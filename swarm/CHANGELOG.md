@@ -1,4 +1,218 @@
-# 0.40.0
+# 0.42.0
+
+- Allow `NetworkBehaviour`s to manage connections.
+  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+
+  - `NetworkBehaviour::handle_pending_inbound_connection`
+  - `NetworkBehaviour::handle_pending_outbound_connection`
+  - `NetworkBehaviour::handle_established_inbound_connection`
+  - `NetworkBehaviour::handle_established_outbound_connection`
+
+  Please note that due to [limitations](https://github.com/rust-lang/rust/issues/98990) in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Nevertheless, they will be removed in the future.
+
+  All four are fallible and returning an error from any of them will abort the given connection.
+  This allows you to create dedicated `NetworkBehaviour`s that only concern themselves with managing connections.
+  For example:
+  - checking the `PeerId` of a newly established connection against an allow/block list
+  - only allowing X connection upgrades at any one time
+  - denying incoming or outgoing connections from a certain IP range
+  - only allowing N connections to or from the same peer
+
+  See [PR 3254].
+
+- Remove `handler` field from `NetworkBehaviourAction::Dial`.
+  Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
+  `ConnectionId`s are `Copy` and will be used throughout the entire lifetime of the connection to report events.
+  This allows you to send events to a very specific connection, much like you previously could directly set state in the handler.
+
+  Removing the `handler` field also reduces the type parameters of `NetworkBehaviourAction` from three to two.
+  The third one used to be defaulted to the `InEvent` of the `ConnectionHandler`.
+  You now have to manually specify that where you previously had to specify the `ConnectionHandler`.
+  This very likely will trigger **convoluted compile errors** about traits not being implemented.
+
+  Within `NetworkBehaviourAction::poll`, the easiest way to migrate is to do this (in the example of `libp2p-floodsub`):
+  ```diff
+  --- a/protocols/floodsub/src/layer.rs
+  +++ b/protocols/floodsub/src/layer.rs
+  @@ -472,7 +465,7 @@ impl NetworkBehaviour for Floodsub {
+       &mut self,
+       _: &mut Context<'_>,
+       _: &mut impl PollParameters,
+  -    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+  +    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+  ```
+
+  In other words:
+
+  |Search|Replace|
+    |---|---|
+  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
+
+  If you reference `NetworkBehaviourAction` somewhere else as well,
+  you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
+
+  See [PR 3328].
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
+
+- Deprecate functions on `PollParameters` in preparation for `PollParameters` to be removed entirely eventually. See [PR 3153].
+
+- Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
+
+- Remove deprecated `inject_*` methods from `NetworkBehaviour` and `ConnectionHandler`.
+  Make the implementation of `on_swarm_event` and `on_connection_handler_event`
+  both mandatory. See [PR 3264] and [PR 3364].
+
+- Update to `libp2p-swarm-derive` `v0.32.0`.
+
+- Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` .
+  The configured value now applies _per_ connection.
+  The default values remains 7.
+  If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
+  See [PR 3188].
+
+- Remove `DialError::ConnectionIo` variant.
+  This was never constructed.
+  See [PR 3374].
+
+- Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
+  See [PR 3375].
+
+- Remove `PendingConnectionError`, `PendingInboundConnectionError` and `PendingOutboundConnectionError` from the public API.
+  They are no longer referenced anywhere with the addition of `ListenError`.
+  See [PR 3497].
+
+- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+
+[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
+[PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
+[PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
+[PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
+[PR 3328]: https://github.com/libp2p/rust-libp2p/pull/3328
+[PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
+[PR 3377]: https://github.com/libp2p/rust-libp2p/pull/3377
+[PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
+[PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
+[PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
+[PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
+
+# 0.41.1
+
+- Update to `libp2p-swarm-derive` `v0.31.0`.
+
+# 0.41.0
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Add new `on_connection_event` method to `ConnectionHandler` that accepts a `ConnectionEvent` enum and update
+  `inject_*` methods to call `on_connection_event` with the respective `ConnectionEvent` variant and deprecate
+  `inject_*`.
+  To migrate, users should replace the `ConnectionHandler::inject_*` calls with a single
+  implementation of `ConnectionHandler::on_connection_event` treating each `ConnectionEvent` variant in
+  the same way its corresponding `inject_*` call was treated.
+  See [PR 3085].
+
+- Add new `on_behaviour_event` method with the same signature as `inject_event`, make the
+  default implementation of `inject_event` call `on_behaviour_event` and deprecate it.
+  To migrate, users should replace the `ConnectionHandler::inject_event` call
+  with `ConnectionHandler::on_behaviour_event`.
+  See [PR 3085].
+
+- Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
+  `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
+  `inject_*`.
+  To migrate, users should replace the `NetworkBehaviour::inject_*` calls with a single
+  implementation of `NetworkBehaviour::on_swarm_event` treating each `FromSwarm` variant in
+  the same way its corresponding `inject_*` call was treated.
+  See [PR 3011].
+
+- Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
+  default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.
+  To migrate, users should replace the `NetworkBehaviour::inject_event` call
+  with `NetworkBehaviour::on_connection_handler_event`.
+  See [PR 3011].
+
+- Export `NetworkBehaviour` derive as `libp2p_swarm::NetworkBehaviour`.
+  This follows the convention of other popular libraries. `serde` for example exports the `Serialize` trait and macro as
+  `serde::Serialize`. See [PR 3055].
+
+- Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
+
+- Make executor in Swarm constructor explicit. See [PR 3097].
+
+  Supported executors:
+  - Tokio
+
+    Previously
+    ```rust
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+                tokio::spawn(fut);
+        }))
+        .build();
+    ```
+    Now
+    ```rust
+    let swarm = Swarm::with_tokio_executor(transport, behaviour, peer_id);
+    ```
+  - Async Std
+
+    Previously
+    ```rust
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+                async_std::task::spawn(fut);
+        }))
+        .build();
+    ```
+    Now
+    ```rust
+    let swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
+    ```
+  - ThreadPool (see [Issue 3107])
+
+    In most cases ThreadPool can be replaced by executors or spawning on the local task.
+
+    Previously
+    ```rust
+    let swarm = Swarm::new(transport, behaviour, peer_id);
+    ```
+
+    Now
+    ```rust
+    let swarm = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
+    ```
+  - Without
+
+    Spawns the tasks on the current task, this may result in bad performance so try to use an executor where possible. Previously this was just a fallback when no executor was specified and constructing a `ThreadPool` failed.
+
+    New
+    ```rust
+    let swarm = Swarm::without_executor(transport, behaviour, peer_id);
+    ```
+
+  Deprecated APIs:
+  - `Swarm::new`
+  - `SwarmBuilder::new`
+  - `SwarmBuilder::executor`
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
+[PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
+[Issue 3107]: https://github.com/libp2p/rust-libp2p/issues/3107
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
+# 0.40.1
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 

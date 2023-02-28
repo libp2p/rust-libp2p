@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Integration tests for the `RequestResponse` network behaviour.
+//! Integration tests for the `Behaviour`.
 
 use async_trait::async_trait;
 use futures::{prelude::*, AsyncWriteExt};
-use libp2p::core::{
+use libp2p_core::{
     upgrade::{read_length_prefixed, write_length_prefixed},
-    PeerId,
+    PeerId, Transport,
 };
-use libp2p::request_response::*;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p_noise::NoiseAuthenticated;
+use libp2p_request_response::*;
+use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_tcp as tcp;
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
 use std::{io, iter};
@@ -39,7 +41,7 @@ async fn is_response_outbound() {
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols, cfg));
 
@@ -61,7 +63,7 @@ async fn is_response_outbound() {
             assert_eq!(&offline_peer, &peer);
             assert_eq!(req_id, request_id1);
         }
-        e => panic!("Peer: Unexpected event: {:?}", e),
+        e => panic!("Peer: Unexpected event: {e:?}"),
     }
 
     let request_id2 = swarm1.behaviour_mut().send_request(&offline_peer, ping);
@@ -81,7 +83,7 @@ async fn ping_protocol() {
     let pong = Pong("pong".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let mut swarm1 =
         Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone()));
@@ -106,7 +108,7 @@ async fn ping_protocol() {
                 RequestResponseEvent::Message {
                     peer,
                     message:
-                        RequestResponseMessage::Request {
+                        Message::Request {
                             request, channel, ..
                         },
                 } => {
@@ -120,7 +122,7 @@ async fn ping_protocol() {
                 RequestResponseEvent::ResponseSent { peer, .. } => {
                     assert_eq!(&peer, &peer2_id);
                 }
-                e => panic!("Peer1: Unexpected event: {:?}", e),
+                e => panic!("Peer1: Unexpected event: {e:?}"),
             }
         }
     };
@@ -143,7 +145,7 @@ async fn ping_protocol() {
                 RequestResponseEvent::Message {
                     peer,
                     message:
-                        RequestResponseMessage::Response {
+                        Message::Response {
                             request_id,
                             response,
                         },
@@ -158,7 +160,7 @@ async fn ping_protocol() {
                         req_id = swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
                     }
                 }
-                e => panic!("Peer2: Unexpected event: {:?}", e),
+                e => panic!("Peer2: Unexpected event: {e:?}"),
             }
         }
     };
@@ -172,7 +174,7 @@ async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let mut swarm1 =
         Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone()));
@@ -189,20 +191,20 @@ async fn emits_inbound_connection_closed_failure() {
     let _channel = loop {
         futures::select!(
             event = swarm1.select_next_some() => match event {
-                SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                SwarmEvent::Behaviour(Event::Message {
                     peer,
-                    message: RequestResponseMessage::Request { request, channel, .. }
+                    message: Message::Request { request, channel, .. }
                 }) => {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);
                     break channel;
                 },
-                SwarmEvent::Behaviour(ev) => panic!("Peer1: Unexpected event: {:?}", ev),
+                SwarmEvent::Behaviour(ev) => panic!("Peer1: Unexpected event: {ev:?}"),
                 _ => {}
             },
             event = swarm2.select_next_some() => {
                 if let SwarmEvent::Behaviour(ev) = event {
-                    panic!("Peer2: Unexpected event: {:?}", ev);
+                    panic!("Peer2: Unexpected event: {ev:?}");
                 }
             }
         )
@@ -213,11 +215,11 @@ async fn emits_inbound_connection_closed_failure() {
 
     loop {
         match swarm1.select_next_some().await {
-            SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure {
+            SwarmEvent::Behaviour(Event::InboundFailure {
                 error: InboundFailure::ConnectionClosed,
                 ..
             }) => break,
-            SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
+            SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {e:?}"),
             _ => {}
         }
     }
@@ -233,7 +235,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let mut swarm1 =
         Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone()));
@@ -250,9 +252,9 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let event = loop {
         futures::select!(
             event = swarm1.select_next_some() => {
-                if let SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                if let SwarmEvent::Behaviour(Event::Message {
                     peer,
-                    message: RequestResponseMessage::Request { request, channel, .. }
+                    message: Message::Request { request, channel, .. }
                 }) = event {
                     assert_eq!(&request, &ping);
                     assert_eq!(&peer, &peer2_id);
@@ -270,8 +272,8 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     };
 
     let error = match event {
-        RequestResponseEvent::OutboundFailure { error, .. } => error,
-        e => panic!("unexpected event from peer 2: {:?}", e),
+        Event::OutboundFailure { error, .. } => error,
+        e => panic!("unexpected event from peer 2: {e:?}"),
     };
 
     assert_eq!(error, OutboundFailure::ConnectionClosed);
@@ -295,7 +297,7 @@ impl ProtocolName for PingProtocol {
 }
 
 #[async_trait]
-impl RequestResponseCodec for PingCodec {
+impl libp2p_request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;

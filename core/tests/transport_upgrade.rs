@@ -19,11 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p::core::identity;
-use libp2p::core::transport::{MemoryTransport, Transport};
-use libp2p::core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p::mplex::MplexConfig;
-use libp2p::noise;
+use libp2p_core::identity;
+use libp2p_core::transport::{MemoryTransport, Transport};
+use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_mplex::MplexConfig;
+use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
 use std::{io, pin::Pin};

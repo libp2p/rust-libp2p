@@ -24,7 +24,6 @@ use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
 use libp2p_core::{
     connection::Endpoint,
-    either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
     Transport,
@@ -108,7 +107,7 @@ impl<T> WsConfig<T> {
     }
 }
 
-type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
+type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
 impl<T> Transport for WsConfig<T>
 where
@@ -350,11 +349,11 @@ where
                 })
                 .await?;
 
-            let stream: TlsOrPlain<_> = EitherOutput::First(EitherOutput::First(stream));
+            let stream: TlsOrPlain<_> = future::Either::Left(future::Either::Left(stream));
             stream
         } else {
             // continue with plain stream
-            EitherOutput::Second(stream)
+            future::Either::Right(stream)
         };
 
         trace!("Sending websocket handshake to {}", addr.host_port);
@@ -381,7 +380,7 @@ where
                 Ok(Either::Left(location))
             }
             handshake::ServerResponse::Rejected { status_code } => {
-                let msg = format!("server rejected handshake; status code = {}", status_code);
+                let msg = format!("server rejected handshake; status code = {status_code}");
                 Err(Error::Handshake(msg.into()))
             }
             handshake::ServerResponse::Accepted { .. } => {
@@ -422,12 +421,12 @@ where
                     })
                     .await?;
 
-                let stream: TlsOrPlain<_> = EitherOutput::First(EitherOutput::Second(stream));
+                let stream: TlsOrPlain<_> = future::Either::Left(future::Either::Right(stream));
 
                 stream
             } else {
                 // continue with plain stream
-                EitherOutput::Second(stream)
+                future::Either::Right(stream)
             };
 
             trace!(
@@ -501,10 +500,10 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let (host_port, dns_name) = loop {
         match (ip, tcp) {
             (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{}:{}", ip, port), None)
+                break (format!("{ip}:{port}"), None)
             }
             (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{}:{}", ip, port), None)
+                break (format!("{ip}:{port}"), None)
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))

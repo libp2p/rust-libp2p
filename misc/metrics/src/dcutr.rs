@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
@@ -35,19 +35,19 @@ impl Metrics {
         sub_registry.register(
             "events",
             "Events emitted by the relay NetworkBehaviour",
-            Box::new(events.clone()),
+            events.clone(),
         );
 
         Self { events }
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelSet)]
 struct EventLabels {
     event: EventType,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelValue)]
 enum EventType {
     InitiateDirectConnectionUpgrade,
     RemoteInitiatedDirectConnectionUpgrade,
@@ -55,21 +55,21 @@ enum EventType {
     DirectConnectionUpgradeFailed,
 }
 
-impl From<&libp2p_dcutr::behaviour::Event> for EventType {
-    fn from(event: &libp2p_dcutr::behaviour::Event) -> Self {
+impl From<&libp2p_dcutr::Event> for EventType {
+    fn from(event: &libp2p_dcutr::Event) -> Self {
         match event {
-            libp2p_dcutr::behaviour::Event::InitiatedDirectConnectionUpgrade {
+            libp2p_dcutr::Event::InitiatedDirectConnectionUpgrade {
                 remote_peer_id: _,
                 local_relayed_addr: _,
             } => EventType::InitiateDirectConnectionUpgrade,
-            libp2p_dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
+            libp2p_dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
                 remote_peer_id: _,
                 remote_relayed_addr: _,
             } => EventType::RemoteInitiatedDirectConnectionUpgrade,
-            libp2p_dcutr::behaviour::Event::DirectConnectionUpgradeSucceeded {
-                remote_peer_id: _,
-            } => EventType::DirectConnectionUpgradeSucceeded,
-            libp2p_dcutr::behaviour::Event::DirectConnectionUpgradeFailed {
+            libp2p_dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id: _ } => {
+                EventType::DirectConnectionUpgradeSucceeded
+            }
+            libp2p_dcutr::Event::DirectConnectionUpgradeFailed {
                 remote_peer_id: _,
                 error: _,
             } => EventType::DirectConnectionUpgradeFailed,
@@ -77,8 +77,8 @@ impl From<&libp2p_dcutr::behaviour::Event> for EventType {
     }
 }
 
-impl super::Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
-    fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
+impl super::Recorder<libp2p_dcutr::Event> for Metrics {
+    fn record(&self, event: &libp2p_dcutr::Event) {
         self.events
             .get_or_create(&EventLabels {
                 event: event.into(),

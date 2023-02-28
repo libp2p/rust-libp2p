@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Locate all nodes providing the file.
             let providers = network_client.get_providers(name.clone()).await;
             if providers.is_empty() {
-                return Err(format!("Could not find provider for file {}.", name).into());
+                return Err(format!("Could not find provider for file {name}.").into());
             }
 
             // Request the content of the file from each node.
@@ -207,20 +207,16 @@ enum CliArgument {
 mod network {
     use super::*;
     use async_trait::async_trait;
+    use either::Either;
     use futures::channel::{mpsc, oneshot};
-    use libp2p::core::either::EitherError;
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
     use libp2p::identity;
     use libp2p::identity::ed25519;
     use libp2p::kad::record::store::MemoryStore;
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
-    use libp2p::request_response::{
-        ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
-        RequestResponseMessage, ResponseChannel,
-    };
-    use libp2p::swarm::{ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-    use libp2p::{NetworkBehaviour, Swarm};
+    use libp2p::request_response::{self, ProtocolSupport, RequestId, ResponseChannel};
+    use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
@@ -251,19 +247,18 @@ mod network {
 
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
-        let swarm = SwarmBuilder::new(
+        let swarm = Swarm::with_threadpool_executor(
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-                request_response: RequestResponse::new(
+                request_response: request_response::Behaviour::new(
                     FileExchangeCodec(),
                     iter::once((FileExchangeProtocol(), ProtocolSupport::Full)),
                     Default::default(),
                 ),
             },
             peer_id,
-        )
-        .build();
+        );
 
         let (command_sender, command_receiver) = mpsc::channel(0);
         let (event_sender, event_receiver) = mpsc::channel(0);
@@ -410,12 +405,12 @@ mod network {
             &mut self,
             event: SwarmEvent<
                 ComposedEvent,
-                EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
+                Either<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
             >,
         ) {
             match event {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
                         result: QueryResult::StartProviding(_),
                         ..
@@ -428,23 +423,42 @@ mod network {
                     let _ = sender.send(());
                 }
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                        result:
+                            QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                                providers,
+                                ..
+                            })),
                         ..
                     },
                 )) => {
-                    let _ = self
-                        .pending_get_providers
-                        .remove(&id)
-                        .expect("Completed query to be previously pending.")
-                        .send(providers);
+                    if let Some(sender) = self.pending_get_providers.remove(&id) {
+                        sender.send(providers).expect("Receiver not to be dropped");
+
+                        // Finish the query. We are only interested in the first result.
+                        self.swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .query_mut(&id)
+                            .unwrap()
+                            .finish();
+                    }
                 }
+                SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+                    KademliaEvent::OutboundQueryProgressed {
+                        result:
+                            QueryResult::GetProviders(Ok(
+                                GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
+                            )),
+                        ..
+                    },
+                )) => {}
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::Message { message, .. },
+                    request_response::Event::Message { message, .. },
                 )) => match message {
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request, channel, ..
                     } => {
                         self.event_sender
@@ -455,7 +469,7 @@ mod network {
                             .await
                             .expect("Event receiver not to be dropped.");
                     }
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     } => {
@@ -467,7 +481,7 @@ mod network {
                     }
                 },
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::OutboundFailure {
+                    request_response::Event::OutboundFailure {
                         request_id, error, ..
                     },
                 )) => {
@@ -478,7 +492,7 @@ mod network {
                         .send(Err(Box::new(error)));
                 }
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::ResponseSent { .. },
+                    request_response::Event::ResponseSent { .. },
                 )) => {}
                 SwarmEvent::NewListenAddr { address, .. } => {
                     let local_peer_id = *self.swarm.local_peer_id();
@@ -506,8 +520,8 @@ mod network {
                     }
                 }
                 SwarmEvent::IncomingConnectionError { .. } => {}
-                SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {}", peer_id),
-                e => panic!("{:?}", e),
+                SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {peer_id}"),
+                e => panic!("{e:?}"),
             }
         }
 
@@ -587,18 +601,18 @@ mod network {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "ComposedEvent")]
     struct ComposedBehaviour {
-        request_response: RequestResponse<FileExchangeCodec>,
+        request_response: request_response::Behaviour<FileExchangeCodec>,
         kademlia: Kademlia<MemoryStore>,
     }
 
     #[derive(Debug)]
     enum ComposedEvent {
-        RequestResponse(RequestResponseEvent<FileRequest, FileResponse>),
+        RequestResponse(request_response::Event<FileRequest, FileResponse>),
         Kademlia(KademliaEvent),
     }
 
-    impl From<RequestResponseEvent<FileRequest, FileResponse>> for ComposedEvent {
-        fn from(event: RequestResponseEvent<FileRequest, FileResponse>) -> Self {
+    impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
+        fn from(event: request_response::Event<FileRequest, FileResponse>) -> Self {
             ComposedEvent::RequestResponse(event)
         }
     }
@@ -665,7 +679,7 @@ mod network {
     }
 
     #[async_trait]
-    impl RequestResponseCodec for FileExchangeCodec {
+    impl request_response::Codec for FileExchangeCodec {
         type Protocol = FileExchangeProtocol;
         type Request = FileRequest;
         type Response = FileResponse;

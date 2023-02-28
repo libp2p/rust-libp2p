@@ -724,17 +724,17 @@ mod tests {
 
         // Expire the timeout for the pending entry on the full bucket.`
         let full_bucket = &mut table.buckets[full_bucket_index.unwrap().get()];
-        let elapsed = Instant::now() - Duration::from_secs(1);
+        let elapsed = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
         full_bucket.pending_mut().unwrap().set_ready_at(elapsed);
 
         match table.entry(&expected_applied.inserted.key) {
             Entry::Present(_, NodeStatus::Connected) => {}
-            x => panic!("Unexpected entry: {:?}", x),
+            x => panic!("Unexpected entry: {x:?}"),
         }
 
         match table.entry(&expected_applied.evicted.as_ref().unwrap().key) {
             Entry::Absent(_) => {}
-            x => panic!("Unexpected entry: {:?}", x),
+            x => panic!("Unexpected entry: {x:?}"),
         }
 
         assert_eq!(Some(expected_applied), table.take_applied_pending());

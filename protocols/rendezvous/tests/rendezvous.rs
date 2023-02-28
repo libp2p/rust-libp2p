@@ -24,9 +24,9 @@ pub mod harness;
 use crate::harness::await_events_or_timeout;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use libp2p::core::identity;
-use libp2p::rendezvous;
-use libp2p::swarm::{DialError, Swarm, SwarmEvent};
+use libp2p_core::identity;
+use libp2p_rendezvous as rendezvous;
+use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::convert::TryInto;
 use std::time::Duration;
@@ -367,8 +367,12 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     eve
 }
 
-#[derive(libp2p::NetworkBehaviour)]
-#[behaviour(event_process = false, out_event = "CombinedEvent")]
+#[derive(libp2p_swarm::NetworkBehaviour)]
+#[behaviour(
+    event_process = false,
+    out_event = "CombinedEvent",
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct CombinedBehaviour {
     client: rendezvous::client::Behaviour,
     server: rendezvous::server::Behaviour,

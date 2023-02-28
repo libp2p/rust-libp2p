@@ -70,15 +70,16 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
 ///      [`ConnectionHandler::poll()`] must return an [`ConnectionHandlerEvent::OutboundSubstreamRequest`],
 ///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
-///      protocol(s). Upon success, [`ConnectionHandler::inject_fully_negotiated_outbound`]
-///      is called with the final output of the upgrade.
+///      protocol(s). Upon success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionEvent::FullyNegotiatedOutbound`] translating the final output of the upgrade.
 ///
 ///   2. Listening by accepting a new inbound substream. When a new inbound substream
 ///      is created on a connection, [`ConnectionHandler::listen_protocol`] is called
 ///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
 ///      negotiate the protocol(s). Upon success,
-///      [`ConnectionHandler::inject_fully_negotiated_inbound`] is called with the final
-///      output of the upgrade.
+///      [`ConnectionHandler::on_connection_event`] is called with [`ConnectionEvent::FullyNegotiatedInbound`]
+///      translating the final output of the upgrade.
+///
 ///
 /// # Connection Keep-Alive
 ///
@@ -114,50 +115,6 @@ pub trait ConnectionHandler: Send + 'static {
     /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
     /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
-
-    /// Injects the output of a successful upgrade on a new inbound substream.
-    ///
-    /// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
-    /// negotiated inbound substreams. E.g. the implementation has to enforce a limit on the number
-    /// of simultaneously open negotiated inbound substreams. In other words it is up to the
-    /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
-    /// an excessive amount of inbound substreams.
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo,
-    );
-
-    /// Injects the output of a successful upgrade on a new outbound substream.
-    ///
-    /// The second argument is the information that was previously passed to
-    /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    );
-
-    /// Injects an event coming from the outside in the handler.
-    fn inject_event(&mut self, event: Self::InEvent);
-
-    /// Notifies the handler of a change in the address of the remote.
-    fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
-
-    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    );
-
-    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-    }
 
     /// Returns until when the connection should be kept alive.
     ///
@@ -224,6 +181,75 @@ pub trait ConnectionHandler: Send + 'static {
     {
         ConnectionHandlerSelect::new(self, other)
     }
+
+    /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
+    fn on_behaviour_event(&mut self, _event: Self::InEvent);
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    );
+}
+
+/// Enumeration with the list of the possible stream events
+/// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
+pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+    /// Informs the handler about the output of a successful upgrade on a new inbound substream.
+    FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
+    /// Informs the handler about the output of a successful upgrade on a new outbound stream.
+    FullyNegotiatedOutbound(FullyNegotiatedOutbound<OP, OOI>),
+    /// Informs the handler about a change in the address of the remote.
+    AddressChange(AddressChange<'a>),
+    /// Informs the handler that upgrading an outbound substream to the given protocol has failed.
+    DialUpgradeError(DialUpgradeError<OOI, OP>),
+    /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
+    ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+}
+
+/// [`ConnectionEvent`] variant that informs the handler about
+/// the output of a successful upgrade on a new inbound substream.
+///
+/// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
+/// negotiated inbound substreams. E.g. the implementation has to enforce a limit on the number
+/// of simultaneously open negotiated inbound substreams. In other words it is up to the
+/// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
+/// an excessive amount of inbound substreams.
+pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
+    pub protocol: IP::Output,
+    pub info: IOI,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound stream.
+///
+/// The `protocol` field is the information that was previously passed to
+/// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
+pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
+    pub protocol: OP::Output,
+    pub info: OOI,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+pub struct AddressChange<'a> {
+    pub new_address: &'a Multiaddr,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler
+/// that upgrading an outbound substream to the given protocol has failed.
+pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
+    pub info: OOI,
+    pub error: ConnectionHandlerUpgrErr<OP::Error>,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler
+/// that upgrading an inbound substream to the given protocol has failed.
+pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
+    pub info: IOI,
+    pub error: ConnectionHandlerUpgrErr<IP::Error>,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)
@@ -441,7 +467,7 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
+            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
         }
     }
 }
@@ -460,6 +486,9 @@ where
 }
 
 /// Prototype for a [`ConnectionHandler`].
+#[deprecated(
+    note = "Implement `ConnectionHandler` directly and use `NetworkBehaviour::{handle_pending_inbound_connection,handle_pending_outbound_connection}` to handle pending connections."
+)]
 pub trait IntoConnectionHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ConnectionHandler;
@@ -486,6 +515,7 @@ pub trait IntoConnectionHandler: Send + 'static {
     }
 }
 
+#[allow(deprecated)]
 impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler,

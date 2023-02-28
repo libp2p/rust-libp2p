@@ -1,3 +1,55 @@
+# 0.43.0
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+- Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
+
+- Limit number of active outbound streams to 32. See [PR 3287].
+
+- Bump MSRV to 1.65.0.
+
+[PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
+[PR 3287]: https://github.com/libp2p/rust-libp2p/pull/3287
+
+# 0.42.1
+
+- Skip unparsable multiaddr in `Peer::addrs`. See [PR 3280].
+
+[PR 3280]: https://github.com/libp2p/rust-libp2p/pull/3280
+
+# 0.42.0
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Replace `Kademlia`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `KademliaHandler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
+  See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+- Fix bad state transition on incoming `AddProvider` messages.
+  This would eventually lead to warning that says: "New inbound substream to PeerId exceeds inbound substream limit. No older substream waiting to be reused."
+  See [PR 3152].
+
+- Refactor APIs to be streaming.
+  - Renamed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed`
+  - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`). See `ProgressStep` to identify the final `OutboundQueryProgressed` of a single query.
+  - To finish a query early, i.e. before the final `OutboundQueryProgressed` of the query, a caller needs to call `query.finish()`.
+  - There is no more automatic caching of records. The user has to manually call `put_record_to` on the `QueryInfo::GetRecord.cache_candidates` to cache a record to a close peer that did not return the record on the foregone query.
+  See [PR 2712].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 3152]: https://github.com/libp2p/rust-libp2p/pull/3152
+[PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
+
 # 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.

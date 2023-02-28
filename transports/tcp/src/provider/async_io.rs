@@ -20,7 +20,7 @@
 
 use super::{Incoming, Provider};
 
-use async_io_crate::Async;
+use async_io::Async;
 use futures::future::{BoxFuture, FutureExt};
 use std::io;
 use std::net;
@@ -55,6 +55,15 @@ pub enum Tcp {}
 impl Provider for Tcp {
     type Stream = Async<net::TcpStream>;
     type Listener = Async<net::TcpListener>;
+    type IfWatcher = if_watch::smol::IfWatcher;
+
+    fn new_if_watcher() -> io::Result<Self::IfWatcher> {
+        Self::IfWatcher::new()
+    }
+
+    fn addrs(if_watcher: &Self::IfWatcher) -> Vec<if_watch::IpNet> {
+        if_watcher.iter().copied().collect()
+    }
 
     fn new_listener(l: net::TcpListener) -> io::Result<Self::Listener> {
         Async::new(l)

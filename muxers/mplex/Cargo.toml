@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-mplex"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.37.0"
+version = "0.39.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,9 +12,9 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 bytes = "1"
-futures = "0.3.1"
+futures = "0.3.26"
 asynchronous-codec = "0.6"
-libp2p-core = { version = "0.37.0", path = "../../core" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"
@@ -25,10 +25,11 @@ unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
 criterion = "0.4"
-env_logger = "0.9"
+env_logger = "0.10"
 futures = "0.3"
-libp2p = { path = "../..", features = ["full"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
+libp2p-plaintext = { path = "../../transports/plaintext" }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 [[bench]]

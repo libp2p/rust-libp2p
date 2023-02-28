@@ -49,7 +49,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > we initiated the stream, so the local ID has the role `Endpoint::Dialer`.
 /// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, Eq, Debug)]
 pub struct LocalStreamId {
     num: u64,
     role: Endpoint,
@@ -64,8 +64,20 @@ impl fmt::Display for LocalStreamId {
     }
 }
 
+/// Manual implementation of [`PartialEq`].
+///
+/// This is equivalent to the derived one but we purposely don't derive it because it triggers the
+/// `clippy::derive_hash_xor_eq` lint.
+///
+/// This [`PartialEq`] implementation satisfies the rule of v1 == v2 -> hash(v1) == hash(v2).
+/// The inverse is not true but does not have to be.
+impl PartialEq for LocalStreamId {
+    fn eq(&self, other: &Self) -> bool {
+        self.num.eq(&other.num) && self.role.eq(&other.role)
+    }
+}
+
 impl Hash for LocalStreamId {
-    #![allow(clippy::derive_hash_xor_eq)]
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.num);
     }
@@ -205,7 +217,7 @@ impl Decoder for Codec {
                 CodecDecodeState::HasHeader(header) => match self.varint_decoder.decode(src)? {
                     Some(len) => {
                         if len as usize > MAX_FRAME_SIZE {
-                            let msg = format!("Mplex frame length {} exceeds maximum", len);
+                            let msg = format!("Mplex frame length {len} exceeds maximum");
                             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                         }
 
@@ -226,7 +238,7 @@ impl Decoder for Codec {
                     }
 
                     let buf = src.split_to(len);
-                    let num = (header >> 3) as u64;
+                    let num = header >> 3;
                     let out = match header & 7 {
                         0 => Frame::Open {
                             stream_id: RemoteStreamId::dialer(num),
@@ -252,7 +264,7 @@ impl Decoder for Codec {
                             stream_id: RemoteStreamId::dialer(num),
                         },
                         _ => {
-                            let msg = format!("Invalid mplex header value 0x{:x}", header);
+                            let msg = format!("Invalid mplex header value 0x{header:x}");
                             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                         }
                     };

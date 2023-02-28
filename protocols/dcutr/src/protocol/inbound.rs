@@ -58,14 +58,23 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
             } else {
                 obs_addrs
                     .into_iter()
-                    .map(Multiaddr::try_from)
-                    // Filter out relayed addresses.
-                    .filter(|a| match a {
-                        Ok(a) => !a.iter().any(|p| p == Protocol::P2pCircuit),
-                        Err(_) => true,
+                    .filter_map(|a| match Multiaddr::try_from(a) {
+                        Ok(a) => Some(a),
+                        Err(e) => {
+                            log::debug!("Unable to parse multiaddr: {e}");
+                            None
+                        }
                     })
-                    .collect::<Result<Vec<Multiaddr>, _>>()
-                    .map_err(|_| UpgradeError::InvalidAddrs)?
+                    // Filter out relayed addresses.
+                    .filter(|a| {
+                        if a.iter().any(|p| p == Protocol::P2pCircuit) {
+                            log::debug!("Dropping relayed address {a}");
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                    .collect::<Vec<Multiaddr>>()
             };
 
             let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
@@ -118,16 +127,13 @@ impl PendingConnect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode")]
-    Codec(
-        #[from]
-        #[source]
-        prost_codec::Error,
-    ),
+    #[error(transparent)]
+    Codec(#[from] prost_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
+    #[deprecated(since = "0.8.1", note = "Error is no longer constructed.")]
     #[error("Invalid addresses.")]
     InvalidAddrs,
     #[error("Failed to parse response type field.")]

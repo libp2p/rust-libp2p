@@ -1,3 +1,47 @@
+# 0.44.0
+
+- Update to `prometheus-client` `v0.19.0`. See [PR 3207].
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+- Initialize `ProtocolConfig` via `GossipsubConfig`. See [PR 3381].
+
+- Rename types as per [discussion 2174].
+  `Gossipsub` has been renamed to `Behaviour`.
+  The `Gossipsub` prefix has been removed from various types like `GossipsubConfig` or `GossipsubMessage`.
+  It is preferred to import the gossipsub protocol as a module (`use libp2p::gossipsub;`), and refer to its types via `gossipsub::`.
+  For example: `gossipsub::Behaviour` or `gossipsub::RawMessage`. See [PR 3303].
+
+[PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
+[PR 3303]: https://github.com/libp2p/rust-libp2p/pull/3303/
+[PR 3381]: https://github.com/libp2p/rust-libp2p/pull/3381/
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+
+# 0.43.0
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Update to `prost-codec` `v0.3.0`.
+
+- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070].
+
+- Replace `Gossipsub`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `GossipsubHandler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
+  See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.42.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].

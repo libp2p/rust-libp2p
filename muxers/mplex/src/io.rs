@@ -1220,7 +1220,7 @@ mod tests {
                 for i in 0..cfg.max_substreams {
                     match m.poll_next_stream(cx) {
                         Poll::Pending => panic!("Expected new inbound stream."),
-                        Poll::Ready(Err(e)) => panic!("{:?}", e),
+                        Poll::Ready(Err(e)) => panic!("{e:?}"),
                         Poll::Ready(Ok(id)) => {
                             assert_eq!(id, LocalStreamId::listener(i as u64));
                         }
@@ -1231,7 +1231,7 @@ mod tests {
                 // after reading and buffering data frames up to the limit.
                 let id = LocalStreamId::listener(0);
                 match m.poll_next_stream(cx) {
-                    Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                    Poll::Ready(r) => panic!("Unexpected result for next stream: {r:?}"),
                     Poll::Pending => {
                         // We expect the implementation to yield when the buffer
                         // is full but before it is exceeded and the max buffer
@@ -1243,7 +1243,7 @@ mod tests {
                             cfg.max_buffer_len
                         );
                         match m.poll_next_stream(cx) {
-                            Poll::Ready(r) => panic!("Unexpected result for next stream: {:?}", r),
+                            Poll::Ready(r) => panic!("Unexpected result for next stream: {r:?}"),
                             Poll::Pending => {
                                 // Expect the buffer for stream 0 to be exceeded, triggering
                                 // the max. buffer behaviour.
@@ -1281,7 +1281,7 @@ mod tests {
                         Poll::Ready(Ok(Some(bytes))) => {
                             assert_eq!(bytes, data);
                         }
-                        x => panic!("Unexpected: {:?}", x),
+                        x => panic!("Unexpected: {x:?}"),
                     }
                 }
 
@@ -1293,7 +1293,7 @@ mod tests {
                         // Expect to read EOF
                         match m.poll_read_stream(cx, id) {
                             Poll::Ready(Ok(None)) => {}
-                            poll => panic!("Unexpected: {:?}", poll),
+                            poll => panic!("Unexpected: {poll:?}"),
                         }
                     }
                     MaxBufferBehaviour::Block => {
@@ -1301,7 +1301,7 @@ mod tests {
                         match m.poll_read_stream(cx, id) {
                             Poll::Ready(Ok(Some(bytes))) => assert_eq!(bytes, data),
                             Poll::Pending => assert_eq!(overflow.get(), 1),
-                            poll => panic!("Unexpected: {:?}", poll),
+                            poll => panic!("Unexpected: {poll:?}"),
                         }
                     }
                 }

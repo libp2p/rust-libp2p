@@ -19,16 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{channel::oneshot, prelude::*, ready};
-use libp2p::core::{
+use libp2p_core::{
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
     transport::{self, MemoryTransport},
     upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p::mplex::MplexConfig;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::{dummy, Swarm, SwarmEvent};
+use libp2p_mplex::MplexConfig;
+use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::{dummy, Swarm, SwarmEvent};
 use rand::random;
 use std::task::Poll;
 
@@ -61,8 +61,10 @@ fn transport_upgrade() {
 
         let listen_addr = Multiaddr::from(Protocol::Memory(random::<u64>()));
 
-        let mut dialer = Swarm::new(dialer_transport, dummy::Behaviour, dialer_id);
-        let mut listener = Swarm::new(listener_transport, dummy::Behaviour, listener_id);
+        let mut dialer =
+            Swarm::with_async_std_executor(dialer_transport, dummy::Behaviour, dialer_id);
+        let mut listener =
+            Swarm::with_async_std_executor(listener_transport, dummy::Behaviour, listener_id);
 
         listener.listen_on(listen_addr).unwrap();
         let (addr_sender, addr_receiver) = oneshot::channel();

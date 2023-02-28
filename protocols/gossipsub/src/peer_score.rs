@@ -32,7 +32,7 @@ use std::time::Duration;
 use wasm_timer::Instant;
 
 mod params;
-use crate::error::ValidationError;
+use crate::ValidationError;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
@@ -253,7 +253,7 @@ impl PeerScore {
 
                 // P2: first message deliveries
                 let p2 = {
-                    let v = topic_stats.first_message_deliveries as f64;
+                    let v = topic_stats.first_message_deliveries;
                     if v < topic_params.first_message_deliveries_cap {
                         v
                     } else {
@@ -563,7 +563,7 @@ impl PeerScore {
         }
     }
 
-    pub fn validate_message(&mut self, _from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
+    pub fn validate_message(&mut self, from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
         // adds an empty record with the message id
         self.deliveries
             .entry(msg_id.clone())
@@ -572,12 +572,12 @@ impl PeerScore {
         if let Some(callback) = self.message_delivery_time_callback {
             if self
                 .peer_stats
-                .get(_from)
+                .get(from)
                 .and_then(|s| s.topics.get(topic_hash))
                 .map(|ts| ts.in_mesh())
                 .unwrap_or(false)
             {
-                callback(_from, topic_hash, 0.0);
+                callback(from, topic_hash, 0.0);
             }
         }
     }

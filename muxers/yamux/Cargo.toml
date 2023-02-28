@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-yamux"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Yamux multiplexing protocol for libp2p"
-version = "0.41.0"
+version = "0.43.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,8 +11,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.1"
-libp2p-core = { version = "0.37.0", path = "../../core" }
+futures = "0.3.26"
+libp2p-core = { version = "0.39.0", path = "../../core" }
 parking_lot = "0.12"
 thiserror = "1.0"
 yamux = "0.10.0"
@@ -22,7 +22,7 @@ log = "0.4"
 async-std = { version = "1.7.0", features = ["attributes"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

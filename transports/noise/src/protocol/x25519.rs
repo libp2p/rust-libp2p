@@ -23,11 +23,13 @@
 //! **Note**: This set of protocols is not interoperable with other
 //! libp2p implementations.
 
+#![allow(deprecated)]
+
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use lazy_static::lazy_static;
 use libp2p_core::UpgradeInfo;
 use libp2p_core::{identity, identity::ed25519};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use sha2::{Digest, Sha512};
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
@@ -35,23 +37,31 @@ use zeroize::Zeroize;
 
 use super::*;
 
-lazy_static! {
-    static ref PARAMS_IK: ProtocolParams = "Noise_IK_25519_ChaChaPoly_SHA256"
+static PARAMS_IK: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IK_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-    static ref PARAMS_IX: ProtocolParams = "Noise_IX_25519_ChaChaPoly_SHA256"
+        .expect("Invalid protocol name")
+});
+static PARAMS_IX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-    static ref PARAMS_XX: ProtocolParams = "Noise_XX_25519_ChaChaPoly_SHA256"
+        .expect("Invalid protocol name")
+});
+static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-}
+        .expect("Invalid protocol name")
+});
 
 /// A X25519 key.
 #[derive(Clone)]
+#[deprecated(
+    since = "0.42.0",
+    note = "Will be removed because it is not compliant with the official libp2p specification. Use `X25519Spec` instead."
+)]
 pub struct X25519([u8; 32]);
 
 impl AsRef<[u8]> for X25519 {
@@ -113,7 +123,7 @@ impl Protocol<X25519> for X25519 {
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519>, NoiseError> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidKey);
+            return Err(NoiseError::InvalidLength);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
@@ -131,15 +141,6 @@ impl Protocol<X25519> for X25519 {
 }
 
 impl Keypair<X25519> {
-    /// An "empty" keypair as a starting state for DH computations in `snow`,
-    /// which get manipulated through the `snow::types::Dh` interface.
-    pub(super) fn default() -> Self {
-        Keypair {
-            secret: SecretKey(X25519([0u8; 32])),
-            public: PublicKey(X25519([0u8; 32])),
-        }
-    }
-
     /// Create a new X25519 keypair.
     pub fn new() -> Keypair<X25519> {
         let mut sk_bytes = [0u8; 32];

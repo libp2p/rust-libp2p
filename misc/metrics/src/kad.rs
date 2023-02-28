@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::{Registry, Unit};
 
 pub struct Metrics {
-    query_result_get_record_ok: Histogram,
+    query_result_get_record_ok: Counter,
     query_result_get_record_error: Family<GetRecordResult, Counter>,
 
     query_result_get_closest_peers_ok: Histogram,
@@ -48,46 +48,46 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("kad");
 
-        let query_result_get_record_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
+        let query_result_get_record_ok = Counter::default();
         sub_registry.register(
             "query_result_get_record_ok",
             "Number of records returned by a successful Kademlia get record query.",
-            Box::new(query_result_get_record_ok.clone()),
+            query_result_get_record_ok.clone(),
         );
 
         let query_result_get_record_error = Family::default();
         sub_registry.register(
             "query_result_get_record_error",
             "Number of failed Kademlia get record queries.",
-            Box::new(query_result_get_record_error.clone()),
+            query_result_get_record_error.clone(),
         );
 
         let query_result_get_closest_peers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_closest_peers_ok",
             "Number of closest peers returned by a successful Kademlia get closest peers query.",
-            Box::new(query_result_get_closest_peers_ok.clone()),
+            query_result_get_closest_peers_ok.clone(),
         );
 
         let query_result_get_closest_peers_error = Family::default();
         sub_registry.register(
             "query_result_get_closest_peers_error",
             "Number of failed Kademlia get closest peers queries.",
-            Box::new(query_result_get_closest_peers_error.clone()),
+            query_result_get_closest_peers_error.clone(),
         );
 
         let query_result_get_providers_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
         sub_registry.register(
             "query_result_get_providers_ok",
             "Number of providers returned by a successful Kademlia get providers query.",
-            Box::new(query_result_get_providers_ok.clone()),
+            query_result_get_providers_ok.clone(),
         );
 
         let query_result_get_providers_error = Family::default();
         sub_registry.register(
             "query_result_get_providers_error",
             "Number of failed Kademlia get providers queries.",
-            Box::new(query_result_get_providers_error.clone()),
+            query_result_get_providers_error.clone(),
         );
 
         let query_result_num_requests: Family<_, _> =
@@ -95,7 +95,7 @@ impl Metrics {
         sub_registry.register(
             "query_result_num_requests",
             "Number of requests started for a Kademlia query.",
-            Box::new(query_result_num_requests.clone()),
+            query_result_num_requests.clone(),
         );
 
         let query_result_num_success: Family<_, _> =
@@ -103,7 +103,7 @@ impl Metrics {
         sub_registry.register(
             "query_result_num_success",
             "Number of successful requests of a Kademlia query.",
-            Box::new(query_result_num_success.clone()),
+            query_result_num_success.clone(),
         );
 
         let query_result_num_failure: Family<_, _> =
@@ -111,7 +111,7 @@ impl Metrics {
         sub_registry.register(
             "query_result_num_failure",
             "Number of failed requests of a Kademlia query.",
-            Box::new(query_result_num_failure.clone()),
+            query_result_num_failure.clone(),
         );
 
         let query_result_duration: Family<_, _> =
@@ -120,21 +120,21 @@ impl Metrics {
             "query_result_duration",
             "Duration of a Kademlia query.",
             Unit::Seconds,
-            Box::new(query_result_duration.clone()),
+            query_result_duration.clone(),
         );
 
         let routing_updated = Family::default();
         sub_registry.register(
             "routing_updated",
             "Number of peers added, updated or evicted to, in or from a specific kbucket in the routing table",
-            Box::new(routing_updated.clone()),
+            routing_updated.clone(),
         );
 
         let inbound_requests = Family::default();
         sub_registry.register(
             "inbound_requests",
             "Number of inbound requests",
-            Box::new(inbound_requests.clone()),
+            inbound_requests.clone(),
         );
 
         Self {
@@ -162,7 +162,7 @@ impl Metrics {
 impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
-            libp2p_kad::KademliaEvent::OutboundQueryCompleted { result, stats, .. } => {
+            libp2p_kad::KademliaEvent::OutboundQueryProgressed { result, stats, .. } => {
                 self.query_result_num_requests
                     .get_or_create(&result.into())
                     .observe(stats.num_requests().into());
@@ -180,9 +180,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
 
                 match result {
                     libp2p_kad::QueryResult::GetRecord(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_record_ok
-                            .observe(ok.records.len() as f64),
+                        Ok(libp2p_kad::GetRecordOk::FoundRecord(_)) => {
+                            self.query_result_get_record_ok.inc();
+                        }
+                        Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. }) => {}
                         Err(error) => {
                             self.query_result_get_record_error
                                 .get_or_create(&error.into())
@@ -200,9 +201,13 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                         }
                     },
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_providers_ok
-                            .observe(ok.providers.len() as f64),
+                        Ok(libp2p_kad::GetProvidersOk::FoundProviders { providers, .. }) => {
+                            self.query_result_get_providers_ok
+                                .observe(providers.len() as f64);
+                        }
+                        Ok(libp2p_kad::GetProvidersOk::FinishedWithNoAdditionalRecord {
+                            ..
+                        }) => {}
                         Err(error) => {
                             self.query_result_get_providers_error
                                 .get_or_create(&error.into())
@@ -253,12 +258,12 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct QueryResult {
     r#type: QueryType,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum QueryType {
     Bootstrap,
     GetClosestPeers,
@@ -301,12 +306,12 @@ impl From<&libp2p_kad::QueryResult> for QueryResult {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct GetRecordResult {
     error: GetRecordError,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum GetRecordError {
     NotFound,
     QuorumFailed,
@@ -329,12 +334,12 @@ impl From<&libp2p_kad::GetRecordError> for GetRecordResult {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct GetClosestPeersResult {
     error: GetClosestPeersError,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum GetClosestPeersError {
     Timeout,
 }
@@ -349,12 +354,12 @@ impl From<&libp2p_kad::GetClosestPeersError> for GetClosestPeersResult {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct GetProvidersResult {
     error: GetProvidersError,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum GetProvidersError {
     Timeout,
 }
@@ -369,20 +374,20 @@ impl From<&libp2p_kad::GetProvidersError> for GetProvidersResult {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct RoutingUpdated {
     action: RoutingAction,
     bucket: u32,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum RoutingAction {
     Added,
     Updated,
     Evicted,
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct InboundRequest {
     request: Request,
 }
@@ -401,7 +406,7 @@ impl From<&libp2p_kad::InboundRequest> for InboundRequest {
     }
 }
 
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+#[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum Request {
     FindNode,
     GetProvider,

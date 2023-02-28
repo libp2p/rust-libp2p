@@ -34,7 +34,8 @@ const MAX_INLINE_KEY_LENGTH: usize = 42;
 
 /// Identifier of a peer of the network.
 ///
-/// The data is a multihash of the public key of the peer.
+/// The data is a CIDv0 compatible multihash of the protobuf encoded public key of the peer
+/// as specified in [specs/peer-ids](https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md).
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PeerId {
     multihash: Multihash,

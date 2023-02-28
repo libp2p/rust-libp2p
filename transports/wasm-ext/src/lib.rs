@@ -631,14 +631,14 @@ impl From<JsErr> for io::Error {
 
 impl fmt::Debug for JsErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
 impl fmt::Display for JsErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(s) = self.0.as_string() {
-            write!(f, "{}", s)
+            write!(f, "{s}")
         } else if let Some(err) = self.0.dyn_ref::<js_sys::Error>() {
             write!(f, "{}", String::from(err.message()))
         } else if let Some(obj) = self.0.dyn_ref::<js_sys::Object>() {

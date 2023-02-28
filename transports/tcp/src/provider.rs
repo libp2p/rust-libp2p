@@ -28,6 +28,8 @@ pub mod tokio;
 
 use futures::future::BoxFuture;
 use futures::io::{AsyncRead, AsyncWrite};
+use futures::Stream;
+use if_watch::{IfEvent, IpNet};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::task::{Context, Poll};
 use std::{fmt, io};
@@ -46,6 +48,14 @@ pub trait Provider: Clone + Send + 'static {
     type Stream: AsyncRead + AsyncWrite + Send + Unpin + fmt::Debug;
     /// The type of TCP listeners obtained from [`Provider::new_listener`].
     type Listener: Send + Unpin;
+    /// The type of IfWatcher obtained from [`Provider::new_if_watcher`].
+    type IfWatcher: Stream<Item = io::Result<IfEvent>> + Send + Unpin;
+
+    /// Create a new IfWatcher responsible for detecting IP address changes.
+    fn new_if_watcher() -> io::Result<Self::IfWatcher>;
+
+    /// An iterator over all currently discovered addresses.
+    fn addrs(_: &Self::IfWatcher) -> Vec<IpNet>;
 
     /// Creates a new listener wrapping the given [`TcpListener`] that
     /// can be polled for incoming connections via [`Self::poll_accept()`].

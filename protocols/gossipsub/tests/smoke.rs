@@ -26,12 +26,13 @@ use rand::{seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
 
 use futures::StreamExt;
-use libp2p::gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
-    ValidationMode,
+use libp2p_core::{
+    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
-use libp2p::swarm::Swarm;
-use libp2p_swarm_test::SwarmExt;
+use libp2p_gossipsub as gossipsub;
+use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_yamux as yamux;
 
 struct Graph {
     nodes: SelectAll<Swarm<Gossipsub>>,
@@ -72,7 +73,7 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    async fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
+    async fn wait_for<F: FnMut(&gossipsub::Event) -> bool>(&mut self, mut f: F) -> bool {
         let condition = async {
             loop {
                 if let Ok(ev) = self
@@ -106,7 +107,7 @@ impl Graph {
     }
 }
 
-async fn build_node() -> Swarm<Gossipsub> {
+async fn build_node() -> Swarm<gossipsub::Behaviour> {
     // NOTE: The graph of created nodes can be disconnected from the mesh point of view as nodes
     // can reach their d_lo value and not add other nodes to their mesh. To speed up this test, we
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
@@ -146,7 +147,7 @@ fn multi_hop_propagation() {
             let number_nodes = graph.nodes.len();
 
             // Subscribe each node to the same topic.
-            let topic = Topic::new("test-net");
+            let topic = gossipsub::IdentTopic::new("test-net");
             for node in &mut graph.nodes {
                 node.behaviour_mut().subscribe(&topic).unwrap();
             }
@@ -156,7 +157,7 @@ fn multi_hop_propagation() {
 
             let all_subscribed = graph
                 .wait_for(move |ev| {
-                    if let GossipsubEvent::Subscribed { .. } = ev {
+                    if let gossipsub::Event::Subscribed { .. } = ev {
                         subscribed += 1;
                         if subscribed == (number_nodes - 1) * 2 {
                             return true;
@@ -169,8 +170,8 @@ fn multi_hop_propagation() {
 
             if !all_subscribed {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to subscribe but only have {:?}/{:?}.",
-                    subscribed, num_nodes,
+                    "Timed out waiting for all nodes to subscribe but only have {
+                    subscribed:?}/{num_nodes:?}.",
                 ));
             }
 
@@ -192,7 +193,7 @@ fn multi_hop_propagation() {
             let mut received_msgs = 0;
             let all_received = graph
                 .wait_for(move |ev| {
-                    if let GossipsubEvent::Message { .. } = ev {
+                    if let gossipsub::Event::Message { .. } = ev {
                         received_msgs += 1;
                         if received_msgs == number_nodes - 1 {
                             return true;
@@ -205,8 +206,8 @@ fn multi_hop_propagation() {
 
             if !all_received {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to receive the msg but only have {:?}/{:?}.",
-                    received_msgs, num_nodes,
+                    "Timed out waiting for all nodes to receive the msg but only have {
+                    received_msgs:?}/{num_nodes:?}.",
                 ));
             }
 

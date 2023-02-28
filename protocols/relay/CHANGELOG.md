@@ -1,3 +1,39 @@
+# 0.15.0
+
+- Rename types as per [discussion 2174].
+  `Relay` has been renamed to `Behaviour`.
+  The `Relay`, and `Client` prefixes have been removed from various types like `ClientTransport`.
+  the `v2` namespace has also been removed, users should prefer importing the relay protocol as a module (`use libp2p::relay;`),
+  and refer to its types via `relay::`. For example: `relay::Behaviour` or `relay::client::Behaviour`.
+  See [PR 3238].
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3238]: https://github.com/libp2p/rust-libp2p/pull/3238
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
+
+# 0.14.0
+
+- Update to `prost-codec` `v0.3.0`.
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Replace `Client` and `Relay`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `client::Handler` and `relay::Handler`'s `ConnectionHandler` implemention `inject_*` methods
+  with the new `on_*` methods. See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.13.0
 
 - Update to `libp2p-core` `v0.37.0`.

@@ -40,8 +40,8 @@
 //!
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p::tcp::TcpTransport;
-//! use libp2p::noise::{Keypair, X25519Spec, NoiseAuthenticated};
+//! use libp2p_tcp::TcpTransport;
+//! use libp2p_noise::{Keypair, X25519Spec, NoiseAuthenticated};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
@@ -55,14 +55,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod error;
 mod io;
 mod protocol;
 
-pub use error::NoiseError;
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
-pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
+#[allow(deprecated)]
+pub use protocol::x25519::X25519;
+pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
@@ -79,6 +79,7 @@ use zeroize::Zeroize;
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
     params: ProtocolParams,
+    #[allow(deprecated)]
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
@@ -105,6 +106,11 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     }
 
     /// Sets the legacy configuration options to use, if any.
+    #[deprecated(
+        since = "0.42.0",
+        note = "`LegacyConfig` will be removed without replacement."
+    )]
+    #[allow(deprecated)]
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
@@ -150,7 +156,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -167,7 +176,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -187,7 +199,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -211,7 +226,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -240,6 +258,42 @@ where
         Ok(state)
     }
 }
+
+/// libp2p_noise error type.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum NoiseError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Noise(#[from] snow::Error),
+    #[error("Invalid public key")]
+    InvalidKey(#[from] identity::error::DecodingError),
+    #[error("Only keys of length 32 bytes are supported")]
+    InvalidLength,
+    #[error("Remote authenticated with an unexpected public key")]
+    UnexpectedKey,
+    #[error("The signature of the remote identity's public key does not verify")]
+    BadSignature,
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+    #[error(transparent)]
+    InvalidPayload(DecodeError),
+    #[error(transparent)]
+    SigningError(#[from] identity::error::SigningError),
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
+
+impl From<prost::DecodeError> for NoiseError {
+    fn from(e: prost::DecodeError) -> Self {
+        NoiseError::InvalidPayload(DecodeError(e))
+    }
+}
+
+// Handshake pattern IX /////////////////////////////////////////////////////
 
 /// Implements the responder part of the `IX` noise handshake pattern.
 ///
@@ -537,6 +591,10 @@ where
 
 /// Legacy configuration options.
 #[derive(Clone, Copy, Default)]
+#[deprecated(
+    since = "0.42.0",
+    note = "`LegacyConfig` will be removed without replacement."
+)]
 pub struct LegacyConfig {
     /// Whether to continue sending legacy handshake payloads,
     /// i.e. length-prefixed protobuf payloads inside a length-prefixed

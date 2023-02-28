@@ -18,24 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Proto, Push};
-use crate::protocol::{Info, ReplySubstream, UpgradeError};
-use futures::prelude::*;
-use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
-    Multiaddr, PeerId, PublicKey,
-};
+use crate::handler::{self, Handler, InEvent};
+use crate::protocol::{Info, Protocol, UpgradeError};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
+    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent,
 };
+use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
-    pin::Pin,
     task::Context,
     task::Poll,
     time::Duration,
@@ -51,30 +48,26 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Pending replies to send.
-    pending_replies: VecDeque<Reply>,
+    /// Pending requests to be fulfilled, either `Handler` requests for `Behaviour` info
+    /// to address identification requests, or push requests to peers
+    /// with current information about the local peer.
+    requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
-    /// Peers to which an active push with current information about
-    /// the local peer should be sent.
-    pending_push: HashSet<PeerId>,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
+
+    listen_addresses: ListenAddresses,
+    external_addresses: ExternalAddresses,
 }
 
-/// A pending reply to an inbound identification request.
-enum Reply {
-    /// The reply is queued for sending.
-    Queued {
-        peer: PeerId,
-        io: ReplySubstream<NegotiatedSubstream>,
-        observed: Multiaddr,
-    },
-    /// The reply is being sent.
-    Sending {
-        peer: PeerId,
-        io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
-    },
+/// A `Behaviour` request to be fulfilled, either `Handler` requests for `Behaviour` info
+/// to address identification requests, or push requests to peers
+/// with current information about the local peer.
+#[derive(Debug, PartialEq, Eq)]
+struct Request {
+    peer_id: PeerId,
+    protocol: Protocol,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -131,7 +124,7 @@ impl Config {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 0,
+            cache_size: 100,
         }
     }
 
@@ -184,10 +177,11 @@ impl Behaviour {
         Self {
             config,
             connected: HashMap::new(),
-            pending_replies: VecDeque::new(),
+            requests: Vec::new(),
             events: VecDeque::new(),
-            pending_push: HashSet::new(),
             discovered_peers,
+            listen_addresses: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -197,32 +191,29 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
-                let handler = self.new_handler();
+            let request = Request {
+                peer_id: p,
+                protocol: Protocol::Push,
+            };
+            if !self.requests.contains(&request) {
+                self.requests.push(request);
+
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    handler,
                 });
             }
         }
     }
-}
 
-impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Proto;
-    type OutEvent = Event;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(self.config.initial_delay, self.config.interval)
-    }
-
-    fn inject_connection_established(
+    fn on_connection_established(
         &mut self,
-        peer_id: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        failed_addresses: Option<&Vec<Multiaddr>>,
-        _other_established: usize,
+        ConnectionEstablished {
+            peer_id,
+            connection_id: conn,
+            endpoint,
+            failed_addresses,
+            ..
+        }: ConnectionEstablished,
     ) {
         let addr = match endpoint {
             ConnectedPoint::Dialer { address, .. } => address.clone(),
@@ -230,74 +221,63 @@ impl NetworkBehaviour for Behaviour {
         };
 
         self.connected
-            .entry(*peer_id)
+            .entry(peer_id)
             .or_default()
-            .insert(*conn, addr);
+            .insert(conn, addr);
 
-        if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
-            for addr in failed_addresses
-                .into_iter()
-                .flat_map(|addresses| addresses.iter())
-            {
+        if let Some(entry) = self.discovered_peers.get_mut(&peer_id) {
+            for addr in failed_addresses {
                 entry.remove(addr);
             }
         }
     }
+}
 
-    fn inject_connection_closed(
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = Handler;
+    type OutEvent = Event;
+
+    fn handle_established_inbound_connection(
         &mut self,
-        peer_id: &PeerId,
-        conn: &ConnectionId,
-        _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            self.connected.remove(peer_id);
-            self.pending_push.remove(peer_id);
-        } else if let Some(addrs) = self.connected.get_mut(peer_id) {
-            addrs.remove(conn);
-        }
+        _: ConnectionId,
+        peer: PeerId,
+        _: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            remote_addr.clone(),
+        ))
     }
 
-    fn inject_dial_failure(
+    fn handle_established_outbound_connection(
         &mut self,
-        peer_id: Option<PeerId>,
-        _: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        if let Some(peer_id) = peer_id {
-            if !self.connected.contains_key(&peer_id) {
-                self.pending_push.remove(&peer_id);
-            }
-        }
-
-        if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
-            if let DialError::Transport(errors) = error {
-                for (addr, _error) in errors {
-                    entry.remove(addr);
-                }
-            }
-        }
+        _: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+        ))
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        if self.config.push_listen_addr_updates {
-            self.pending_push.extend(self.connected.keys());
-        }
-    }
-
-    fn inject_expired_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        if self.config.push_listen_addr_updates {
-            self.pending_push.extend(self.connected.keys());
-        }
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             handler::Event::Identified(mut info) => {
@@ -321,25 +301,22 @@ impl NetworkBehaviour for Behaviour {
                         score: AddressScore::Finite(1),
                     });
             }
+            handler::Event::Identification(peer) => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Sent {
+                        peer_id: peer,
+                    }));
+            }
             handler::Event::IdentificationPushed => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Pushed {
                         peer_id,
                     }));
             }
-            handler::Event::Identify(sender) => {
-                let observed = self
-                    .connected
-                    .get(&peer_id)
-                    .and_then(|addrs| addrs.get(&connection))
-                    .expect(
-                        "`inject_event` is only called with an established connection \
-                             and `inject_connection_established` ensures there is an entry; qed",
-                    );
-                self.pending_replies.push_back(Reply::Queued {
-                    peer: peer_id,
-                    io: sender,
-                    observed: observed.clone(),
+            handler::Event::Identify => {
+                self.requests.push(Request {
+                    peer_id,
+                    protocol: Protocol::Identify(connection_id),
                 });
             }
             handler::Event::IdentificationError(error) => {
@@ -354,103 +331,137 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
 
-        // Check for a pending active push to perform.
-        let peer_push = self.pending_push.iter().find_map(|peer| {
-            self.connected.get(peer).map(|conns| {
-                let observed_addr = conns
-                    .values()
-                    .next()
-                    .expect("connected peer has a connection")
-                    .clone();
-
-                let listen_addrs = listen_addrs(params);
-                let protocols = supported_protocols(params);
-
-                let info = Info {
-                    public_key: self.config.local_public_key.clone(),
-                    protocol_version: self.config.protocol_version.clone(),
-                    agent_version: self.config.agent_version.clone(),
-                    listen_addrs,
-                    protocols,
-                    observed_addr,
-                };
-
-                (*peer, Push(info))
-            })
-        });
-
-        if let Some((peer_id, push)) = peer_push {
-            self.pending_push.remove(&peer_id);
-            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+        // Check for pending requests.
+        match self.requests.pop() {
+            Some(Request {
                 peer_id,
-                event: push,
+                protocol: Protocol::Push,
+            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
                 handler: NotifyHandler::Any,
-            });
+                event: InEvent {
+                    listen_addrs: self
+                        .listen_addresses
+                        .iter()
+                        .chain(self.external_addresses.iter())
+                        .cloned()
+                        .collect(),
+                    supported_protocols: supported_protocols(params),
+                    protocol: Protocol::Push,
+                },
+            }),
+            Some(Request {
+                peer_id,
+                protocol: Protocol::Identify(connection_id),
+            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(connection_id),
+                event: InEvent {
+                    listen_addrs: self
+                        .listen_addresses
+                        .iter()
+                        .chain(self.external_addresses.iter())
+                        .cloned()
+                        .collect(),
+                    supported_protocols: supported_protocols(params),
+                    protocol: Protocol::Identify(connection_id),
+                },
+            }),
+            None => Poll::Pending,
         }
-
-        // Check for pending replies to send.
-        if let Some(r) = self.pending_replies.pop_front() {
-            let mut sending = 0;
-            let to_send = self.pending_replies.len() + 1;
-            let mut reply = Some(r);
-            loop {
-                match reply {
-                    Some(Reply::Queued { peer, io, observed }) => {
-                        let info = Info {
-                            listen_addrs: listen_addrs(params),
-                            protocols: supported_protocols(params),
-                            public_key: self.config.local_public_key.clone(),
-                            protocol_version: self.config.protocol_version.clone(),
-                            agent_version: self.config.agent_version.clone(),
-                            observed_addr: observed,
-                        };
-                        let io = Box::pin(io.send(info));
-                        reply = Some(Reply::Sending { peer, io });
-                    }
-                    Some(Reply::Sending { peer, mut io }) => {
-                        sending += 1;
-                        match Future::poll(Pin::new(&mut io), cx) {
-                            Poll::Ready(Ok(())) => {
-                                let event = Event::Sent { peer_id: peer };
-                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                            }
-                            Poll::Pending => {
-                                self.pending_replies.push_back(Reply::Sending { peer, io });
-                                if sending == to_send {
-                                    // All remaining futures are NotReady
-                                    break;
-                                } else {
-                                    reply = self.pending_replies.pop_front();
-                                }
-                            }
-                            Poll::Ready(Err(err)) => {
-                                let event = Event::Error {
-                                    peer_id: peer,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(
-                                        libp2p_core::upgrade::UpgradeError::Apply(err),
-                                    ),
-                                };
-                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                            }
-                        }
-                    }
-                    None => unreachable!(),
-                }
-            }
-        }
-
-        Poll::Pending
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers.get(peer)
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self.discovered_peers.get(&peer))
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarm_event(&event);
+
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                remaining_established,
+                ..
+            }) => {
+                if remaining_established == 0 {
+                    self.connected.remove(&peer_id);
+                    self.requests.retain(|request| {
+                        request
+                            != &Request {
+                                peer_id,
+                                protocol: Protocol::Push,
+                            }
+                    });
+                } else if let Some(addrs) = self.connected.get_mut(&peer_id) {
+                    addrs.remove(&connection_id);
+                }
+            }
+            FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
+                if let Some(peer_id) = peer_id {
+                    if !self.connected.contains_key(&peer_id) {
+                        self.requests.retain(|request| {
+                            request
+                                != &Request {
+                                    peer_id,
+                                    protocol: Protocol::Push,
+                                }
+                        });
+                    }
+                }
+
+                if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
+                    if let DialError::Transport(errors) = error {
+                        for (addr, _error) in errors {
+                            entry.remove(addr);
+                        }
+                    }
+                }
+            }
+            FromSwarm::NewListenAddr(_) | FromSwarm::ExpiredListenAddr(_) => {
+                if self.config.push_listen_addr_updates {
+                    for p in self.connected.keys() {
+                        let request = Request {
+                            peer_id: *p,
+                            protocol: Protocol::Push,
+                        };
+                        if !self.requests.contains(&request) {
+                            self.requests.push(request);
+                        }
+                    }
+                }
+            }
+            FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 
@@ -495,17 +506,11 @@ fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
         .collect()
 }
 
-fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
-    let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-    listen_addrs.extend(params.listened_addresses());
-    listen_addrs
-}
-
 /// If there is a given peer_id in the multiaddr, make sure it is the same as
 /// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this returns true.
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
-    if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
+    if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
     true
@@ -553,11 +558,12 @@ impl PeerCache {
 mod tests {
     use super::*;
     use futures::pin_mut;
-    use libp2p::mplex::MplexConfig;
-    use libp2p::noise;
-    use libp2p::tcp;
+    use futures::prelude::*;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
+    use libp2p_mplex::MplexConfig;
+    use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};
+    use libp2p_tcp as tcp;
     use std::time::Duration;
 
     fn transport() -> (
@@ -584,7 +590,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -593,7 +599,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -614,7 +620,7 @@ mod tests {
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
-        // `IdentifyHandler::connection_keep_alive`. Hence the test succeeds if
+        // `Handler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
         async_std::task::block_on(async move {
             loop {
@@ -661,7 +667,7 @@ mod tests {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -670,7 +676,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -742,18 +748,16 @@ mod tests {
                     .with_initial_delay(Duration::from_secs(10)),
             );
 
-            Swarm::new(transport, protocol, pubkey.to_peer_id())
+            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
         };
 
         let mut swarm2 = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(
-                Config::new("a".to_string(), pubkey.clone())
-                    .with_cache_size(100)
-                    .with_agent_version("b".to_string()),
+                Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
-            Swarm::new(transport, protocol, pubkey.to_peer_id())
+            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
         };
 
         let swarm1_peer_id = *swarm1.local_peer_id();
@@ -833,8 +837,8 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(Protocol::P2p(peer_id.into()));
-        addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
+        addr.push(multiaddr::Protocol::P2p(peer_id.into()));
+        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id.into()));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));
         assert!(!multiaddr_matches_peer_id(

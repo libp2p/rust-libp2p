@@ -471,8 +471,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TransportUpgradeError::Transport(e) => write!(f, "Transport error: {}", e),
-            TransportUpgradeError::Upgrade(e) => write!(f, "Upgrade error: {}", e),
+            TransportUpgradeError::Transport(e) => write!(f, "Transport error: {e}"),
+            TransportUpgradeError::Upgrade(e) => write!(f, "Upgrade error: {e}"),
         }
     }
 }

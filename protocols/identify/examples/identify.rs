@@ -37,7 +37,9 @@
 //! and will send each other identify info which is then printed to the console.
 
 use futures::prelude::*;
-use libp2p::{identify, identity, Multiaddr, PeerId};
+use libp2p_core::upgrade::Version;
+use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use std::error::Error;
 
@@ -45,9 +47,13 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
-    let transport = libp2p::development_transport(local_key.clone()).await?;
+    let transport = libp2p_tcp::async_io::Transport::default()
+        .upgrade(Version::V1)
+        .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .boxed();
 
     // Create a identify network behaviour.
     let behaviour = identify::Behaviour::new(identify::Config::new(
@@ -55,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         local_key.public(),
     ));
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
@@ -66,19 +72,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {}", addr)
+        println!("Dialed {addr}")
     }
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
             // Prints peer id identify info is being sent to.
             SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
-                println!("Sent identify info to {:?}", peer_id)
+                println!("Sent identify info to {peer_id:?}")
             }
             // Prints out the info received via the identify event
             SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => {
-                println!("Received {:?}", info)
+                println!("Received {info:?}")
             }
             _ => {}
         }

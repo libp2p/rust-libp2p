@@ -20,32 +20,23 @@
 
 //! [`ConnectionHandler`] handling direct connection upgraded through a relayed connection.
 
-use libp2p_core::connection::ConnectionId;
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    SubstreamProtocol,
 };
 use std::task::{Context, Poll};
 use void::Void;
 
 #[derive(Debug)]
 pub enum Event {
-    DirectConnectionUpgradeSucceeded { relayed_connection_id: ConnectionId },
+    DirectConnectionEstablished,
 }
 
+#[derive(Default)]
 pub struct Handler {
-    relayed_connection_id: ConnectionId,
     reported: bool,
-}
-
-impl Handler {
-    pub(crate) fn new(relayed_connection_id: ConnectionId) -> Self {
-        Self {
-            reported: false,
-            relayed_connection_id,
-        }
-    }
 }
 
 impl ConnectionHandler for Handler {
@@ -61,30 +52,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-    }
-
-    fn inject_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
+    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No
@@ -104,11 +72,27 @@ impl ConnectionHandler for Handler {
         if !self.reported {
             self.reported = true;
             return Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::DirectConnectionUpgradeSucceeded {
-                    relayed_connection_id: self.relayed_connection_id,
-                },
+                Event::DirectConnectionEstablished,
             ));
         }
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_) => {}
+        }
     }
 }

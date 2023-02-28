@@ -19,21 +19,22 @@
 // DEALINGS IN THE SOFTWARE.
 
 use clap::Parser;
-use futures::executor::block_on;
+use futures::executor::{block_on, ThreadPool};
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
-use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::transport::OrTransport;
-use libp2p::core::upgrade;
-use libp2p::dns::DnsConfig;
-use libp2p::identify;
-use libp2p::noise;
-use libp2p::relay::v2::client::{self, Client};
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
-use libp2p::tcp;
-use libp2p::Transport;
-use libp2p::{dcutr, ping};
-use libp2p::{identity, NetworkBehaviour, PeerId};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::transport::OrTransport;
+use libp2p_core::upgrade;
+use libp2p_core::Transport;
+use libp2p_core::{identity, PeerId};
+use libp2p_dcutr as dcutr;
+use libp2p_dns::DnsConfig;
+use libp2p_identify as identify;
+use libp2p_noise as noise;
+use libp2p_ping as ping;
+use libp2p_relay as relay;
+use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p_tcp as tcp;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -86,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {:?}", local_peer_id);
 
-    let (relay_transport, client) = Client::new_transport_and_behaviour(local_peer_id);
+    let (relay_transport, client) = relay::client::new(local_peer_id);
 
     let transport = OrTransport::new(
         relay_transport,
@@ -100,16 +101,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         noise::NoiseAuthenticated::xx(&local_key)
             .expect("Signing libp2p-noise static DH keypair failed."),
     )
-    .multiplex(libp2p::yamux::YamuxConfig::default())
+    .multiplex(libp2p_yamux::YamuxConfig::default())
     .boxed();
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Event", event_process = false)]
+    #[behaviour(
+        out_event = "Event",
+        event_process = false,
+        prelude = "libp2p_swarm::derive_prelude"
+    )]
     struct Behaviour {
-        relay_client: Client,
+        relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        dcutr: dcutr::behaviour::Behaviour,
+        dcutr: dcutr::Behaviour,
     }
 
     #[derive(Debug)]
@@ -117,8 +122,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     enum Event {
         Ping(ping::Event),
         Identify(identify::Event),
-        Relay(client::Event),
-        Dcutr(dcutr::behaviour::Event),
+        Relay(relay::client::Event),
+        Dcutr(dcutr::Event),
     }
 
     impl From<ping::Event> for Event {
@@ -133,14 +138,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<client::Event> for Event {
-        fn from(e: client::Event) -> Self {
+    impl From<relay::client::Event> for Event {
+        fn from(e: relay::client::Event) -> Self {
             Event::Relay(e)
         }
     }
 
-    impl From<dcutr::behaviour::Event> for Event {
-        fn from(e: dcutr::behaviour::Event) -> Self {
+    impl From<dcutr::Event> for Event {
+        fn from(e: dcutr::Event) -> Self {
             Event::Dcutr(e)
         }
     }
@@ -152,12 +157,15 @@ fn main() -> Result<(), Box<dyn Error>> {
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
-        dcutr: dcutr::behaviour::Behaviour::new(),
+        dcutr: dcutr::Behaviour::new(local_peer_id),
     };
 
-    let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
-        .dial_concurrency_factor(10_u8.try_into().unwrap())
-        .build();
+    let mut swarm = match ThreadPool::new() {
+        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
+        Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
+    }
+    .dial_concurrency_factor(10_u8.try_into().unwrap())
+    .build();
 
     swarm
         .listen_on(
@@ -177,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         SwarmEvent::NewListenAddr { address, .. } => {
                             info!("Listening on {:?}", address);
                         }
-                        event => panic!("{:?}", event),
+                        event => panic!("{event:?}"),
                     }
                 }
                 _ = delay => {
@@ -212,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("Relay told us our public address: {:?}", observed_addr);
                     learned_observed_addr = true;
                 }
-                event => panic!("{:?}", event),
+                event => panic!("{event:?}"),
             }
 
             if learned_observed_addr && told_relay_observed_addr {
@@ -244,9 +252,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
                 }
-                SwarmEvent::Behaviour(Event::Relay(client::Event::ReservationReqAccepted {
-                    ..
-                })) => {
+                SwarmEvent::Behaviour(Event::Relay(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                )) => {
                     assert!(opts.mode == Mode::Listen);
                     info!("Relay accepted our reservation request.");
                 }

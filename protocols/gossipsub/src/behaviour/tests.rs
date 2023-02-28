@@ -21,25 +21,23 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
+use crate::ValidationError;
 use crate::{
-    GossipsubConfig, GossipsubConfigBuilder, GossipsubMessage, IdentTopic as Topic,
-    TopicScoreParams,
+    config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
 };
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::Endpoint;
+use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::thread::sleep;
 use std::time::Duration;
 
-#[derive(Default, Builder, Debug)]
-#[builder(default)]
+#[derive(Default, Debug)]
 struct InjectNodes<D, F>
 // TODO: remove trait bound Default when this issue is fixed:
 //  https://github.com/colin-kiegel/rust-derive-builder/issues/93
@@ -50,7 +48,7 @@ where
     peer_no: usize,
     topics: Vec<String>,
     to_subscribe: bool,
-    gs_config: GossipsubConfig,
+    gs_config: Config,
     explicit: usize,
     outbound: usize,
     scoring: Option<(PeerScoreParams, PeerScoreThresholds)>,
@@ -63,10 +61,10 @@ where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    pub fn create_network(self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
+    pub fn create_network(self) -> (Behaviour<D, F>, Vec<PeerId>, Vec<TopicHash>) {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         // create a gossipsub struct
-        let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
+        let mut gs: Behaviour<D, F> = Behaviour::new_with_subscription_filter_and_transform(
             MessageAuthenticity::Signed(keypair),
             self.gs_config,
             None,
@@ -108,34 +106,65 @@ where
 
         (gs, peers, topic_hashes)
     }
-}
 
-impl<D, F> InjectNodesBuilder<D, F>
-where
-    D: DataTransform + Default + Clone + Send + 'static,
-    F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
-{
-    pub fn create_network(&self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-        self.build().unwrap().create_network()
+    fn peer_no(mut self, peer_no: usize) -> Self {
+        self.peer_no = peer_no;
+        self
+    }
+
+    fn topics(mut self, topics: Vec<String>) -> Self {
+        self.topics = topics;
+        self
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn to_subscribe(mut self, to_subscribe: bool) -> Self {
+        self.to_subscribe = to_subscribe;
+        self
+    }
+
+    fn gs_config(mut self, gs_config: Config) -> Self {
+        self.gs_config = gs_config;
+        self
+    }
+
+    fn explicit(mut self, explicit: usize) -> Self {
+        self.explicit = explicit;
+        self
+    }
+
+    fn outbound(mut self, outbound: usize) -> Self {
+        self.outbound = outbound;
+        self
+    }
+
+    fn scoring(mut self, scoring: Option<(PeerScoreParams, PeerScoreThresholds)>) -> Self {
+        self.scoring = scoring;
+        self
+    }
+
+    fn subscription_filter(mut self, subscription_filter: F) -> Self {
+        self.subscription_filter = subscription_filter;
+        self
     }
 }
 
-fn inject_nodes<D, F>() -> InjectNodesBuilder<D, F>
+fn inject_nodes<D, F>() -> InjectNodes<D, F>
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    InjectNodesBuilder::default()
+    InjectNodes::default()
 }
 
-fn inject_nodes1() -> InjectNodesBuilder<IdentityTransform, AllowAllSubscriptionFilter> {
-    inject_nodes()
+fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter> {
+    InjectNodes::<IdentityTransform, AllowAllSubscriptionFilter>::default()
 }
 
 // helper functions for testing
 
 fn add_peer<D, F>(
-    gs: &mut Gossipsub<D, F>,
+    gs: &mut Behaviour<D, F>,
     topic_hashes: &Vec<TopicHash>,
     outbound: bool,
     explicit: bool,
@@ -148,7 +177,7 @@ where
 }
 
 fn add_peer_with_addr<D, F>(
-    gs: &mut Gossipsub<D, F>,
+    gs: &mut Behaviour<D, F>,
     topic_hashes: &Vec<TopicHash>,
     outbound: bool,
     explicit: bool,
@@ -169,7 +198,7 @@ where
 }
 
 fn add_peer_with_addr_and_kind<D, F>(
-    gs: &mut Gossipsub<D, F>,
+    gs: &mut Behaviour<D, F>,
     topic_hashes: &Vec<TopicHash>,
     outbound: bool,
     explicit: bool,
@@ -181,25 +210,29 @@ where
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     let peer = PeerId::random();
-    gs.inject_connection_established(
-        &peer,
-        &ConnectionId::new(0),
-        &if outbound {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: Endpoint::Dialer,
-            }
-        } else {
-            ConnectedPoint::Listener {
-                local_addr: Multiaddr::empty(),
-                send_back_addr: address,
-            }
-        },
-        None,
-        0, // first connection
-    );
+    let endpoint = if outbound {
+        ConnectedPoint::Dialer {
+            address,
+            role_override: Endpoint::Dialer,
+        }
+    } else {
+        ConnectedPoint::Listener {
+            local_addr: Multiaddr::empty(),
+            send_back_addr: address,
+        }
+    };
+
+    #[allow(deprecated)]
+    gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+        peer_id: peer,
+        connection_id: ConnectionId::DUMMY,
+        endpoint: &endpoint,
+        failed_addresses: &[],
+        other_established: 0, // first connection
+    }));
     if let Some(kind) = kind {
-        gs.inject_event(peer, ConnectionId::new(1), HandlerEvent::PeerKind(kind));
+        #[allow(deprecated)]
+        gs.on_connection_handler_event(peer, ConnectionId::DUMMY, HandlerEvent::PeerKind(kind));
     }
     if explicit {
         gs.add_explicit_peer(&peer);
@@ -209,8 +242,8 @@ where
             &topic_hashes
                 .iter()
                 .cloned()
-                .map(|t| GossipsubSubscription {
-                    action: GossipsubSubscriptionAction::Subscribe,
+                .map(|t| Subscription {
+                    action: SubscriptionAction::Subscribe,
                     topic_hash: t,
                 })
                 .collect::<Vec<_>>(),
@@ -220,7 +253,7 @@ where
     peer
 }
 
-fn disconnect_peer<D, F>(gs: &mut Gossipsub<D, F>, peer_id: &PeerId)
+fn disconnect_peer<D, F>(gs: &mut Behaviour<D, F>, peer_id: &PeerId)
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
@@ -231,28 +264,32 @@ where
             role_override: Endpoint::Dialer,
         }; // this is not relevant
            // peer_connections.connections should never be empty.
+
         let mut active_connections = peer_connections.connections.len();
-        for conn_id in peer_connections.connections.clone() {
-            let handler = gs.new_handler();
+        for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
-            gs.inject_connection_closed(
-                peer_id,
-                &conn_id,
-                &fake_endpoint,
-                handler,
-                active_connections,
-            );
+
+            let dummy_handler =
+                Handler::new(ProtocolConfig::new(&Config::default()), Duration::ZERO);
+
+            gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id: *peer_id,
+                connection_id,
+                endpoint: &fake_endpoint,
+                handler: dummy_handler,
+                remaining_established: active_connections,
+            }));
         }
     }
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
+fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> Rpc {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
     for message in rpc.publish.into_iter() {
-        messages.push(RawGossipsubMessage {
+        messages.push(RawMessage {
             source: message.from.map(|x| PeerId::from_bytes(&x).unwrap()),
             data: message.data.unwrap_or_default(),
             sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
@@ -265,10 +302,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
     let mut control_msgs = Vec::new();
     if let Some(rpc_control) = rpc.control {
         // Collect the gossipsub control messages
-        let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+        let ihave_msgs: Vec<ControlAction> = rpc_control
             .ihave
             .into_iter()
-            .map(|ihave| GossipsubControlAction::IHave {
+            .map(|ihave| ControlAction::IHave {
                 topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
                 message_ids: ihave
                     .message_ids
@@ -278,10 +315,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
             })
             .collect();
 
-        let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+        let iwant_msgs: Vec<ControlAction> = rpc_control
             .iwant
             .into_iter()
-            .map(|iwant| GossipsubControlAction::IWant {
+            .map(|iwant| ControlAction::IWant {
                 message_ids: iwant
                     .message_ids
                     .into_iter()
@@ -290,10 +327,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
             })
             .collect();
 
-        let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+        let graft_msgs: Vec<ControlAction> = rpc_control
             .graft
             .into_iter()
-            .map(|graft| GossipsubControlAction::Graft {
+            .map(|graft| ControlAction::Graft {
                 topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
             })
             .collect();
@@ -317,7 +354,7 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
                 .collect::<Vec<PeerInfo>>();
 
             let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-            prune_msgs.push(GossipsubControlAction::Prune {
+            prune_msgs.push(ControlAction::Prune {
                 topic_hash,
                 peers,
                 backoff: prune.backoff,
@@ -330,16 +367,16 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
         control_msgs.extend(prune_msgs);
     }
 
-    GossipsubRpc {
+    Rpc {
         messages,
         subscriptions: rpc
             .subscriptions
             .into_iter()
-            .map(|sub| GossipsubSubscription {
+            .map(|sub| Subscription {
                 action: if Some(true) == sub.subscribe {
-                    GossipsubSubscriptionAction::Subscribe
+                    SubscriptionAction::Subscribe
                 } else {
-                    GossipsubSubscriptionAction::Unsubscribe
+                    SubscriptionAction::Unsubscribe
                 },
                 topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
             })
@@ -373,17 +410,17 @@ fn test_subscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    for s in &message.subscriptions {
-                        if let Some(true) = s.subscribe {
-                            collected_subscriptions.push(s.clone())
-                        };
-                    }
-                    collected_subscriptions
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref message),
+                ..
+            } => {
+                for s in &message.subscriptions {
+                    if let Some(true) = s.subscribe {
+                        collected_subscriptions.push(s.clone())
+                    };
                 }
-                _ => collected_subscriptions,
-            },
+                collected_subscriptions
+            }
             _ => collected_subscriptions,
         });
 
@@ -441,17 +478,17 @@ fn test_unsubscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    for s in &message.subscriptions {
-                        if let Some(true) = s.subscribe {
-                            collected_subscriptions.push(s.clone())
-                        };
-                    }
-                    collected_subscriptions
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref message),
+                ..
+            } => {
+                for s in &message.subscriptions {
+                    if let Some(true) = s.subscribe {
+                        collected_subscriptions.push(s.clone())
+                    };
                 }
-                _ => collected_subscriptions,
-            },
+                collected_subscriptions
+            }
             _ => collected_subscriptions,
         });
 
@@ -517,11 +554,11 @@ fn test_join() {
     );
 
     fn collect_grafts(
-        mut collected_grafts: Vec<GossipsubControlAction>,
-        (_, controls): (&PeerId, &Vec<GossipsubControlAction>),
-    ) -> Vec<GossipsubControlAction> {
+        mut collected_grafts: Vec<ControlAction>,
+        (_, controls): (&PeerId, &Vec<ControlAction>),
+    ) -> Vec<ControlAction> {
         for c in controls.iter() {
-            if let GossipsubControlAction::Graft { topic_hash: _ } = c {
+            if let ControlAction::Graft { topic_hash: _ } = c {
                 collected_grafts.push(c.clone())
             }
         }
@@ -545,16 +582,17 @@ fn test_join() {
     for _ in 0..3 {
         let random_peer = PeerId::random();
         // inform the behaviour of a new peer
-        gs.inject_connection_established(
-            &random_peer,
-            &ConnectionId::new(1),
-            &ConnectedPoint::Dialer {
+        #[allow(deprecated)]
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: random_peer,
+            connection_id: ConnectionId::DUMMY,
+            endpoint: &ConnectedPoint::Dialer {
                 address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            0,
-        );
+            failed_addresses: &[],
+            other_established: 0,
+        }));
 
         // add the new peer to the fanout
         let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
@@ -594,7 +632,7 @@ fn test_publish_without_flood_publishing() {
     // - Insert message into gs.mcache and gs.received
 
     //turn off flood publish to test old behaviour
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
         .unwrap();
@@ -628,16 +666,16 @@ fn test_publish_without_flood_publishing() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    let event = proto_to_message(message);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
-                    collected_publish
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref message),
+                ..
+            } => {
+                let event = proto_to_message(message);
+                for s in &event.messages {
+                    collected_publish.push(s.clone());
                 }
-                _ => collected_publish,
-            },
+                collected_publish
+            }
             _ => collected_publish,
         });
 
@@ -654,7 +692,7 @@ fn test_publish_without_flood_publishing() {
 
     let msg_id = gs.config.message_id(message);
 
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
         config.mesh_n_low(),
@@ -676,7 +714,7 @@ fn test_fanout() {
     // - Insert message into gs.mcache and gs.received
 
     //turn off flood publish to test fanout behaviour
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
         .unwrap();
@@ -718,16 +756,16 @@ fn test_fanout() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    let event = proto_to_message(message);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
-                    collected_publish
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref message),
+                ..
+            } => {
+                let event = proto_to_message(message);
+                for s in &event.messages {
+                    collected_publish.push(s.clone());
                 }
-                _ => collected_publish,
-            },
+                collected_publish
+            }
             _ => collected_publish,
         });
 
@@ -771,26 +809,25 @@ fn test_inject_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
-                    !m.subscriptions.is_empty()
-                } else {
-                    false
-                }
-            }
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref m),
+                ..
+            } => !m.subscriptions.is_empty(),
             _ => false,
         })
         .collect();
 
     // check that there are two subscriptions sent to each peer
     for sevent in send_events.clone() {
-        if let NetworkBehaviourAction::NotifyHandler { event, .. } = sevent {
-            if let GossipsubHandlerIn::Message(ref m) = **event {
-                assert!(
-                    m.subscriptions.len() == 2,
-                    "There should be two subscriptions sent to each peer (1 for each topic)."
-                );
-            }
+        if let NetworkBehaviourAction::NotifyHandler {
+            event: HandlerIn::Message(ref m),
+            ..
+        } = sevent
+        {
+            assert!(
+                m.subscriptions.len() == 2,
+                "There should be two subscriptions sent to each peer (1 for each topic)."
+            );
         };
     }
 
@@ -832,14 +869,14 @@ fn test_handle_received_subscriptions() {
     // The first peer sends 3 subscriptions and 1 unsubscription
     let mut subscriptions = topic_hashes[..3]
         .iter()
-        .map(|topic_hash| GossipsubSubscription {
-            action: GossipsubSubscriptionAction::Subscribe,
+        .map(|topic_hash| Subscription {
+            action: SubscriptionAction::Subscribe,
             topic_hash: topic_hash.clone(),
         })
-        .collect::<Vec<GossipsubSubscription>>();
+        .collect::<Vec<Subscription>>();
 
-    subscriptions.push(GossipsubSubscription {
-        action: GossipsubSubscriptionAction::Unsubscribe,
+    subscriptions.push(Subscription {
+        action: SubscriptionAction::Unsubscribe,
         topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
     });
 
@@ -880,8 +917,8 @@ fn test_handle_received_subscriptions() {
     // Peer 0 unsubscribes from the first topic
 
     gs.handle_received_subscriptions(
-        &[GossipsubSubscription {
-            action: GossipsubSubscriptionAction::Unsubscribe,
+        &[Subscription {
+            action: SubscriptionAction::Unsubscribe,
             topic_hash: topic_hashes[0].clone(),
         }],
         &peers[0],
@@ -903,13 +940,13 @@ fn test_handle_received_subscriptions() {
 #[test]
 /// Test Gossipsub.get_random_peers() function
 fn test_get_random_peers() {
-    // generate a default GossipsubConfig
-    let gs_config = GossipsubConfigBuilder::default()
+    // generate a default Config
+    let gs_config = ConfigBuilder::default()
         .validation_mode(ValidationMode::Anonymous)
         .build()
         .unwrap();
     // create a gossipsub struct
-    let mut gs: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, gs_config).unwrap();
+    let mut gs: Behaviour = Behaviour::new(MessageAuthenticity::Anonymous, gs_config).unwrap();
 
     // create a topic and fill it with some peers
     let topic_hash = Topic::new("Test").hash();
@@ -928,7 +965,10 @@ fn test_get_random_peers() {
                 *p,
                 PeerConnections {
                     kind: PeerKind::Gossipsubv1_1,
-                    connections: vec![ConnectionId::new(1)],
+                    connections: vec![
+                        #[allow(deprecated)]
+                        ConnectionId::DUMMY,
+                    ],
                 },
             )
         })
@@ -989,7 +1029,7 @@ fn test_handle_iwant_msg_cached() {
         .to_subscribe(true)
         .create_network();
 
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(peers[11]),
         data: vec![1, 2, 3, 4],
         sequence_number: Some(1u64),
@@ -1016,7 +1056,7 @@ fn test_handle_iwant_msg_cached() {
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
                         collected_messages.push(c.clone())
@@ -1047,7 +1087,7 @@ fn test_handle_iwant_msg_cached_shifted() {
 
     // perform 10 memshifts and check that it leaves the cache
     for shift in 1..10 {
-        let raw_message = RawGossipsubMessage {
+        let raw_message = RawMessage {
             source: Some(peers[11]),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(shift),
@@ -1073,17 +1113,16 @@ fn test_handle_iwant_msg_cached_shifted() {
 
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
-                    let event = proto_to_message(m);
-                    event
-                        .messages
-                        .iter()
-                        .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
-                        .any(|msg| gs.config.message_id(&msg) == msg_id)
-                } else {
-                    false
-                }
+            NetworkBehaviourAction::NotifyHandler {
+                event: HandlerIn::Message(ref m),
+                ..
+            } => {
+                let event = proto_to_message(m);
+                event
+                    .messages
+                    .iter()
+                    .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
+                    .any(|msg| gs.config.message_id(&msg) == msg_id)
             }
             _ => false,
         });
@@ -1138,7 +1177,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
     // check that we sent an IWANT request for `unknown id`
     let iwant_exists = match gs.control_pool.get(&peers[7]) {
         Some(controls) => controls.iter().any(|c| match c {
-            GossipsubControlAction::IWant { message_ids } => message_ids
+            ControlAction::IWant { message_ids } => message_ids
                 .iter()
                 .any(|m| *m == MessageId::new(b"unknown id")),
             _ => false,
@@ -1305,8 +1344,8 @@ fn test_handle_prune_peer_in_mesh() {
 }
 
 fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
-    gs: &Gossipsub<D, F>,
-    mut filter: impl FnMut(&PeerId, &GossipsubControlAction) -> bool,
+    gs: &Behaviour<D, F>,
+    mut filter: impl FnMut(&PeerId, &ControlAction) -> bool,
 ) -> usize {
     gs.control_pool
         .iter()
@@ -1315,24 +1354,24 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
         + gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
-                        let event = proto_to_message(m);
-                        event
-                            .control_msgs
-                            .iter()
-                            .filter(|m| filter(peer_id, m))
-                            .count()
-                    } else {
-                        0
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    event: HandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    event
+                        .control_msgs
+                        .iter()
+                        .filter(|m| filter(peer_id, m))
+                        .count()
                 }
                 _ => 0,
             })
             .sum::<usize>()
 }
 
-fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(gs: &mut Gossipsub<D, F>) {
+fn flush_events<D: DataTransform, F: TopicSubscriptionFilter>(gs: &mut Behaviour<D, F>) {
     gs.control_pool.clear();
     gs.events.clear();
 }
@@ -1356,7 +1395,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id() == Some(peer),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1369,7 +1408,7 @@ fn test_explicit_peer_gets_connected() {
 
 #[test]
 fn test_explicit_peer_reconnects() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .check_explicit_peers_ticks(2)
         .build()
         .unwrap();
@@ -1397,8 +1436,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1413,8 +1451,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1429,7 +1466,7 @@ fn test_handle_graft_explicit_peer() {
         .peer_no(1)
         .topics(vec![String::from("topic1"), String::from("topic2")])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
@@ -1445,7 +1482,7 @@ fn test_handle_graft_explicit_peer() {
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == peer
             && match m {
-                GossipsubControlAction::Prune { topic_hash, .. } =>
+                ControlAction::Prune { topic_hash, .. } =>
                     topic_hash == &topic_hashes[0] || topic_hash == &topic_hashes[1],
                 _ => false,
             })
@@ -1460,7 +1497,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
         .peer_no(2)
         .topics(vec![String::from("topic1")])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
@@ -1473,7 +1510,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             >= 1,
         "No graft message got created to non-explicit peer"
     );
@@ -1481,7 +1518,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1493,7 +1530,7 @@ fn do_not_graft_explicit_peer() {
         .peer_no(1)
         .topics(vec![String::from("topic")])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
@@ -1505,7 +1542,7 @@ fn do_not_graft_explicit_peer() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &others[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1517,13 +1554,13 @@ fn do_forward_messages_to_explicit_peers() {
         .peer_no(2)
         .topics(vec![String::from("topic1"), String::from("topic2")])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
     let local_id = PeerId::random();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: Some(peers[1]),
         data: vec![12],
         sequence_number: Some(0),
@@ -1538,19 +1575,19 @@ fn do_forward_messages_to_explicit_peers() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
-                        let event = proto_to_message(m);
-                        peer_id == &peers[0]
-                            && event
-                                .messages
-                                .iter()
-                                .filter(|m| m.data == message.data)
-                                .count()
-                                > 0
-                    } else {
-                        false
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    event: HandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    peer_id == &peers[0]
+                        && event
+                            .messages
+                            .iter()
+                            .filter(|m| m.data == message.data)
+                            .count()
+                            > 0
                 }
                 _ => false,
             })
@@ -1566,7 +1603,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
         .peer_no(2)
         .topics(Vec::new())
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
@@ -1575,8 +1612,8 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
         gs.handle_received_subscriptions(
-            &[GossipsubSubscription {
-                action: GossipsubSubscriptionAction::Subscribe,
+            &[Subscription {
+                action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
             }],
             peer,
@@ -1592,7 +1629,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             > 0,
         "No graft message got created to non-explicit peer"
     );
@@ -1600,7 +1637,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1612,7 +1649,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
         .peer_no(2)
         .topics(Vec::new())
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
@@ -1621,8 +1658,8 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
         gs.handle_received_subscriptions(
-            &[GossipsubSubscription {
-                action: GossipsubSubscriptionAction::Subscribe,
+            &[Subscription {
+                action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
             }],
             peer,
@@ -1641,7 +1678,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             >= 1,
         "No graft message got created to non-explicit peer"
     );
@@ -1649,7 +1686,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1661,13 +1698,13 @@ fn no_gossip_gets_sent_to_explicit_peers() {
         .peer_no(2)
         .topics(vec![String::from("topic1"), String::from("topic2")])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(1)
         .create_network();
 
     let local_id = PeerId::random();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: Some(peers[1]),
         data: vec![],
         sequence_number: Some(0),
@@ -1691,7 +1728,7 @@ fn no_gossip_gets_sent_to_explicit_peers() {
             .get(&peers[0])
             .unwrap_or(&Vec::new())
             .iter()
-            .filter(|m| matches!(m, GossipsubControlAction::IHave { .. }))
+            .filter(|m| matches!(m, ControlAction::IHave { .. }))
             .count(),
         0,
         "Gossip got emitted to explicit peer"
@@ -1701,7 +1738,7 @@ fn no_gossip_gets_sent_to_explicit_peers() {
 // Tests the mesh maintenance addition
 #[test]
 fn test_mesh_addition() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
     let (mut gs, peers, topics) = inject_nodes1()
@@ -1735,7 +1772,7 @@ fn test_mesh_addition() {
 // Tests the mesh maintenance subtraction
 #[test]
 fn test_mesh_subtraction() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
 
     // Adds mesh_low peers and PRUNE 2 giving us a deficit.
     let n = config.mesh_n_high() + 10;
@@ -1762,7 +1799,7 @@ fn test_mesh_subtraction() {
 
 #[test]
 fn test_connect_to_px_peers_on_handle_prune() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     let (mut gs, peers, topics) = inject_nodes1()
         .peer_no(1)
@@ -1794,7 +1831,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();
@@ -1817,7 +1854,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
 
 #[test]
 fn test_send_px_and_backoff_in_prune() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     //build mesh with enough peers for px
     let (mut gs, peers, topics) = inject_nodes1()
@@ -1839,7 +1876,7 @@ fn test_send_px_and_backoff_in_prune() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -1858,7 +1895,7 @@ fn test_send_px_and_backoff_in_prune() {
 
 #[test]
 fn test_prune_backoffed_peer_on_graft() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     //build mesh with enough peers for px
     let (mut gs, peers, topics) = inject_nodes1()
@@ -1887,7 +1924,7 @@ fn test_prune_backoffed_peer_on_graft() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -1904,7 +1941,7 @@ fn test_prune_backoffed_peer_on_graft() {
 
 #[test]
 fn test_do_not_graft_within_backoff_period() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .backoff_slack(1)
         .heartbeat_interval(Duration::from_millis(100))
         .build()
@@ -1935,10 +1972,7 @@ fn test_do_not_graft_within_backoff_period() {
     //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -1949,10 +1983,7 @@ fn test_do_not_graft_within_backoff_period() {
 
     //check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
@@ -1960,7 +1991,7 @@ fn test_do_not_graft_within_backoff_period() {
 #[test]
 fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without_backoff() {
     //set default backoff period to 1 second
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(90))
         .backoff_slack(1)
         .heartbeat_interval(Duration::from_millis(100))
@@ -1990,10 +2021,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
     //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -2004,10 +2032,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
 
     //check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
@@ -2015,7 +2040,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
 #[test]
 fn test_unsubscribe_backoff() {
     const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .backoff_slack(1)
         // ensure a prune_backoff > unsubscribe_backoff
         .prune_backoff(Duration::from_secs(5))
@@ -2037,7 +2062,7 @@ fn test_unsubscribe_backoff() {
 
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { backoff, .. } => backoff == &Some(1),
+            ControlAction::Prune { backoff, .. } => backoff == &Some(1),
             _ => false,
         }),
         1,
@@ -2061,10 +2086,7 @@ fn test_unsubscribe_backoff() {
     // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -2075,17 +2097,14 @@ fn test_unsubscribe_backoff() {
 
     // check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
 
 #[test]
 fn test_flood_publish() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     let topic = "test";
     // Adds more peers than mesh can hold to test flood publishing
@@ -2105,7 +2124,7 @@ fn test_flood_publish() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push(s.clone());
@@ -2129,7 +2148,7 @@ fn test_flood_publish() {
 
     let msg_id = gs.config.message_id(message);
 
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
         config.mesh_n_high() + 10,
@@ -2144,7 +2163,7 @@ fn test_flood_publish() {
 
 #[test]
 fn test_gossip_to_at_least_gossip_lazy_peers() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     //add more peers than in mesh to test gossipping
     //by default only mesh_n_low peers will get added to mesh
@@ -2155,7 +2174,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
         .create_network();
 
     //receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2177,7 +2196,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
     //check that exactly config.gossip_lazy() many gossip messages were sent.
     assert_eq!(
         count_control_msgs(&gs, |_, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
@@ -2189,7 +2208,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
 
 #[test]
 fn test_gossip_to_at_most_gossip_factor_peers() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     //add a lot of peers
     let m = config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
@@ -2200,7 +2219,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
         .create_network();
 
     //receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2221,7 +2240,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
     //check that exactly config.gossip_lazy() many gossip messages were sent.
     assert_eq!(
         count_control_msgs(&gs, |_, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
@@ -2233,7 +2252,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
 
 #[test]
 fn test_accept_only_outbound_peer_grafts_when_mesh_full() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     //enough peers to fill the mesh
     let (mut gs, peers, topics) = inject_nodes1()
@@ -2273,7 +2292,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
     //use an extreme case to catch errors with high probability
     let m = 50;
     let n = 2 * m;
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_high(n)
         .mesh_n(n)
         .mesh_n_low(n)
@@ -2317,7 +2336,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
 
 #[test]
 fn test_add_outbound_peers_if_min_is_not_satisfied() {
-    let config: GossipsubConfig = GossipsubConfig::default();
+    let config: Config = Config::default();
 
     // Fill full mesh with inbound peers
     let (mut gs, peers, topics) = inject_nodes1()
@@ -2349,15 +2368,9 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
     );
 }
 
-//TODO add a test that ensures that new outbound connections are recognized as such.
-// This is at the moment done in behaviour with relying on the fact that the call to
-// `inject_connection_established` for the first connection is done before `inject_connected`
-// gets called. For all further connections `inject_connection_established` should get called
-// after `inject_connected`.
-
 #[test]
 fn test_prune_negative_scored_peers() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
 
     //build mesh with one peer
     let (mut gs, peers, topics) = inject_nodes1()
@@ -2386,7 +2399,7 @@ fn test_prune_negative_scored_peers() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -2403,7 +2416,7 @@ fn test_prune_negative_scored_peers() {
 
 #[test]
 fn test_dont_graft_to_negative_scored_peers() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     //init full mesh
     let (mut gs, peers, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
@@ -2441,7 +2454,7 @@ fn test_dont_graft_to_negative_scored_peers() {
 /// peers should get ignored, therefore we test it here.
 #[test]
 fn test_ignore_px_from_negative_scored_peer() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
 
     //build mesh with one peer
     let (mut gs, peers, topics) = inject_nodes1()
@@ -2484,7 +2497,7 @@ fn test_ignore_px_from_negative_scored_peer() {
 
 #[test]
 fn test_only_send_nonnegative_scoring_peers_in_px() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .prune_peers(16)
         .do_px()
         .build()
@@ -2520,7 +2533,7 @@ fn test_only_send_nonnegative_scoring_peers_in_px() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers: px,
                     ..
@@ -2536,7 +2549,7 @@ fn test_only_send_nonnegative_scoring_peers_in_px() {
 
 #[test]
 fn test_do_not_gossip_to_peers_below_gossip_threshold() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
@@ -2570,7 +2583,7 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     // Receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2592,7 +2605,7 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
     // Check that exactly one gossip messages got sent and it got sent to p2
     assert_eq!(
         count_control_msgs(&gs, |peer, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => {
@@ -2611,7 +2624,7 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
 
 #[test]
 fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
@@ -2647,7 +2660,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     // Receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2672,7 +2685,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
                         collected_messages.push((*peer_id, c.clone()))
@@ -2703,7 +2716,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
 #[test]
 fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
@@ -2738,7 +2751,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     //message that other peers have
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2759,7 +2772,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     // check that we sent exactly one IWANT request to p2
     assert_eq!(
         count_control_msgs(&gs, |peer, c| match c {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 if message_ids.iter().any(|m| m == &msg_id) {
                     assert_eq!(peer, &p2);
                     true
@@ -2774,7 +2787,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
 #[test]
 fn test_do_not_publish_to_peer_below_publish_threshold() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
         .unwrap();
@@ -2820,7 +2833,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push((*peer_id, s.clone()));
@@ -2838,7 +2851,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
 
 #[test]
 fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
@@ -2877,7 +2890,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = **event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push((*peer_id, s.clone()));
@@ -2895,7 +2908,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
 
 #[test]
 fn test_ignore_rpc_from_peers_below_graylist_threshold() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
@@ -2923,7 +2936,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     //reduce score of p2 below publish_threshold but not below graylist_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    let raw_message1 = RawGossipsubMessage {
+    let raw_message1 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4],
         sequence_number: Some(1u64),
@@ -2933,7 +2946,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message2 = RawGossipsubMessage {
+    let raw_message2 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5],
         sequence_number: Some(2u64),
@@ -2943,7 +2956,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message3 = RawGossipsubMessage {
+    let raw_message3 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5, 6],
         sequence_number: Some(3u64),
@@ -2953,7 +2966,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message4 = RawGossipsubMessage {
+    let raw_message4 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5, 6, 7],
         sequence_number: Some(4u64),
@@ -2969,12 +2982,12 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     // Transform the inbound message
     let message4 = &gs.data_transform.inbound_transform(raw_message4).unwrap();
 
-    let subscription = GossipsubSubscription {
-        action: GossipsubSubscriptionAction::Subscribe,
+    let subscription = Subscription {
+        action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
     };
 
-    let control_action = GossipsubControlAction::IHave {
+    let control_action = ControlAction::IHave {
         topic_hash: topics[0].clone(),
         message_ids: vec![config.message_id(message2)],
     };
@@ -2983,11 +2996,12 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     gs.events.clear();
 
     //receive from p1
-    gs.inject_event(
+    gs.on_connection_handler_event(
         p1,
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
@@ -3000,20 +3014,21 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     assert_eq!(gs.events.len(), 1);
     assert!(matches!(
         gs.events[0],
-        NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Subscribed { .. })
+        NetworkBehaviourAction::GenerateEvent(Event::Subscribed { .. })
     ));
 
-    let control_action = GossipsubControlAction::IHave {
+    let control_action = ControlAction::IHave {
         topic_hash: topics[0].clone(),
         message_ids: vec![config.message_id(message4)],
     };
 
     //receive from p2
-    gs.inject_event(
+    gs.on_connection_handler_event(
         p2,
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
@@ -3028,10 +3043,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
 
 #[test]
 fn test_ignore_px_from_peers_below_accept_px_threshold() {
-    let config = GossipsubConfigBuilder::default()
-        .prune_peers(16)
-        .build()
-        .unwrap();
+    let config = ConfigBuilder::default().prune_peers(16).build().unwrap();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         accept_px_threshold: peer_score_params.app_specific_weight,
@@ -3099,7 +3111,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
 
 #[test]
 fn test_keep_best_scoring_peers_on_oversubscription() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_low(15)
         .mesh_n(30)
         .mesh_n_high(60)
@@ -3152,7 +3164,7 @@ fn test_keep_best_scoring_peers_on_oversubscription() {
 
 #[test]
 fn test_scoring_p1() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3217,15 +3229,12 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawGossipsubMessage {
+fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
-    RawGossipsubMessage {
+    RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..30))
-            .into_iter()
-            .map(|_| rng.gen())
-            .collect(),
+        data: (0..rng.gen_range(10..30)).map(|_| rng.gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,
@@ -3236,7 +3245,7 @@ fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawGossipsubMessage
 
 #[test]
 fn test_scoring_p2() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3265,7 +3274,7 @@ fn test_scoring_p2() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3334,7 +3343,7 @@ fn test_scoring_p2() {
 
 #[test]
 fn test_scoring_p3() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3365,7 +3374,7 @@ fn test_scoring_p3() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3429,7 +3438,7 @@ fn test_scoring_p3() {
 
 #[test]
 fn test_scoring_p3b() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(100))
         .build()
         .unwrap();
@@ -3466,7 +3475,7 @@ fn test_scoring_p3b() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3525,7 +3534,7 @@ fn test_scoring_p3b() {
 
 #[test]
 fn test_scoring_p4_valid_message() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3558,7 +3567,7 @@ fn test_scoring_p4_valid_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3584,7 +3593,7 @@ fn test_scoring_p4_valid_message() {
 
 #[test]
 fn test_scoring_p4_invalid_signature() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3621,11 +3630,12 @@ fn test_scoring_p4_invalid_signature() {
     //peer 0 delivers message with invalid signature
     let m = random_message(&mut seq, &topics);
 
-    gs.inject_event(
+    gs.on_connection_handler_event(
         peers[0],
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
@@ -3642,7 +3652,7 @@ fn test_scoring_p4_invalid_signature() {
 
 #[test]
 fn test_scoring_p4_message_from_self() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3675,7 +3685,7 @@ fn test_scoring_p4_message_from_self() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3692,7 +3702,7 @@ fn test_scoring_p4_message_from_self() {
 
 #[test]
 fn test_scoring_p4_ignored_message() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3725,7 +3735,7 @@ fn test_scoring_p4_ignored_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3751,7 +3761,7 @@ fn test_scoring_p4_ignored_message() {
 
 #[test]
 fn test_scoring_p4_application_invalidated_message() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3784,7 +3794,7 @@ fn test_scoring_p4_application_invalidated_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3813,7 +3823,7 @@ fn test_scoring_p4_application_invalidated_message() {
 
 #[test]
 fn test_scoring_p4_application_invalid_message_from_two_peers() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3846,7 +3856,7 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3883,7 +3893,7 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
 
 #[test]
 fn test_scoring_p4_three_application_invalid_messages() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -3916,7 +3926,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3967,7 +3977,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
 
 #[test]
 fn test_scoring_p4_decay() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .validate_messages()
         .build()
         .unwrap();
@@ -4000,7 +4010,7 @@ fn test_scoring_p4_decay() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Behaviour, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -4047,7 +4057,7 @@ fn test_scoring_p5() {
         .peer_no(1)
         .topics(vec!["test".into()])
         .to_subscribe(true)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(0)
         .outbound(0)
         .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
@@ -4073,7 +4083,7 @@ fn test_scoring_p6() {
         .peer_no(0)
         .topics(vec![])
         .to_subscribe(false)
-        .gs_config(GossipsubConfig::default())
+        .gs_config(Config::default())
         .explicit(0)
         .outbound(0)
         .scoring(Some((peer_score_params, PeerScoreThresholds::default())))
@@ -4104,17 +4114,18 @@ fn test_scoring_p6() {
     }
 
     //add additional connection for 3 others with addr
+    #[allow(deprecated)]
     for id in others.iter().take(3) {
-        gs.inject_connection_established(
-            id,
-            &ConnectionId::new(0),
-            &ConnectedPoint::Dialer {
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: *id,
+            connection_id: ConnectionId::DUMMY,
+            endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            0,
-        );
+            failed_addresses: &[],
+            other_established: 0,
+        }));
     }
 
     //penalties apply squared
@@ -4126,16 +4137,17 @@ fn test_scoring_p6() {
 
     //add additional connection for 3 of the peers to addr2
     for peer in peers.iter().take(3) {
-        gs.inject_connection_established(
-            peer,
-            &ConnectionId::new(0),
-            &ConnectedPoint::Dialer {
+        #[allow(deprecated)]
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: *peer,
+            connection_id: ConnectionId::DUMMY,
+            endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            1,
-        );
+            failed_addresses: &[],
+            other_established: 1,
+        }));
     }
 
     //double penalties for the first three of each
@@ -4156,16 +4168,17 @@ fn test_scoring_p6() {
     );
 
     //two times same ip doesn't count twice
-    gs.inject_connection_established(
-        &peers[0],
-        &ConnectionId::new(0),
-        &ConnectedPoint::Dialer {
+    #[allow(deprecated)]
+    gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+        peer_id: peers[0],
+        connection_id: ConnectionId::DUMMY,
+        endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
         },
-        None,
-        2,
-    );
+        failed_addresses: &[],
+        other_established: 2,
+    }));
 
     //nothing changed
     //double penalties for the first three of each
@@ -4188,7 +4201,7 @@ fn test_scoring_p6() {
 
 #[test]
 fn test_scoring_p7_grafts_before_backoff() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(200))
         .graft_flood_threshold(Duration::from_millis(100))
         .build()
@@ -4258,7 +4271,7 @@ fn test_scoring_p7_grafts_before_backoff() {
 
 #[test]
 fn test_opportunistic_grafting() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_low(3)
         .mesh_n(5)
         .mesh_n_high(7)
@@ -4293,7 +4306,6 @@ fn test_opportunistic_grafting() {
 
     //add additional 5 peers
     let others: Vec<_> = (0..5)
-        .into_iter()
         .map(|_| add_peer(&mut gs, &topics, false, false))
         .collect();
 
@@ -4365,10 +4377,7 @@ fn test_ignore_graft_from_unknown_topic() {
 
     //assert that no prune got created
     assert_eq!(
-        count_control_msgs(&gs, |_, a| matches!(
-            a,
-            GossipsubControlAction::Prune { .. }
-        )),
+        count_control_msgs(&gs, |_, a| matches!(a, ControlAction::Prune { .. })),
         0,
         "we should not prune after graft in unknown topic"
     );
@@ -4376,7 +4385,7 @@ fn test_ignore_graft_from_unknown_topic() {
 
 #[test]
 fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
-    let config = GossipsubConfig::default();
+    let config = Config::default();
     //build gossipsub with full mesh
     let (mut gs, _, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
@@ -4411,13 +4420,12 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
         gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
-                        let event = proto_to_message(m);
-                        event.messages.len()
-                    } else {
-                        0
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    event: HandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    event.messages.len()
                 }
                 _ => 0,
             })
@@ -4429,7 +4437,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 
 #[test]
 fn test_ignore_too_many_ihaves() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .max_ihave_messages(10)
         .build()
         .unwrap();
@@ -4472,7 +4480,7 @@ fn test_ignore_too_many_ihaves() {
     //we send iwant only for the first 10 messages
     assert_eq!(
         count_control_msgs(&gs, |p, action| p == &peer
-            && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))),
+            && matches!(action, ControlAction::IWant { message_ids } if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))),
         10,
         "exactly the first ten ihaves should be processed and one iwant for each created"
     );
@@ -4495,7 +4503,7 @@ fn test_ignore_too_many_ihaves() {
     //we sent iwant for all 20 messages
     assert_eq!(
         count_control_msgs(&gs, |p, action| p == &peer
-            && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1)),
+            && matches!(action, ControlAction::IWant { message_ids } if message_ids.len() == 1)),
         20,
         "all 20 should get sent"
     );
@@ -4503,7 +4511,7 @@ fn test_ignore_too_many_ihaves() {
 
 #[test]
 fn test_ignore_too_many_messages_in_ihave() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .max_ihave_messages(10)
         .max_ihave_length(10)
         .build()
@@ -4544,7 +4552,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     let mut sum = 0;
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 p == &peer && {
                     assert!(first_twelve.is_superset(&message_ids.iter().collect()));
                     sum += message_ids.len();
@@ -4569,7 +4577,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     let mut sum = 0;
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 p == &peer && {
                     sum += message_ids.len();
                     true
@@ -4583,7 +4591,7 @@ fn test_ignore_too_many_messages_in_ihave() {
 
 #[test]
 fn test_limit_number_of_message_ids_inside_ihave() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .max_ihave_messages(10)
         .max_ihave_length(100)
         .build()
@@ -4623,7 +4631,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IHave { message_ids, .. } => {
+            ControlAction::IHave { message_ids, .. } => {
                 if p == &p1 {
                     ihaves1 = message_ids.iter().cloned().collect();
                     true
@@ -4656,7 +4664,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
         (this may fail with a probability < 10^-58"
     );
     assert!(
-        ihaves1.intersection(&ihaves2).into_iter().count() > 0,
+        ihaves1.intersection(&ihaves2).count() > 0,
         "should have sent random messages with some common messages to p1 and p2 \
             (this may fail with a probability < 10^-58"
     );
@@ -4666,7 +4674,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 fn test_iwant_penalties() {
     let _ = env_logger::try_init();
 
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
         .build()
         .unwrap();
@@ -4771,8 +4779,8 @@ fn test_iwant_penalties() {
             assert!(i > 9);
             double_penalized += 1
         } else {
-            println!("{}", peer);
-            println!("{}", score);
+            println!("{peer}");
+            println!("{score}");
             panic!("Invalid score of peer");
         }
     }
@@ -4784,7 +4792,7 @@ fn test_iwant_penalties() {
 
 #[test]
 fn test_publish_to_floodsub_peers_without_flood_publish() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
         .unwrap();
@@ -4820,7 +4828,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
+                    if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -4841,7 +4849,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
 
 #[test]
 fn test_do_not_use_floodsub_in_fanout() {
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .flood_publish(false)
         .build()
         .unwrap();
@@ -4877,7 +4885,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
+                    if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -4959,7 +4967,7 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
     //check that prune does not contain px
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { peers: px, .. } => !px.is_empty(),
+            ControlAction::Prune { peers: px, .. } => !px.is_empty(),
             _ => false,
         }),
         0,
@@ -4997,7 +5005,7 @@ fn test_dont_send_floodsub_peers_in_px() {
     //check that px in prune message is empty
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { peers: px, .. } => !px.is_empty(),
+            ControlAction::Prune { peers: px, .. } => !px.is_empty(),
             _ => false,
         }),
         0,
@@ -5097,7 +5105,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         }};
     }
 
-    let message_id_fn = |m: &GossipsubMessage| -> MessageId {
+    let message_id_fn = |m: &Message| -> MessageId {
         let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
             get_counters_and_hash!(&m.data);
         unsafe {
@@ -5106,14 +5114,14 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         id.0.reverse();
         id
     };
-    let fast_message_id_fn = |m: &RawGossipsubMessage| -> FastMessageId {
+    let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
         let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).fast_counter += 1;
         }
         id
     };
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .message_id_fn(message_id_fn)
         .fast_message_id_fn(fast_message_id_fn)
         .build()
@@ -5125,7 +5133,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         .gs_config(config)
         .create_network();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: None,
         data: counters_address.to_be_bytes().to_vec(),
         sequence_number: None,
@@ -5171,7 +5179,8 @@ fn test_subscribe_and_graft_with_negative_score() {
 
     let (mut gs2, _, _) = inject_nodes1().create_network();
 
-    let connection_id = ConnectionId::new(0);
+    #[allow(deprecated)]
+    let connection_id = ConnectionId::DUMMY;
 
     let topic = Topic::new("test");
 
@@ -5186,12 +5195,12 @@ fn test_subscribe_and_graft_with_negative_score() {
     //subscribe to topic in gs2
     gs2.subscribe(&topic).unwrap();
 
-    let forward_messages_to_p1 = |gs1: &mut Gossipsub<_, _>, gs2: &mut Gossipsub<_, _>| {
+    let forward_messages_to_p1 = |gs1: &mut Behaviour<_, _>, gs2: &mut Behaviour<_, _>| {
         //collect messages to p1
         let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == p1 {
-                    if let GossipsubHandlerIn::Message(m) = Arc::try_unwrap(event).unwrap() {
+                    if let HandlerIn::Message(m) = event {
                         Some(m)
                     } else {
                         None
@@ -5203,7 +5212,7 @@ fn test_subscribe_and_graft_with_negative_score() {
             _ => None,
         });
         for message in messages_to_p1 {
-            gs1.inject_event(
+            gs1.on_connection_handler_event(
                 p2,
                 connection_id,
                 HandlerEvent::Message {

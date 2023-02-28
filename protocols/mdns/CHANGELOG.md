@@ -1,3 +1,45 @@
+# 0.43.0
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Require the node's local `PeerId` to be passed into the constructor of `libp2p_mdns::Behaviour`. See [PR 3153].
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+- Don't expire mDNS records when the last connection was closed.
+  mDNS records will only be expired when the TTL is reached and the DNS record is no longer valid.
+  See [PR 3367].
+
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3367]: https://github.com/libp2p/rust-libp2p/pull/3367
+
+# 0.42.0
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Update to `if-watch` `3.0.0` and both rename `TokioMdns` to `Behaviour` living in `tokio::Behaviour`,
+and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
+
+- Remove the remaning `Mdns` prefixes from types as per [discussion 2174].
+  I.e the `Mdns` prefix has been removed from various types like `MdnsEvent`.
+  Users should prefer importing the mdns protocol as a module (`use libp2p::mdns;`),
+  and refer to its types via `mdns::`. For example: `mdns::Behaviour` or `mdns::Event`.
+
+- Replace `GenMdns`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3096]: https://github.com/libp2p/rust-libp2p/pull/3096
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].

@@ -51,11 +51,17 @@
 use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p::core::Multiaddr;
-use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
+use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_identify as identify;
+use libp2p_metrics::{Metrics, Recorder};
+use libp2p_noise as noise;
+use libp2p_ping as ping;
 use libp2p_swarm::keep_alive;
+use libp2p_swarm::NetworkBehaviour;
+use libp2p_swarm::Swarm;
+use libp2p_swarm::SwarmEvent;
+use libp2p_tcp as tcp;
+use libp2p_yamux as yamux;
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -68,11 +74,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
+    let local_pub_key = local_key.public();
+    info!("Local peer id: {local_peer_id:?}");
 
-    let mut swarm = Swarm::new(
-        block_on(libp2p::development_transport(local_key))?,
-        Behaviour::default(),
+    let mut swarm = Swarm::without_executor(
+        tcp::async_io::Transport::default()
+            .upgrade(Version::V1)
+            .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed(),
+        Behaviour::new(local_pub_key),
         local_peer_id,
     );
 
@@ -95,6 +106,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
+                    info!("{:?}", identify_event);
+                    metrics.record(&identify_event);
+                }
                 swarm_event => {
                     info!("{:?}", swarm_event);
                     metrics.record(&swarm_event);
@@ -109,8 +124,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 ///
 /// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
-#[derive(NetworkBehaviour, Default)]
+#[derive(NetworkBehaviour)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
+    identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
+}
+
+impl Behaviour {
+    fn new(local_pub_key: identity::PublicKey) -> Self {
+        Self {
+            ping: ping::Behaviour::default(),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/ipfs/0.1.0".into(),
+                local_pub_key,
+            )),
+            keep_alive: keep_alive::Behaviour::default(),
+        }
+    }
 }

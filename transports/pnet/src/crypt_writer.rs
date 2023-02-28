@@ -55,7 +55,7 @@ impl<W: AsyncWrite> CryptWriter<W> {
     }
 }
 
-/// Write the contents of a Vec<u8> into an AsyncWrite.
+/// Write the contents of a [`Vec<u8>`] into an [`AsyncWrite`].
 ///
 /// The handling 0 byte progress and the Interrupted error was taken from BufWriter in async_std.
 ///

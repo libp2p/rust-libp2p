@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol_stack;
 use libp2p_core::PeerId;
-use prometheus_client::encoding::text::{EncodeMetric, Encoder};
+use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::metrics::MetricType;
 use prometheus_client::registry::Registry;
@@ -36,6 +38,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
+    listen_addresses: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
@@ -48,14 +51,14 @@ impl Metrics {
             "Number of connected nodes supporting a specific protocol, with \
              \"unrecognized\" for each peer supporting one or more unrecognized \
              protocols",
-            Box::new(protocols.clone()),
+            protocols.clone(),
         );
 
         let error = Counter::default();
         sub_registry.register(
             "errors",
             "Number of errors while attempting to identify the remote",
-            Box::new(error.clone()),
+            error.clone(),
         );
 
         let pushed = Counter::default();
@@ -63,7 +66,7 @@ impl Metrics {
             "pushed",
             "Number of times identification information of the local node has \
              been actively pushed to a peer.",
-            Box::new(pushed.clone()),
+            pushed.clone(),
         );
 
         let received = Counter::default();
@@ -71,7 +74,7 @@ impl Metrics {
             "received",
             "Number of times identification information has been received from \
              a peer",
-            Box::new(received.clone()),
+            received.clone(),
         );
 
         let received_info_listen_addrs =
@@ -80,7 +83,7 @@ impl Metrics {
             "received_info_listen_addrs",
             "Number of listen addresses for remote peer received in \
              identification information",
-            Box::new(received_info_listen_addrs.clone()),
+            received_info_listen_addrs.clone(),
         );
 
         let received_info_protocols =
@@ -89,7 +92,7 @@ impl Metrics {
             "received_info_protocols",
             "Number of protocols supported by the remote peer received in \
              identification information",
-            Box::new(received_info_protocols.clone()),
+            received_info_protocols.clone(),
         );
 
         let sent = Counter::default();
@@ -97,7 +100,14 @@ impl Metrics {
             "sent",
             "Number of times identification information of the local node has \
              been sent to a peer in response to an identification request",
-            Box::new(sent.clone()),
+            sent.clone(),
+        );
+
+        let listen_addresses = Family::default();
+        sub_registry.register(
+            "listen_addresses",
+            "Number of listen addresses for remote peer per protocol stack",
+            listen_addresses.clone(),
         );
 
         Self {
@@ -108,6 +118,7 @@ impl Metrics {
             received_info_listen_addrs,
             received_info_protocols,
             sent,
+            listen_addresses,
         }
     }
 }
@@ -140,9 +151,9 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 #[cfg(feature = "ping")]
                                 libp2p_ping::PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
-                                libp2p_relay::v2::STOP_PROTOCOL_NAME,
+                                libp2p_relay::STOP_PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
-                                libp2p_relay::v2::HOP_PROTOCOL_NAME,
+                                libp2p_relay::HOP_PROTOCOL_NAME,
                             ];
 
                             allowed_protocols.contains(&p.as_bytes())
@@ -167,6 +178,13 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                     .observe(info.protocols.len() as f64);
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
+                for listen_addr in &info.listen_addrs {
+                    self.listen_addresses
+                        .get_or_create(&AddressLabels {
+                            protocols: protocol_stack::as_string(listen_addr),
+                        })
+                        .inc();
+                }
             }
             libp2p_identify::Event::Sent { .. } => {
                 self.sent.inc();
@@ -190,7 +208,12 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
+struct AddressLabels {
+    protocols: String,
+}
+
+#[derive(Default, Clone, Debug)]
 struct Protocols {
     peers: Arc<Mutex<HashMap<PeerId, Vec<String>>>>,
 }
@@ -212,14 +235,14 @@ impl Protocols {
 }
 
 impl EncodeMetric for Protocols {
-    fn encode(&self, mut encoder: Encoder) -> Result<(), std::io::Error> {
+    fn encode(&self, mut encoder: MetricEncoder) -> Result<(), std::fmt::Error> {
         let count_by_protocol = self
             .peers
             .lock()
             .expect("Lock not to be poisoned")
             .iter()
             .fold(
-                HashMap::<String, u64>::default(),
+                HashMap::<String, i64>::default(),
                 |mut acc, (_, protocols)| {
                     for protocol in protocols {
                         let count = acc.entry(protocol.to_string()).or_default();
@@ -231,11 +254,8 @@ impl EncodeMetric for Protocols {
 
         for (protocol, count) in count_by_protocol {
             encoder
-                .with_label_set(&("protocol", protocol))
-                .no_suffix()?
-                .no_bucket()?
-                .encode_value(count)?
-                .no_exemplar()?;
+                .encode_family(&[("protocol", protocol)])?
+                .encode_gauge(&count)?;
         }
 
         Ok(())

@@ -23,7 +23,7 @@
 //! receives a request and sends a response, whereas the
 //! outbound upgrade send a request and receives a response.
 
-use crate::codec::RequestResponseCodec;
+use crate::codec::Codec;
 use crate::RequestId;
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*};
@@ -67,7 +67,7 @@ impl ProtocolSupport {
 #[derive(Debug)]
 pub struct ResponseProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -78,7 +78,7 @@ where
 
 impl<TCodec> UpgradeInfo for ResponseProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     type Info = TCodec::Protocol;
     type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
@@ -90,7 +90,7 @@ where
 
 impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + 'static,
+    TCodec: Codec + Send + 'static,
 {
     type Output = bool;
     type Error = io::Error;
@@ -132,7 +132,7 @@ where
 /// Sends a request and receives a response.
 pub struct RequestProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -142,7 +142,7 @@ where
 
 impl<TCodec> fmt::Debug for RequestProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RequestProtocol")
@@ -153,7 +153,7 @@ where
 
 impl<TCodec> UpgradeInfo for RequestProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     type Info = TCodec::Protocol;
     type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
@@ -165,7 +165,7 @@ where
 
 impl<TCodec> OutboundUpgrade<NegotiatedSubstream> for RequestProtocol<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + 'static,
+    TCodec: Codec + Send + 'static,
 {
     type Output = TCodec::Response;
     type Error = io::Error;

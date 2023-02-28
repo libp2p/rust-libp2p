@@ -1,3 +1,37 @@
+# 0.24.0
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Rename types as per [discussion 2174].
+  `RequestResponse` has been renamed to `Behaviour`.
+  The `RequestResponse` prefix has been removed from various types like `RequestResponseEvent`.
+  Users should prefer importing the request_response protocol as a module (`use libp2p::request_response;`),
+  and refer to its types via `request_response::`. For example: `request_response::Behaviour` or `request_response::Event`.
+  See [PR 3159].
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3159]: https://github.com/libp2p/rust-libp2p/pull/3159
+
+# 0.23.0
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Replace `RequestResponse`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `RequestResponseHandler`'s `ConnectionHandler` implemention `inject_*` methods
+  with the new `on_*` methods. See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.22.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].

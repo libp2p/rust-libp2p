@@ -18,23 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 use futures::StreamExt;
-use libp2p::{
-    identity,
-    mdns::{MdnsConfig, MdnsEvent, TokioMdns},
-    swarm::{Swarm, SwarmEvent},
-    PeerId,
-};
+use libp2p_core::{identity, upgrade::Version, PeerId, Transport};
+use libp2p_mdns::{tokio::Behaviour, Config, Event};
+use libp2p_swarm::Swarm;
+use libp2p_swarm::SwarmEvent;
 use std::error::Error;
 use std::time::Duration;
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv4() -> Result<(), Box<dyn Error>> {
-    run_discovery_test(MdnsConfig::default()).await
+    run_discovery_test(Config::default()).await
 }
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() -> Result<(), Box<dyn Error>> {
-    let config = MdnsConfig {
+    let config = Config {
         enable_ipv6: true,
         ..Default::default()
     };
@@ -44,7 +42,7 @@ async fn test_discovery_tokio_ipv6() -> Result<(), Box<dyn Error>> {
 #[tokio::test]
 async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
     env_logger::try_init().ok();
-    let config = MdnsConfig {
+    let config = Config {
         ttl: Duration::from_secs(1),
         query_interval: Duration::from_secs(10),
         ..Default::default()
@@ -53,17 +51,21 @@ async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
     run_peer_expiration_test(config).await
 }
 
-async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
+async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p::tokio_development_transport(id_keys)?;
-    let behaviour = TokioMdns::new(config)?;
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let transport = libp2p_tcp::tokio::Transport::default()
+        .upgrade(Version::V1)
+        .authenticate(libp2p_noise::NoiseAuthenticated::xx(&id_keys).unwrap())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .boxed();
+    let behaviour = Behaviour::new(config, peer_id)?;
+    let mut swarm = Swarm::with_tokio_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)
 }
 
-async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
+async fn run_discovery_test(config: Config) -> Result<(), Box<dyn Error>> {
     env_logger::try_init().ok();
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
@@ -71,7 +73,7 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut discovered_b = false;
     loop {
         futures::select! {
-            ev = a.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+            ev = a.select_next_some() => if let SwarmEvent::Behaviour(Event::Discovered(peers)) = ev {
                 for (peer, _addr) in peers {
                     if peer == *b.local_peer_id() {
                         if discovered_a {
@@ -82,7 +84,7 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
                     }
                 }
             },
-            ev = b.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+            ev = b.select_next_some() => if let SwarmEvent::Behaviour(Event::Discovered(peers)) = ev {
                 for (peer, _addr) in peers {
                     if peer == *a.local_peer_id() {
                         if discovered_b {
@@ -97,7 +99,7 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     }
 }
 
-async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
+async fn run_peer_expiration_test(config: Config) -> Result<(), Box<dyn Error>> {
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
     let expired_at = tokio::time::sleep(Duration::from_secs(15));
@@ -109,14 +111,14 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
                 panic!();
             },
             ev = a.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) => {
+                SwarmEvent::Behaviour(Event::Expired(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *b.local_peer_id() {
                             return Ok(());
                         }
                     }
                 }
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+                SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *b.local_peer_id() {
                             expired_at.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(2));
@@ -126,14 +128,14 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
                 _ => {}
             },
             ev = b.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) => {
+                SwarmEvent::Behaviour(Event::Expired(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *a.local_peer_id() {
                             return Ok(());
                         }
                     }
                 }
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+                SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *a.local_peer_id() {
                             expired_at.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(2));

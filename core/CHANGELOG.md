@@ -1,3 +1,45 @@
+# 0.39.0
+
+- Move `ConnectionId` to `libp2p-swarm`. See [PR 3221].
+- Move `PendingPoint` to `libp2p-swarm` and make it crate-private. See [PR 3221].
+
+[PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
+
+# 0.38.0
+
+- Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
+
+- Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord` and `signed_envelope::DecodingError`. See [PR 3058].
+
+- Move `Executor` to `libp2p-swarm`. See [PR 3097].
+
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+- Update `multistream-select` to `v0.12.1`. See [PR 3090].
+
+- Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
+
+- Remove `EitherError` in favor of `either::Either`. See [PR 3337].
+
+- Remove `EitherTransport` in favor of implementing `Transport` on `either::Either`. See [PR 3338].
+
+- Remove `EitherUpgrade` in favor of implementing `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` on `either::Either`. See [PR 3339].
+
+- Remove `EitherFuture2` in favor of `EitherFuture`. See [PR 3340].
+
+- Remove `EitherOutput` in favor of `future::Either`. See [PR 3341].
+
+[PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
+[PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
+[PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
+[PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
+[PR 3339]: https://github.com/libp2p/rust-libp2p/pull/3339
+[PR 3340]: https://github.com/libp2p/rust-libp2p/pull/3340
+[PR 3341]: https://github.com/libp2p/rust-libp2p/pull/3341
+
 # 0.37.0
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].

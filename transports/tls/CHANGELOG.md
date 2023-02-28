@@ -1,3 +1,7 @@
-# 0.1.0 [unreleased]
+# 0.1.0-alpha.2
+
+- Update to `libp2p-core` `v0.39.0`.
+
+# 0.1.0-alpha
 
 Initial release.

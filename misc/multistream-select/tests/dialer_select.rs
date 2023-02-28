@@ -92,7 +92,7 @@ fn negotiation_failed() {
                 Ok((_, io)) => io,
                 Err(NegotiationError::Failed) => return,
                 Err(NegotiationError::ProtocolError(e)) => {
-                    panic!("Unexpected protocol error {}", e)
+                    panic!("Unexpected protocol error {e}")
                 }
             };
             match io.complete().await {

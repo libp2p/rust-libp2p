@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-relay"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.62.0"
 description = "Communications relaying for libp2p"
-version = "0.13.0"
+version = "0.15.0"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,14 +14,14 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 bytes = "1"
 either = "1.6.0"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3"
 instant = "0.1.11"
-libp2p-core = { version = "0.37.0", path = "../../core" }
-libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
-prost-codec = { version = "0.2", path = "../../misc/prost-codec" }
+prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
 prost = "0.11"
 rand = "0.8.4"
 smallvec = "1.6.1"
@@ -33,12 +33,18 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.9.0"
-libp2p = { path = "../..", features = ["full"] }
+clap = { version = "4.1.6", features = ["derive"] }
+env_logger = "0.10.0"
+libp2p-identify = { path = "../../protocols/identify" }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-ping = { path = "../../protocols/ping" }
+libp2p-plaintext = { path = "../../transports/plaintext" }
+libp2p-swarm = { path = "../../swarm", features = ["macros"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
+libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-clap = { version = "4.0.13", features = ["derive"] }
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

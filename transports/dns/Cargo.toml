@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-dns"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "DNS transport implementation for libp2p"
-version = "0.37.0"
+version = "0.39.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,16 +11,16 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.37.0", path = "../../core" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4.1"
-futures = "0.3.1"
+futures = "0.3.26"
 async-std-resolver = { version = "0.22", optional = true }
 parking_lot = "0.12.0"
 trust-dns-resolver = { version = "0.22", default-features = false, features = ["system-config"] }
 smallvec = "1.6.1"
 
 [dev-dependencies]
-env_logger = "0.9"
+env_logger = "0.10"
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 

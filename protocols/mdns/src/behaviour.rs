@@ -24,44 +24,93 @@ mod timer;
 
 use self::iface::InterfaceState;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::MdnsConfig;
+use crate::Config;
 use futures::Stream;
-use if_watch::{IfEvent, IfWatcher};
-use libp2p_core::transport::ListenerId;
-use libp2p_core::{Multiaddr, PeerId};
+use if_watch::IfEvent;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
+/// An abstraction to allow for compatibility with various async runtimes.
+pub trait Provider: 'static {
+    /// The Async Socket type.
+    type Socket: AsyncSocket;
+    /// The Async Timer type.
+    type Timer: Builder + Stream;
+    /// The IfWatcher type.
+    type Watcher: Stream<Item = std::io::Result<IfEvent>> + fmt::Debug + Unpin;
+
+    /// Create a new instance of the `IfWatcher` type.
+    fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
+}
+
+/// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
-use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+pub mod async_io {
+    use super::Provider;
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+    use if_watch::smol::IfWatcher;
 
-/// The type of a [`GenMdns`] using the `async-io` implementation.
-#[cfg(feature = "async-io")]
-pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer>;
+    #[doc(hidden)]
+    pub enum AsyncIo {}
 
+    impl Provider for AsyncIo {
+        type Socket = AsyncUdpSocket;
+        type Timer = AsyncTimer;
+        type Watcher = IfWatcher;
+
+        fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
+            IfWatcher::new()
+        }
+    }
+
+    pub type Behaviour = super::Behaviour<AsyncIo>;
+}
+
+/// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
-use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+pub mod tokio {
+    use super::Provider;
+    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+    use if_watch::tokio::IfWatcher;
 
-/// The type of a [`GenMdns`] using the `tokio` implementation.
-#[cfg(feature = "tokio")]
-pub type TokioMdns = GenMdns<TokioUdpSocket, TokioTimer>;
+    #[doc(hidden)]
+    pub enum Tokio {}
+
+    impl Provider for Tokio {
+        type Socket = TokioUdpSocket;
+        type Timer = TokioTimer;
+        type Watcher = IfWatcher;
+
+        fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
+            IfWatcher::new()
+        }
+    }
+
+    pub type Behaviour = super::Behaviour<Tokio>;
+}
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct GenMdns<S, T> {
+pub struct Behaviour<P>
+where
+    P: Provider,
+{
     /// InterfaceState config.
-    config: MdnsConfig,
+    config: Config,
 
     /// Iface watcher.
-    if_watch: IfWatcher,
+    if_watch: P::Watcher,
 
     /// Mdns interface states.
-    iface_states: HashMap<IpAddr, InterfaceState<S, T>>,
+    iface_states: HashMap<IpAddr, InterfaceState<P::Socket, P::Timer>>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -72,22 +121,27 @@ pub struct GenMdns<S, T> {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<T>,
+    closest_expiration: Option<P::Timer>,
+
+    listen_addresses: ListenAddresses,
+
+    local_peer_id: PeerId,
 }
 
-impl<S, T> GenMdns<S, T>
+impl<P> Behaviour<P>
 where
-    T: Builder,
+    P: Provider,
 {
     /// Builds a new `Mdns` behaviour.
-    pub fn new(config: MdnsConfig) -> io::Result<Self> {
-        let if_watch = if_watch::IfWatcher::new()?;
+    pub fn new(config: Config, local_peer_id: PeerId) -> io::Result<Self> {
         Ok(Self {
             config,
-            if_watch,
+            if_watch: P::new_watcher()?,
             iface_states: Default::default(),
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
+            listen_addresses: Default::default(),
+            local_peer_id,
         })
     }
 
@@ -109,64 +163,95 @@ where
                 *expires = now;
             }
         }
-        self.closest_expiration = Some(T::at(now));
+        self.closest_expiration = Some(P::Timer::at(now));
     }
 }
 
-impl<S, T> NetworkBehaviour for GenMdns<S, T>
+impl<P> NetworkBehaviour for Behaviour<P>
 where
-    T: Builder + Stream,
-    S: AsyncSocket,
+    P: Provider,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type OutEvent = MdnsEvent;
+    type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        dummy::ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_nodes
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self
+            .discovered_nodes
             .iter()
-            .filter(|(peer, _, _)| peer == peer_id)
+            .filter(|(peer, _, _)| peer == &peer_id)
             .map(|(_, addr, _)| addr.clone())
-            .collect()
+            .collect())
     }
 
-    fn inject_event(
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         _: PeerId,
-        _: libp2p_core::connection::ConnectionId,
-        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        _: ConnectionId,
+        ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        log::trace!("waking interface state because listening address changed");
-        for iface in self.iface_states.values_mut() {
-            iface.fire_timer();
-        }
-    }
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
 
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        _: &libp2p_core::connection::ConnectionId,
-        _: &libp2p_core::ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            self.expire_node(peer);
+        match event {
+            FromSwarm::NewListener(_) => {
+                log::trace!("waking interface state because listening address changed");
+                for iface in self.iface_states.values_mut() {
+                    iface.fire_timer();
+                }
+            }
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -181,7 +266,7 @@ where
                         continue;
                     }
                     if let Entry::Vacant(e) = self.iface_states.entry(addr) {
-                        match InterfaceState::new(addr, self.config.clone()) {
+                        match InterfaceState::new(addr, self.config.clone(), self.local_peer_id) {
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }
@@ -201,7 +286,9 @@ where
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         for iface_state in self.iface_states.values_mut() {
-            while let Poll::Ready((peer, addr, expiration)) = iface_state.poll(cx, params) {
+            while let Poll::Ready((peer, addr, expiration)) =
+                iface_state.poll(cx, &self.listen_addresses)
+            {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes
                     .iter_mut()
@@ -216,7 +303,7 @@ where
             }
         }
         if !discovered.is_empty() {
-            let event = MdnsEvent::Discovered(DiscoveredAddrsIter {
+            let event = Event::Discovered(DiscoveredAddrsIter {
                 inner: discovered.into_iter(),
             });
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -235,13 +322,13 @@ where
             true
         });
         if !expired.is_empty() {
-            let event = MdnsEvent::Expired(ExpiredAddrsIter {
+            let event = Event::Expired(ExpiredAddrsIter {
                 inner: expired.into_iter(),
             });
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
-            let mut timer = T::at(closest_expiration);
+            let mut timer = P::Timer::at(closest_expiration);
             let _ = Pin::new(&mut timer).poll_next(cx);
 
             self.closest_expiration = Some(timer);
@@ -252,7 +339,7 @@ where
 
 /// Event that can be produced by the `Mdns` behaviour.
 #[derive(Debug)]
-pub enum MdnsEvent {
+pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(DiscoveredAddrsIter),
 

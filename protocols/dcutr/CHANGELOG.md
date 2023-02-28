@@ -1,3 +1,48 @@
+# 0.9.0
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+- Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
+  This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
+
+- Require the node's local `PeerId` to be passed into the constructor of `libp2p_dcutr::Behaviour`. See [PR 3153].
+
+- Rename types in public API to follow naming conventions defined in [issue 2217]. See [PR 3214].
+
+[PR 3213]: https://github.com/libp2p/rust-libp2p/pull/3213
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
+[PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
+
+# 0.8.1
+
+- Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound` and
+  `OutboundUpgrade::upgrade_outbound`. See [PR 3300].
+
+[PR 3300]: https://github.com/libp2p/rust-libp2p/pull/3300
+
+# 0.8.0
+
+- Update to `prost-codec` `v0.3.0`.
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `direct::Handler` and `relayed::Handler`'s `ConnectionHandler` implemention `inject_*`
+  methods with the new `on_*` methods. See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.7.0
 
 - Update to `libp2p-core` `v0.37.0`.

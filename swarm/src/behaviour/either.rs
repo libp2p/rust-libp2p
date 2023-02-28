@@ -18,12 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
-use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::connection::ConnectionId;
+use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
@@ -32,187 +31,123 @@ where
     L: NetworkBehaviour,
     R: NetworkBehaviour,
 {
-    type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
+    type ConnectionHandler = Either<THandler<L>, THandler<R>>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        match self {
-            Either::Left(a) => IntoEitherHandler::Left(a.new_handler()),
-            Either::Right(b) => IntoEitherHandler::Right(b.new_handler()),
-        }
-    }
-
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        match self {
-            Either::Left(a) => a.addresses_of_peer(peer_id),
-            Either::Right(b) => b.addresses_of_peer(peer_id),
-        }
-    }
-
-    fn inject_connection_established(
+    fn handle_pending_inbound_connection(
         &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
+        id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
         match self {
-            Either::Left(a) => a.inject_connection_established(
-                peer_id,
-                connection,
-                endpoint,
-                errors,
-                other_established,
-            ),
-            Either::Right(b) => b.inject_connection_established(
-                peer_id,
-                connection,
-                endpoint,
-                errors,
-                other_established,
-            ),
+            Either::Left(a) => a.handle_pending_inbound_connection(id, local_addr, remote_addr),
+            Either::Right(b) => b.handle_pending_inbound_connection(id, local_addr, remote_addr),
         }
     }
 
-    fn inject_connection_closed(
+    fn handle_established_inbound_connection(
         &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), Either::Left(handler)) => behaviour.inject_connection_closed(
-                peer_id,
-                connection,
-                endpoint,
-                handler,
-                remaining_established,
-            ),
-            (Either::Right(behaviour), Either::Right(handler)) => behaviour
-                .inject_connection_closed(
-                    peer_id,
-                    connection,
-                    endpoint,
-                    handler,
-                    remaining_established,
-                ),
-            _ => unreachable!(),
-        }
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_inbound_connection(
+                connection_id,
+                peer,
+                local_addr,
+                remote_addr,
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_inbound_connection(
+                connection_id,
+                peer,
+                local_addr,
+                remote_addr,
+            )?),
+        };
+
+        Ok(handler)
     }
 
-    fn inject_address_change(
+    fn handle_pending_outbound_connection(
         &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
+        connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let addresses = match self {
+            Either::Left(inner) => inner.handle_pending_outbound_connection(
+                connection_id,
+                maybe_peer,
+                addresses,
+                effective_role,
+            )?,
+            Either::Right(inner) => inner.handle_pending_outbound_connection(
+                connection_id,
+                maybe_peer,
+                addresses,
+                effective_role,
+            )?,
+        };
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
+                connection_id,
+                peer,
+                addr,
+                role_override,
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
+                connection_id,
+                peer,
+                addr,
+                role_override,
+            )?),
+        };
+
+        Ok(handler)
+    }
+
+    fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
         match self {
-            Either::Left(a) => a.inject_address_change(peer_id, connection, old, new),
-            Either::Right(b) => b.inject_address_change(peer_id, connection, old, new),
+            Either::Left(b) => b.on_swarm_event(event.map_handler(|h| match h {
+                Either::Left(h) => h,
+                Either::Right(_) => unreachable!(),
+            })),
+            Either::Right(b) => b.on_swarm_event(event.map_handler(|h| match h {
+                Either::Right(h) => h,
+                Either::Left(_) => unreachable!(),
+            })),
         }
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
         match (self, event) {
-            (Either::Left(behaviour), Either::Left(event)) => {
-                behaviour.inject_event(peer_id, connection, event)
+            (Either::Left(left), Either::Left(event)) => {
+                left.on_connection_handler_event(peer_id, connection_id, event);
             }
-            (Either::Right(behaviour), Either::Right(event)) => {
-                behaviour.inject_event(peer_id, connection, event)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
-            }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
+            (Either::Right(right), Either::Right(event)) => {
+                right.on_connection_handler_event(peer_id, connection_id, event);
             }
             _ => unreachable!(),
-        }
-    }
-
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        match self {
-            Either::Left(a) => a.inject_new_listener(id),
-            Either::Right(b) => b.inject_new_listener(id),
-        }
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_new_listen_addr(id, addr),
-            Either::Right(b) => b.inject_new_listen_addr(id, addr),
-        }
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_expired_listen_addr(id, addr),
-            Either::Right(b) => b.inject_expired_listen_addr(id, addr),
-        }
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_new_external_addr(addr),
-            Either::Right(b) => b.inject_new_external_addr(addr),
-        }
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_expired_external_addr(addr),
-            Either::Right(b) => b.inject_expired_external_addr(addr),
-        }
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        match self {
-            Either::Left(a) => a.inject_listener_error(id, err),
-            Either::Right(b) => b.inject_listener_error(id, err),
-        }
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        match self {
-            Either::Left(a) => a.inject_listener_closed(id, reason),
-            Either::Right(b) => b.inject_listener_closed(id, reason),
         }
     }
 
@@ -220,14 +155,14 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
-                .map_handler_and_in(IntoEitherHandler::Left, Either::Left),
+                .map_in(Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Right)
-                .map_handler_and_in(IntoEitherHandler::Right, Either::Right),
+                .map_in(Either::Right),
         };
 
         Poll::Ready(event)

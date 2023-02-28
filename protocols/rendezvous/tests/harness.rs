@@ -52,15 +52,15 @@ where
 macro_rules! assert_behaviour_events {
     ($swarm: ident: $pat: pat, || $body: block) => {
         match $swarm.next_or_timeout().await {
-            libp2p::swarm::SwarmEvent::Behaviour($pat) => $body,
+            libp2p_swarm::SwarmEvent::Behaviour($pat) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }
     };
     ($swarm1: ident: $pat1: pat, $swarm2: ident: $pat2: pat, || $body: block) => {
         match await_events_or_timeout(&mut $swarm1, &mut $swarm2).await {
             (
-                libp2p::swarm::SwarmEvent::Behaviour($pat1),
-                libp2p::swarm::SwarmEvent::Behaviour($pat2),
+                libp2p_swarm::SwarmEvent::Behaviour($pat1),
+                libp2p_swarm::SwarmEvent::Behaviour($pat2),
             ) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }

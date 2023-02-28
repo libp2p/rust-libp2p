@@ -198,8 +198,8 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportTimeoutError::Timeout => write!(f, "Timeout has been reached"),
-            TransportTimeoutError::TimerError(err) => write!(f, "Error in the timer: {}", err),
-            TransportTimeoutError::Other(err) => write!(f, "{}", err),
+            TransportTimeoutError::TimerError(err) => write!(f, "Error in the timer: {err}"),
+            TransportTimeoutError::Other(err) => write!(f, "{err}"),
         }
     }
 }

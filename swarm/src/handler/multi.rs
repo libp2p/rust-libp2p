@@ -21,15 +21,18 @@
 //! A [`ConnectionHandler`] implementation that combines multiple other [`ConnectionHandler`]s
 //! indexed by some key.
 
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, PeerId};
 use rand::Rng;
 use std::{
     cmp,
@@ -62,7 +65,7 @@ where
 
 impl<K, H> MultiHandler<K, H>
 where
-    K: Hash + Eq,
+    K: Clone + Debug + Hash + Eq + Send + 'static,
     H: ConnectionHandler,
 {
     /// Create and populate a `MultiHandler` from the given handler iterator.
@@ -81,6 +84,134 @@ where
                 .map(|h| h.listen_protocol().into_upgrade().0),
         )?;
         Ok(m)
+    }
+
+    fn on_listen_upgrade_error(
+        &mut self,
+        ListenUpgradeError { error, mut info }: ListenUpgradeError<
+            <Self as ConnectionHandler>::InboundOpenInfo,
+            <Self as ConnectionHandler>::InboundProtocol,
+        >,
+    ) {
+        match error {
+            ConnectionHandlerUpgrErr::Timer => {
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            ListenUpgradeError {
+                                info: i,
+                                error: ConnectionHandlerUpgrErr::Timer,
+                            },
+                        ));
+                    }
+                }
+            }
+            ConnectionHandlerUpgrErr::Timeout => {
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            ListenUpgradeError {
+                                info: i,
+                                error: ConnectionHandlerUpgrErr::Timeout,
+                            },
+                        ));
+                    }
+                }
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                for (k, h) in &mut self.handlers {
+                    if let Some(i) = info.take(k) {
+                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            ListenUpgradeError {
+                                info: i,
+                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                    NegotiationError::Failed,
+                                )),
+                            },
+                        ));
+                    }
+                }
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                NegotiationError::ProtocolError(e),
+            )) => match e {
+                ProtocolError::IoError(e) => {
+                    for (k, h) in &mut self.handlers {
+                        if let Some(i) = info.take(k) {
+                            let e = NegotiationError::ProtocolError(ProtocolError::IoError(
+                                e.kind().into(),
+                            ));
+                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                                ListenUpgradeError {
+                                    info: i,
+                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                        e,
+                                    )),
+                                },
+                            ));
+                        }
+                    }
+                }
+                ProtocolError::InvalidMessage => {
+                    for (k, h) in &mut self.handlers {
+                        if let Some(i) = info.take(k) {
+                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                                ListenUpgradeError {
+                                    info: i,
+                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                        e,
+                                    )),
+                                },
+                            ));
+                        }
+                    }
+                }
+                ProtocolError::InvalidProtocol => {
+                    for (k, h) in &mut self.handlers {
+                        if let Some(i) = info.take(k) {
+                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                                ListenUpgradeError {
+                                    info: i,
+                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                        e,
+                                    )),
+                                },
+                            ));
+                        }
+                    }
+                }
+                ProtocolError::TooManyProtocols => {
+                    for (k, h) in &mut self.handlers {
+                        if let Some(i) = info.take(k) {
+                            let e =
+                                NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                                ListenUpgradeError {
+                                    info: i,
+                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                        e,
+                                    )),
+                                },
+                            ));
+                        }
+                    }
+                }
+            },
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) => {
+                if let Some(h) = self.handlers.get_mut(&k) {
+                    if let Some(i) = info.take(&k) {
+                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            ListenUpgradeError {
+                                info: i,
+                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                            },
+                        ));
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -121,151 +252,79 @@ where
         SubstreamProtocol::new(upgrade, info).with_timeout(timeout)
     }
 
-    fn inject_fully_negotiated_outbound(
+    fn on_connection_event(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        (key, arg): Self::OutboundOpenInfo,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
     ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol,
+                info: (key, arg),
+            }) => {
+                if let Some(h) = self.handlers.get_mut(&key) {
+                    h.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                        FullyNegotiatedOutbound {
+                            protocol,
+                            info: arg,
+                        },
+                    ));
+                } else {
+                    log::error!("FullyNegotiatedOutbound: no handler for key")
+                }
+            }
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: (key, arg),
+                mut info,
+            }) => {
+                if let Some(h) = self.handlers.get_mut(&key) {
+                    if let Some(i) = info.take(&key) {
+                        h.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                            FullyNegotiatedInbound {
+                                protocol: arg,
+                                info: i,
+                            },
+                        ));
+                    }
+                } else {
+                    log::error!("FullyNegotiatedInbound: no handler for key")
+                }
+            }
+            ConnectionEvent::AddressChange(AddressChange { new_address }) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+                        new_address,
+                    }));
+                }
+            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                info: (key, arg),
+                error,
+            }) => {
+                if let Some(h) = self.handlers.get_mut(&key) {
+                    h.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                        info: arg,
+                        error,
+                    }));
+                } else {
+                    log::error!("DialUpgradeError: no handler for protocol")
+                }
+            }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                self.on_listen_upgrade_error(listen_upgrade_error)
+            }
+        }
+    }
+
+    fn on_behaviour_event(&mut self, (key, event): Self::InEvent) {
         if let Some(h) = self.handlers.get_mut(&key) {
-            h.inject_fully_negotiated_outbound(protocol, arg)
+            h.on_behaviour_event(event)
         } else {
-            log::error!("inject_fully_negotiated_outbound: no handler for key")
-        }
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        (key, arg): <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        mut info: Self::InboundOpenInfo,
-    ) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            if let Some(i) = info.take(&key) {
-                h.inject_fully_negotiated_inbound(arg, i)
-            }
-        } else {
-            log::error!("inject_fully_negotiated_inbound: no handler for key")
-        }
-    }
-
-    fn inject_event(&mut self, (key, event): Self::InEvent) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            h.inject_event(event)
-        } else {
-            log::error!("inject_event: no handler for key")
-        }
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        for h in self.handlers.values_mut() {
-            h.inject_address_change(addr)
-        }
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        (key, arg): Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        if let Some(h) = self.handlers.get_mut(&key) {
-            h.inject_dial_upgrade_error(arg, error)
-        } else {
-            log::error!("inject_dial_upgrade_error: no handler for protocol")
-        }
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        mut info: Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timer => {
-                for (k, h) in &mut self.handlers {
-                    if let Some(i) = info.take(k) {
-                        h.inject_listen_upgrade_error(i, ConnectionHandlerUpgrErr::Timer)
-                    }
-                }
-            }
-            ConnectionHandlerUpgrErr::Timeout => {
-                for (k, h) in &mut self.handlers {
-                    if let Some(i) = info.take(k) {
-                        h.inject_listen_upgrade_error(i, ConnectionHandlerUpgrErr::Timeout)
-                    }
-                }
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                for (k, h) in &mut self.handlers {
-                    if let Some(i) = info.take(k) {
-                        h.inject_listen_upgrade_error(
-                            i,
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::Failed,
-                            )),
-                        )
-                    }
-                }
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => match e {
-                ProtocolError::IoError(e) => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::IoError(
-                                e.kind().into(),
-                            ));
-                            h.inject_listen_upgrade_error(
-                                i,
-                                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
-                            )
-                        }
-                    }
-                }
-                ProtocolError::InvalidMessage => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
-                            h.inject_listen_upgrade_error(
-                                i,
-                                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
-                            )
-                        }
-                    }
-                }
-                ProtocolError::InvalidProtocol => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
-                            h.inject_listen_upgrade_error(
-                                i,
-                                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
-                            )
-                        }
-                    }
-                }
-                ProtocolError::TooManyProtocols => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e =
-                                NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
-                            h.inject_listen_upgrade_error(
-                                i,
-                                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
-                            )
-                        }
-                    }
-                }
-            },
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) => {
-                if let Some(h) = self.handlers.get_mut(&k) {
-                    if let Some(i) = info.take(&k) {
-                        h.inject_listen_upgrade_error(
-                            i,
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
-                        )
-                    }
-                }
-            }
+            log::error!("on_behaviour_event: no handler for key")
         }
     }
 
@@ -331,10 +390,12 @@ impl<K, H> IntoIterator for MultiHandler<K, H> {
 
 /// A [`IntoConnectionHandler`] for multiple other `IntoConnectionHandler`s.
 #[derive(Clone)]
+#[deprecated(note = "Use `MultiHandler` directly.")]
 pub struct IntoMultiHandler<K, H> {
     handlers: HashMap<K, H>,
 }
 
+#[allow(deprecated)]
 impl<K, H> fmt::Debug for IntoMultiHandler<K, H>
 where
     K: fmt::Debug + Eq + Hash,
@@ -347,6 +408,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<K, H> IntoMultiHandler<K, H>
 where
     K: Hash + Eq,
@@ -367,6 +429,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<K, H> IntoConnectionHandler for IntoMultiHandler<K, H>
 where
     K: Debug + Clone + Eq + Hash + Send + 'static,
@@ -547,7 +610,7 @@ impl DuplicateProtonameError {
 impl fmt::Display for DuplicateProtonameError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Ok(s) = std::str::from_utf8(&self.0) {
-            write!(f, "duplicate protocol name: {}", s)
+            write!(f, "duplicate protocol name: {s}")
         } else {
             write!(f, "duplicate protocol name: {:?}", self.0)
         }

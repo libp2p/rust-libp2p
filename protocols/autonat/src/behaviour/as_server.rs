@@ -23,14 +23,13 @@ use super::{
     ResponseError,
 };
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
-    InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
-    ResponseChannel,
+    self as request_response, InboundFailure, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -75,7 +74,7 @@ pub enum InboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a server role.
 pub struct AsServer<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
+    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
@@ -98,15 +97,13 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
     fn handle_event(
         &mut self,
         _params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
-        let mut events = VecDeque::new();
-        let mut action = None;
+        event: request_response::Event<DialRequest, DialResponse>,
+    ) -> VecDeque<Action> {
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request_id,
                         request,
                         channel,
@@ -125,20 +122,24 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             .insert(peer, (probe_id, request_id, addrs.clone(), channel));
                         self.throttled_clients.push((peer, Instant::now()));
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Request {
-                            probe_id,
-                            peer,
-                            addresses: addrs.clone(),
-                        }));
-
-                        action = Some(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(peer)
-                                .condition(PeerCondition::Always)
-                                .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
-                                .addresses(addrs)
-                                .build(),
-                            handler: self.inner.new_handler(),
-                        });
+                        VecDeque::from([
+                            NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                                InboundProbeEvent::Request {
+                                    probe_id,
+                                    peer,
+                                    addresses: addrs.clone(),
+                                },
+                            )),
+                            NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(peer)
+                                    .condition(PeerCondition::Always)
+                                    .override_dial_concurrency_factor(
+                                        NonZeroU8::new(1).expect("1 > 0"),
+                                    )
+                                    .addresses(addrs)
+                                    .build(),
+                            },
+                        ])
                     }
                     Err((status_text, error)) => {
                         log::debug!(
@@ -153,15 +154,17 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                            probe_id,
-                            peer,
-                            error: InboundProbeError::Response(error),
-                        }));
+                        VecDeque::from([NetworkBehaviourAction::GenerateEvent(
+                            Event::InboundProbe(InboundProbeEvent::Error {
+                                probe_id,
+                                peer,
+                                error: InboundProbeError::Response(error),
+                            }),
+                        )])
                     }
                 }
             }
-            RequestResponseEvent::InboundFailure {
+            request_response::Event::InboundFailure {
                 peer,
                 error,
                 request_id,
@@ -179,15 +182,16 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                    probe_id,
-                    peer,
-                    error: InboundProbeError::InboundRequest(error),
-                }));
+                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                    InboundProbeEvent::Error {
+                        probe_id,
+                        peer,
+                        error: InboundProbeError::InboundRequest(error),
+                    },
+                ))])
             }
-            _ => {}
+            _ => VecDeque::new(),
         }
-        (events, action)
     }
 }
 
@@ -346,7 +350,7 @@ impl<'a> AsServer<'a> {
                     addr.push(Protocol::P2p(peer.into()))
                 }
                 // Only collect distinct addresses.
-                distinct.insert(addr.clone()).then(|| addr)
+                distinct.insert(addr.clone()).then_some(addr)
             })
             .collect()
     }

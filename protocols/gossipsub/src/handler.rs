@@ -18,16 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
-use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
+use crate::types::{PeerKind, RawMessage, Rpc};
+use crate::{HandlerError, ValidationError};
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{InboundUpgrade, NegotiationError, OutboundUpgrade, UpgradeError};
+use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
     SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
@@ -52,10 +53,10 @@ pub enum HandlerEvent {
     /// any) that were received.
     Message {
         /// The GossipsubRPC message excluding any invalid messages.
-        rpc: GossipsubRpc,
+        rpc: Rpc,
         /// Any invalid messages that were received in the RPC, along with the associated
         /// validation error.
-        invalid_messages: Vec<(RawGossipsubMessage, ValidationError)>,
+        invalid_messages: Vec<(RawMessage, ValidationError)>,
     },
     /// An inbound or outbound substream has been established with the peer and this informs over
     /// which protocol. This message only occurs once per connection.
@@ -63,8 +64,8 @@ pub enum HandlerEvent {
 }
 
 /// A message sent from the behaviour to the handler.
-#[derive(Debug, Clone)]
-pub enum GossipsubHandlerIn {
+#[derive(Debug)]
+pub enum HandlerIn {
     /// A gossipsub message to send.
     Message(crate::rpc_proto::Rpc),
     /// The peer has joined the mesh.
@@ -81,7 +82,7 @@ pub enum GossipsubHandlerIn {
 const MAX_SUBSTREAM_CREATION: usize = 5;
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
-pub struct GossipsubHandler {
+pub struct Handler {
     /// Upgrade configuration for the gossipsub protocol.
     listen_protocol: SubstreamProtocol<ProtocolConfig, ()>,
 
@@ -123,7 +124,7 @@ pub struct GossipsubHandler {
     idle_timeout: Duration,
 
     /// Collection of errors from attempting an upgrade.
-    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<GossipsubHandlerError>>,
+    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<HandlerError>>,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
@@ -160,10 +161,10 @@ enum OutboundSubstreamState {
     Poisoned,
 }
 
-impl GossipsubHandler {
-    /// Builds a new [`GossipsubHandler`].
+impl Handler {
+    /// Builds a new [`Handler`].
     pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
-        GossipsubHandler {
+        Handler {
             listen_protocol: SubstreamProtocol::new(protocol_config, ()),
             inbound_substream: None,
             outbound_substream: None,
@@ -180,25 +181,13 @@ impl GossipsubHandler {
             in_mesh: false,
         }
     }
-}
 
-impl ConnectionHandler for GossipsubHandler {
-    type InEvent = GossipsubHandlerIn;
-    type OutEvent = HandlerEvent;
-    type Error = GossipsubHandlerError;
-    type InboundOpenInfo = ();
-    type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = crate::rpc_proto::Rpc;
-    type OutboundProtocol = ProtocolConfig;
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        self.listen_protocol.clone()
-    }
-
-    fn inject_fully_negotiated_inbound(
+    fn on_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _info: Self::InboundOpenInfo,
+        FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
     ) {
         let (substream, peer_kind) = protocol;
 
@@ -219,10 +208,15 @@ impl ConnectionHandler for GossipsubHandler {
         self.inbound_substream = Some(InboundSubstreamState::WaitingInput(substream));
     }
 
-    fn inject_fully_negotiated_outbound(
+    fn on_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        message: Self::OutboundOpenInfo,
+        FullyNegotiatedOutbound {
+            protocol,
+            info: message,
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
     ) {
         let (substream, peer_kind) = protocol;
 
@@ -249,35 +243,37 @@ impl ConnectionHandler for GossipsubHandler {
             self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
         }
     }
+}
 
-    fn inject_event(&mut self, message: GossipsubHandlerIn) {
+impl ConnectionHandler for Handler {
+    type InEvent = HandlerIn;
+    type OutEvent = HandlerEvent;
+    type Error = HandlerError;
+    type InboundOpenInfo = ();
+    type InboundProtocol = ProtocolConfig;
+    type OutboundOpenInfo = crate::rpc_proto::Rpc;
+    type OutboundProtocol = ProtocolConfig;
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        self.listen_protocol.clone()
+    }
+
+    fn on_behaviour_event(&mut self, message: HandlerIn) {
         if !self.protocol_unsupported {
             match message {
-                GossipsubHandlerIn::Message(m) => self.send_queue.push(m),
+                HandlerIn::Message(m) => self.send_queue.push(m),
                 // If we have joined the mesh, keep the connection alive.
-                GossipsubHandlerIn::JoinedMesh => {
+                HandlerIn::JoinedMesh => {
                     self.in_mesh = true;
                     self.keep_alive = KeepAlive::Yes;
                 }
                 // If we have left the mesh, start the idle timer.
-                GossipsubHandlerIn::LeftMesh => {
+                HandlerIn::LeftMesh => {
                     self.in_mesh = false;
                     self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
                 }
             }
         }
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        e: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-        self.outbound_substream_establishing = false;
-        warn!("Dial upgrade error {:?}", e);
-        self.upgrade_errors.push_back(e);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -300,7 +296,7 @@ impl ConnectionHandler for GossipsubHandler {
             let reported_error = match error {
                 // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                 ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                    Some(GossipsubHandlerError::NegotiationTimeout)
+                    Some(HandlerError::NegotiationTimeout)
                 }
                 // There was an error post negotiation, close the connection.
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
@@ -323,7 +319,7 @@ impl ConnectionHandler for GossipsubHandler {
                             }
                         }
                         NegotiationError::ProtocolError(e) => {
-                            Some(GossipsubHandlerError::NegotiationProtocolError(e))
+                            Some(HandlerError::NegotiationProtocolError(e))
                         }
                     }
                 }
@@ -347,7 +343,7 @@ impl ConnectionHandler for GossipsubHandler {
         if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, end the connection.
             return Poll::Ready(ConnectionHandlerEvent::Close(
-                GossipsubHandlerError::MaxInboundSubstreams,
+                HandlerError::MaxInboundSubstreams,
             ));
         }
 
@@ -358,7 +354,7 @@ impl ConnectionHandler for GossipsubHandler {
         {
             if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
                 return Poll::Ready(ConnectionHandlerEvent::Close(
-                    GossipsubHandlerError::MaxOutboundSubstreams,
+                    HandlerError::MaxOutboundSubstreams,
                 ));
             }
             let message = self.send_queue.remove(0);
@@ -388,7 +384,7 @@ impl ConnectionHandler for GossipsubHandler {
                         }
                         Poll::Ready(Some(Err(error))) => {
                             match error {
-                                GossipsubHandlerError::MaxTransmissionSize => {
+                                HandlerError::MaxTransmissionSize => {
                                     warn!("Message exceeded the maximum transmission size");
                                     self.inbound_substream =
                                         Some(InboundSubstreamState::WaitingInput(substream));
@@ -475,7 +471,7 @@ impl ConnectionHandler for GossipsubHandler {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
-                                Err(GossipsubHandlerError::MaxTransmissionSize) => {
+                                Err(HandlerError::MaxTransmissionSize) => {
                                     error!("Message exceeded the maximum transmission size and was not sent.");
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::WaitingOutput(substream));
@@ -559,5 +555,30 @@ impl ConnectionHandler for GossipsubHandler {
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { error: e, .. }) => {
+                self.outbound_substream_establishing = false;
+                warn!("Dial upgrade error {:?}", e);
+                self.upgrade_errors.push_back(e);
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }

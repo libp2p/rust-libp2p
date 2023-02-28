@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-swarm"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.62.0"
 description = "The libp2p swarm"
-version = "0.40.1"
+version = "0.42.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,24 +13,49 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.6.0"
 fnv = "1.0"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3.0.2"
 instant = "0.1.11"
-libp2p-core = { version = "0.37.0", path = "../core" }
+libp2p-core = { version = "0.39.0", path = "../core" }
+libp2p-swarm-derive = { version = "0.32.0", path = "../swarm-derive", optional = true }
 log = "0.4"
 pin-project = "1.0.0"
 rand = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0"
 void = "1"
+wasm-bindgen-futures = { version = "0.4.34", optional = true }
+getrandom = { version = "0.2.3", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
+
+[target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
+async-std = { version = "1.6.2", optional = true }
+tokio = { version = "1.15", features = ["rt"], optional = true }
+
+[features]
+macros = ["dep:libp2p-swarm-derive"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
+wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-env_logger = "0.9"
-libp2p = { path = "..", features = ["full"] }
+either = "1.6.0"
+env_logger = "0.10"
+futures = "0.3.26"
+libp2p-identify = { path = "../protocols/identify" }
+libp2p-kad = { path = "../protocols/kad" }
+libp2p-ping = { path = "../protocols/ping" }
+libp2p-plaintext = { path = "../transports/plaintext" }
+libp2p-swarm-derive = { path = "../swarm-derive" }
+libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+void = "1"
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+[[test]]
+name = "swarm_derive"
+required-features = ["macros"]
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

@@ -93,6 +93,10 @@ pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "quic")]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[doc(inline)]
+pub use libp2p_quic as quic;
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -111,6 +115,7 @@ pub use libp2p_swarm as swarm;
 pub use libp2p_tcp as tcp;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
@@ -119,6 +124,11 @@ pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
+#[cfg(feature = "webrtc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[doc(inline)]
+pub use libp2p_webrtc as webrtc;
 #[cfg(feature = "websocket")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
@@ -130,7 +140,6 @@ pub use libp2p_yamux as yamux;
 mod transport_ext;
 
 pub mod bandwidth;
-pub mod simple;
 
 #[cfg(doc)]
 pub mod tutorials;
@@ -142,10 +151,8 @@ pub use self::core::{
     PeerId, Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
-pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
-pub use libp2p_swarm_derive::NetworkBehaviour;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///

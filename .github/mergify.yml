@@ -1,0 +1,42 @@
+defaults:
+  actions:
+    queue:
+      method: squash
+      commit_message_template: |
+        {{ title }}
+        
+        {{ body | get_section("## Description", "") }}
+        
+        Pull-Request: #{{ number }}.
+
+pull_request_rules:
+  - name: Ask to resolve conflict
+    conditions:
+      - conflict
+      - -draft # Draft PRs are allowed to have conflicts.
+      - -author=dependabot[bot]
+    actions:
+      comment:
+        message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
+
+  - name: Add to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - label=send-it
+    actions:
+      queue:
+
+  - name: Remove reviews on updates after PR is queued for merging
+    conditions:
+      - base=master
+      - label=send-it
+      - author!=@libp2p/rust-libp2p-maintainers
+      - author!=dependabot[bot]
+    actions:
+      dismiss_reviews:
+        message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
+        changes_requested: false
+
+queue_rules:
+  - name: default
+    conditions: []

@@ -103,10 +103,10 @@ pub fn build_query() -> MdnsPacket {
 /// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
-pub fn build_query_response(
+pub fn build_query_response<'a>(
     id: u16,
     peer_id: PeerId,
-    addresses: impl ExactSizeIterator<Item = Multiaddr>,
+    addresses: impl ExactSizeIterator<Item = &'a Multiaddr>,
     ttl: Duration,
 ) -> Vec<MdnsPacket> {
     // Convert the TTL into seconds.
@@ -395,14 +395,14 @@ impl error::Error for MdnsResponseError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dns_parser::Packet;
     use libp2p_core::identity;
     use std::time::Duration;
+    use trust_dns_proto::op::Message;
 
     #[test]
     fn build_query_correct() {
         let query = build_query();
-        assert!(Packet::parse(&query).is_ok());
+        assert!(Message::from_vec(&query).is_ok());
     }
 
     #[test]
@@ -413,18 +413,18 @@ mod tests {
         let packets = build_query_response(
             0xf8f8,
             my_peer_id,
-            vec![addr1, addr2].into_iter(),
+            vec![&addr1, &addr2].into_iter(),
             Duration::from_secs(60),
         );
         for packet in packets {
-            assert!(Packet::parse(&packet).is_ok());
+            assert!(Message::from_vec(&packet).is_ok());
         }
     }
 
     #[test]
     fn build_service_discovery_response_correct() {
         let query = build_service_discovery_response(0x1234, Duration::from_secs(120));
-        assert!(Packet::parse(&query).is_ok());
+        assert!(Message::from_vec(&query).is_ok());
     }
 
     #[test]

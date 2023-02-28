@@ -20,13 +20,18 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
+use asynchronous_codec::Framed;
 use futures::{
     io::{AsyncRead, AsyncWrite},
-    AsyncWriteExt, Future,
+    Future,
 };
-use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
-use prost::Message;
-use std::{error, fmt, io, iter, pin::Pin};
+use futures::{SinkExt, StreamExt};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use std::{io, iter, pin::Pin};
+
+const MAX_MESSAGE_LEN_BYTES: usize = 2048;
+
+const PROTOCOL_NAME: &[u8] = b"/floodsub/1.0.0";
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -44,7 +49,7 @@ impl UpgradeInfo for FloodsubProtocol {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -53,19 +58,27 @@ where
     TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = FloodsubRpc;
-    type Error = FloodsubDecodeError;
+    type Error = FloodsubError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
-            let rpc = rpc_proto::Rpc::decode(&packet[..])?;
+            let mut framed = Framed::new(
+                socket,
+                prost_codec::Codec::<rpc_proto::Rpc>::new(MAX_MESSAGE_LEN_BYTES),
+            );
+
+            let rpc = framed
+                .next()
+                .await
+                .ok_or_else(|| FloodsubError::ReadError(io::ErrorKind::UnexpectedEof.into()))?
+                .map_err(CodecError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
                 messages.push(FloodsubMessage {
                     source: PeerId::from_bytes(&publish.from.unwrap_or_default())
-                        .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
+                        .map_err(|_| FloodsubError::InvalidPeerId)?,
                     data: publish.data.unwrap_or_default(),
                     sequence_number: publish.seqno.unwrap_or_default(),
                     topics: publish.topic_ids.into_iter().map(Topic::new).collect(),
@@ -92,53 +105,22 @@ where
 }
 
 /// Reach attempt interrupt errors.
-#[derive(Debug)]
-pub enum FloodsubDecodeError {
-    /// Error when reading the packet from the socket.
-    ReadError(io::Error),
-    /// Error when decoding the raw buffer into a protobuf.
-    ProtobufError(prost::DecodeError),
+#[derive(thiserror::Error, Debug)]
+pub enum FloodsubError {
     /// Error when parsing the `PeerId` in the message.
+    #[error("Failed to decode PeerId from message")]
     InvalidPeerId,
+    /// Error when decoding the raw buffer into a protobuf.
+    #[error("Failed to decode protobuf")]
+    ProtobufError(#[from] CodecError),
+    /// Error when reading the packet from the socket.
+    #[error("Failed to read from socket")]
+    ReadError(#[from] io::Error),
 }
 
-impl From<io::Error> for FloodsubDecodeError {
-    fn from(err: io::Error) -> Self {
-        FloodsubDecodeError::ReadError(err)
-    }
-}
-
-impl From<prost::DecodeError> for FloodsubDecodeError {
-    fn from(err: prost::DecodeError) -> Self {
-        FloodsubDecodeError::ProtobufError(err)
-    }
-}
-
-impl fmt::Display for FloodsubDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => {
-                write!(f, "Error while reading from socket: {}", err)
-            }
-            FloodsubDecodeError::ProtobufError(ref err) => {
-                write!(f, "Error while decoding protobuf: {}", err)
-            }
-            FloodsubDecodeError::InvalidPeerId => {
-                write!(f, "Error while decoding PeerId from message")
-            }
-        }
-    }
-}
-
-impl error::Error for FloodsubDecodeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => Some(err),
-            FloodsubDecodeError::ProtobufError(ref err) => Some(err),
-            FloodsubDecodeError::InvalidPeerId => None,
-        }
-    }
-}
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct CodecError(#[from] prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -154,7 +136,7 @@ impl UpgradeInfo for FloodsubRpc {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -163,16 +145,17 @@ where
     TSocket: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
     type Output = ();
-    type Error = io::Error;
+    type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let bytes = self.into_bytes();
-
-            upgrade::write_length_prefixed(&mut socket, bytes).await?;
-            socket.close().await?;
-
+            let mut framed = Framed::new(
+                socket,
+                prost_codec::Codec::<rpc_proto::Rpc>::new(MAX_MESSAGE_LEN_BYTES),
+            );
+            framed.send(self.into_rpc()).await?;
+            framed.close().await?;
             Ok(())
         })
     }
@@ -180,8 +163,8 @@ where
 
 impl FloodsubRpc {
     /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
-    fn into_bytes(self) -> Vec<u8> {
-        let rpc = rpc_proto::Rpc {
+    fn into_rpc(self) -> rpc_proto::Rpc {
+        rpc_proto::Rpc {
             publish: self
                 .messages
                 .into_iter()
@@ -201,12 +184,7 @@ impl FloodsubRpc {
                     topic_id: Some(topic.topic.into()),
                 })
                 .collect(),
-        };
-
-        let mut buf = Vec::with_capacity(rpc.encoded_len());
-        rpc.encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
-        buf
+        }
     }
 }
 
