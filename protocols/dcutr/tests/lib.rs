@@ -19,17 +19,15 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::stream::StreamExt;
-use futures::task::Spawn;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::upgrade::Version;
-use libp2p_core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
-use libp2p_core::PublicKey;
+use libp2p_core::transport::{MemoryTransport, OrTransport, Transport};
 use libp2p_core::{identity, PeerId};
 use libp2p_dcutr as dcutr;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
 #[async_std::test]
@@ -74,17 +72,15 @@ async fn connect() {
             .try_into_behaviour_event()
             .unwrap()
         {
-            ClientEvent::Dcutr(
-                dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
-                    remote_peer_id,
-                    remote_relayed_addr,
-                },
-            ) => {
+            ClientEvent::Dcutr(dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
+                remote_peer_id,
+                remote_relayed_addr,
+            }) => {
                 if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr {
                     break;
                 }
             }
-            other => panic!("Unexpected event: {:?}.", other),
+            other => panic!("Unexpected event: {other:?}."),
         }
     }
 
@@ -92,7 +88,7 @@ async fn connect() {
 
     src.wait(move |e| match e {
         SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-            (*endpoint.get_remote_address() == dst_addr).then(|| ())
+            (*endpoint.get_remote_address() == dst_addr).then_some(())
         }
         _ => None,
     })
@@ -103,7 +99,7 @@ fn build_relay() -> Swarm<relay::Behaviour> {
     Swarm::new_ephemeral(|identity| {
         let local_peer_id = identity.public().to_peer_id();
 
-        relay::Relay::new(
+        relay::Behaviour::new(
             local_peer_id,
             relay::Config {
                 reservation_duration: Duration::from_secs(2),
@@ -124,7 +120,7 @@ fn build_client() -> Swarm<Client> {
         .boxed()
         .upgrade(Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
     Swarm::with_threadpool_executor(

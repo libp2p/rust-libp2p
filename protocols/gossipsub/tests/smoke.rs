@@ -20,22 +20,18 @@
 
 use async_std::prelude::FutureExt;
 use futures::stream::{FuturesUnordered, SelectAll};
+use futures::StreamExt;
+use libp2p_gossipsub as gossipsub;
+use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
+use libp2p_swarm::Swarm;
+use libp2p_swarm_test::SwarmExt as _;
 use log::debug;
-use quickcheck::{QuickCheck, TestResult};
+use quickcheck_ext::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
 
-use futures::StreamExt;
-use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
-};
-use libp2p_gossipsub as gossipsub;
-use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
-
 struct Graph {
-    nodes: SelectAll<Swarm<Gossipsub>>,
+    nodes: SelectAll<Swarm<gossipsub::Behaviour>>,
 }
 
 impl Graph {
@@ -116,7 +112,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
     let mut swarm = Swarm::new_ephemeral(|identity| {
         let peer_id = identity.public().to_peer_id();
 
-        let config = GossipsubConfigBuilder::default()
+        let config = gossipsub::ConfigBuilder::default()
             .heartbeat_initial_delay(Duration::from_millis(100))
             .heartbeat_interval(Duration::from_millis(200))
             .history_length(10)
@@ -124,7 +120,7 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
             .validation_mode(ValidationMode::Permissive)
             .build()
             .unwrap();
-        Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap()
+        gossipsub::Behaviour::new(MessageAuthenticity::Author(peer_id), config).unwrap()
     });
     swarm.listen().await;
 
@@ -170,8 +166,7 @@ fn multi_hop_propagation() {
 
             if !all_subscribed {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to subscribe but only have {
-                    subscribed:?}/{num_nodes:?}.",
+                    "Timed out waiting for all nodes to subscribe but only have {subscribed:?}/{num_nodes:?}.",
                 ));
             }
 
@@ -206,8 +201,7 @@ fn multi_hop_propagation() {
 
             if !all_received {
                 return TestResult::error(format!(
-                    "Timed out waiting for all nodes to receive the msg but only have {
-                    received_msgs:?}/{num_nodes:?}.",
+                    "Timed out waiting for all nodes to receive the msg but only have {received_msgs:?}/{num_nodes:?}.",
                 ));
             }
 

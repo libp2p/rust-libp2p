@@ -7,17 +7,11 @@ use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::plaintext::PlainText2Config;
 use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::{
-    AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
-};
+use libp2p::swarm::{AddressScore, NetworkBehaviour, SwarmEvent, THandlerErr};
 use libp2p::yamux::YamuxConfig;
 use libp2p::{Multiaddr, PeerId, Swarm, Transport};
 use std::fmt::Debug;
 use std::time::Duration;
-
-type THandler<TBehaviour> = <TBehaviour as NetworkBehaviour>::ConnectionHandler;
-type THandlerErr<TBehaviour> =
-    <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
 
 /// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
 #[async_trait]
@@ -99,7 +93,7 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::new(transport, behaviour_fn(identity), peer_id)
+        Swarm::without_executor(transport, behaviour_fn(identity), peer_id)
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)

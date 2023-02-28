@@ -2360,6 +2360,7 @@ dependencies = [
  "prost",
  "prost-build",
  "prost-codec",
+ "quickcheck-ext",
  "rand 0.8.5",
  "regex",
  "serde",

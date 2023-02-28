@@ -40,6 +40,7 @@ async-std = "1.6.3"
 env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-swarm-test = { path = "../../swarm-test"}
+quickcheck-ext = { path = "../../misc/quickcheck-ext" }
 
 [build-dependencies]
 prost-build = "0.11"

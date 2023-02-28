@@ -20,21 +20,10 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
-use either::Either;
-use futures::{channel::mpsc, prelude::*};
-use libp2p_core::{
-    identity,
-    muxing::StreamMuxerBox,
-    transport::{self, Transport},
-    upgrade, Multiaddr, PeerId,
-};
-use libp2p_mplex as mplex;
-use libp2p_noise as noise;
+use futures::prelude::*;
 use libp2p_ping as ping;
 use libp2p_swarm::keep_alive;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p_tcp as tcp;
-use libp2p_yamux as yamux;
 use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};

@@ -21,7 +21,7 @@
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::swarm::SwarmEvent;
+use libp2p_swarm::SwarmEvent;
 use std::fmt::Debug;
 use std::time::Duration;
 
