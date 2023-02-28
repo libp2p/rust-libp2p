@@ -143,6 +143,11 @@ libp2p-tcp = { path = "transports/tcp", features = ["tokio"] }
 members = [
     "core",
     "examples/chat",
+    "examples/distributed-key-value-store",
+    "examples/file-sharing",
+    "examples/ipfs-kad",
+    "examples/ipfs-private",
+    "examples/ping",
     "misc/metrics",
     "misc/multistream-select",
     "misc/rw-stream-sink",

@@ -1218,6 +1218,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "distributed-key-value-store"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1384,6 +1396,20 @@ name = "fiat-crypto"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a214f5bb88731d436478f3ae1f8a277b62124089ba9fb67f4f93fb100ef73c90"
+
+[[package]]
+name = "file-sharing"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap 4.1.6",
+ "either",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
 
 [[package]]
 name = "flate2"
@@ -1971,6 +1997,31 @@ dependencies = [
  "widestring",
  "winapi",
  "winreg",
+]
+
+[[package]]
+name = "ipfs-kad"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
+
+[[package]]
+name = "ipfs-private"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "either",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
 ]
 
 [[package]]
@@ -3387,6 +3438,17 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "ping"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
 
 [[package]]
 name = "pkcs8"

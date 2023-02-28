@@ -1,5 +1,5 @@
 [package]
-name = "chat"
+name = "ping"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -7,7 +7,6 @@ publish = false
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
-env_logger = "0.10.0"
 futures = "0.3.26"
-libp2p = { path = "../../", features=["async-std", "dns", "gossipsub", "mdns", "mplex", "noise", "macros", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../", features=["async-std", "dns", "macros", "mplex", "noise", "ping", "tcp", "websocket", "yamux"] }
 multiaddr = { version = "0.17.0" }
