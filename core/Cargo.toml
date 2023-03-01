@@ -16,7 +16,7 @@ fnv = "1.0"
 futures = { version = "0.3.26", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 instant = "0.1.11"
-libp2p-identity = { version = "0.1", path = "../identity", features = ["peerid"] }
+libp2p-identity = { version = "0.1", path = "../identity", features = ["peerid", "ed25519"] }
 log = "0.4"
 multiaddr = { version = "0.17.0" }
 multihash = { version = "0.17.0", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
@@ -47,7 +47,6 @@ prost-build = "0.11"
 secp256k1 = [ "libp2p-identity/secp256k1" ]
 ecdsa = [ "libp2p-identity/ecdsa" ]
 rsa = [ "libp2p-identity/rsa" ]
-ed25519 = [ "libp2p-identity/ed25519" ]
 serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

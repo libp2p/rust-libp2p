@@ -55,11 +55,6 @@ pub mod identity {
     pub use libp2p_identity::Keypair;
     pub use libp2p_identity::PublicKey;
 
-    #[cfg(feature = "ed25519")]
-    #[deprecated(
-        since = "0.39.0",
-        note = "The `ed25519` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
-    )]
     pub mod ed25519 {
         pub use libp2p_identity::ed25519::Keypair;
         pub use libp2p_identity::ed25519::PublicKey;
