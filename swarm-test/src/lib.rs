@@ -169,9 +169,6 @@ where
 
     async fn listen(&mut self) -> (Multiaddr, Multiaddr) {
         let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
-        let tcp_addr_listener_id = self
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-            .unwrap();
 
         // block until we are actually listening
         let memory_multiaddr = self
@@ -193,6 +190,10 @@ where
         // Memory addresses are externally reachable because they all share the same memory-space.
         self.add_external_address(memory_multiaddr.clone(), AddressScore::Infinite);
 
+        let tcp_addr_listener_id = self
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
+
         let tcp_multiaddr = self
             .wait(|e| match e {
                 SwarmEvent::NewListenAddr {
@@ -209,8 +210,8 @@ where
             })
             .await;
 
-        // TCP addresses are "externally" reachable because we run our tests in the same process and they all can reach localhost.
-        self.add_external_address(tcp_multiaddr.clone(), AddressScore::Infinite);
+        // We purposely don't add the TCP addr as an external one because we want to only use the memory transport for making connections in here.
+        // The TCP transport is only supported for protocols that manage their own connections.
 
         (memory_multiaddr, tcp_multiaddr)
     }

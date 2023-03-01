@@ -133,6 +133,8 @@ fn unsupported_doesnt_fail() {
     let result = async_std::task::block_on(async {
         swarm1.listen().await;
         swarm2.connect(&mut swarm1).await;
+        let swarm1_peer_id = *swarm1.local_peer_id();
+        async_std::task::spawn(swarm1.loop_on_next());
 
         loop {
             match swarm2.next_or_timeout().await {
@@ -140,7 +142,7 @@ fn unsupported_doesnt_fail() {
                     result: Err(ping::Failure::Unsupported),
                     ..
                 })) => {
-                    swarm2.disconnect_peer_id(*swarm1.local_peer_id()).unwrap();
+                    swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
                 }
                 SwarmEvent::ConnectionClosed { cause: Some(e), .. } => {
                     break Err(e);
