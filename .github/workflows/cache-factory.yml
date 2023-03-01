@@ -70,6 +70,3 @@ jobs:
 
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
-
-      - name: Render docs
-        run: cargo doc --all-features --workspace

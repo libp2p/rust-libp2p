@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-bytes = "1"
 either = "1.6.0"
 futures = "0.3.26"
 futures-timer = "3.0"

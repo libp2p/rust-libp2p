@@ -1,3 +1,9 @@
+# 0.22.3 - unreleased
+
+- Fix handshake over websocket. See [PR 3476]
+
+[PR 3476]: https://github.com/libp2p/rust-libp2p/pull/3476
+
 # 0.22.2
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
