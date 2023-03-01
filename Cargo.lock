@@ -2570,6 +2570,7 @@ version = "0.22.3"
 dependencies = [
  "futures",
  "libp2p-core",
+ "libp2p-identity",
  "libp2p-noise",
  "libp2p-swarm",
  "libp2p-tcp",

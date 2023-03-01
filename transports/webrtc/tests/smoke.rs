@@ -62,8 +62,8 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop as fn(_, _) -> _);
 }
 
-fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
-    libp2p_core::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
 }
 
 fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {

@@ -62,7 +62,7 @@ where
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     pub fn create_network(self) -> (Behaviour<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
         // create a gossipsub struct
         let mut gs: Behaviour<D, F> = Behaviour::new_with_subscription_filter_and_transform(
             MessageAuthenticity::Signed(keypair),
