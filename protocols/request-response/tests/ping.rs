@@ -101,19 +101,14 @@ async fn ping_protocol() {
 
     let peer1 = async move {
         loop {
-            match swarm1
-                .next_or_timeout()
-                .await
-                .try_into_behaviour_event()
-                .unwrap()
-            {
-                request_response::Event::Message {
+            match swarm1.next_or_timeout().await.try_into_behaviour_event() {
+                Ok(request_response::Event::Message {
                     peer,
                     message:
                         request_response::Message::Request {
                             request, channel, ..
                         },
-                } => {
+                }) => {
                     assert_eq!(&request, &expected_ping);
                     assert_eq!(&peer, &peer2_id);
                     swarm1
@@ -121,10 +116,13 @@ async fn ping_protocol() {
                         .send_response(channel, pong.clone())
                         .unwrap();
                 }
-                request_response::Event::ResponseSent { peer, .. } => {
+                Ok(request_response::Event::ResponseSent { peer, .. }) => {
                     assert_eq!(&peer, &peer2_id);
                 }
-                e => panic!("Peer1: Unexpected event: {e:?}"),
+                Ok(e) => {
+                    panic!("Peer1: Unexpected event: {e:?}")
+                }
+                Err(..) => {}
             }
         }
     };
