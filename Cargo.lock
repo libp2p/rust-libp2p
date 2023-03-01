@@ -1232,7 +1232,19 @@ dependencies = [
  "der",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 1.6.4",
+]
+
+[[package]]
+name = "ecdsa"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12844141594ad74185a926d030f3b605f6a903b4e3fec351f3ea338ac5b7637e"
+dependencies = [
+ "der",
+ "elliptic-curve",
+ "rfc6979",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -1241,7 +1253,7 @@ version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
- "signature",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -2193,7 +2205,7 @@ dependencies = [
  "multihash",
  "multistream-select",
  "once_cell",
- "p256",
+ "p256 0.12.0",
  "parking_lot 0.12.1",
  "pin-project",
  "prost",
@@ -3301,8 +3313,20 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
+ "sha2 0.10.6",
+]
+
+[[package]]
+name = "p256"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49c124b3cbce43bcbac68c58ec181d98ed6cc7e6d0aa7c3ba97b2563410b0e55"
+dependencies = [
+ "ecdsa 0.15.1",
+ "elliptic-curve",
+ "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -3312,7 +3336,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfc8c5bf642dde52bb9e87c0ecd8ca5a76faac2eeed98dedb7c717997e1080aa"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
  "sha2 0.10.6",
 ]
@@ -3577,6 +3601,15 @@ checksum = "e97e3215779627f01ee256d2fad52f3d95e8e1c11e9fc6fd08f7cd455d5d5c78"
 dependencies = [
  "proc-macro2",
  "syn",
+]
+
+[[package]]
+name = "primeorder"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b54f7131b3dba65a2f414cf5bd25b66d4682e4608610668eae785750ba4c5b2"
+dependencies = [
+ "elliptic-curve",
 ]
 
 [[package]]
@@ -4323,6 +4356,16 @@ name = "signature"
 version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
+dependencies = [
+ "digest 0.10.6",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "signature"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
 dependencies = [
  "digest 0.10.6",
  "rand_core 0.6.4",
@@ -5185,7 +5228,7 @@ dependencies = [
  "hmac 0.10.1",
  "log",
  "oid-registry 0.6.1",
- "p256",
+ "p256 0.11.1",
  "p384",
  "pem",
  "rand 0.8.5",
@@ -5197,7 +5240,7 @@ dependencies = [
  "serde",
  "sha-1",
  "sha2 0.9.9",
- "signature",
+ "signature 1.6.4",
  "subtle",
  "thiserror",
  "tokio",
