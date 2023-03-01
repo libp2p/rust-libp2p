@@ -331,6 +331,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::prelude::*;
     use std::str::FromStr;
 
     #[test]
@@ -353,7 +354,7 @@ mod tests {
         let expected_peer_id =
             PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
 
-        let encoded = base64::decode(base_64_encoded).unwrap();
+        let encoded = BASE64_STANDARD.decode(base_64_encoded).unwrap();
 
         let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();

@@ -18,16 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    FullyNegotiatedInbound, InboundUpgradeSend, IntoConnectionHandler, KeepAlive,
-    ListenUpgradeError, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
+use crate::ConnectionHandlerUpgrErr;
 use either::Either;
 use futures::future;
-use libp2p_core::upgrade::UpgradeError;
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::{ConnectedPoint, PeerId, UpgradeError};
 use std::task::{Context, Poll};
 
 /// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
@@ -39,6 +40,7 @@ pub enum IntoEitherHandler<L, R> {
 
 /// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
 /// implementations.
+#[allow(deprecated)]
 impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
 where
     L: IntoConnectionHandler,
@@ -96,7 +98,7 @@ where
     RIP: InboundUpgradeSend,
     LIP: InboundUpgradeSend,
 {
-    fn transpose(
+    pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedInbound<LIP, LIOI>, FullyNegotiatedInbound<RIP, RIOI>> {
         match self {

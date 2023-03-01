@@ -19,13 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{ValidationMode, Version};
-use crate::error::{HandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
 use crate::{rpc_proto, Config};
+use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
