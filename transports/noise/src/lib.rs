@@ -65,6 +65,8 @@ pub use protocol::x25519::X25519;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+use std::fmt;
+use std::fmt::Formatter;
 
 use crate::handshake::State;
 use crate::io::handshake;
@@ -283,45 +285,18 @@ pub enum NoiseError {
     SigningError(#[from] identity::error::SigningError),
 }
 
-// This type was created to avoid breaking changes
-// caused by quick_protobuf::Error related to auto traits.
-// See https://github.com/libp2p/rust-libp2p/pull/3312.
 #[derive(Debug, thiserror::Error)]
-pub enum DecodeError {
-    #[error("{0}")]
-    Io(String),
-    #[error("{0}")]
-    Utf8(core::str::Utf8Error),
-    #[error("{0}")]
-    Deprecated(&'static str),
-    #[error("{0}")]
-    UnknownWireType(u8),
-    #[error("Varint decoding error")]
-    Varint,
-    #[error("{0}")]
-    Message(String),
-    #[error("{0}")]
-    Map(u8),
-    #[error("Out of data when reading from or writing to a byte buffer")]
-    UnexpectedEndOfBuffer,
-    #[error("The supplied output buffer is not large enough to serialize the message")]
-    OutputBufferTooSmall,
+pub struct DecodeError(String);
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 impl From<quick_protobuf::Error> for DecodeError {
     fn from(e: quick_protobuf::Error) -> Self {
-        use quick_protobuf::Error;
-        match e {
-            Error::Io(e) => Self::Io(e.to_string()),
-            Error::Utf8(e) => Self::Utf8(e),
-            Error::Deprecated(e) => Self::Deprecated(e),
-            Error::UnknownWireType(e) => Self::UnknownWireType(e),
-            Error::Varint => Self::Varint,
-            Error::Message(e) => Self::Message(e),
-            Error::Map(e) => Self::Map(e),
-            Error::UnexpectedEndOfBuffer => Self::UnexpectedEndOfBuffer,
-            Error::OutputBufferTooSmall => Self::OutputBufferTooSmall,
-        }
+        Self(e.to_string())
     }
 }
 
