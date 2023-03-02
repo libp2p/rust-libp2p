@@ -71,45 +71,70 @@ pub trait SwarmExt {
 
 /// Drives two [`Swarm`]s until a certain number of events are emitted.
 ///
-/// ## Usage
+/// # Usage
 ///
-/// The number of events is configured via the array size of the return type.
+/// ## Number of events
+///
+/// The number of events is configured via const generics based on the array size of the return type.
 /// This allows the compiler to infer how many events you are expecting based on how you use this function.
 /// For example, if you expect the first [`Swarm`] to emit 2 events, you should assign the first variable of the returned tuple value to an array of size 2.
 /// This works especially well if you directly pattern-match on the return value.
 ///
-/// ## Difference to [`futures::future::join`]
+/// ## Type of event
+///
+/// This function utilizes the [`TryIntoOutput`] trait.
+/// Similar as to the number of expected events, the type of event is inferred based on your usage.
+/// If you match against a [`SwarmEvent`], the first [`SwarmEvent`] will be returned.
+/// If you match against your [`NetworkBehaviour::OutEvent`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
+///
+/// You can implement the [`TryIntoOutput`] for any other type to further customize this behaviour.
+///
+/// # Difference to [`futures::future::join`]
 ///
 /// This function is similar to joining two futures with two crucial differences:
 /// 1. As described above, it allows you to obtain more than a single event.
-/// 2. More importantly, it will continue to poll the first [`Swarm`] **even if it already has emitted all expected events**.
+/// 2. More importantly, it will continue to poll the [`Swarm`]s **even if they already has emitted all expected events**.
 ///
-/// Especially (2) is crucial for our usage of this function. If a [`Swarm`] is not polled, nothing within it makes progress.
-/// This can "starve" the 2nd swarm which may wait for another message to be sent on a connection for example.
+/// Especially (2) is crucial for our usage of this function.
+/// If a [`Swarm`] is not polled, nothing within it makes progress.
+/// This can "starve" the other swarm which for example may wait for another message to be sent on a connection.
 ///
 /// Using [`drive`] instead of [`join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
-pub async fn drive<A, const N1: usize, B, const N2: usize>(
-    swarm1: &mut Swarm<A>,
-    swarm2: &mut Swarm<B>,
-) -> ([A::OutEvent; N1], [B::OutEvent; N2])
+pub async fn drive<
+    TBehaviour1,
+    const NUM_EVENTS_SWARM_1: usize,
+    Out1,
+    TBehaviour2,
+    const NUM_EVENTS_SWARM_2: usize,
+    Out2,
+>(
+    swarm1: &mut Swarm<TBehaviour2>,
+    swarm2: &mut Swarm<TBehaviour1>,
+) -> ([Out1; NUM_EVENTS_SWARM_1], [Out2; NUM_EVENTS_SWARM_2])
 where
-    A: NetworkBehaviour + Send,
-    A::OutEvent: Debug,
-    B: NetworkBehaviour + Send,
-    B::OutEvent: Debug,
+    TBehaviour2: NetworkBehaviour + Send,
+    TBehaviour2::OutEvent: Debug,
+    TBehaviour1: NetworkBehaviour + Send,
+    TBehaviour1::OutEvent: Debug,
+    SwarmEvent<TBehaviour2::OutEvent, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
+    SwarmEvent<TBehaviour1::OutEvent, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
+    Out1: Debug,
+    Out2: Debug,
 {
-    let mut res1 = Vec::with_capacity(N1);
-    let mut res2 = Vec::with_capacity(N2);
+    let mut res1 = Vec::<Out1>::with_capacity(NUM_EVENTS_SWARM_1);
+    let mut res2 = Vec::<Out2>::with_capacity(NUM_EVENTS_SWARM_2);
 
-    while res1.len() < N1 || res2.len() < N2 {
-        match futures::future::select(swarm1.next_behaviour_event(), swarm2.next_behaviour_event())
-            .await
-        {
+    while res1.len() < NUM_EVENTS_SWARM_1 || res2.len() < NUM_EVENTS_SWARM_2 {
+        match futures::future::select(swarm1.next_swarm_event(), swarm2.next_swarm_event()).await {
             Either::Left((o1, _)) => {
-                res1.push(o1);
+                if let Ok(o1) = o1.try_into_output() {
+                    res1.push(o1);
+                }
             }
             Either::Right((o2, _)) => {
-                res2.push(o2);
+                if let Ok(o2) = o2.try_into_output() {
+                    res2.push(o2);
+                }
             }
         }
     }
@@ -119,14 +144,31 @@ where
 
     (
         res1.try_into().expect(&format!(
-            "expected {N1} items from first swarm but got {}",
+            "expected {NUM_EVENTS_SWARM_1} items from first swarm but got {}",
             res1_len
         )),
         res2.try_into().expect(&format!(
-            "expected {N2} items from second swarm but got {}",
+            "expected {NUM_EVENTS_SWARM_2} items from second swarm but got {}",
             res2_len
         )),
     )
+}
+
+pub trait TryIntoOutput<O>: Sized {
+    fn try_into_output(self) -> Result<O, Self>;
+}
+
+impl<O, THandlerErr> TryIntoOutput<O> for SwarmEvent<O, THandlerErr> {
+    fn try_into_output(self) -> Result<O, Self> {
+        self.try_into_behaviour_event()
+    }
+}
+impl<TBehaviourOutEvent, THandlerErr> TryIntoOutput<SwarmEvent<TBehaviourOutEvent, THandlerErr>>
+    for SwarmEvent<TBehaviourOutEvent, THandlerErr>
+{
+    fn try_into_output(self) -> Result<SwarmEvent<TBehaviourOutEvent, THandlerErr>, Self> {
+        Ok(self)
+    }
 }
 
 #[async_trait]
