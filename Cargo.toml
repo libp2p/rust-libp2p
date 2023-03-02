@@ -146,6 +146,7 @@ members = [
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
+    "examples/identify",
     "examples/ipfs-kad",
     "examples/ipfs-private",
     "examples/ping",
