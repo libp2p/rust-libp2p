@@ -41,16 +41,9 @@ fn ping_pong() {
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
-                let (e1, e2) =
-                    future::join(swarm1.next_swarm_event(), swarm2.next_swarm_event()).await;
-
-                let e1 = match e1 {
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping)) => ping,
-                    other => panic!("Unexpected event: {other:?}"),
-                };
-                let e2 = match e2 {
-                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping)) => ping,
-                    other => panic!("Unexpected event: {other:?}"),
+                let (e1, e2) = match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+                    ([BehaviourEvent::Ping(e1)], [BehaviourEvent::Ping(e2)]) => (e1, e2),
+                    events => panic!("Unexpected events: {events:?}"),
                 };
 
                 assert_eq!(&e1.peer, swarm2.local_peer_id());
