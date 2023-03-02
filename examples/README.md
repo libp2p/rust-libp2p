@@ -23,5 +23,5 @@ A set of examples showcasing how to use rust-libp2p.
 - [Ping](./ping) Small `ping` clone, sending a ping to a peer, expecting a pong as a response. See [tutorial](../src/tutorials/ping.rs) for a step-by-step guide building the example.
 
 
-- [Rendezvous Server](./rendezvous-point), [Rendezvous Register](./rendezvous-register), [Rendezvous Discover](./rendezvous-discover), [Rendezvous Identify](./rendezvous-identify) Rendezvous Protocol. See [specs](https://github.com/libp2p/specs/blob/master/rendezvous/README.md).
+- [Rendezvous](./rendezvous) Rendezvous Protocol. See [specs](https://github.com/libp2p/specs/blob/master/rendezvous/README.md).
 

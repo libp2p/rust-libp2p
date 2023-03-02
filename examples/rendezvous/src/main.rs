@@ -22,18 +22,15 @@
 ///
 /// 1. Run the rendezvous server:
 ///     ```
-///     cd rendezvous-point
-///     RUST_LOG=info cargo run
+///     RUST_LOG=info cargo run --bin rendezvous
 ///     ```
 /// 2. Register a peer:
 ///     ```
-///     cd rendezvous-register
-///     RUST_LOG=info cargo run
+///     RUST_LOG=info cargo run --bin register
 ///     ```
 /// 3. Try to discover the peer from (2):
 ///     ```
-///     cd rendezvous-discover
-///     RUST_LOG=info cargo run
+///     RUST_LOG=info cargo run --bin discover
 ///     ```
 use futures::StreamExt;
 use libp2p::{
