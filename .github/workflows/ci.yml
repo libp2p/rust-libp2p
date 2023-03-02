@@ -35,7 +35,7 @@ jobs:
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.parse-msrv.outputs.version }}
 
@@ -49,9 +49,7 @@ jobs:
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
         run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -71,11 +69,10 @@ jobs:
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
-      - name: Check public API for semver violations
+      - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
-        run: |
-          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.17.1/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
-          cargo semver-checks check-release -p ${{ matrix.crate }}
+        with:
+          crate: ${{ matrix.crate }}
 
       - name: Enforce no dependency on meta crate
         run: |
@@ -111,9 +108,8 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           target: ${{ matrix.target }}
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
@@ -139,9 +135,7 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
@@ -161,9 +155,7 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
@@ -189,7 +181,7 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
@@ -212,9 +204,7 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
@@ -230,9 +220,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
@@ -245,9 +234,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:          
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
