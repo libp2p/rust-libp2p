@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{stop_message, Limit, Peer, Status, StopMessage};
+use crate::proto;
 use crate::protocol::{MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -51,13 +51,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let msg = StopMessage {
-            r#type: stop_message::Type::Connect.into(),
-            peer: Some(Peer {
+        let msg = proto::StopMessage {
+            type_pb: proto::StopMessageType::CONNECT,
+            peer: Some(proto::Peer {
                 id: self.relay_peer_id.to_bytes(),
                 addrs: vec![],
             }),
-            limit: Some(Limit {
+            limit: Some(proto::Limit {
                 duration: Some(
                     self.max_circuit_duration
                         .as_secs()
@@ -69,12 +69,15 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             status: None,
         };
 
-        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
+        let mut substream = Framed::new(
+            substream,
+            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
+        );
 
         async move {
             substream.send(msg).await?;
-            let StopMessage {
-                r#type,
+            let proto::StopMessage {
+                type_pb,
                 peer: _,
                 limit: _,
                 status,
@@ -83,23 +86,19 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            match r#type {
-                stop_message::Type::Connect => {
+            match type_pb {
+                proto::StopMessageType::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
-                stop_message::Type::Status => {}
+                proto::StopMessageType::STATUS => {}
             }
 
-            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
-                .ok_or(FatalUpgradeError::ParseStatusField)?;
-            match status {
-                Status::Ok => {}
-                Status::ResourceLimitExceeded => {
+            match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+                proto::Status::OK => {}
+                proto::Status::RESOURCE_LIMIT_EXCEEDED => {
                     return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                 }
-                Status::PermissionDenied => {
+                proto::Status::PERMISSION_DENIED => {
                     return Err(CircuitFailedReason::PermissionDenied.into())
                 }
                 s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
@@ -130,8 +129,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
+impl From<quick_protobuf_codec::Error> for UpgradeError {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -147,7 +146,7 @@ pub enum CircuitFailedReason {
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Expected 'status' field to be set.")]
@@ -159,5 +158,5 @@ pub enum FatalUpgradeError {
     #[error("Failed to parse response type field.")]
     ParseStatusField,
     #[error("Unexpected message status '{0:?}'")]
-    UnexpectedStatus(Status),
+    UnexpectedStatus(proto::Status),
 }

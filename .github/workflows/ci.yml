@@ -293,3 +293,30 @@ jobs:
             echo "PR title is too long (greater than 72 characters)"
             exit 1
           fi
+
+  check-proto-files:
+    name: Check for changes in proto files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+
+      - run: cargo install --version 0.10.0 pb-rs --locked
+
+      - name: Glob match
+        uses: tj-actions/glob@v16
+        id: glob
+        with:
+          files: |
+            **/generated/*.proto
+
+      - name: Generate proto files
+        run: pb-rs --dont_use_cow ${{ steps.glob.outputs.paths }}
+
+      - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
+        run: |
+            git_status=$(git status --porcelain)
+
+            echo $git_status
+            test -z "$git_status"

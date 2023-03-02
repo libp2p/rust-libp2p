@@ -16,7 +16,7 @@ bytes = "1"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4.8"
-prost = "0.11"
+quick-protobuf = "0.8"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1.0.2"
 
@@ -24,9 +24,6 @@ void = "1.0.2"
 env_logger = "0.10.0"
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
-
-[build-dependencies]
-prost-build = "0.11"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
