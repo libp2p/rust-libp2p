@@ -139,15 +139,18 @@ where
         }
     }
 
-    let res1_len = res1.len();
-    let res2_len = res2.len();
-
     (
-        res1.try_into().unwrap_or_else(|_| {
-            panic!("expected {NUM_EVENTS_SWARM_1} items from first swarm but got {res1_len}",)
+        res1.try_into().unwrap_or_else(|res1: Vec<_>| {
+            panic!(
+                "expected {NUM_EVENTS_SWARM_1} items from first swarm but got {}",
+                res1.len()
+            )
         }),
-        res2.try_into().unwrap_or_else(|_| {
-            panic!("expected {NUM_EVENTS_SWARM_2} items from second swarm but got {res2_len}",)
+        res2.try_into().unwrap_or_else(|res2: Vec<_>| {
+            panic!(
+                "expected {NUM_EVENTS_SWARM_2} items from second swarm but got {}",
+                res2.len()
+            )
         }),
     )
 }
