@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::stream::FuturesUnordered;
-use futures::{future, StreamExt};
+use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
@@ -38,14 +38,14 @@ async fn given_successful_registration_then_successful_discovery() {
         .behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None);
 
-    match future::join(alice.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            rendezvous::client::Event::Registered {
+            [rendezvous::client::Event::Registered {
                 rendezvous_node,
                 ttl,
                 namespace: register_node_namespace,
-            },
-            rendezvous::server::Event::PeerRegistered { peer, registration },
+            }],
+            [rendezvous::server::Event::PeerRegistered { peer, registration }],
         ) => {
             assert_eq!(&peer, alice.local_peer_id());
             assert_eq!(&rendezvous_node, robert.local_peer_id());
@@ -59,10 +59,10 @@ async fn given_successful_registration_then_successful_discovery() {
     bob.behaviour_mut()
         .discover(Some(namespace.clone()), None, None, *robert.local_peer_id());
 
-    match future::join(bob.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut bob, &mut robert).await {
         (
-            rendezvous::client::Event::Discovered { registrations, .. },
-            rendezvous::server::Event::DiscoverServed { .. },
+            [rendezvous::client::Event::Discovered { registrations, .. }],
+            [rendezvous::server::Event::DiscoverServed { .. }],
         ) => match registrations.as_slice() {
             [rendezvous::Registration {
                 namespace: registered_namespace,
@@ -93,10 +93,10 @@ async fn given_successful_registration_then_refresh_ttl() {
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
 
-    match future::join(alice.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            rendezvous::client::Event::Registered { .. },
-            rendezvous::server::Event::PeerRegistered { .. },
+            [rendezvous::client::Event::Registered { .. }],
+            [rendezvous::server::Event::PeerRegistered { .. }],
         ) => {}
         events => panic!("Unexpected events: {events:?}"),
     }
@@ -104,10 +104,10 @@ async fn given_successful_registration_then_refresh_ttl() {
     bob.behaviour_mut()
         .discover(Some(namespace.clone()), None, None, roberts_peer_id);
 
-    match future::join(bob.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut bob, &mut robert).await {
         (
-            rendezvous::client::Event::Discovered { .. },
-            rendezvous::server::Event::DiscoverServed { .. },
+            [rendezvous::client::Event::Discovered { .. }],
+            [rendezvous::server::Event::DiscoverServed { .. }],
         ) => {}
         events => panic!("Unexpected events: {events:?}"),
     }
@@ -116,10 +116,10 @@ async fn given_successful_registration_then_refresh_ttl() {
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, Some(refresh_ttl));
 
-    match future::join(alice.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            rendezvous::client::Event::Registered { ttl, .. },
-            rendezvous::server::Event::PeerRegistered { .. },
+            [rendezvous::client::Event::Registered { ttl, .. }],
+            [rendezvous::server::Event::PeerRegistered { .. }],
         ) => {
             assert_eq!(ttl, refresh_ttl);
         }
@@ -129,10 +129,10 @@ async fn given_successful_registration_then_refresh_ttl() {
     bob.behaviour_mut()
         .discover(Some(namespace.clone()), None, None, *robert.local_peer_id());
 
-    match future::join(bob.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut bob, &mut robert).await {
         (
-            rendezvous::client::Event::Discovered { registrations, .. },
-            rendezvous::server::Event::DiscoverServed { .. },
+            [rendezvous::client::Event::Discovered { registrations, .. }],
+            [rendezvous::server::Event::DiscoverServed { .. }],
         ) => match registrations.as_slice() {
             [rendezvous::Registration { ttl, .. }] => {
                 assert_eq!(*ttl, refresh_ttl);
@@ -156,13 +156,13 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
         Some(100_000_000),
     );
 
-    match future::join(alice.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
+            [rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
                 error,
                 ..
-            }),
-            rendezvous::server::Event::PeerNotRegistered { .. },
+            })],
+            [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(error, rendezvous::ErrorCode::InvalidTtl);
         }
@@ -235,13 +235,13 @@ async fn eve_cannot_register() {
     eve.behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None);
 
-    match future::join(eve.next_behaviour_event(), robert.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut eve, &mut robert).await {
         (
-            rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
+            [rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
                 error: err_code,
                 ..
-            }),
-            rendezvous::server::Event::PeerNotRegistered { .. },
+            })],
+            [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(err_code, rendezvous::ErrorCode::NotAuthorized);
         }
@@ -264,16 +264,10 @@ async fn can_combine_client_and_server() {
         .behaviour_mut()
         .client
         .register(namespace.clone(), *robert.local_peer_id(), None);
-
-    match future::join(
-        charlie.next_behaviour_event(),
-        robert.next_behaviour_event(),
-    )
-    .await
-    {
+    match libp2p_swarm_test::drive(&mut charlie, &mut robert).await {
         (
-            CombinedEvent::Client(rendezvous::client::Event::Registered { .. }),
-            rendezvous::server::Event::PeerRegistered { .. },
+            [CombinedEvent::Client(rendezvous::client::Event::Registered { .. })],
+            [rendezvous::server::Event::PeerRegistered { .. }],
         ) => {}
         events => panic!("Unexpected events: {events:?}"),
     }
@@ -281,11 +275,10 @@ async fn can_combine_client_and_server() {
     alice
         .behaviour_mut()
         .register(namespace, *charlie.local_peer_id(), None);
-
-    match future::join(charlie.next_behaviour_event(), alice.next_behaviour_event()).await {
+    match libp2p_swarm_test::drive(&mut charlie, &mut alice).await {
         (
-            CombinedEvent::Client(rendezvous::client::Event::Registered { .. }),
-            rendezvous::client::Event::Registered { .. },
+            [CombinedEvent::Server(rendezvous::server::Event::PeerRegistered { .. })],
+            [rendezvous::client::Event::Registered { .. }],
         ) => {}
         events => panic!("Unexpected events: {events:?}"),
     }

@@ -69,6 +69,66 @@ pub trait SwarmExt {
     async fn loop_on_next(self);
 }
 
+/// Drives two [`Swarm`]s until a certain number of events are emitted.
+///
+/// ## Usage
+///
+/// The number of events is configured via the array size of the return type.
+/// This allows the compiler to infer how many events you are expecting based on how you use this function.
+/// For example, if you expect the first [`Swarm`] to emit 2 events, you should assign the first variable of the returned tuple value to an array of size 2.
+/// This works especially well if you directly pattern-match on the return value.
+///
+/// ## Difference to [`futures::future::join`]
+///
+/// This function is similar to joining two futures with two crucial differences:
+/// 1. As described above, it allows you to obtain more than a single event.
+/// 2. More importantly, it will continue to poll the first [`Swarm`] **even if it already has emitted all expected events**.
+///
+/// Especially (2) is crucial for our usage of this function. If a [`Swarm`] is not polled, nothing within it makes progress.
+/// This can "starve" the 2nd swarm which may wait for another message to be sent on a connection for example.
+///
+/// Using [`drive`] instead of [`join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
+pub async fn drive<A, const N1: usize, B, const N2: usize>(
+    swarm1: &mut Swarm<A>,
+    swarm2: &mut Swarm<B>,
+) -> ([A::OutEvent; N1], [B::OutEvent; N2])
+where
+    A: NetworkBehaviour + Send,
+    A::OutEvent: Debug,
+    B: NetworkBehaviour + Send,
+    B::OutEvent: Debug,
+{
+    let mut res1 = Vec::with_capacity(N1);
+    let mut res2 = Vec::with_capacity(N2);
+
+    while res1.len() < N1 || res2.len() < N2 {
+        match futures::future::select(swarm1.next_behaviour_event(), swarm2.next_behaviour_event())
+            .await
+        {
+            Either::Left((o1, _)) => {
+                res1.push(o1);
+            }
+            Either::Right((o2, _)) => {
+                res2.push(o2);
+            }
+        }
+    }
+
+    let res1_len = res1.len();
+    let res2_len = res2.len();
+
+    (
+        res1.try_into().expect(&format!(
+            "expected {N1} items from first swarm but got {}",
+            res1_len
+        )),
+        res2.try_into().expect(&format!(
+            "expected {N2} items from second swarm but got {}",
+            res2_len
+        )),
+    )
+}
+
 #[async_trait]
 impl<B> SwarmExt for Swarm<B>
 where
@@ -244,7 +304,7 @@ where
 
     async fn loop_on_next(mut self) {
         while let Some(event) = self.next().await {
-            log::debug!("Swarm produced: {:?}", event);
+            log::trace!("Swarm produced: {:?}", event);
         }
     }
 }
