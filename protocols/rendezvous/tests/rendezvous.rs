@@ -373,8 +373,8 @@ async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::ser
     server
 }
 
-async fn new_combined_node() -> Swarm<CombinedBehaviour> {
-    let mut node = Swarm::new_ephemeral(|identity| CombinedBehaviour {
+async fn new_combined_node() -> Swarm<Combined> {
+    let mut node = Swarm::new_ephemeral(|identity| Combined {
         client: rendezvous::client::Behaviour::new(identity),
         server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
     });
@@ -395,31 +395,8 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
 }
 
 #[derive(libp2p_swarm::NetworkBehaviour)]
-#[behaviour(
-    event_process = false,
-    out_event = "CombinedEvent",
-    prelude = "libp2p_swarm::derive_prelude"
-)]
-struct CombinedBehaviour {
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+struct Combined {
     client: rendezvous::client::Behaviour,
     server: rendezvous::server::Behaviour,
-}
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum CombinedEvent {
-    Client(rendezvous::client::Event),
-    Server(rendezvous::server::Event),
-}
-
-impl From<rendezvous::server::Event> for CombinedEvent {
-    fn from(v: rendezvous::server::Event) -> Self {
-        Self::Server(v)
-    }
-}
-
-impl From<rendezvous::client::Event> for CombinedEvent {
-    fn from(v: rendezvous::client::Event) -> Self {
-        Self::Client(v)
-    }
 }
