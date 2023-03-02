@@ -50,7 +50,7 @@ async fn is_response_outbound() {
         .send_request(&offline_peer, ping.clone());
 
     match swarm1
-        .next_or_timeout()
+        .next_swarm_event()
         .await
         .try_into_behaviour_event()
         .unwrap()
@@ -101,7 +101,7 @@ async fn ping_protocol() {
 
     let peer1 = async move {
         loop {
-            match swarm1.next_or_timeout().await.try_into_behaviour_event() {
+            match swarm1.next_swarm_event().await.try_into_behaviour_event() {
                 Ok(request_response::Event::Message {
                     peer,
                     message:
@@ -137,7 +137,7 @@ async fn ping_protocol() {
 
         loop {
             match swarm2
-                .next_or_timeout()
+                .next_swarm_event()
                 .await
                 .try_into_behaviour_event()
                 .unwrap()

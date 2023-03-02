@@ -42,7 +42,7 @@ async fn test_dial_back() {
         })
         .unwrap();
     let observed_client_ip = loop {
-        match server.next_or_timeout().await {
+        match server.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 endpoint:
@@ -84,7 +84,7 @@ async fn test_dial_back() {
     };
 
     loop {
-        match server.next_or_timeout().await {
+        match server.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 endpoint:
@@ -141,7 +141,7 @@ async fn test_dial_error() {
     };
 
     loop {
-        match server.next_or_timeout().await {
+        match server.next_swarm_event().await {
             SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                 assert_eq!(peer_id.unwrap(), client_id);
                 assert!(matches!(error, DialError::Transport(_)));
@@ -284,7 +284,7 @@ async fn test_dial_multiple_addr() {
     };
 
     loop {
-        match server.next_or_timeout().await {
+        match server.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
                 peer_id,
                 endpoint:

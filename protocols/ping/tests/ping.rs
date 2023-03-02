@@ -42,7 +42,7 @@ fn ping_pong() {
 
             for _ in 0..count.get() {
                 let (e1, e2) =
-                    future::join(swarm1.next_or_timeout(), swarm2.next_or_timeout()).await;
+                    future::join(swarm1.next_swarm_event(), swarm2.next_swarm_event()).await;
 
                 let e1 = match e1 {
                     SwarmEvent::Behaviour(BehaviourEvent::Ping(ping)) => ping,
@@ -107,7 +107,7 @@ async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<Behaviour>
     let mut failure_count = 0;
 
     loop {
-        match swarm.next_or_timeout().await {
+        match swarm.next_swarm_event().await {
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                 result: Ok(ping::Success::Ping { .. }),
                 ..
@@ -137,7 +137,7 @@ fn unsupported_doesnt_fail() {
         async_std::task::spawn(swarm1.loop_on_next());
 
         loop {
-            match swarm2.next_or_timeout().await {
+            match swarm2.next_swarm_event().await {
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                     result: Err(ping::Failure::Unsupported),
                     ..

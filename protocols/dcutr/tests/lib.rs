@@ -66,7 +66,7 @@ async fn connect() {
 
     loop {
         match src
-            .next_or_timeout()
+            .next_swarm_event()
             .await
             .try_into_behaviour_event()
             .unwrap()
@@ -171,7 +171,7 @@ async fn wait_for_reservation(
     let mut new_listen_addr_for_relayed_addr = false;
     let mut reservation_req_accepted = false;
     loop {
-        match client.next_or_timeout().await {
+        match client.next_swarm_event().await {
             SwarmEvent::NewListenAddr { address, .. } if address != client_addr => {}
             SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
                 new_listen_addr_for_relayed_addr = true;

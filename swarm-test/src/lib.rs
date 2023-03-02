@@ -57,7 +57,7 @@ pub trait SwarmExt {
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_or_timeout(
+    async fn next_swarm_event(
         &mut self,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
 
@@ -118,7 +118,7 @@ where
         let mut listener_done = false;
 
         loop {
-            match futures::future::select(self.next_or_timeout(), other.next_or_timeout()).await {
+            match futures::future::select(self.next_swarm_event(), other.next_swarm_event()).await {
                 Either::Left((SwarmEvent::ConnectionEstablished { .. }, _)) => {
                     dialer_done = true;
                 }
@@ -160,7 +160,7 @@ where
         P: Send,
     {
         loop {
-            let event = self.next_or_timeout().await;
+            let event = self.next_swarm_event().await;
             if let Some(e) = predicate(event) {
                 break e;
             }
@@ -216,7 +216,7 @@ where
         (memory_multiaddr, tcp_multiaddr)
     }
 
-    async fn next_or_timeout(
+    async fn next_swarm_event(
         &mut self,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>> {
         match futures::future::select(
@@ -236,7 +236,7 @@ where
 
     async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent {
         loop {
-            if let Ok(event) = self.next_or_timeout().await.try_into_behaviour_event() {
+            if let Ok(event) = self.next_swarm_event().await.try_into_behaviour_event() {
                 return event;
             }
         }

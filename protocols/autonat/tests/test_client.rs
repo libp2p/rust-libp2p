@@ -124,7 +124,7 @@ async fn test_auto_probe() {
 
     let mut had_connection_event = false;
     loop {
-        match client.next_or_timeout().await {
+        match client.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
                 endpoint, peer_id, ..
             } if endpoint.is_listener() => {
@@ -157,7 +157,7 @@ async fn test_auto_probe() {
     // returned a response before the inbound established connection was reported at the client.
     // In this (rare) case the `ConnectionEstablished` event occurs after the `OutboundProbeEvent::Response`.
     if !had_connection_event {
-        match client.next_or_timeout().await {
+        match client.next_swarm_event().await {
             SwarmEvent::ConnectionEstablished {
                 endpoint, peer_id, ..
             } if endpoint.is_listener() => {
