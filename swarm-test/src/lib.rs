@@ -99,7 +99,7 @@ pub trait SwarmExt {
 /// If a [`Swarm`] is not polled, nothing within it makes progress.
 /// This can "starve" the other swarm which for example may wait for another message to be sent on a connection.
 ///
-/// Using [`drive`] instead of [`join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
+/// Using [`drive`] instead of [`futures::future::join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
 pub async fn drive<
     TBehaviour1,
     const NUM_EVENTS_SWARM_1: usize,
@@ -143,14 +143,18 @@ where
     let res2_len = res2.len();
 
     (
-        res1.try_into().expect(&format!(
-            "expected {NUM_EVENTS_SWARM_1} items from first swarm but got {}",
-            res1_len
-        )),
-        res2.try_into().expect(&format!(
-            "expected {NUM_EVENTS_SWARM_2} items from second swarm but got {}",
-            res2_len
-        )),
+        res1.try_into().unwrap_or_else(|| {
+            panic!(
+                "expected {NUM_EVENTS_SWARM_1} items from first swarm but got {}",
+                res1_len
+            )
+        }),
+        res2.try_into().unwrap_or_else(|| {
+            panic!(
+                "expected {NUM_EVENTS_SWARM_2} items from second swarm but got {}",
+                res2_len
+            )
+        }),
     )
 }
 
