@@ -1116,6 +1116,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dcutr"
+version = "0.1.0"
+dependencies = [
+ "clap 4.1.6",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "log",
+]
+
+[[package]]
 name = "der"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
