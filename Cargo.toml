@@ -149,7 +149,7 @@ members = [
     "examples/identify",
     "examples/ipfs-kad",
     "examples/ipfs-private",
-    "examples/ping",
+    "examples/pingpong",
     "examples/rendezvous",
     "misc/metrics",
     "misc/multistream-select",
