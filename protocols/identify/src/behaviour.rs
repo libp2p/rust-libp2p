@@ -142,7 +142,7 @@ impl Config {
 
     /// Configures the initial delay before the first identification
     /// request is sent on a newly established connection to a peer.
-#[deprecated(
+    #[deprecated(
         since = "0.52.0",
         note = "The `initial_delay` is no longer necessary and will be 
                 completely removed since a remote should be able to instantly
