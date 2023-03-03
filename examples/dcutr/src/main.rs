@@ -33,7 +33,7 @@ use libp2p::{
     dcutr,
     dns::DnsConfig,
     identify, identity, noise, ping, relay,
-    swarm::{derive_prelude, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux,
 };
 use log::info;
