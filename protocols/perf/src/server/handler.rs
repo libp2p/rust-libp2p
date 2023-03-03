@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
@@ -31,9 +34,24 @@ use void::Void;
 #[derive(Debug)]
 pub enum Event {}
 
-#[derive(Default)]
 pub struct Handler {
     inbound: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
+    keep_alive: KeepAlive,
+}
+
+impl Handler {
+    pub fn new() -> Self {
+        Self {
+            inbound: Default::default(),
+            keep_alive: KeepAlive::Yes,
+        }
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConnectionHandler for Handler {
@@ -80,8 +98,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // TODO
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(
@@ -102,6 +119,18 @@ impl ConnectionHandler for Handler {
                     panic!("{e:?}")
                 }
             }
+        }
+
+        if self.inbound.is_empty() {
+            match self.keep_alive {
+                KeepAlive::Yes => {
+                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                }
+                KeepAlive::Until(_) => {}
+                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+            }
+        } else {
+            self.keep_alive = KeepAlive::Yes
         }
 
         Poll::Pending

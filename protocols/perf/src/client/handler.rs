@@ -21,6 +21,7 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
@@ -42,7 +43,6 @@ pub enum Command {
     Start { params: RunParams },
 }
 
-#[derive(Default)]
 pub struct Handler {
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -55,6 +55,24 @@ pub struct Handler {
     >,
 
     outbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
+
+    keep_alive: KeepAlive,
+}
+
+impl Handler {
+    pub fn new() -> Self {
+        Self {
+            queued_events: Default::default(),
+            outbound: Default::default(),
+            keep_alive: KeepAlive::Yes,
+        }
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConnectionHandler for Handler {
@@ -111,8 +129,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // TODO
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(
@@ -140,6 +157,18 @@ impl ConnectionHandler for Handler {
                     panic!("{e:?}")
                 }
             }
+        }
+
+        if self.outbound.is_empty() {
+            match self.keep_alive {
+                KeepAlive::Yes => {
+                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                }
+                KeepAlive::Until(_) => {}
+                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+            }
+        } else {
+            self.keep_alive = KeepAlive::Yes
         }
 
         Poll::Pending
