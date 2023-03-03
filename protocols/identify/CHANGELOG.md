@@ -1,4 +1,6 @@
-- Reduce the initial delay before running the identify protocol to 0 and make the option deprecated
+# 0.42.1 [unreleased]
+
+- Reduce the initial delay before running the identify protocol to 0 and make the option deprecated [PR 3545](https://github.com/libp2p/rust-libp2p/pull/3545)
 
 # 0.42.0
 
