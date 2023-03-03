@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::structs_proto;
+use crate::proto;
 use async_trait::async_trait;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_request_response::{self as request_response, ProtocolName};
-use prost::Message;
+use quick_protobuf::{BytesReader, Writer};
 use std::{convert::TryFrom, io};
 
 #[derive(Clone, Debug)]
@@ -108,14 +108,17 @@ pub struct DialRequest {
 
 impl DialRequest {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
-        let msg = structs_proto::Message::decode(bytes)
+        use quick_protobuf::MessageRead;
+
+        let mut reader = BytesReader::from_bytes(bytes);
+        let msg = proto::Message::from_reader(&mut reader, bytes)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        if msg.r#type != Some(structs_proto::message::MessageType::Dial as _) {
+        if msg.type_pb != Some(proto::MessageType::DIAL) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
-        let (peer_id, addrs) = if let Some(structs_proto::message::Dial {
+        let (peer_id, addrs) = if let Some(proto::Dial {
             peer:
-                Some(structs_proto::message::PeerInfo {
+                Some(proto::PeerInfo {
                     id: Some(peer_id),
                     addrs,
                 }),
@@ -131,12 +134,13 @@ impl DialRequest {
         };
 
         let peer_id = {
-            PeerId::try_from(peer_id)
+            PeerId::try_from(peer_id.to_vec())
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
         };
+
         let addrs = addrs
             .into_iter()
-            .filter_map(|a| match Multiaddr::try_from(a) {
+            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
                 Ok(a) => Some(a),
                 Err(e) => {
                     log::debug!("Unable to parse multiaddr: {e}");
@@ -151,6 +155,8 @@ impl DialRequest {
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
+        use quick_protobuf::MessageWrite;
+
         let peer_id = self.peer_id.to_bytes();
         let addrs = self
             .addresses
@@ -158,21 +164,21 @@ impl DialRequest {
             .map(|addr| addr.to_vec())
             .collect();
 
-        let msg = structs_proto::Message {
-            r#type: Some(structs_proto::message::MessageType::Dial as _),
-            dial: Some(structs_proto::message::Dial {
-                peer: Some(structs_proto::message::PeerInfo {
-                    id: Some(peer_id),
+        let msg = proto::Message {
+            type_pb: Some(proto::MessageType::DIAL),
+            dial: Some(proto::Dial {
+                peer: Some(proto::PeerInfo {
+                    id: Some(peer_id.to_vec()),
                     addrs,
                 }),
             }),
-            dial_response: None,
+            dialResponse: None,
         };
 
-        let mut bytes = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut bytes)
-            .expect("Vec<u8> provides capacity as needed");
-        bytes
+        let mut buf = Vec::with_capacity(msg.get_size());
+        let mut writer = Writer::new(&mut buf);
+        msg.write_message(&mut writer).expect("Encoding to succeed");
+        buf
     }
 }
 
@@ -184,29 +190,27 @@ pub enum ResponseError {
     InternalError,
 }
 
-impl From<ResponseError> for i32 {
+impl From<ResponseError> for proto::ResponseStatus {
     fn from(t: ResponseError) -> Self {
         match t {
-            ResponseError::DialError => 100,
-            ResponseError::DialRefused => 101,
-            ResponseError::BadRequest => 200,
-            ResponseError::InternalError => 300,
+            ResponseError::DialError => proto::ResponseStatus::E_DIAL_ERROR,
+            ResponseError::DialRefused => proto::ResponseStatus::E_DIAL_REFUSED,
+            ResponseError::BadRequest => proto::ResponseStatus::E_BAD_REQUEST,
+            ResponseError::InternalError => proto::ResponseStatus::E_INTERNAL_ERROR,
         }
     }
 }
 
-impl TryFrom<structs_proto::message::ResponseStatus> for ResponseError {
+impl TryFrom<proto::ResponseStatus> for ResponseError {
     type Error = io::Error;
 
-    fn try_from(value: structs_proto::message::ResponseStatus) -> Result<Self, Self::Error> {
+    fn try_from(value: proto::ResponseStatus) -> Result<Self, Self::Error> {
         match value {
-            structs_proto::message::ResponseStatus::EDialError => Ok(ResponseError::DialError),
-            structs_proto::message::ResponseStatus::EDialRefused => Ok(ResponseError::DialRefused),
-            structs_proto::message::ResponseStatus::EBadRequest => Ok(ResponseError::BadRequest),
-            structs_proto::message::ResponseStatus::EInternalError => {
-                Ok(ResponseError::InternalError)
-            }
-            structs_proto::message::ResponseStatus::Ok => {
+            proto::ResponseStatus::E_DIAL_ERROR => Ok(ResponseError::DialError),
+            proto::ResponseStatus::E_DIAL_REFUSED => Ok(ResponseError::DialRefused),
+            proto::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
+            proto::ResponseStatus::E_INTERNAL_ERROR => Ok(ResponseError::InternalError),
+            proto::ResponseStatus::OK => {
                 log::debug!("Received response with status code OK but expected error.");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -225,38 +229,35 @@ pub struct DialResponse {
 
 impl DialResponse {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, io::Error> {
-        let msg = structs_proto::Message::decode(bytes)
+        use quick_protobuf::MessageRead;
+
+        let mut reader = BytesReader::from_bytes(bytes);
+        let msg = proto::Message::from_reader(&mut reader, bytes)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        if msg.r#type != Some(structs_proto::message::MessageType::DialResponse as _) {
+        if msg.type_pb != Some(proto::MessageType::DIAL_RESPONSE) {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
 
-        Ok(match msg.dial_response {
-            Some(structs_proto::message::DialResponse {
-                status: Some(status),
-                status_text,
+        Ok(match msg.dialResponse {
+            Some(proto::DialResponse {
+                status: Some(proto::ResponseStatus::OK),
+                statusText,
                 addr: Some(addr),
-            }) if structs_proto::message::ResponseStatus::from_i32(status)
-                == Some(structs_proto::message::ResponseStatus::Ok) =>
-            {
-                let addr = Multiaddr::try_from(addr)
+            }) => {
+                let addr = Multiaddr::try_from(addr.to_vec())
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
                 Self {
-                    status_text,
+                    status_text: statusText,
                     result: Ok(addr),
                 }
             }
-            Some(structs_proto::message::DialResponse {
+            Some(proto::DialResponse {
                 status: Some(status),
-                status_text,
+                statusText,
                 addr: None,
             }) => Self {
-                status_text,
-                result: Err(ResponseError::try_from(
-                    structs_proto::message::ResponseStatus::from_i32(status).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code")
-                    })?,
-                )?),
+                status_text: statusText,
+                result: Err(ResponseError::try_from(status)?),
             },
             _ => {
                 log::debug!("Received malformed response message.");
@@ -269,35 +270,38 @@ impl DialResponse {
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
+        use quick_protobuf::MessageWrite;
+
         let dial_response = match self.result {
-            Ok(addr) => structs_proto::message::DialResponse {
-                status: Some(0),
-                status_text: self.status_text,
+            Ok(addr) => proto::DialResponse {
+                status: Some(proto::ResponseStatus::OK),
+                statusText: self.status_text,
                 addr: Some(addr.to_vec()),
             },
-            Err(error) => structs_proto::message::DialResponse {
+            Err(error) => proto::DialResponse {
                 status: Some(error.into()),
-                status_text: self.status_text,
+                statusText: self.status_text,
                 addr: None,
             },
         };
 
-        let msg = structs_proto::Message {
-            r#type: Some(structs_proto::message::MessageType::DialResponse as _),
+        let msg = proto::Message {
+            type_pb: Some(proto::MessageType::DIAL_RESPONSE),
             dial: None,
-            dial_response: Some(dial_response),
+            dialResponse: Some(dial_response),
         };
 
-        let mut bytes = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut bytes)
-            .expect("Vec<u8> provides capacity as needed");
-        bytes
+        let mut buf = Vec::with_capacity(msg.get_size());
+        let mut writer = Writer::new(&mut buf);
+        msg.write_message(&mut writer).expect("Encoding to succeed");
+        buf
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quick_protobuf::MessageWrite;
 
     #[test]
     fn test_request_encode_decode() {
@@ -346,20 +350,20 @@ mod tests {
             a
         };
 
-        let msg = structs_proto::Message {
-            r#type: Some(structs_proto::message::MessageType::Dial.into()),
-            dial: Some(structs_proto::message::Dial {
-                peer: Some(structs_proto::message::PeerInfo {
+        let msg = proto::Message {
+            type_pb: Some(proto::MessageType::DIAL),
+            dial: Some(proto::Dial {
+                peer: Some(proto::PeerInfo {
                     id: Some(PeerId::random().to_bytes()),
                     addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
                 }),
             }),
-            dial_response: None,
+            dialResponse: None,
         };
 
-        let mut bytes = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut bytes)
-            .expect("Vec<u8> provides capacity as needed");
+        let mut bytes = Vec::with_capacity(msg.get_size());
+        let mut writer = Writer::new(&mut bytes);
+        msg.write_message(&mut writer).expect("Encoding to succeed");
 
         let request = DialRequest::from_bytes(&bytes).expect("not to fail");
 

@@ -19,10 +19,8 @@ instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../core" }
 libp2p-swarm-derive = { version = "0.32.0", path = "../swarm-derive", optional = true }
 log = "0.4"
-pin-project = "1.0.0"
 rand = "0.8"
 smallvec = "1.6.1"
-thiserror = "1.0"
 void = "1"
 wasm-bindgen-futures = { version = "0.4.34", optional = true }
 getrandom = { version = "0.2.3", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature

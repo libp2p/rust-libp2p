@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::Status;
 use crate::priv_client::transport;
+use crate::proto;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
@@ -218,7 +218,7 @@ impl Handler {
                     .circuit_deny_futs
                     .insert(
                         src_peer_id,
-                        inbound_circuit.deny(Status::NoReservation).boxed(),
+                        inbound_circuit.deny(proto::Status::NO_RESERVATION).boxed(),
                     )
                     .is_some()
                 {
