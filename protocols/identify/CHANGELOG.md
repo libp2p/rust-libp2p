@@ -1,3 +1,5 @@
+- Reduce the initial delay before running the identify protocol to 0 and make the option deprecated
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.

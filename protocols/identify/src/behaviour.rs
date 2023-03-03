@@ -87,7 +87,7 @@ pub struct Config {
     /// The initial delay before the first identification request
     /// is sent to a remote on a newly established connection.
     ///
-    /// Defaults to 500ms.
+    /// Defaults to 0ms.
     #[deprecated(
         since = "0.52.0",
         note = "The `initial_delay` is no longer necessary and will be 
