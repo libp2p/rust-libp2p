@@ -26,11 +26,15 @@
 ///     ```
 /// 2. Register a peer:
 ///     ```
-///     RUST_LOG=info cargo run --bin register
+///     RUST_LOG=info cargo run --bin rzv-register
 ///     ```
 /// 3. Try to discover the peer from (2):
 ///     ```
-///     RUST_LOG=info cargo run --bin discover
+///     RUST_LOG=info cargo run --bin rzv-discover
+///     ```
+/// 4. Try to discover with identify:
+///     ```
+///     RUST_LOG=info cargo run --bin rzv-identify
 ///     ```
 use futures::StreamExt;
 use libp2p::{

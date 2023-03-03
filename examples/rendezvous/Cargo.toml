@@ -15,10 +15,13 @@ void = "1"
 tokio = { version = "1.25", features = [ "rt-multi-thread", "macros", "time" ] }
 
 [[bin]]
-name = "discover"
+name = "rzv-discover"
+path = "src/bin/discover.rs"
 
 [[bin]]
-name = "register"
+name = "rzv-register"
+path = "src/bin/register.rs"
 
 [[bin]]
-name = "identify"
+name = "rzv-identify"
+path = "src/bin/identify.rs"
