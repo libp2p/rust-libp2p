@@ -48,9 +48,9 @@
 # 0.50.1
 
 - Pin pre-releases of alpha dependencies (quic, webrtc & tls) to avoid breaking changes.
-  See [PR XXXX].
+  See [PR 3540].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3540]: https://github.com/libp2p/rust-libp2p/pull/3540
 
 # 0.50.0
 
