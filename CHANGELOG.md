@@ -47,7 +47,10 @@
 
 # 0.51.1 - unreleased
 
-- Introduce `ed25519` feature. See [PR 3350].
+- Introduce `ed25519` feature.
+  For backwards-compatibility, the `ed25519` identity keys are still available without activating this feature.
+  However, going forward, you should explicitly activate it to avoid compile errors going forward.
+  See [PR 3350].
 
 [PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
 
