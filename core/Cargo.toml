@@ -24,7 +24,7 @@ multistream-select = { version = "0.12.1", path = "../misc/multistream-select" }
 once_cell = "1.17.1"
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
-prost = "0.11"
+quick-protobuf = "0.8"
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../misc/rw-stream-sink" }
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -39,9 +39,6 @@ libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
 multihash = { version = "0.17.0", default-features = false, features = ["arb"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
-
-[build-dependencies]
-prost-build = "0.11"
 
 [features]
 secp256k1 = [ "libp2p-identity/secp256k1" ]

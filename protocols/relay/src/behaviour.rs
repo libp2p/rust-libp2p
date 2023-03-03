@@ -24,8 +24,8 @@ mod handler;
 pub mod rate_limiter;
 
 use crate::behaviour::handler::Handler;
-use crate::message_proto;
 use crate::multiaddr_ext::MultiaddrExt;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
@@ -382,7 +382,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                     .into()
@@ -497,7 +497,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                 } else if let Some(dst_conn) = self
@@ -533,7 +533,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::NoReservation,
+                            status: proto::Status::NO_RESERVATION,
                         }),
                     }
                 };

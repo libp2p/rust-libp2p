@@ -30,9 +30,11 @@ mod priv_client;
 mod protocol;
 pub mod v2;
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod message_proto {
-    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::message_v2::pb::mod_HopMessage::Type as HopMessageType;
+    pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;
+    pub use self::message_v2::pb::{HopMessage, Limit, Peer, Reservation, Status, StopMessage};
 }
 
 pub use behaviour::{Behaviour, CircuitId, Config, Event};

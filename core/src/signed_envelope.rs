@@ -3,6 +3,7 @@ use libp2p_identity::SigningError;
 use libp2p_identity::{Keypair, PublicKey};
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
+use quick_protobuf::{BytesReader, Writer};
 
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
 ///
@@ -72,34 +73,38 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use prost::Message;
+        use quick_protobuf::MessageWrite;
 
-        let envelope = crate::envelope_proto::Envelope {
+        let envelope = proto::Envelope {
             public_key: self.key.to_protobuf_encoding(),
             payload_type: self.payload_type,
             payload: self.payload,
             signature: self.signature,
         };
 
-        let mut buf = Vec::with_capacity(envelope.encoded_len());
+        let mut buf = Vec::with_capacity(envelope.get_size());
+        let mut writer = Writer::new(&mut buf);
+
         envelope
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
 
         buf
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use prost::Message;
+        use quick_protobuf::MessageRead;
 
-        let envelope = crate::envelope_proto::Envelope::decode(bytes).map_err(DecodeError)?;
+        let mut reader = BytesReader::from_bytes(bytes);
+        let envelope =
+            proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError::from)?;
 
         Ok(Self {
             key: PublicKey::from_protobuf_encoding(&envelope.public_key)?,
-            payload_type: envelope.payload_type,
-            payload: envelope.payload,
-            signature: envelope.signature,
+            payload_type: envelope.payload_type.to_vec(),
+            payload: envelope.payload.to_vec(),
+            signature: envelope.signature.to_vec(),
         })
     }
 }
