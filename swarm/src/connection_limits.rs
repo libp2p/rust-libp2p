@@ -28,6 +28,33 @@ use std::collections::{HashMap, HashSet};
 use std::task::{Context, Poll};
 use void::Void;
 
+/// A [`NetworkBehaviour`] that enforces a set of [`ConnectionLimits`].
+///
+/// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
+///
+/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](crate::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`] will be emitted.
+/// The [`ListenError::Denied`](crate::ListenError::Denied) and respectively the [`DialError::Denied`](crate::DialError::Denied) variant
+/// contain a [`ConnectionDenied`](crate::ConnectionDenied) type that can be downcast to [`ConnectionLimit`] error if (and only if) **this**
+/// behaviour denied the connection.
+///
+/// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
+///
+/// # Example
+///
+/// ```rust
+/// # use libp2p_identify as identify;
+/// # use libp2p_ping as ping;
+/// # use libp2p_swarm_derive::NetworkBehaviour;
+///
+/// #[derive(NetworkBehaviour)]
+/// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+/// struct MyBehaviour {
+///   identify: identify::Behaviour,
+///   ping: ping::Behaviour,
+///   limits: connection_limits::Behaviour
+/// }
+/// ```
 pub struct Behaviour {
     limits: ConnectionLimits,
 
