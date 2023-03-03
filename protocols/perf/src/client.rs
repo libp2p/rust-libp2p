@@ -18,5 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Instant;
+
 pub mod behaviour;
 mod handler;
+
+/// Parameters for a single run, i.e. one stream, sending and receiving data.
+#[derive(Debug, Clone, Copy)]
+pub struct RunParams {
+    pub to_send: usize,
+    pub to_receive: usize,
+}
+
+/// Timers for a single run, i.e. one stream, sending and receiving data.
+#[derive(Debug, Clone, Copy)]
+pub struct RunTimers {
+    pub write_start: Instant,
+    pub write_done: Instant,
+    pub read_done: Instant,
+}
+
+/// Statistics for a single run, i.e. one stream, sending and receiving data.
+#[derive(Debug)]
+pub struct RunStats {
+    pub params: RunParams,
+    pub timers: RunTimers,
+}

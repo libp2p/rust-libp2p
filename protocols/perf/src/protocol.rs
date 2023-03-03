@@ -22,15 +22,15 @@ use std::time::Instant;
 
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::{RunParams, RunTimers};
+use crate::{client, server};
 
 const BUF: [u8; 1024] = [0; 1024];
 
 pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
-    params: RunParams,
+    params: client::RunParams,
     mut stream: S,
-) -> Result<RunTimers, std::io::Error> {
-    let RunParams {
+) -> Result<client::RunTimers, std::io::Error> {
+    let client::RunParams {
         to_send,
         to_receive,
     } = params;
@@ -60,7 +60,7 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
 
     let read_done = Instant::now();
 
-    Ok(RunTimers {
+    Ok(client::RunTimers {
         write_start,
         write_done,
         read_done,
@@ -69,7 +69,7 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
 
 pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
-) -> Result<(), std::io::Error> {
+) -> Result<server::RunStats, std::io::Error> {
     let to_send = {
         let mut buf = [0; 8];
         stream.read_exact(&mut buf).await?;
@@ -77,8 +77,19 @@ pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
         u64::from_be_bytes(buf) as usize
     };
 
+    let read_start = Instant::now();
+
     let mut receive_buf = vec![0; 1024];
-    while stream.read(&mut receive_buf).await? != 0 {}
+    let mut received = 0;
+    loop {
+        let n = stream.read(&mut receive_buf).await?;
+        received += n;
+        if n == 0 {
+            break;
+        }
+    }
+
+    let read_done = Instant::now();
 
     let mut sent = 0;
     while sent < to_send {
@@ -89,8 +100,16 @@ pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     }
 
     stream.close().await?;
+    let write_done = Instant::now();
 
-    Ok(())
+    Ok(server::RunStats {
+        params: server::RunParams { sent, received },
+        timers: server::RunTimers {
+            read_start,
+            read_done,
+            write_done,
+        },
+    })
 }
 
 #[cfg(test)]
@@ -171,7 +190,7 @@ mod tests {
         let stream = DummyStream::new(vec![0]);
 
         block_on(send_receive(
-            RunParams {
+            client::RunParams {
                 to_send: 0,
                 to_receive: 0,
             },

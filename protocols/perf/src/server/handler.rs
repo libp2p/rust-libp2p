@@ -31,11 +31,15 @@ use libp2p_swarm::{
 };
 use void::Void;
 
+use super::RunStats;
+
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    Finished { stats: RunStats },
+}
 
 pub struct Handler {
-    inbound: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
+    inbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
     keep_alive: KeepAlive,
 }
 
@@ -114,7 +118,9 @@ impl ConnectionHandler for Handler {
     > {
         while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
             match result {
-                Ok(()) => {}
+                Ok(stats) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished { stats }))
+                }
                 Err(e) => {
                     panic!("{e:?}")
                 }

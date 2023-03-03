@@ -25,7 +25,7 @@ use libp2p_core::{
     identity, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, PeerId, Transport,
 };
 use libp2p_dns::DnsConfig;
-use libp2p_perf::RunParams;
+use libp2p_perf::client::RunParams;
 use libp2p_swarm::{SwarmBuilder, SwarmEvent};
 use log::info;
 

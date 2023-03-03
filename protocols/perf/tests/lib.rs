@@ -3,7 +3,10 @@ use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr,
     Transport,
 };
-use libp2p_perf::{client, server, RunParams};
+use libp2p_perf::{
+    client::{self, RunParams},
+    server,
+};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux::YamuxConfig;

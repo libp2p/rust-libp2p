@@ -32,7 +32,9 @@ use libp2p_swarm::{
     THandlerOutEvent,
 };
 
-use crate::{client::handler::Handler, RunParams, RunStats};
+use crate::client::handler::Handler;
+
+use super::{RunParams, RunStats};
 
 #[derive(Debug)]
 pub enum Event {

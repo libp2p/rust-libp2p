@@ -24,32 +24,8 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use std::time::Instant;
-
 pub mod client;
 mod protocol;
 pub mod server;
 
 pub const PROTOCOL_NAME: &[u8; 11] = b"/perf/1.0.0";
-
-/// Parameters for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug, Clone, Copy)]
-pub struct RunParams {
-    pub to_send: usize,
-    pub to_receive: usize,
-}
-
-/// Timers for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug, Clone, Copy)]
-pub struct RunTimers {
-    pub write_start: Instant,
-    pub write_done: Instant,
-    pub read_done: Instant,
-}
-
-/// Statistics for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug)]
-pub struct RunStats {
-    pub params: RunParams,
-    pub timers: RunTimers,
-}

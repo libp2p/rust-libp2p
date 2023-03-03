@@ -31,7 +31,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 
-use crate::{RunParams, RunStats};
+use super::{RunParams, RunStats};
 
 #[derive(Debug)]
 pub enum Event {

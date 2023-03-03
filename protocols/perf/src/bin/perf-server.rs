@@ -98,6 +98,32 @@ fn main() {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
+                SwarmEvent::Behaviour(libp2p_perf::server::behaviour::Event::Finished {
+                    remote_peer_id,
+                    stats,
+                }) => {
+                    let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
+                    let receive_time =
+                        (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
+                    let receive_bandwidth_mebibit_second =
+                        (received_mebibytes * 8.0) as f64 / receive_time;
+
+                    let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
+                    let sent_time =
+                        (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
+                    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) as f64 / sent_time;
+
+                    info!(
+                        "Finished run with {}: Received {} MiB in {} s with {} MiBit/s and sent {} MiB in {} s with {} MiBit/s",
+                        remote_peer_id,
+                        received_mebibytes,
+                        receive_time,
+                        receive_bandwidth_mebibit_second,
+                        sent_mebibytes,
+                        sent_time,
+                        sent_bandwidth_mebibit_second,
+                    )
+                }
                 e => panic!("{e:?}"),
             }
         }

@@ -33,8 +33,15 @@ use libp2p_swarm::{
 
 use crate::server::handler::Handler;
 
+use super::RunStats;
+
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    Finished {
+        remote_peer_id: PeerId,
+        stats: RunStats,
+    },
+}
 
 #[derive(Default)]
 pub struct Behaviour {
@@ -83,9 +90,17 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _event_source: PeerId,
         _connection_id: ConnectionId,
-        _handler_event: THandlerOutEvent<Self>,
+        handler_event: THandlerOutEvent<Self>,
     ) {
-        todo!();
+        match handler_event {
+            super::handler::Event::Finished { stats } => {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
+                        remote_peer_id: _event_source,
+                        stats,
+                    }))
+            }
+        }
     }
 
     fn poll(
