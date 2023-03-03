@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{hop_message, HopMessage, Limit, Reservation, Status};
+use crate::proto;
 use crate::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -51,11 +51,14 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
+        let mut substream = Framed::new(
+            substream,
+            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
+        );
 
         async move {
-            let HopMessage {
-                r#type,
+            let proto::HopMessage {
+                type_pb,
                 peer,
                 reservation: _,
                 limit: _,
@@ -65,21 +68,19 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            let req = match r#type {
-                hop_message::Type::Reserve => Req::Reserve(ReservationReq {
+            let req = match type_pb {
+                proto::HopMessageType::RESERVE => Req::Reserve(ReservationReq {
                     substream,
                     reservation_duration: self.reservation_duration,
                     max_circuit_duration: self.max_circuit_duration,
                     max_circuit_bytes: self.max_circuit_bytes,
                 }),
-                hop_message::Type::Connect => {
+                proto::HopMessageType::CONNECT => {
                     let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
                         .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => {
+                proto::HopMessageType::STATUS => {
                     return Err(FatalUpgradeError::UnexpectedTypeStatus.into())
                 }
             };
@@ -96,8 +97,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
+impl From<quick_protobuf_codec::Error> for UpgradeError {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -105,7 +106,7 @@ impl From<prost_codec::Error> for UpgradeError {
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Failed to parse response type field.")]
@@ -124,7 +125,7 @@ pub enum Req {
 }
 
 pub struct ReservationReq {
-    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HopMessage>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
@@ -132,10 +133,10 @@ pub struct ReservationReq {
 
 impl ReservationReq {
     pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
+        let msg = proto::HopMessage {
+            type_pb: proto::HopMessageType::STATUS,
             peer: None,
-            reservation: Some(Reservation {
+            reservation: Some(proto::Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
                 expire: (SystemTime::now() + self.reservation_duration)
                     .duration_since(SystemTime::UNIX_EPOCH)
@@ -143,7 +144,7 @@ impl ReservationReq {
                     .as_secs(),
                 voucher: None,
             }),
-            limit: Some(Limit {
+            limit: Some(proto::Limit {
                 duration: Some(
                     self.max_circuit_duration
                         .as_secs()
@@ -152,25 +153,25 @@ impl ReservationReq {
                 ),
                 data: Some(self.max_circuit_bytes),
             }),
-            status: Some(Status::Ok.into()),
+            status: Some(proto::Status::OK),
         };
 
         self.send(msg).await
     }
 
-    pub async fn deny(self, status: Status) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
+    pub async fn deny(self, status: proto::Status) -> Result<(), UpgradeError> {
+        let msg = proto::HopMessage {
+            type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(status.into()),
+            status: Some(status),
         };
 
         self.send(msg).await
     }
 
-    async fn send(mut self, msg: HopMessage) -> Result<(), UpgradeError> {
+    async fn send(mut self, msg: proto::HopMessage) -> Result<(), UpgradeError> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
@@ -181,7 +182,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HopMessage>>,
 }
 
 impl CircuitReq {
@@ -190,12 +191,12 @@ impl CircuitReq {
     }
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
+        let msg = proto::HopMessage {
+            type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(Status::Ok.into()),
+            status: Some(proto::Status::OK),
         };
 
         self.send(msg).await?;
@@ -214,19 +215,19 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
+    pub async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
+        let msg = proto::HopMessage {
+            type_pb: proto::HopMessageType::STATUS,
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(status.into()),
+            status: Some(status),
         };
         self.send(msg).await?;
         self.substream.close().await.map_err(Into::into)
     }
 
-    async fn send(&mut self, msg: HopMessage) -> Result<(), prost_codec::Error> {
+    async fn send(&mut self, msg: proto::HopMessage) -> Result<(), quick_protobuf_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 
