@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .boxed();
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Event", event_process = false, prelude = "derive_prelude")]
+    #[behaviour(out_event = "Event", event_process = false)]
     struct Behaviour {
         relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,

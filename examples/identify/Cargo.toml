@@ -8,4 +8,4 @@ publish = false
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = "0.3.26"
-libp2p = { path = "../../", features=["async-std", "dns", "dcutr", "identify", "macros", "mplex", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
+libp2p = { path = "../../", features = ["async-std", "dns", "dcutr", "identify", "macros", "mplex", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
