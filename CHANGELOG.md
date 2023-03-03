@@ -45,6 +45,12 @@
 
 # `libp2p` facade crate
 
+# 0.51.1 - unreleased
+
+- Introduce `ed25519` feature. See [PR 3350].
+
+[PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
+
 # 0.51.0
 
 - Enable `NetworkBehaviour`s to manage connections.
@@ -59,8 +65,6 @@
 - Remove `SimpleProtocol` due to being unused. See [`libp2p::core::upgrade`](https://docs.rs/libp2p/0.50.0/libp2p/core/upgrade/index.html) for alternatives. See [PR 3191].
 
 - Bump MSRV to 1.65.0.
-
-- Introduce `ed25519` feature. See [PR 3350].
 
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.9.0`](protocols/dcutr/CHANGELOG.md#090).
@@ -102,7 +106,6 @@
     - Update to [`libp2p-core` `v0.39.0`](core/CHANGELOG.md#0390).
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
-[PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
 
 # 0.50.0
 
