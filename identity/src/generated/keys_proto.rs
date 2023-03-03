@@ -52,10 +52,20 @@ impl<'a> From<&'a str> for KeyType {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PublicKey {
     pub Type: keys_proto::KeyType,
     pub Data: Vec<u8>,
+}
+
+
+impl Default for PublicKey {
+    fn default() -> Self {
+        Self {
+            Type: keys_proto::KeyType::RSA,
+            Data: Vec::<u8>::new(),
+        }
+    }
 }
 
 impl<'a> MessageRead<'a> for PublicKey {
@@ -76,22 +86,32 @@ impl<'a> MessageRead<'a> for PublicKey {
 impl MessageWrite for PublicKey {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint(*(&self.Type) as u64)
-        + 1 + sizeof_len((&self.Data).len())
+        + 1 + sizeof_varint((self.Type) as u64)
+        + 1 + sizeof_len((self.Data).len())
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_enum(*&self.Type as i32))?;
-        w.write_with_tag(18, |w| w.write_bytes(&**&self.Data))?;
+        w.write_with_tag(8, |w| w.write_enum(self.Type as i32))?;
+        w.write_with_tag(18, |w| w.write_bytes(&self.Data))?;
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PrivateKey {
     pub Type: keys_proto::KeyType,
     pub Data: Vec<u8>,
+}
+
+
+impl Default for PrivateKey {
+    fn default() -> Self {
+        Self {
+            Type: keys_proto::KeyType::RSA,
+            Data: Vec::<u8>::new(),
+        }
+    }
 }
 
 impl<'a> MessageRead<'a> for PrivateKey {
@@ -112,13 +132,13 @@ impl<'a> MessageRead<'a> for PrivateKey {
 impl MessageWrite for PrivateKey {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint(*(&self.Type) as u64)
-        + 1 + sizeof_len((&self.Data).len())
+        + 1 + sizeof_varint((self.Type) as u64)
+        + 1 + sizeof_len((self.Data).len())
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_enum(*&self.Type as i32))?;
-        w.write_with_tag(18, |w| w.write_bytes(&**&self.Data))?;
+        w.write_with_tag(8, |w| w.write_enum(self.Type as i32))?;
+        w.write_with_tag(18, |w| w.write_bytes(&self.Data))?;
         Ok(())
     }
 }
