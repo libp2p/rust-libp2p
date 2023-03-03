@@ -20,7 +20,7 @@
 
 use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
-use crate::message_proto::Status;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use bytes::Bytes;
 use either::Either;
@@ -33,11 +33,11 @@ use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, SendWrapper,
+    ListenUpgradeError,
 };
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId,
-    IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -58,12 +58,12 @@ pub enum In {
     },
     DenyReservationReq {
         inbound_reservation_req: inbound_hop::ReservationReq,
-        status: Status,
+        status: proto::Status,
     },
     DenyCircuitReq {
         circuit_id: Option<CircuitId>,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
+        status: proto::Status,
     },
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
@@ -208,7 +208,7 @@ pub enum Event {
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
+        status: proto::Status,
         error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// An inbound circuit has closed.
@@ -337,31 +337,6 @@ impl fmt::Debug for Event {
     }
 }
 
-pub struct Prototype {
-    pub config: Config,
-}
-
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, dummy::ConnectionHandler>;
-
-    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint.is_relayed() {
-            // Deny all substreams on relayed connection.
-            Either::Right(dummy::ConnectionHandler)
-        } else {
-            Either::Left(Handler::new(self.config, endpoint.clone()))
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        Either::Left(SendWrapper(inbound_hop::Upgrade {
-            reservation_duration: self.config.reservation_duration,
-            max_circuit_duration: self.config.max_circuit_duration,
-            max_circuit_bytes: self.config.max_circuit_bytes,
-        }))
-    }
-}
-
 /// [`ConnectionHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
 pub struct Handler {
@@ -418,7 +393,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+    pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
             endpoint,
             config,
@@ -547,12 +522,14 @@ impl Handler {
         >,
     ) {
         let (non_fatal_error, status) = match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                (ConnectionHandlerUpgrErr::Timeout, Status::ConnectionFailed)
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                (ConnectionHandlerUpgrErr::Timer, Status::ConnectionFailed)
-            }
+            ConnectionHandlerUpgrErr::Timeout => (
+                ConnectionHandlerUpgrErr::Timeout,
+                proto::Status::CONNECTION_FAILED,
+            ),
+            ConnectionHandlerUpgrErr::Timer => (
+                ConnectionHandlerUpgrErr::Timer,
+                proto::Status::CONNECTION_FAILED,
+            ),
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => {
@@ -581,10 +558,10 @@ impl Handler {
                 outbound_stop::UpgradeError::CircuitFailed(error) => {
                     let status = match error {
                         outbound_stop::CircuitFailedReason::ResourceLimitExceeded => {
-                            Status::ResourceLimitExceeded
+                            proto::Status::RESOURCE_LIMIT_EXCEEDED
                         }
                         outbound_stop::CircuitFailedReason::PermissionDenied => {
-                            Status::PermissionDenied
+                            proto::Status::PERMISSION_DENIED
                         }
                     };
                     (

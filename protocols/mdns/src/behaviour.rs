@@ -27,11 +27,11 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -174,22 +174,50 @@ where
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        dummy::ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_nodes
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self
+            .discovered_nodes
             .iter()
-            .filter(|(peer, _, _)| peer == peer_id)
+            .filter(|(peer, _, _)| peer == &peer_id)
             .map(|(_, addr, _)| addr.clone())
-            .collect()
+            .collect())
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
     }
 
     fn on_connection_handler_event(
         &mut self,
         _: PeerId,
-        _: libp2p_swarm::ConnectionId,
+        _: ConnectionId,
         ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)

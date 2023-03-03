@@ -23,16 +23,19 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::message_proto;
+use crate::behaviour::handler::Handler;
+use crate::multiaddr_ext::MultiaddrExt;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::PeerId;
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -250,17 +253,57 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype {
-            config: handler::Config {
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if local_addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
             },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+        )))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
         }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
+                reservation_duration: self.config.reservation_duration,
+                max_circuit_duration: self.config.max_circuit_duration,
+                max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+        )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -338,7 +381,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                     .into()
@@ -453,7 +496,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                 } else if let Some(dst_conn) = self
@@ -489,7 +532,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::NoReservation,
+                            status: proto::Status::NO_RESERVATION,
                         }),
                     }
                 };
