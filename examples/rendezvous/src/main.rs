@@ -40,11 +40,10 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, ping, rendezvous,
-    swarm::{derive_prelude, keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
     PeerId, Transport,
 };
 use std::time::Duration;
-use void::Void;
 
 #[tokio::main]
 async fn main() {
@@ -82,7 +81,7 @@ async fn main() {
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                 log::info!("Disconnected from {}", peer_id);
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(
+            SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::server::Event::PeerRegistered { peer, registration },
             )) => {
                 log::info!(
@@ -91,7 +90,7 @@ async fn main() {
                     registration.namespace
                 );
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(
+            SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::server::Event::DiscoverServed {
                     enquirer,
                     registrations,
@@ -110,44 +109,7 @@ async fn main() {
     }
 }
 
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum MyEvent {
-    Rendezvous(rendezvous::server::Event),
-    Identify(identify::Event),
-    Ping(ping::Event),
-}
-
-impl From<rendezvous::server::Event> for MyEvent {
-    fn from(event: rendezvous::server::Event) -> Self {
-        MyEvent::Rendezvous(event)
-    }
-}
-
-impl From<identify::Event> for MyEvent {
-    fn from(event: identify::Event) -> Self {
-        MyEvent::Identify(event)
-    }
-}
-
-impl From<ping::Event> for MyEvent {
-    fn from(event: ping::Event) -> Self {
-        MyEvent::Ping(event)
-    }
-}
-
-impl From<Void> for MyEvent {
-    fn from(event: Void) -> Self {
-        void::unreachable(event)
-    }
-}
-
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "MyEvent",
-    event_process = false,
-    prelude = "derive_prelude"
-)]
 struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::server::Behaviour,

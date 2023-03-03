@@ -24,11 +24,10 @@ use libp2p::{
     identity,
     multiaddr::Protocol,
     ping, rendezvous,
-    swarm::{derive_prelude, keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
     Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
-use void::Void;
 
 const NAMESPACE: &str = "rendezvous";
 
@@ -79,7 +78,7 @@ async fn main() {
                             rendezvous_point,
                         );
                     }
-                    SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::client::Event::Discovered {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(rendezvous::client::Event::Discovered {
                         registrations,
                         cookie: new_cookie,
                         ..
@@ -103,7 +102,7 @@ async fn main() {
                             }
                         }
                     }
-                    SwarmEvent::Behaviour(MyEvent::Ping(ping::Event {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
                         peer,
                         result: Ok(ping::Success::Ping { rtt }),
                     })) if peer != rendezvous_point => {
@@ -124,36 +123,7 @@ async fn main() {
     }
 }
 
-#[derive(Debug)]
-enum MyEvent {
-    Rendezvous(rendezvous::client::Event),
-    Ping(ping::Event),
-}
-
-impl From<rendezvous::client::Event> for MyEvent {
-    fn from(event: rendezvous::client::Event) -> Self {
-        MyEvent::Rendezvous(event)
-    }
-}
-
-impl From<ping::Event> for MyEvent {
-    fn from(event: ping::Event) -> Self {
-        MyEvent::Ping(event)
-    }
-}
-
-impl From<Void> for MyEvent {
-    fn from(event: Void) -> Self {
-        void::unreachable(event)
-    }
-}
-
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "MyEvent",
-    event_process = false,
-    prelude = "derive_prelude"
-)]
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,

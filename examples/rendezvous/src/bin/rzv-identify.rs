@@ -22,11 +22,10 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, ping, rendezvous,
-    swarm::{derive_prelude, keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
     Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
-use void::Void;
 
 #[tokio::main]
 async fn main() {
@@ -75,18 +74,22 @@ async fn main() {
                 log::error!("Lost connection to rendezvous point {}", error);
             }
             // once `/identify` did its job, we know our external address and can register
-            SwarmEvent::Behaviour(MyEvent::Identify(identify::Event::Received { .. })) => {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
+                ..
+            })) => {
                 swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
                 );
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(rendezvous::client::Event::Registered {
-                namespace,
-                ttl,
-                rendezvous_node,
-            })) => {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
+                rendezvous::client::Event::Registered {
+                    namespace,
+                    ttl,
+                    rendezvous_node,
+                },
+            )) => {
                 log::info!(
                     "Registered for namespace '{}' at rendezvous point {} for the next {} seconds",
                     namespace,
@@ -94,13 +97,13 @@ async fn main() {
                     ttl
                 );
             }
-            SwarmEvent::Behaviour(MyEvent::Rendezvous(
+            SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::client::Event::RegisterFailed(error),
             )) => {
                 log::error!("Failed to register {}", error);
                 return;
             }
-            SwarmEvent::Behaviour(MyEvent::Ping(ping::Event {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
                 peer,
                 result: Ok(ping::Success::Ping { rtt }),
             })) if peer != rendezvous_point => {
@@ -113,44 +116,7 @@ async fn main() {
     }
 }
 
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum MyEvent {
-    Rendezvous(rendezvous::client::Event),
-    Identify(identify::Event),
-    Ping(ping::Event),
-}
-
-impl From<rendezvous::client::Event> for MyEvent {
-    fn from(event: rendezvous::client::Event) -> Self {
-        MyEvent::Rendezvous(event)
-    }
-}
-
-impl From<identify::Event> for MyEvent {
-    fn from(event: identify::Event) -> Self {
-        MyEvent::Identify(event)
-    }
-}
-
-impl From<ping::Event> for MyEvent {
-    fn from(event: ping::Event) -> Self {
-        MyEvent::Ping(event)
-    }
-}
-
-impl From<Void> for MyEvent {
-    fn from(event: Void) -> Self {
-        void::unreachable(event)
-    }
-}
-
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "MyEvent",
-    event_process = false,
-    prelude = "derive_prelude"
-)]
 struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::client::Behaviour,

@@ -3918,7 +3918,6 @@ dependencies = [
  "libp2p",
  "log",
  "tokio",
- "void",
 ]
 
 [[package]]
