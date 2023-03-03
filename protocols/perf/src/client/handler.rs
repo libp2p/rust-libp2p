@@ -26,7 +26,7 @@ use std::{
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 
@@ -87,7 +87,9 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            ConnectionEvent::FullyNegotiatedInbound(_) => todo!(),
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info,

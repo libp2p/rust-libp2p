@@ -25,10 +25,9 @@ use std::{
     task::{Context, Poll},
 };
 
-use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, dummy, ConnectionClosed, ConnectionId, FromSwarm,
+    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
     THandlerOutEvent,
 };
@@ -62,7 +61,7 @@ impl Behaviour {
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: server,
                 handler: NotifyHandler::Any,
-                event: Either::Left(crate::client::handler::Command::Start { params }),
+                event: crate::client::handler::Command::Start { params },
             });
 
         return Ok(());
@@ -76,7 +75,7 @@ pub enum PerfError {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
     fn handle_established_outbound_connection(
@@ -86,7 +85,7 @@ impl NetworkBehaviour for Behaviour {
         _addr: &Multiaddr,
         _role_override: libp2p_core::Endpoint,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(Either::Left(Handler::default()))
+        Ok(Handler::default())
     }
 
     fn handle_established_inbound_connection(
@@ -96,7 +95,7 @@ impl NetworkBehaviour for Behaviour {
         _local_addr: &Multiaddr,
         _remote_addr: &Multiaddr,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(Either::Right(dummy::ConnectionHandler))
+        Ok(Handler::default())
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -141,13 +140,12 @@ impl NetworkBehaviour for Behaviour {
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
-            Either::Left(super::handler::Event::Finished { stats }) => {
+            super::handler::Event::Finished { stats } => {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
                         stats,
                     }));
             }
-            Either::Right(v) => void::unreachable(v),
         }
     }
 

@@ -13,7 +13,6 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 anyhow = "1"
 clap = { version = "4.1.6", features = ["derive"] }
-either = "1.8.0"
 env_logger = "0.10.0"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }

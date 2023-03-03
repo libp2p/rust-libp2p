@@ -62,13 +62,29 @@ fn perf() {
         client
     };
 
-    client.behaviour_mut().perf(
-        server_address,
-        RunParams {
-            to_send: 0,
-            to_receive: 0,
-        },
-    );
+    client.dial(server_address).unwrap();
+    let server_peer_id = pool.run_until(async {
+        loop {
+            match client.next().await.unwrap() {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => return peer_id,
+                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                    panic!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                }
+                e => panic!("{e:?}"),
+            }
+        }
+    });
+
+    client
+        .behaviour_mut()
+        .perf(
+            server_peer_id,
+            RunParams {
+                to_send: 0,
+                to_receive: 0,
+            },
+        )
+        .unwrap();
 
     pool.run_until(async {
         loop {
