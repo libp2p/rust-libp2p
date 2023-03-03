@@ -6,7 +6,7 @@ members = [
     "misc/keygen",
     "misc/metrics",
     "misc/multistream-select",
-    "misc/prost-codec",
+    "misc/quick-protobuf-codec",
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
     "muxers/mplex",

@@ -6,8 +6,11 @@
 
 - Deprecate `LegacyConfig` without replacement. See [PR 3265].
 
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
 [PR 3227]: https://github.com/libp2p/rust-libp2p/pull/3227
 [PR 3265]: https://github.com/libp2p/rust-libp2p/pull/3265
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.41.0
 

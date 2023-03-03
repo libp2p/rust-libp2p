@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::rpc_proto;
+use crate::proto;
 use crate::topic::Topic;
 use asynchronous_codec::Framed;
 use futures::{
@@ -65,7 +65,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                prost_codec::Codec::<rpc_proto::Rpc>::new(MAX_MESSAGE_LEN_BYTES),
+                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
             );
 
             let rpc = framed
@@ -120,7 +120,7 @@ pub enum FloodsubError {
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct CodecError(#[from] prost_codec::Error);
+pub struct CodecError(#[from] quick_protobuf_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -152,7 +152,7 @@ where
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
-                prost_codec::Codec::<rpc_proto::Rpc>::new(MAX_MESSAGE_LEN_BYTES),
+                quick_protobuf_codec::Codec::<proto::RPC>::new(MAX_MESSAGE_LEN_BYTES),
             );
             framed.send(self.into_rpc()).await?;
             framed.close().await?;
@@ -163,12 +163,12 @@ where
 
 impl FloodsubRpc {
     /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
-    fn into_rpc(self) -> rpc_proto::Rpc {
-        rpc_proto::Rpc {
+    fn into_rpc(self) -> proto::RPC {
+        proto::RPC {
             publish: self
                 .messages
                 .into_iter()
-                .map(|msg| rpc_proto::Message {
+                .map(|msg| proto::Message {
                     from: Some(msg.source.to_bytes()),
                     data: Some(msg.data),
                     seqno: Some(msg.sequence_number),
@@ -179,7 +179,7 @@ impl FloodsubRpc {
             subscriptions: self
                 .subscriptions
                 .into_iter()
-                .map(|topic| rpc_proto::rpc::SubOpts {
+                .map(|topic| proto::SubOpts {
                     subscribe: Some(topic.action == FloodsubSubscriptionAction::Subscribe),
                     topic_id: Some(topic.topic.into()),
                 })
