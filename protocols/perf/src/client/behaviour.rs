@@ -25,9 +25,10 @@ use std::{
     task::{Context, Poll},
 };
 
+use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, dial_opts::DialOpts, ConnectionId, FromSwarm,
+    derive_prelude::ConnectionEstablished, dial_opts::DialOpts, dummy, ConnectionId, FromSwarm,
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
     THandlerOutEvent,
 };
@@ -64,7 +65,7 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Handler;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
     fn handle_established_outbound_connection(
@@ -74,7 +75,17 @@ impl NetworkBehaviour for Behaviour {
         _addr: &Multiaddr,
         _role_override: libp2p_core::Endpoint,
     ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
-        Ok(Handler::default())
+        Ok(Either::Left(Handler::default()))
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        _peer: PeerId,
+        _local_addr: &Multiaddr,
+        _remote_addr: &Multiaddr,
+    ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
+        Ok(Either::Right(dummy::ConnectionHandler))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -90,9 +101,9 @@ impl NetworkBehaviour for Behaviour {
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler: NotifyHandler::One(connection_id),
-                    event: crate::client::handler::Command::Start {
+                    event: Either::Left(crate::client::handler::Command::Start {
                         params: self.pending_run.remove(&connection_id).unwrap(),
-                    },
+                    }),
                 }),
             FromSwarm::ConnectionClosed(_) => todo!(),
             FromSwarm::AddressChange(_) => todo!(),
@@ -115,12 +126,13 @@ impl NetworkBehaviour for Behaviour {
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
-            super::handler::Event::Finished { stats } => {
+            Either::Left(super::handler::Event::Finished { stats }) => {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
                         stats,
                     }));
             }
+            Either::Right(v) => void::unreachable(v),
         }
     }
 

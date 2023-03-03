@@ -2542,6 +2542,7 @@ name = "libp2p-perf"
 version = "0.1.0"
 dependencies = [
  "clap 4.1.6",
+ "either",
  "env_logger 0.10.0",
  "futures",
  "libp2p-core",
