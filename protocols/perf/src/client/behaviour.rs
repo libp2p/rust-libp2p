@@ -21,14 +21,14 @@
 //! [`NetworkBehaviour`] of the libp2p perf protocol.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashSet, VecDeque},
     task::{Context, Poll},
 };
 
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, dial_opts::DialOpts, dummy, ConnectionId, FromSwarm,
+    derive_prelude::ConnectionEstablished, dummy, ConnectionClosed, ConnectionId, FromSwarm,
     NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
     THandlerOutEvent,
 };
@@ -42,9 +42,10 @@ pub enum Event {
 
 #[derive(Default)]
 pub struct Behaviour {
-    pending_run: HashMap<ConnectionId, RunParams>,
     /// Queue of actions to return when polled.
     queued_events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+    /// Set of connected peers.
+    connected: HashSet<PeerId>,
 }
 
 impl Behaviour {
@@ -52,16 +53,26 @@ impl Behaviour {
         Self::default()
     }
 
-    pub fn perf(&mut self, server: Multiaddr, params: RunParams) {
-        let opts: DialOpts = server.into();
-        let connection_id = opts.connection_id();
+    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<(), PerfError> {
+        if !self.connected.contains(&server) {
+            return Err(PerfError::NotConnected);
+        }
 
-        self.pending_run.insert(connection_id, params);
-
-        // TODO: What if we are already connected?
         self.queued_events
-            .push_back(NetworkBehaviourAction::Dial { opts });
+            .push_back(NetworkBehaviourAction::NotifyHandler {
+                peer_id: server,
+                handler: NotifyHandler::Any,
+                event: Either::Left(crate::client::handler::Command::Start { params }),
+            });
+
+        return Ok(());
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum PerfError {
+    #[error("Not connected to peer")]
+    NotConnected,
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -92,20 +103,24 @@ impl NetworkBehaviour for Behaviour {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
-                connection_id,
+                connection_id: _,
                 endpoint: _,
                 failed_addresses: _,
                 other_established: _,
-            }) => self
-                .queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(connection_id),
-                    event: Either::Left(crate::client::handler::Command::Start {
-                        params: self.pending_run.remove(&connection_id).unwrap(),
-                    }),
-                }),
-            FromSwarm::ConnectionClosed(_) => todo!(),
+            }) => {
+                self.connected.insert(peer_id);
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id: _,
+                endpoint: _,
+                handler: _,
+                remaining_established,
+            }) => {
+                if remaining_established == 0 {
+                    assert!(self.connected.remove(&peer_id));
+                }
+            }
             FromSwarm::AddressChange(_) => todo!(),
             FromSwarm::DialFailure(_) => todo!(),
             FromSwarm::ListenFailure(_) => todo!(),

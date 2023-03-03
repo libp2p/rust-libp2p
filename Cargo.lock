@@ -2541,6 +2541,7 @@ dependencies = [
 name = "libp2p-perf"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap 4.1.6",
  "either",
  "env_logger 0.10.0",
@@ -2555,6 +2556,7 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "rand 0.8.5",
+ "thiserror",
  "void",
 ]
 

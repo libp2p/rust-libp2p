@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use anyhow::{bail, Result};
 use clap::Parser;
 use futures::{executor::block_on, future::Either, StreamExt};
 use libp2p_core::{
@@ -35,7 +36,7 @@ struct Opts {
     server_address: Multiaddr,
 }
 
-fn main() {
+fn main() -> Result<()> {
     env_logger::init();
 
     let opts = Opts::parse();
@@ -77,13 +78,26 @@ fn main() {
     .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
     .build();
 
+    swarm.dial(opts.server_address).unwrap();
+    let server_peer_id = block_on(async {
+        loop {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => return Ok(peer_id),
+                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                    bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                }
+                e => panic!("{e:?}"),
+            }
+        }
+    })?;
+
     swarm.behaviour_mut().perf(
-        opts.server_address.clone(),
+        server_peer_id,
         RunParams {
             to_send: 10 * 1024 * 1024,
             to_receive: 10 * 1024 * 1024,
         },
-    );
+    )?;
 
     let stats = block_on(async {
         loop {
@@ -121,4 +135,6 @@ fn main() {
         receive_time,
         receive_bandwidth_mebibit_second
     );
+
+    Ok(())
 }
