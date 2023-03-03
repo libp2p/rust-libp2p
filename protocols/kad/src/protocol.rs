@@ -443,7 +443,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
     match message.type_pb {
         proto::MessageType::PING => Ok(KadRequestMsg::Ping),
         proto::MessageType::PUT_VALUE => {
-            let record = record_from_proto(message.record.unwrap_or_default())?;
+            let record = record_from_proto(message.record)?;
             Ok(KadRequestMsg::PutValue { record })
         }
         proto::MessageType::GET_VALUE => Ok(KadRequestMsg::GetValue {

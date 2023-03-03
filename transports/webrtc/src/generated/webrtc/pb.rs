@@ -14,20 +14,10 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
     pub flag: Option<webrtc::pb::mod_Message::Flag>,
     pub message: Option<Vec<u8>>,
-}
-
-
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            flag: None,
-            message: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -48,13 +38,13 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-        + if self.flag.is_some() { 1 + sizeof_varint((*(self.flag.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.message.is_some() { 1 + sizeof_len((self.message.as_ref().unwrap()).len()) } else { 0 }
+        + self.flag.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.message.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.flag.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.flag.as_ref().unwrap()) as i32))?; }
-        if self.message.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.message.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.flag { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.message { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }

@@ -14,24 +14,12 @@ use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Envelope {
     pub public_key: Vec<u8>,
     pub payload_type: Vec<u8>,
     pub payload: Vec<u8>,
     pub signature: Vec<u8>,
-}
-
-
-impl Default for Envelope {
-    fn default() -> Self {
-        Self {
-            public_key: Vec::<u8>::new(),
-            payload_type: Vec::<u8>::new(),
-            payload: Vec::<u8>::new(),
-            signature: Vec::<u8>::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Envelope {
@@ -54,17 +42,17 @@ impl<'a> MessageRead<'a> for Envelope {
 impl MessageWrite for Envelope {
     fn get_size(&self) -> usize {
         0
-        + if self.public_key != Vec::<u8>::new() { 1 + sizeof_len((self.public_key).len()) } else { 0 }
-        + if self.payload_type != Vec::<u8>::new() { 1 + sizeof_len((self.payload_type).len()) } else { 0 }
-        + if self.payload != Vec::<u8>::new() { 1 + sizeof_len((self.payload).len()) } else { 0 }
-        + if self.signature != Vec::<u8>::new() { 1 + sizeof_len((self.signature).len()) } else { 0 }
+        + if self.public_key.is_empty() { 0 } else { 1 + sizeof_len((&self.public_key).len()) }
+        + if self.payload_type.is_empty() { 0 } else { 1 + sizeof_len((&self.payload_type).len()) }
+        + if self.payload.is_empty() { 0 } else { 1 + sizeof_len((&self.payload).len()) }
+        + if self.signature.is_empty() { 0 } else { 1 + sizeof_len((&self.signature).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.public_key != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.public_key))?; }
-        if self.payload_type != Vec::<u8>::new() { w.write_with_tag(18, |w| w.write_bytes(&self.payload_type))?; }
-        if self.payload != Vec::<u8>::new() { w.write_with_tag(26, |w| w.write_bytes(&self.payload))?; }
-        if self.signature != Vec::<u8>::new() { w.write_with_tag(42, |w| w.write_bytes(&self.signature))?; }
+        if !self.public_key.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.public_key))?; }
+        if !self.payload_type.is_empty() { w.write_with_tag(18, |w| w.write_bytes(&**&self.payload_type))?; }
+        if !self.payload.is_empty() { w.write_with_tag(26, |w| w.write_bytes(&**&self.payload))?; }
+        if !self.signature.is_empty() { w.write_with_tag(42, |w| w.write_bytes(&**&self.signature))?; }
         Ok(())
     }
 }

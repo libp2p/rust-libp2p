@@ -14,22 +14,11 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct NoiseHandshakePayload {
     pub identity_key: Vec<u8>,
     pub identity_sig: Vec<u8>,
     pub data: Vec<u8>,
-}
-
-
-impl Default for NoiseHandshakePayload {
-    fn default() -> Self {
-        Self {
-            identity_key: Vec::<u8>::new(),
-            identity_sig: Vec::<u8>::new(),
-            data: Vec::<u8>::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for NoiseHandshakePayload {
@@ -51,15 +40,15 @@ impl<'a> MessageRead<'a> for NoiseHandshakePayload {
 impl MessageWrite for NoiseHandshakePayload {
     fn get_size(&self) -> usize {
         0
-        + if self.identity_key != Vec::<u8>::new() { 1 + sizeof_len((self.identity_key).len()) } else { 0 }
-        + if self.identity_sig != Vec::<u8>::new() { 1 + sizeof_len((self.identity_sig).len()) } else { 0 }
-        + if self.data != Vec::<u8>::new() { 1 + sizeof_len((self.data).len()) } else { 0 }
+        + if self.identity_key.is_empty() { 0 } else { 1 + sizeof_len((&self.identity_key).len()) }
+        + if self.identity_sig.is_empty() { 0 } else { 1 + sizeof_len((&self.identity_sig).len()) }
+        + if self.data.is_empty() { 0 } else { 1 + sizeof_len((&self.data).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.identity_key != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.identity_key))?; }
-        if self.identity_sig != Vec::<u8>::new() { w.write_with_tag(18, |w| w.write_bytes(&self.identity_sig))?; }
-        if self.data != Vec::<u8>::new() { w.write_with_tag(26, |w| w.write_bytes(&self.data))?; }
+        if !self.identity_key.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.identity_key))?; }
+        if !self.identity_sig.is_empty() { w.write_with_tag(18, |w| w.write_bytes(&**&self.identity_sig))?; }
+        if !self.data.is_empty() { w.write_with_tag(26, |w| w.write_bytes(&**&self.data))?; }
         Ok(())
     }
 }

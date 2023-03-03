@@ -14,7 +14,7 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
     pub type_pb: Option<rendezvous::pb::mod_Message::MessageType>,
     pub register: Option<rendezvous::pb::mod_Message::Register>,
@@ -22,20 +22,6 @@ pub struct Message {
     pub unregister: Option<rendezvous::pb::mod_Message::Unregister>,
     pub discover: Option<rendezvous::pb::mod_Message::Discover>,
     pub discoverResponse: Option<rendezvous::pb::mod_Message::DiscoverResponse>,
-}
-
-
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            type_pb: None,
-            register: None,
-            registerResponse: None,
-            unregister: None,
-            discover: None,
-            discoverResponse: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -60,21 +46,21 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-        + if self.type_pb.is_some() { 1 + sizeof_varint((*(self.type_pb.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.register.is_some() { 1 + sizeof_len((self.register.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.registerResponse.is_some() { 1 + sizeof_len((self.registerResponse.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.unregister.is_some() { 1 + sizeof_len((self.unregister.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.discover.is_some() { 1 + sizeof_len((self.discover.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.discoverResponse.is_some() { 1 + sizeof_len((self.discoverResponse.as_ref().unwrap()).get_size()) } else { 0 }
+        + self.type_pb.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.register.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.registerResponse.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.unregister.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.discover.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.discoverResponse.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.type_pb.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.type_pb.as_ref().unwrap()) as i32))?; }
-        if self.register.is_some() { w.write_with_tag(18, |w| w.write_message(self.register.as_ref().unwrap()))?; }
-        if self.registerResponse.is_some() { w.write_with_tag(26, |w| w.write_message(self.registerResponse.as_ref().unwrap()))?; }
-        if self.unregister.is_some() { w.write_with_tag(34, |w| w.write_message(self.unregister.as_ref().unwrap()))?; }
-        if self.discover.is_some() { w.write_with_tag(42, |w| w.write_message(self.discover.as_ref().unwrap()))?; }
-        if self.discoverResponse.is_some() { w.write_with_tag(50, |w| w.write_message(self.discoverResponse.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.type_pb { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.register { w.write_with_tag(18, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.registerResponse { w.write_with_tag(26, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.unregister { w.write_with_tag(34, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.discover { w.write_with_tag(42, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.discoverResponse { w.write_with_tag(50, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -84,22 +70,11 @@ pub mod mod_Message {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Register {
     pub ns: Option<String>,
     pub signedPeerRecord: Option<Vec<u8>>,
     pub ttl: Option<u64>,
-}
-
-
-impl Default for Register {
-    fn default() -> Self {
-        Self {
-            ns: None,
-            signedPeerRecord: None,
-            ttl: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Register {
@@ -121,36 +96,25 @@ impl<'a> MessageRead<'a> for Register {
 impl MessageWrite for Register {
     fn get_size(&self) -> usize {
         0
-        + if self.ns.is_some() { 1 + sizeof_len((self.ns.as_ref().unwrap()).len()) } else { 0 }
-        + if self.signedPeerRecord.is_some() { 1 + sizeof_len((self.signedPeerRecord.as_ref().unwrap()).len()) } else { 0 }
-        + if self.ttl.is_some() { 1 + sizeof_varint((*(self.ttl.as_ref().unwrap())) as u64) } else { 0 }
+        + self.ns.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.signedPeerRecord.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.ttl.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.ns.is_some() { w.write_with_tag(10, |w| w.write_string(&self.ns.as_ref().unwrap()))?; }
-        if self.signedPeerRecord.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.signedPeerRecord.as_ref().unwrap()))?; }
-        if self.ttl.is_some() { w.write_with_tag(24, |w| w.write_uint64(*(self.ttl.as_ref().unwrap())))?; }
+        if let Some(ref s) = self.ns { w.write_with_tag(10, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.signedPeerRecord { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.ttl { w.write_with_tag(24, |w| w.write_uint64(*s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct RegisterResponse {
     pub status: Option<rendezvous::pb::mod_Message::ResponseStatus>,
     pub statusText: Option<String>,
     pub ttl: Option<u64>,
-}
-
-
-impl Default for RegisterResponse {
-    fn default() -> Self {
-        Self {
-            status: None,
-            statusText: None,
-            ttl: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for RegisterResponse {
@@ -172,34 +136,24 @@ impl<'a> MessageRead<'a> for RegisterResponse {
 impl MessageWrite for RegisterResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.status.is_some() { 1 + sizeof_varint((*(self.status.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.statusText.is_some() { 1 + sizeof_len((self.statusText.as_ref().unwrap()).len()) } else { 0 }
-        + if self.ttl.is_some() { 1 + sizeof_varint((*(self.ttl.as_ref().unwrap())) as u64) } else { 0 }
+        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.statusText.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.ttl.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.status.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.status.as_ref().unwrap()) as i32))?; }
-        if self.statusText.is_some() { w.write_with_tag(18, |w| w.write_string(&self.statusText.as_ref().unwrap()))?; }
-        if self.ttl.is_some() { w.write_with_tag(24, |w| w.write_uint64(*(self.ttl.as_ref().unwrap())))?; }
+        if let Some(ref s) = self.status { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.statusText { w.write_with_tag(18, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.ttl { w.write_with_tag(24, |w| w.write_uint64(*s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Unregister {
     pub ns: Option<String>,
     pub id: Option<Vec<u8>>,
-}
-
-
-impl Default for Unregister {
-    fn default() -> Self {
-        Self {
-            ns: None,
-            id: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Unregister {
@@ -220,34 +174,23 @@ impl<'a> MessageRead<'a> for Unregister {
 impl MessageWrite for Unregister {
     fn get_size(&self) -> usize {
         0
-        + if self.ns.is_some() { 1 + sizeof_len((self.ns.as_ref().unwrap()).len()) } else { 0 }
-        + if self.id.is_some() { 1 + sizeof_len((self.id.as_ref().unwrap()).len()) } else { 0 }
+        + self.ns.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.ns.is_some() { w.write_with_tag(10, |w| w.write_string(&self.ns.as_ref().unwrap()))?; }
-        if self.id.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.id.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.ns { w.write_with_tag(10, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.id { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Discover {
     pub ns: Option<String>,
     pub limit: Option<u64>,
     pub cookie: Option<Vec<u8>>,
-}
-
-
-impl Default for Discover {
-    fn default() -> Self {
-        Self {
-            ns: None,
-            limit: None,
-            cookie: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Discover {
@@ -269,38 +212,26 @@ impl<'a> MessageRead<'a> for Discover {
 impl MessageWrite for Discover {
     fn get_size(&self) -> usize {
         0
-        + if self.ns.is_some() { 1 + sizeof_len((self.ns.as_ref().unwrap()).len()) } else { 0 }
-        + if self.limit.is_some() { 1 + sizeof_varint((*(self.limit.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.cookie.is_some() { 1 + sizeof_len((self.cookie.as_ref().unwrap()).len()) } else { 0 }
+        + self.ns.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.limit.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.cookie.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.ns.is_some() { w.write_with_tag(10, |w| w.write_string(&self.ns.as_ref().unwrap()))?; }
-        if self.limit.is_some() { w.write_with_tag(16, |w| w.write_uint64(*(self.limit.as_ref().unwrap())))?; }
-        if self.cookie.is_some() { w.write_with_tag(26, |w| w.write_bytes(&self.cookie.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.ns { w.write_with_tag(10, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.limit { w.write_with_tag(16, |w| w.write_uint64(*s))?; }
+        if let Some(ref s) = self.cookie { w.write_with_tag(26, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct DiscoverResponse {
     pub registrations: Vec<rendezvous::pb::mod_Message::Register>,
     pub cookie: Option<Vec<u8>>,
     pub status: Option<rendezvous::pb::mod_Message::ResponseStatus>,
     pub statusText: Option<String>,
-}
-
-
-impl Default for DiscoverResponse {
-    fn default() -> Self {
-        Self {
-            registrations: Vec::new(),
-            cookie: None,
-            status: None,
-            statusText: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for DiscoverResponse {
@@ -324,16 +255,16 @@ impl MessageWrite for DiscoverResponse {
     fn get_size(&self) -> usize {
         0
         + self.registrations.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-        + if self.cookie.is_some() { 1 + sizeof_len((self.cookie.as_ref().unwrap()).len()) } else { 0 }
-        + if self.status.is_some() { 1 + sizeof_varint((*(self.status.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.statusText.is_some() { 1 + sizeof_len((self.statusText.as_ref().unwrap()).len()) } else { 0 }
+        + self.cookie.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.statusText.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.registrations { w.write_with_tag(10, |w| w.write_message(s))?; }
-        if self.cookie.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.cookie.as_ref().unwrap()))?; }
-        if self.status.is_some() { w.write_with_tag(24, |w| w.write_enum(*(self.status.as_ref().unwrap()) as i32))?; }
-        if self.statusText.is_some() { w.write_with_tag(34, |w| w.write_string(&self.statusText.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.cookie { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.status { w.write_with_tag(24, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.statusText { w.write_with_tag(34, |w| w.write_string(&**s))?; }
         Ok(())
     }
 }

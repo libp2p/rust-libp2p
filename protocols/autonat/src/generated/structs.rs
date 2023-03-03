@@ -14,22 +14,11 @@ use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
     pub type_pb: Option<structs::mod_Message::MessageType>,
     pub dial: Option<structs::mod_Message::Dial>,
     pub dialResponse: Option<structs::mod_Message::DialResponse>,
-}
-
-
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            type_pb: None,
-            dial: None,
-            dialResponse: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -51,15 +40,15 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-        + if self.type_pb.is_some() { 1 + sizeof_varint((*(self.type_pb.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.dial.is_some() { 1 + sizeof_len((self.dial.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.dialResponse.is_some() { 1 + sizeof_len((self.dialResponse.as_ref().unwrap()).get_size()) } else { 0 }
+        + self.type_pb.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.dial.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.dialResponse.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.type_pb.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.type_pb.as_ref().unwrap()) as i32))?; }
-        if self.dial.is_some() { w.write_with_tag(18, |w| w.write_message(self.dial.as_ref().unwrap()))?; }
-        if self.dialResponse.is_some() { w.write_with_tag(26, |w| w.write_message(self.dialResponse.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.type_pb { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.dial { w.write_with_tag(18, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.dialResponse { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -69,20 +58,10 @@ pub mod mod_Message {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct PeerInfo {
     pub id: Option<Vec<u8>>,
     pub addrs: Vec<Vec<u8>>,
-}
-
-
-impl Default for PeerInfo {
-    fn default() -> Self {
-        Self {
-            id: None,
-            addrs: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for PeerInfo {
@@ -103,30 +82,21 @@ impl<'a> MessageRead<'a> for PeerInfo {
 impl MessageWrite for PeerInfo {
     fn get_size(&self) -> usize {
         0
-        + if self.id.is_some() { 1 + sizeof_len((self.id.as_ref().unwrap()).len()) } else { 0 }
+        + self.id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
         + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.id.is_some() { w.write_with_tag(10, |w| w.write_bytes(&self.id.as_ref().unwrap()))?; }
-        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        if let Some(ref s) = self.id { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
+        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Dial {
     pub peer: Option<structs::mod_Message::PeerInfo>,
-}
-
-
-impl Default for Dial {
-    fn default() -> Self {
-        Self {
-            peer: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Dial {
@@ -146,32 +116,21 @@ impl<'a> MessageRead<'a> for Dial {
 impl MessageWrite for Dial {
     fn get_size(&self) -> usize {
         0
-        + if self.peer.is_some() { 1 + sizeof_len((self.peer.as_ref().unwrap()).get_size()) } else { 0 }
+        + self.peer.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.peer.is_some() { w.write_with_tag(10, |w| w.write_message(self.peer.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.peer { w.write_with_tag(10, |w| w.write_message(s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct DialResponse {
     pub status: Option<structs::mod_Message::ResponseStatus>,
     pub statusText: Option<String>,
     pub addr: Option<Vec<u8>>,
-}
-
-
-impl Default for DialResponse {
-    fn default() -> Self {
-        Self {
-            status: None,
-            statusText: None,
-            addr: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for DialResponse {
@@ -193,15 +152,15 @@ impl<'a> MessageRead<'a> for DialResponse {
 impl MessageWrite for DialResponse {
     fn get_size(&self) -> usize {
         0
-        + if self.status.is_some() { 1 + sizeof_varint((*(self.status.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.statusText.is_some() { 1 + sizeof_len((self.statusText.as_ref().unwrap()).len()) } else { 0 }
-        + if self.addr.is_some() { 1 + sizeof_len((self.addr.as_ref().unwrap()).len()) } else { 0 }
+        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.statusText.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.addr.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.status.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.status.as_ref().unwrap()) as i32))?; }
-        if self.statusText.is_some() { w.write_with_tag(18, |w| w.write_string(&self.statusText.as_ref().unwrap()))?; }
-        if self.addr.is_some() { w.write_with_tag(26, |w| w.write_bytes(&self.addr.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.status { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        if let Some(ref s) = self.statusText { w.write_with_tag(18, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.addr { w.write_with_tag(26, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }

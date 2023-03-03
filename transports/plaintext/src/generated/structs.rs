@@ -14,20 +14,10 @@ use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Exchange {
     pub id: Option<Vec<u8>>,
     pub pubkey: Option<Vec<u8>>,
-}
-
-
-impl Default for Exchange {
-    fn default() -> Self {
-        Self {
-            id: None,
-            pubkey: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Exchange {
@@ -48,13 +38,13 @@ impl<'a> MessageRead<'a> for Exchange {
 impl MessageWrite for Exchange {
     fn get_size(&self) -> usize {
         0
-        + if self.id.is_some() { 1 + sizeof_len((self.id.as_ref().unwrap()).len()) } else { 0 }
-        + if self.pubkey.is_some() { 1 + sizeof_len((self.pubkey.as_ref().unwrap()).len()) } else { 0 }
+        + self.id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.pubkey.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.id.is_some() { w.write_with_tag(10, |w| w.write_bytes(&self.id.as_ref().unwrap()))?; }
-        if self.pubkey.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.pubkey.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.id { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.pubkey { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }

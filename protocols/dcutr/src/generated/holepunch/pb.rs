@@ -14,20 +14,10 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct HolePunch {
     pub type_pb: holepunch::pb::mod_HolePunch::Type,
     pub ObsAddrs: Vec<Vec<u8>>,
-}
-
-
-impl Default for HolePunch {
-    fn default() -> Self {
-        Self {
-            type_pb: holepunch::pb::mod_HolePunch::Type::CONNECT,
-            ObsAddrs: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for HolePunch {
@@ -48,13 +38,13 @@ impl<'a> MessageRead<'a> for HolePunch {
 impl MessageWrite for HolePunch {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint((self.type_pb) as u64)
+        + 1 + sizeof_varint(*(&self.type_pb) as u64)
         + self.ObsAddrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_enum(self.type_pb as i32))?;
-        for s in &self.ObsAddrs { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?;
+        for s in &self.ObsAddrs { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }

@@ -14,22 +14,11 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct RPC {
     pub subscriptions: Vec<gossipsub::pb::mod_RPC::SubOpts>,
     pub publish: Vec<gossipsub::pb::Message>,
     pub control: Option<gossipsub::pb::ControlMessage>,
-}
-
-
-impl Default for RPC {
-    fn default() -> Self {
-        Self {
-            subscriptions: Vec::new(),
-            publish: Vec::new(),
-            control: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for RPC {
@@ -53,13 +42,13 @@ impl MessageWrite for RPC {
         0
         + self.subscriptions.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.publish.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-        + if self.control.is_some() { 1 + sizeof_len((self.control.as_ref().unwrap()).get_size()) } else { 0 }
+        + self.control.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.subscriptions { w.write_with_tag(10, |w| w.write_message(s))?; }
         for s in &self.publish { w.write_with_tag(18, |w| w.write_message(s))?; }
-        if self.control.is_some() { w.write_with_tag(26, |w| w.write_message(self.control.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.control { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -69,20 +58,10 @@ pub mod mod_RPC {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct SubOpts {
     pub subscribe: Option<bool>,
     pub topic_id: Option<String>,
-}
-
-
-impl Default for SubOpts {
-    fn default() -> Self {
-        Self {
-            subscribe: None,
-            topic_id: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for SubOpts {
@@ -103,13 +82,13 @@ impl<'a> MessageRead<'a> for SubOpts {
 impl MessageWrite for SubOpts {
     fn get_size(&self) -> usize {
         0
-        + if self.subscribe.is_some() { 1 + sizeof_varint((*(self.subscribe.as_ref().unwrap())) as u64) } else { 0 }
-        + if self.topic_id.is_some() { 1 + sizeof_len((self.topic_id.as_ref().unwrap()).len()) } else { 0 }
+        + self.subscribe.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.subscribe.is_some() { w.write_with_tag(8, |w| w.write_bool(*(self.subscribe.as_ref().unwrap())))?; }
-        if self.topic_id.is_some() { w.write_with_tag(18, |w| w.write_string(&self.topic_id.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.subscribe { w.write_with_tag(8, |w| w.write_bool(*s))?; }
+        if let Some(ref s) = self.topic_id { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         Ok(())
     }
 }
@@ -117,7 +96,7 @@ impl MessageWrite for SubOpts {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
     pub from: Option<Vec<u8>>,
     pub data: Option<Vec<u8>>,
@@ -125,20 +104,6 @@ pub struct Message {
     pub topic: String,
     pub signature: Option<Vec<u8>>,
     pub key: Option<Vec<u8>>,
-}
-
-
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            from: None,
-            data: None,
-            seqno: None,
-            topic: "".to_string(),
-            signature: None,
-            key: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -163,44 +128,32 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-        + if self.from.is_some() { 1 + sizeof_len((self.from.as_ref().unwrap()).len()) } else { 0 }
-        + if self.data.is_some() { 1 + sizeof_len((self.data.as_ref().unwrap()).len()) } else { 0 }
-        + if self.seqno.is_some() { 1 + sizeof_len((self.seqno.as_ref().unwrap()).len()) } else { 0 }
-        + 1 + sizeof_len((self.topic).len())
-        + if self.signature.is_some() { 1 + sizeof_len((self.signature.as_ref().unwrap()).len()) } else { 0 }
-        + if self.key.is_some() { 1 + sizeof_len((self.key.as_ref().unwrap()).len()) } else { 0 }
+        + self.from.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.data.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.seqno.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + 1 + sizeof_len((&self.topic).len())
+        + self.signature.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.key.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.from.is_some() { w.write_with_tag(10, |w| w.write_bytes(&self.from.as_ref().unwrap()))?; }
-        if self.data.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.data.as_ref().unwrap()))?; }
-        if self.seqno.is_some() { w.write_with_tag(26, |w| w.write_bytes(&self.seqno.as_ref().unwrap()))?; }
-        w.write_with_tag(34, |w| w.write_string(&self.topic))?;
-        if self.signature.is_some() { w.write_with_tag(42, |w| w.write_bytes(&self.signature.as_ref().unwrap()))?; }
-        if self.key.is_some() { w.write_with_tag(50, |w| w.write_bytes(&self.key.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.from { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.data { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.seqno { w.write_with_tag(26, |w| w.write_bytes(&**s))?; }
+        w.write_with_tag(34, |w| w.write_string(&**&self.topic))?;
+        if let Some(ref s) = self.signature { w.write_with_tag(42, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.key { w.write_with_tag(50, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlMessage {
     pub ihave: Vec<gossipsub::pb::ControlIHave>,
     pub iwant: Vec<gossipsub::pb::ControlIWant>,
     pub graft: Vec<gossipsub::pb::ControlGraft>,
     pub prune: Vec<gossipsub::pb::ControlPrune>,
-}
-
-
-impl Default for ControlMessage {
-    fn default() -> Self {
-        Self {
-            ihave: Vec::new(),
-            iwant: Vec::new(),
-            graft: Vec::new(),
-            prune: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for ControlMessage {
@@ -239,20 +192,10 @@ impl MessageWrite for ControlMessage {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlIHave {
     pub topic_id: Option<String>,
     pub message_ids: Vec<Vec<u8>>,
-}
-
-
-impl Default for ControlIHave {
-    fn default() -> Self {
-        Self {
-            topic_id: None,
-            message_ids: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for ControlIHave {
@@ -273,30 +216,21 @@ impl<'a> MessageRead<'a> for ControlIHave {
 impl MessageWrite for ControlIHave {
     fn get_size(&self) -> usize {
         0
-        + if self.topic_id.is_some() { 1 + sizeof_len((self.topic_id.as_ref().unwrap()).len()) } else { 0 }
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
         + self.message_ids.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.topic_id.is_some() { w.write_with_tag(10, |w| w.write_string(&self.topic_id.as_ref().unwrap()))?; }
-        for s in &self.message_ids { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        if let Some(ref s) = self.topic_id { w.write_with_tag(10, |w| w.write_string(&**s))?; }
+        for s in &self.message_ids { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlIWant {
     pub message_ids: Vec<Vec<u8>>,
-}
-
-
-impl Default for ControlIWant {
-    fn default() -> Self {
-        Self {
-            message_ids: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for ControlIWant {
@@ -320,24 +254,15 @@ impl MessageWrite for ControlIWant {
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        for s in &self.message_ids { w.write_with_tag(10, |w| w.write_bytes(s))?; }
+        for s in &self.message_ids { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlGraft {
     pub topic_id: Option<String>,
-}
-
-
-impl Default for ControlGraft {
-    fn default() -> Self {
-        Self {
-            topic_id: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for ControlGraft {
@@ -357,32 +282,21 @@ impl<'a> MessageRead<'a> for ControlGraft {
 impl MessageWrite for ControlGraft {
     fn get_size(&self) -> usize {
         0
-        + if self.topic_id.is_some() { 1 + sizeof_len((self.topic_id.as_ref().unwrap()).len()) } else { 0 }
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.topic_id.is_some() { w.write_with_tag(10, |w| w.write_string(&self.topic_id.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.topic_id { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct ControlPrune {
     pub topic_id: Option<String>,
     pub peers: Vec<gossipsub::pb::PeerInfo>,
     pub backoff: Option<u64>,
-}
-
-
-impl Default for ControlPrune {
-    fn default() -> Self {
-        Self {
-            topic_id: None,
-            peers: Vec::new(),
-            backoff: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for ControlPrune {
@@ -404,34 +318,24 @@ impl<'a> MessageRead<'a> for ControlPrune {
 impl MessageWrite for ControlPrune {
     fn get_size(&self) -> usize {
         0
-        + if self.topic_id.is_some() { 1 + sizeof_len((self.topic_id.as_ref().unwrap()).len()) } else { 0 }
+        + self.topic_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
         + self.peers.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
-        + if self.backoff.is_some() { 1 + sizeof_varint((*(self.backoff.as_ref().unwrap())) as u64) } else { 0 }
+        + self.backoff.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.topic_id.is_some() { w.write_with_tag(10, |w| w.write_string(&self.topic_id.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.topic_id { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         for s in &self.peers { w.write_with_tag(18, |w| w.write_message(s))?; }
-        if self.backoff.is_some() { w.write_with_tag(24, |w| w.write_uint64(*(self.backoff.as_ref().unwrap())))?; }
+        if let Some(ref s) = self.backoff { w.write_with_tag(24, |w| w.write_uint64(*s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct PeerInfo {
     pub peer_id: Option<Vec<u8>>,
     pub signed_peer_record: Option<Vec<u8>>,
-}
-
-
-impl Default for PeerInfo {
-    fn default() -> Self {
-        Self {
-            peer_id: None,
-            signed_peer_record: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for PeerInfo {
@@ -452,34 +356,23 @@ impl<'a> MessageRead<'a> for PeerInfo {
 impl MessageWrite for PeerInfo {
     fn get_size(&self) -> usize {
         0
-        + if self.peer_id.is_some() { 1 + sizeof_len((self.peer_id.as_ref().unwrap()).len()) } else { 0 }
-        + if self.signed_peer_record.is_some() { 1 + sizeof_len((self.signed_peer_record.as_ref().unwrap()).len()) } else { 0 }
+        + self.peer_id.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.signed_peer_record.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.peer_id.is_some() { w.write_with_tag(10, |w| w.write_bytes(&self.peer_id.as_ref().unwrap()))?; }
-        if self.signed_peer_record.is_some() { w.write_with_tag(18, |w| w.write_bytes(&self.signed_peer_record.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.peer_id { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
+        if let Some(ref s) = self.signed_peer_record { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct TopicDescriptor {
     pub name: Option<String>,
     pub auth: Option<gossipsub::pb::mod_TopicDescriptor::AuthOpts>,
     pub enc: Option<gossipsub::pb::mod_TopicDescriptor::EncOpts>,
-}
-
-
-impl Default for TopicDescriptor {
-    fn default() -> Self {
-        Self {
-            name: None,
-            auth: None,
-            enc: None,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for TopicDescriptor {
@@ -501,15 +394,15 @@ impl<'a> MessageRead<'a> for TopicDescriptor {
 impl MessageWrite for TopicDescriptor {
     fn get_size(&self) -> usize {
         0
-        + if self.name.is_some() { 1 + sizeof_len((self.name.as_ref().unwrap()).len()) } else { 0 }
-        + if self.auth.is_some() { 1 + sizeof_len((self.auth.as_ref().unwrap()).get_size()) } else { 0 }
-        + if self.enc.is_some() { 1 + sizeof_len((self.enc.as_ref().unwrap()).get_size()) } else { 0 }
+        + self.name.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.auth.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
+        + self.enc.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.name.is_some() { w.write_with_tag(10, |w| w.write_string(&self.name.as_ref().unwrap()))?; }
-        if self.auth.is_some() { w.write_with_tag(18, |w| w.write_message(self.auth.as_ref().unwrap()))?; }
-        if self.enc.is_some() { w.write_with_tag(26, |w| w.write_message(self.enc.as_ref().unwrap()))?; }
+        if let Some(ref s) = self.name { w.write_with_tag(10, |w| w.write_string(&**s))?; }
+        if let Some(ref s) = self.auth { w.write_with_tag(18, |w| w.write_message(s))?; }
+        if let Some(ref s) = self.enc { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
 }
@@ -519,20 +412,10 @@ pub mod mod_TopicDescriptor {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct AuthOpts {
     pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_AuthOpts::AuthMode>,
     pub keys: Vec<Vec<u8>>,
-}
-
-
-impl Default for AuthOpts {
-    fn default() -> Self {
-        Self {
-            mode: None,
-            keys: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for AuthOpts {
@@ -553,13 +436,13 @@ impl<'a> MessageRead<'a> for AuthOpts {
 impl MessageWrite for AuthOpts {
     fn get_size(&self) -> usize {
         0
-        + if self.mode.is_some() { 1 + sizeof_varint((*(self.mode.as_ref().unwrap())) as u64) } else { 0 }
+        + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
         + self.keys.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.mode.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.mode.as_ref().unwrap()) as i32))?; }
-        for s in &self.keys { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        for s in &self.keys { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }
@@ -605,20 +488,10 @@ impl<'a> From<&'a str> for AuthMode {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct EncOpts {
     pub mode: Option<gossipsub::pb::mod_TopicDescriptor::mod_EncOpts::EncMode>,
     pub key_hashes: Vec<Vec<u8>>,
-}
-
-
-impl Default for EncOpts {
-    fn default() -> Self {
-        Self {
-            mode: None,
-            key_hashes: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for EncOpts {
@@ -639,13 +512,13 @@ impl<'a> MessageRead<'a> for EncOpts {
 impl MessageWrite for EncOpts {
     fn get_size(&self) -> usize {
         0
-        + if self.mode.is_some() { 1 + sizeof_varint((*(self.mode.as_ref().unwrap())) as u64) } else { 0 }
+        + self.mode.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
         + self.key_hashes.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.mode.is_some() { w.write_with_tag(8, |w| w.write_enum(*(self.mode.as_ref().unwrap()) as i32))?; }
-        for s in &self.key_hashes { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        if let Some(ref s) = self.mode { w.write_with_tag(8, |w| w.write_enum(*s as i32))?; }
+        for s in &self.key_hashes { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
     }
 }

@@ -14,26 +14,13 @@ use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Record {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
     pub timeReceived: String,
     pub publisher: Vec<u8>,
     pub ttl: u32,
-}
-
-
-impl Default for Record {
-    fn default() -> Self {
-        Self {
-            key: Vec::<u8>::new(),
-            value: Vec::<u8>::new(),
-            timeReceived: "".to_string(),
-            publisher: Vec::<u8>::new(),
-            ttl: 0u32,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Record {
@@ -57,46 +44,32 @@ impl<'a> MessageRead<'a> for Record {
 impl MessageWrite for Record {
     fn get_size(&self) -> usize {
         0
-        + if self.key != Vec::<u8>::new() { 1 + sizeof_len((self.key).len()) } else { 0 }
-        + if self.value != Vec::<u8>::new() { 1 + sizeof_len((self.value).len()) } else { 0 }
-        + if self.timeReceived != "".to_string() { 1 + sizeof_len((self.timeReceived).len()) } else { 0 }
-        + if self.publisher != Vec::<u8>::new() { 2 + sizeof_len((self.publisher).len()) } else { 0 }
-        + if self.ttl != 0u32 { 2 + sizeof_varint((self.ttl) as u64) } else { 0 }
+        + if self.key.is_empty() { 0 } else { 1 + sizeof_len((&self.key).len()) }
+        + if self.value.is_empty() { 0 } else { 1 + sizeof_len((&self.value).len()) }
+        + if self.timeReceived == String::default() { 0 } else { 1 + sizeof_len((&self.timeReceived).len()) }
+        + if self.publisher.is_empty() { 0 } else { 2 + sizeof_len((&self.publisher).len()) }
+        + if self.ttl == 0u32 { 0 } else { 2 + sizeof_varint(*(&self.ttl) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.key != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.key))?; }
-        if self.value != Vec::<u8>::new() { w.write_with_tag(18, |w| w.write_bytes(&self.value))?; }
-        if self.timeReceived != "".to_string() { w.write_with_tag(42, |w| w.write_string(&self.timeReceived))?; }
-        if self.publisher != Vec::<u8>::new() { w.write_with_tag(5330, |w| w.write_bytes(&self.publisher))?; }
-        if self.ttl != 0u32 { w.write_with_tag(6216, |w| w.write_uint32(self.ttl))?; }
+        if !self.key.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.key))?; }
+        if !self.value.is_empty() { w.write_with_tag(18, |w| w.write_bytes(&**&self.value))?; }
+        if self.timeReceived != String::default() { w.write_with_tag(42, |w| w.write_string(&**&self.timeReceived))?; }
+        if !self.publisher.is_empty() { w.write_with_tag(5330, |w| w.write_bytes(&**&self.publisher))?; }
+        if self.ttl != 0u32 { w.write_with_tag(6216, |w| w.write_uint32(*&self.ttl))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
     pub type_pb: dht::pb::mod_Message::MessageType,
     pub clusterLevelRaw: i32,
     pub key: Vec<u8>,
-    pub record: dht::pb::Record,
+    pub record: Option<dht::pb::Record>,
     pub closerPeers: Vec<dht::pb::mod_Message::Peer>,
     pub providerPeers: Vec<dht::pb::mod_Message::Peer>,
-}
-
-
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            type_pb: dht::pb::mod_Message::MessageType::PUT_VALUE,
-            clusterLevelRaw: 0i32,
-            key: Vec::<u8>::new(),
-            record: dht::pb::Record::default(),
-            closerPeers: Vec::new(),
-            providerPeers: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Message {
@@ -107,7 +80,7 @@ impl<'a> MessageRead<'a> for Message {
                 Ok(8) => msg.type_pb = r.read_enum(bytes)?,
                 Ok(80) => msg.clusterLevelRaw = r.read_int32(bytes)?,
                 Ok(18) => msg.key = r.read_bytes(bytes)?.to_owned(),
-                Ok(26) => msg.record = r.read_message::<dht::pb::Record>(bytes)?,
+                Ok(26) => msg.record = Some(r.read_message::<dht::pb::Record>(bytes)?),
                 Ok(66) => msg.closerPeers.push(r.read_message::<dht::pb::mod_Message::Peer>(bytes)?),
                 Ok(74) => msg.providerPeers.push(r.read_message::<dht::pb::mod_Message::Peer>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -121,19 +94,19 @@ impl<'a> MessageRead<'a> for Message {
 impl MessageWrite for Message {
     fn get_size(&self) -> usize {
         0
-        + if self.type_pb != dht::pb::mod_Message::MessageType::PUT_VALUE { 1 + sizeof_varint((self.type_pb) as u64) } else { 0 }
-        + if self.clusterLevelRaw != 0i32 { 1 + sizeof_varint((self.clusterLevelRaw) as u64) } else { 0 }
-        + if self.key != Vec::<u8>::new() { 1 + sizeof_len((self.key).len()) } else { 0 }
-        + 1 + sizeof_len((self.record).get_size())
+        + if self.type_pb == dht::pb::mod_Message::MessageType::PUT_VALUE { 0 } else { 1 + sizeof_varint(*(&self.type_pb) as u64) }
+        + if self.clusterLevelRaw == 0i32 { 0 } else { 1 + sizeof_varint(*(&self.clusterLevelRaw) as u64) }
+        + if self.key.is_empty() { 0 } else { 1 + sizeof_len((&self.key).len()) }
+        + self.record.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.closerPeers.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.providerPeers.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.type_pb != dht::pb::mod_Message::MessageType::PUT_VALUE { w.write_with_tag(8, |w| w.write_enum(self.type_pb as i32))?; }
-        if self.clusterLevelRaw != 0i32 { w.write_with_tag(80, |w| w.write_int32(self.clusterLevelRaw))?; }
-        if self.key != Vec::<u8>::new() { w.write_with_tag(18, |w| w.write_bytes(&self.key))?; }
-        w.write_with_tag(26, |w| w.write_message(&self.record))?;
+        if self.type_pb != dht::pb::mod_Message::MessageType::PUT_VALUE { w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?; }
+        if self.clusterLevelRaw != 0i32 { w.write_with_tag(80, |w| w.write_int32(*&self.clusterLevelRaw))?; }
+        if !self.key.is_empty() { w.write_with_tag(18, |w| w.write_bytes(&**&self.key))?; }
+        if let Some(ref s) = self.record { w.write_with_tag(26, |w| w.write_message(s))?; }
         for s in &self.closerPeers { w.write_with_tag(66, |w| w.write_message(s))?; }
         for s in &self.providerPeers { w.write_with_tag(74, |w| w.write_message(s))?; }
         Ok(())
@@ -145,22 +118,11 @@ pub mod mod_Message {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct Peer {
     pub id: Vec<u8>,
     pub addrs: Vec<Vec<u8>>,
     pub connection: dht::pb::mod_Message::ConnectionType,
-}
-
-
-impl Default for Peer {
-    fn default() -> Self {
-        Self {
-            id: Vec::<u8>::new(),
-            addrs: Vec::new(),
-            connection: dht::pb::mod_Message::ConnectionType::NOT_CONNECTED,
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for Peer {
@@ -182,15 +144,15 @@ impl<'a> MessageRead<'a> for Peer {
 impl MessageWrite for Peer {
     fn get_size(&self) -> usize {
         0
-        + if self.id != Vec::<u8>::new() { 1 + sizeof_len((self.id).len()) } else { 0 }
+        + if self.id.is_empty() { 0 } else { 1 + sizeof_len((&self.id).len()) }
         + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
-        + if self.connection != dht::pb::mod_Message::ConnectionType::NOT_CONNECTED { 1 + sizeof_varint((self.connection) as u64) } else { 0 }
+        + if self.connection == dht::pb::mod_Message::ConnectionType::NOT_CONNECTED { 0 } else { 1 + sizeof_varint(*(&self.connection) as u64) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.id != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.id))?; }
-        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(s))?; }
-        if self.connection != dht::pb::mod_Message::ConnectionType::NOT_CONNECTED { w.write_with_tag(24, |w| w.write_enum(self.connection as i32))?; }
+        if !self.id.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.id))?; }
+        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        if self.connection != dht::pb::mod_Message::ConnectionType::NOT_CONNECTED { w.write_with_tag(24, |w| w.write_enum(*&self.connection as i32))?; }
         Ok(())
     }
 }

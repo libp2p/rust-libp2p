@@ -14,22 +14,11 @@ use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct PeerRecord {
     pub peer_id: Vec<u8>,
     pub seq: u64,
     pub addresses: Vec<peer_record_proto::mod_PeerRecord::AddressInfo>,
-}
-
-
-impl Default for PeerRecord {
-    fn default() -> Self {
-        Self {
-            peer_id: Vec::<u8>::new(),
-            seq: 0u64,
-            addresses: Vec::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for PeerRecord {
@@ -51,14 +40,14 @@ impl<'a> MessageRead<'a> for PeerRecord {
 impl MessageWrite for PeerRecord {
     fn get_size(&self) -> usize {
         0
-        + if self.peer_id != Vec::<u8>::new() { 1 + sizeof_len((self.peer_id).len()) } else { 0 }
-        + if self.seq != 0u64 { 1 + sizeof_varint((self.seq) as u64) } else { 0 }
+        + if self.peer_id.is_empty() { 0 } else { 1 + sizeof_len((&self.peer_id).len()) }
+        + if self.seq == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.seq) as u64) }
         + self.addresses.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.peer_id != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.peer_id))?; }
-        if self.seq != 0u64 { w.write_with_tag(16, |w| w.write_uint64(self.seq))?; }
+        if !self.peer_id.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.peer_id))?; }
+        if self.seq != 0u64 { w.write_with_tag(16, |w| w.write_uint64(*&self.seq))?; }
         for s in &self.addresses { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -69,18 +58,9 @@ pub mod mod_PeerRecord {
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default, PartialEq, Clone)]
 pub struct AddressInfo {
     pub multiaddr: Vec<u8>,
-}
-
-
-impl Default for AddressInfo {
-    fn default() -> Self {
-        Self {
-            multiaddr: Vec::<u8>::new(),
-        }
-    }
 }
 
 impl<'a> MessageRead<'a> for AddressInfo {
@@ -100,11 +80,11 @@ impl<'a> MessageRead<'a> for AddressInfo {
 impl MessageWrite for AddressInfo {
     fn get_size(&self) -> usize {
         0
-        + if self.multiaddr != Vec::<u8>::new() { 1 + sizeof_len((self.multiaddr).len()) } else { 0 }
+        + if self.multiaddr.is_empty() { 0 } else { 1 + sizeof_len((&self.multiaddr).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.multiaddr != Vec::<u8>::new() { w.write_with_tag(10, |w| w.write_bytes(&self.multiaddr))?; }
+        if !self.multiaddr.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.multiaddr))?; }
         Ok(())
     }
 }
