@@ -45,7 +45,7 @@
 //!
 //! ## Architectural properties
 //!
-//! - Clean clonable async/await interface ([`Client`]) to interact with the
+//! - Clean clonable async/await interface ([`Client`](network::Client)) to interact with the
 //!   network layer.
 //!
 //! - Single task driving the network layer, no locks required.
@@ -56,7 +56,7 @@
 //!
 //! 1. Run command below in one terminal.
 //!
-//!    ```
+//!    ```sh
 //!    cargo run -- --listen-address /ip4/127.0.0.1/tcp/40837 \
 //!              --secret-key-seed 1 \
 //!              provide \
@@ -66,7 +66,7 @@
 //!
 //! 2. Run command below in another terminal.
 //!
-//!    ```
+//!    ```sh
 //!    cargo run -- --peer /ip4/127.0.0.1/tcp/40837/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X \
 //!              get \
 //!              --name <name-for-others-to-find-your-file>
