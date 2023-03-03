@@ -45,6 +45,13 @@
 
 # `libp2p` facade crate
 
+# 0.50.1
+
+- Pin pre-releases of alpha dependencies (quic, webrtc & tls) to avoid breaking changes.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
