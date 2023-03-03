@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::rpc_proto;
+use crate::rpc_proto::proto;
 use base64::prelude::*;
 use prometheus_client::encoding::EncodeLabelSet;
-use prost::Message;
+use quick_protobuf::Writer;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -47,15 +47,18 @@ impl Hasher for Sha256Hash {
     /// Creates a [`TopicHash`] by SHA256 hashing the topic then base64 encoding the
     /// hash.
     fn hash(topic_string: String) -> TopicHash {
-        let topic_descripter = rpc_proto::TopicDescriptor {
+        use quick_protobuf::MessageWrite;
+
+        let topic_descripter = proto::TopicDescriptor {
             name: Some(topic_string),
             auth: None,
             enc: None,
         };
-        let mut bytes = Vec::with_capacity(topic_descripter.encoded_len());
+        let mut bytes = Vec::with_capacity(topic_descripter.get_size());
+        let mut writer = Writer::new(&mut bytes);
         topic_descripter
-            .encode(&mut bytes)
-            .expect("buffer is large enough");
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
         let hash = BASE64_STANDARD.encode(Sha256::digest(&bytes));
         TopicHash { hash }
     }

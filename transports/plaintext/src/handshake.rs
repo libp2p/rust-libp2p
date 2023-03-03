@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::PlainTextError;
-use crate::structs_proto::Exchange;
+use crate::proto::Exchange;
 use crate::PlainText2Config;
 
 use asynchronous_codec::{Framed, FramedParts};
@@ -27,7 +27,7 @@ use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use libp2p_core::{PeerId, PublicKey};
 use log::{debug, trace};
-use prost::Message;
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use unsigned_varint::codec::UviBytes;
 
@@ -56,10 +56,11 @@ impl HandshakeContext<Local> {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
             pubkey: Some(config.local_public_key.to_protobuf_encoding()),
         };
-        let mut buf = Vec::with_capacity(exchange.encoded_len());
+        let mut buf = Vec::with_capacity(exchange.get_size());
+        let mut writer = Writer::new(&mut buf);
         exchange
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
 
         Self {
             config,
@@ -73,7 +74,8 @@ impl HandshakeContext<Local> {
         self,
         exchange_bytes: BytesMut,
     ) -> Result<HandshakeContext<Remote>, PlainTextError> {
-        let prop = Exchange::decode(exchange_bytes)?;
+        let mut reader = BytesReader::from_bytes(&exchange_bytes);
+        let prop = Exchange::from_reader(&mut reader, &exchange_bytes)?;
 
         let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
         let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;

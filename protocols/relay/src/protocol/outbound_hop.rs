@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto::{hop_message, HopMessage, Peer, Status};
+use crate::proto;
 use crate::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -52,16 +52,16 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = match self {
-            Upgrade::Reserve => HopMessage {
-                r#type: hop_message::Type::Reserve.into(),
+            Upgrade::Reserve => proto::HopMessage {
+                type_pb: proto::HopMessageType::RESERVE,
                 peer: None,
                 reservation: None,
                 limit: None,
                 status: None,
             },
-            Upgrade::Connect { dst_peer_id } => HopMessage {
-                r#type: hop_message::Type::Connect.into(),
-                peer: Some(Peer {
+            Upgrade::Connect { dst_peer_id } => proto::HopMessage {
+                type_pb: proto::HopMessageType::CONNECT,
+                peer: Some(proto::Peer {
                     id: dst_peer_id.to_bytes(),
                     addrs: vec![],
                 }),
@@ -71,12 +71,15 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             },
         };
 
-        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
+        let mut substream = Framed::new(
+            substream,
+            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
+        );
 
         async move {
             substream.send(msg).await?;
-            let HopMessage {
-                r#type,
+            let proto::HopMessage {
+                type_pb,
                 peer: _,
                 reservation,
                 limit,
@@ -86,31 +89,28 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            match r#type {
-                hop_message::Type::Connect => {
+            match type_pb {
+                proto::HopMessageType::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
-                hop_message::Type::Reserve => {
+                proto::HopMessageType::RESERVE => {
                     return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
                 }
-                hop_message::Type::Status => {}
+                proto::HopMessageType::STATUS => {}
             }
-
-            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
-                .ok_or(FatalUpgradeError::ParseStatusField)?;
 
             let limit = limit.map(Into::into);
 
             let output = match self {
                 Upgrade::Reserve => {
-                    match status {
-                        Status::Ok => {}
-                        Status::ReservationRefused => {
+                    match status
+                        .ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))?
+                    {
+                        proto::Status::OK => {}
+                        proto::Status::RESERVATION_REFUSED => {
                             return Err(ReservationFailedReason::Refused.into())
                         }
-                        Status::ResourceLimitExceeded => {
+                        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
                             return Err(ReservationFailedReason::ResourceLimitExceeded.into())
                         }
                         s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
@@ -126,7 +126,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     let addrs = reservation
                         .addrs
                         .into_iter()
-                        .map(TryFrom::try_from)
+                        .map(|b| Multiaddr::try_from(b.to_vec()))
                         .collect::<Result<Vec<Multiaddr>, _>>()
                         .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
 
@@ -153,18 +153,20 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     }
                 }
                 Upgrade::Connect { .. } => {
-                    match status {
-                        Status::Ok => {}
-                        Status::ResourceLimitExceeded => {
+                    match status
+                        .ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))?
+                    {
+                        proto::Status::OK => {}
+                        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
                             return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                         }
-                        Status::ConnectionFailed => {
+                        proto::Status::CONNECTION_FAILED => {
                             return Err(CircuitFailedReason::ConnectionFailed.into())
                         }
-                        Status::NoReservation => {
+                        proto::Status::NO_RESERVATION => {
                             return Err(CircuitFailedReason::NoReservation.into())
                         }
-                        Status::PermissionDenied => {
+                        proto::Status::PERMISSION_DENIED => {
                             return Err(CircuitFailedReason::PermissionDenied.into())
                         }
                         s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
@@ -205,8 +207,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
+impl From<quick_protobuf_codec::Error> for UpgradeError {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -234,7 +236,7 @@ pub enum ReservationFailedReason {
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Expected 'status' field to be set.")]
@@ -256,7 +258,7 @@ pub enum FatalUpgradeError {
     #[error("Failed to parse response type field.")]
     ParseStatusField,
     #[error("Unexpected message status '{0:?}'")]
-    UnexpectedStatus(Status),
+    UnexpectedStatus(proto::Status),
 }
 
 pub enum Output {
