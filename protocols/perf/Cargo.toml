@@ -11,24 +11,22 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+clap = { version = "4.1.6", features = ["derive"] }
+env_logger = "0.10.0"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-# TODO: Needed?
+libp2p-dns = { version = "0.39.0", path = "../../transports/dns", features = ["async-std"] }
+libp2p-noise = { version = "0.42.0", path = "../../transports/noise" }
+libp2p-quic = { version = "0.7.0-alpha.2", path = "../../transports/quic", features = ["async-std"] }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm", features = ["macros", "async-std"] }
+libp2p-tcp = { version = "0.39.0", path = "../../transports/tcp", features = ["async-io"] }
+libp2p-yamux = { version = "0.43.0", path = "../../muxers/yamux" }
+log = "0.4"
 void = "1"
 
 [dev-dependencies]
-env_logger = "0.10.0"
-libp2p-dns = { path = "../../transports/dns", features = ["async-std"] }
-libp2p-noise = { path = "../../transports/noise" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
-libp2p-swarm = { path = "../../swarm", features = ["macros", "async-std"] }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
-libp2p-quic = { path = "../../transports/quic", features = ["async-std"] }
-libp2p-yamux = { path = "../../muxers/yamux" }
-log = "0.4"
 rand = "0.8"
-clap = { version = "4.1.6", features = ["derive"] }
+libp2p-plaintext = { path = "../../transports/plaintext" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
