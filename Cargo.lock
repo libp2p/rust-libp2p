@@ -2373,6 +2373,7 @@ dependencies = [
  "p256 0.12.0",
  "prost",
  "prost-build",
+ "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
  "ring",

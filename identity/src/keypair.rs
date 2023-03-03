@@ -20,7 +20,8 @@
 
 use crate::error::{DecodingError, SigningError};
 use crate::proto;
-use std::convert::TryFrom;
+use quick_protobuf::{BytesReader, Writer};
+use std::convert::{TryFrom};
 
 #[cfg(feature = "ed25519")]
 use crate::ed25519;
@@ -33,10 +34,6 @@ use crate::secp256k1;
 
 #[cfg(feature = "ecdsa")]
 use crate::ecdsa;
-
-use crate::proto;
-use quick_protobuf::{BytesReader, Writer};
-use std::convert::{TryFrom, TryInto};
 
 /// Identity keypair of a node.
 ///
@@ -397,14 +394,11 @@ impl TryFrom<proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
-        let key_type = proto::KeyType::from_i32(pubkey.r#type)
-            .ok_or_else(|| DecodingError::unknown_key_type(pubkey.r#type))?;
-
         #[allow(deprecated)]
-        match key_type {
+        match pubkey.Type {
             #[cfg(feature = "ed25519")]
             proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(&pubkey.data).map(PublicKey::Ed25519)
+                ed25519::PublicKey::decode(&pubkey.Data).map(PublicKey::Ed25519)
             }
             #[cfg(not(feature = "ed25519"))]
             proto::KeyType::Ed25519 => {

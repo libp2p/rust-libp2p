@@ -69,48 +69,48 @@ mod keypair;
 #[cfg(feature = "peerid")]
 mod peer_id;
 
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
     feature = "ed25519",
     feature = "rsa"
 ))]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
-
-    impl zeroize::Zeroize for PrivateKey {
-        fn zeroize(&mut self) {
-            self.r#type.zeroize();
-            self.data.zeroize();
-        }
+impl zeroize::Zeroize for proto::PrivateKey {
+    fn zeroize(&mut self) {
+        self.Data.zeroize();
     }
+}
 
-    impl From<&crate::PublicKey> for PublicKey {
-        fn from(key: &crate::PublicKey) -> Self {
-            #[allow(deprecated)]
-            match key {
-                #[cfg(feature = "ed25519")]
-                crate::PublicKey::Ed25519(key) => PublicKey {
-                    r#type: KeyType::Ed25519 as i32,
-                    data: key.encode().to_vec(),
-                },
-                #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-                crate::PublicKey::Rsa(key) => PublicKey {
-                    r#type: KeyType::Rsa as i32,
-                    data: key.encode_x509(),
-                },
-                #[cfg(feature = "secp256k1")]
-                crate::PublicKey::Secp256k1(key) => PublicKey {
-                    r#type: KeyType::Secp256k1 as i32,
-                    data: key.encode().to_vec(),
-                },
-                #[cfg(feature = "ecdsa")]
-                crate::PublicKey::Ecdsa(key) => PublicKey {
-                    r#type: KeyType::Ecdsa as i32,
-                    data: key.encode_der(),
-                },
-            }
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
+impl From<&PublicKey> for proto::PublicKey {
+    fn from(key: &PublicKey) -> Self {
+        #[allow(deprecated)]
+        match key {
+            #[cfg(feature = "ed25519")]
+            PublicKey::Ed25519(key) => proto::PublicKey {
+                Type: proto::KeyType::Ed25519,
+                Data: key.encode().to_vec(),
+            },
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            PublicKey::Rsa(key) => proto::PublicKey {
+                Type: proto::KeyType::RSA,
+                Data: key.encode_x509(),
+            },
+            #[cfg(feature = "secp256k1")]
+            PublicKey::Secp256k1(key) => proto::PublicKey {
+                Type: proto::KeyType::Secp256k1,
+                Data: key.encode().to_vec(),
+            },
+            #[cfg(feature = "ecdsa")]
+            PublicKey::Ecdsa(key) => proto::PublicKey {
+                Type: proto::KeyType::ECDSA,
+                Data: key.encode_der(),
+            },
         }
     }
 }

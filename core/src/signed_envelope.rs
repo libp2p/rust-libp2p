@@ -1,4 +1,4 @@
-use crate::DecodeError;
+use crate::{DecodeError, proto};
 use libp2p_identity::SigningError;
 use libp2p_identity::{Keypair, PublicKey};
 use std::fmt;
