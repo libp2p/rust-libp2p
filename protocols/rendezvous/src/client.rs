@@ -30,11 +30,12 @@ use futures::stream::StreamExt;
 use instant::Duration;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
-use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{Endpoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionId, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
@@ -168,19 +169,51 @@ impl NetworkBehaviour for Behaviour {
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
-
-        SubstreamConnectionHandler::new_outbound_only(initial_keep_alive)
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_outbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        let addresses = self
+            .discovered_peers
             .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == peer).then_some(addresses))
+            .filter_map(|((candidate, _), addresses)| (candidate == &peer).then_some(addresses))
             .flatten()
             .cloned()
-            .collect()
+            .collect();
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_outbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
     fn on_connection_handler_event(

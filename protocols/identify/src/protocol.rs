@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::structs_proto;
+use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
@@ -169,18 +169,18 @@ where
 
     let pubkey_bytes = info.public_key.to_protobuf_encoding();
 
-    let message = structs_proto::Identify {
-        agent_version: Some(info.agent_version),
-        protocol_version: Some(info.protocol_version),
-        public_key: Some(pubkey_bytes),
-        listen_addrs,
-        observed_addr: Some(info.observed_addr.to_vec()),
+    let message = proto::Identify {
+        agentVersion: Some(info.agent_version),
+        protocolVersion: Some(info.protocol_version),
+        publicKey: Some(pubkey_bytes),
+        listenAddrs: listen_addrs,
+        observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols,
     };
 
     let mut framed_io = FramedWrite::new(
         io,
-        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+        quick_protobuf_codec::Codec::<proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
     );
 
     framed_io.send(message).await?;
@@ -200,7 +200,7 @@ where
 
     let info = FramedRead::new(
         socket,
-        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+        quick_protobuf_codec::Codec::<proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
     )
     .next()
     .await
@@ -212,17 +212,17 @@ where
     Ok(info)
 }
 
-impl TryFrom<structs_proto::Identify> for Info {
+impl TryFrom<proto::Identify> for Info {
     type Error = UpgradeError;
 
-    fn try_from(msg: structs_proto::Identify) -> Result<Self, Self::Error> {
+    fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
         fn parse_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, multiaddr::Error> {
             Multiaddr::try_from(bytes)
         }
 
         let listen_addrs = {
             let mut addrs = Vec::new();
-            for addr in msg.listen_addrs.into_iter() {
+            for addr in msg.listenAddrs.into_iter() {
                 match parse_multiaddr(addr) {
                     Ok(a) => addrs.push(a),
                     Err(e) => {
@@ -233,9 +233,9 @@ impl TryFrom<structs_proto::Identify> for Info {
             addrs
         };
 
-        let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())?;
+        let public_key = PublicKey::from_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
 
-        let observed_addr = match parse_multiaddr(msg.observed_addr.unwrap_or_default()) {
+        let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,
             Err(e) => {
                 debug!("Unable to parse multiaddr: {e:?}");
@@ -244,8 +244,8 @@ impl TryFrom<structs_proto::Identify> for Info {
         };
         let info = Info {
             public_key,
-            protocol_version: msg.protocol_version.unwrap_or_default(),
-            agent_version: msg.agent_version.unwrap_or_default(),
+            protocol_version: msg.protocolVersion.unwrap_or_default(),
+            agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
             protocols: msg.protocols,
             observed_addr,
@@ -258,7 +258,7 @@ impl TryFrom<structs_proto::Identify> for Info {
 #[derive(Debug, Error)]
 pub enum UpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("I/O interaction failed")]
     Io(#[from] io::Error),
     #[error("Stream closed")]
@@ -375,13 +375,13 @@ mod tests {
             a
         };
 
-        let payload = structs_proto::Identify {
-            agent_version: None,
-            listen_addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
-            observed_addr: None,
-            protocol_version: None,
+        let payload = proto::Identify {
+            agentVersion: None,
+            listenAddrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
+            observedAddr: None,
+            protocolVersion: None,
             protocols: vec![],
-            public_key: Some(
+            publicKey: Some(
                 identity::Keypair::generate_ed25519()
                     .public()
                     .to_protobuf_encoding(),
