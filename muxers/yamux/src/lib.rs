@@ -26,6 +26,7 @@ use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
+use std::io::{IoSlice, IoSliceMut};
 use std::task::Waker;
 use std::{
     fmt, io, iter,
@@ -47,7 +48,7 @@ pub struct Yamux<S> {
     ///
     /// This buffer stores inbound streams that are created whilst [`StreamMuxer::poll`] is called.
     /// Once the buffer is full, new inbound streams are dropped.
-    inbound_stream_buffer: VecDeque<yamux::Stream>,
+    inbound_stream_buffer: VecDeque<Stream>,
     /// Waker to be called when new inbound streams are available.
     inbound_stream_waker: Option<Waker>,
 }
@@ -80,7 +81,7 @@ impl<S> StreamMuxer for Yamux<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
-    type Substream = yamux::Stream;
+    type Substream = Stream;
     type Error = YamuxError;
 
     fn poll_inbound(
@@ -102,7 +103,7 @@ where
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let stream = ready!(self.connection.poll_new_outbound(cx)?);
 
-        Poll::Ready(Ok(stream))
+        Poll::Ready(Ok(Stream(stream)))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<YamuxResult<()>> {
@@ -120,7 +121,7 @@ where
         let inbound_stream = ready!(this.poll_inner(cx))?;
 
         if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
-            log::warn!("dropping {inbound_stream} because buffer is full");
+            log::warn!("dropping {} because buffer is full", inbound_stream.0);
             drop(inbound_stream);
         } else {
             this.inbound_stream_buffer.push_back(inbound_stream);
@@ -140,12 +141,12 @@ impl<S> Yamux<S>
 where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
-    fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<yamux::Stream, YamuxError>> {
+    fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, YamuxError>> {
         let stream = ready!(self.connection.poll_next_inbound(cx))
             .transpose()?
             .ok_or(YamuxError(ConnectionError::Closed))?;
 
-        Poll::Ready(Ok(stream))
+        Poll::Ready(Ok(Stream(stream)))
     }
 }
 
@@ -238,6 +239,53 @@ impl YamuxConfig {
     pub fn set_window_update_mode(&mut self, mode: WindowUpdateMode) -> &mut Self {
         self.inner.set_window_update_mode(mode.0);
         self
+    }
+}
+
+/// A stream produced by the yamux multiplexer.
+pub struct Stream(yamux::Stream);
+
+impl AsyncRead for Stream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+
+    fn poll_read_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_read_vectored(cx, bufs)
+    }
+}
+
+impl AsyncWrite for Stream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_close(cx)
     }
 }
 
