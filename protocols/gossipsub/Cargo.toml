@@ -24,8 +24,8 @@ log = "0.4.11"
 sha2 = "0.10.0"
 base64 = "0.21.0"
 smallvec = "1.6.1"
-prost = "0.11"
-prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
+quick-protobuf = "0.8"
+quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
 hex_fmt = "0.3.0"
 regex = "1.5.5"
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -45,9 +45,6 @@ libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-swarm = { path = "../../swarm" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-
-[build-dependencies]
-prost-build = "0.11"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

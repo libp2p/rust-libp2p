@@ -146,7 +146,7 @@ members = [
     "misc/multistream-select",
     "misc/rw-stream-sink",
     "misc/keygen",
-    "misc/prost-codec",
+    "misc/quick-protobuf-codec",
     "misc/quickcheck-ext",
     "muxers/mplex",
     "muxers/yamux",
