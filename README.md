@@ -79,6 +79,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 (In alphabetical order.)
 
 - Elena Frank ([@elenaf9](https://github.com/elenaf9/))
+- João Oliveira ([@jxs](https://github.com/jxs))
 - Max Inden ([@mxinden](https://github.com/mxinden/))
 - Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
@@ -100,3 +101,4 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
+- [Ursa](https://github.com/fleek-network/ursa) - Decentralized Content Delivery & Edge Compute.

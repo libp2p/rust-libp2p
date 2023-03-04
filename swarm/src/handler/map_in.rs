@@ -19,9 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
-    SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
@@ -65,8 +63,7 @@ where
 
     fn on_behaviour_event(&mut self, event: TNewIn) {
         if let Some(event) = (self.map)(event) {
-            #[allow(deprecated)]
-            self.inner.inject_event(event);
+            self.inner.on_behaviour_event(event);
         }
     }
 
@@ -97,35 +94,6 @@ where
             Self::OutboundOpenInfo,
         >,
     ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, info }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_fully_negotiated_inbound(protocol, info)
-            }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol,
-                info,
-            }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_fully_negotiated_outbound(protocol, info)
-            }
-            ConnectionEvent::AddressChange(AddressChange { new_address }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_address_change(new_address)
-            }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_dial_upgrade_error(info, error)
-            }
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info, error }) =>
-            {
-                #[allow(deprecated)]
-                self.inner.inject_listen_upgrade_error(info, error)
-            }
-        }
+        self.inner.on_connection_event(event);
     }
 }

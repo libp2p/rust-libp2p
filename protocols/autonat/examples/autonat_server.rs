@@ -95,7 +95,10 @@ impl Behaviour {
             )),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::Config::default(),
+                autonat::Config {
+                    only_global_ips: false,
+                    ..Default::default()
+                },
             ),
         }
     }

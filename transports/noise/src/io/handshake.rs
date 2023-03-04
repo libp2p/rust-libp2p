@@ -20,19 +20,20 @@
 
 //! Noise protocol handshake I/O.
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod payload_proto {
-    include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
+mod proto {
+    include!("../generated/mod.rs");
+    pub use self::payload::proto::NoiseHandshakePayload;
 }
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
+#[allow(deprecated)]
 use crate::LegacyConfig;
 use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_core::identity;
-use prost::Message;
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
 
 /// The identity of the remote established during a handshake.
@@ -77,6 +78,7 @@ pub struct State<T> {
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
     /// Legacy configuration parameters.
+    #[allow(deprecated)]
     legacy: LegacyConfig,
 }
 
@@ -86,6 +88,7 @@ impl<T> State<T> {
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
+    #[allow(deprecated)]
     pub fn new(
         io: T,
         session: snow::HandshakeState,
@@ -175,8 +178,10 @@ where
 {
     let msg = recv(state).await?;
 
-    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
+    let mut reader = BytesReader::from_bytes(&msg[..]);
+    let mut pb_result = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]);
 
+    #[allow(deprecated)]
     if pb_result.is_err() && state.legacy.recv_legacy_handshake {
         // NOTE: This is support for legacy handshake payloads. As long as
         // the frame length is less than 256 bytes, which is the case for
@@ -196,7 +201,8 @@ where
                 // frame length, because each length is encoded as a `u16`.
                 if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
                     log::debug!("Attempting fallback legacy protobuf decoding.");
-                    payload_proto::NoiseHandshakePayload::decode(&msg[2..])
+                    let mut reader = BytesReader::from_bytes(&msg[2..]);
+                    proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[2..])
                 } else {
                     Err(e)
                 }
@@ -229,7 +235,7 @@ pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::NoiseHandshakePayload {
+    let mut pb = proto::NoiseHandshakePayload {
         identity_key: state.identity.public.to_protobuf_encoding(),
         ..Default::default()
     };
@@ -238,16 +244,17 @@ where
         pb.identity_sig = sig.clone()
     }
 
+    #[allow(deprecated)]
     let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+        let mut msg = Vec::with_capacity(2 + pb.get_size());
+        msg.extend_from_slice(&(pb.get_size() as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        Vec::with_capacity(pb.get_size())
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    let mut writer = Writer::new(&mut msg);
+    pb.write_message(&mut writer).expect("Encoding to succeed");
     state.io.send(&msg).await?;
 
     Ok(())
@@ -258,22 +265,23 @@ pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseErr
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::NoiseHandshakePayload::default();
+    let mut pb = proto::NoiseHandshakePayload::default();
 
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
     }
 
+    #[allow(deprecated)]
     let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+        let mut msg = Vec::with_capacity(2 + pb.get_size());
+        msg.extend_from_slice(&(pb.get_size() as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        Vec::with_capacity(pb.get_size())
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    let mut writer = Writer::new(&mut msg);
+    pb.write_message(&mut writer).expect("Encoding to succeed");
     state.io.send(&msg).await?;
 
     Ok(())

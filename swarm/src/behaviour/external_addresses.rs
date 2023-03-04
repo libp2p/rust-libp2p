@@ -1,4 +1,5 @@
 use crate::behaviour::{ExpiredExternalAddr, FromSwarm, NewExternalAddr};
+#[allow(deprecated)]
 use crate::IntoConnectionHandler;
 use libp2p_core::Multiaddr;
 use std::collections::HashSet;
@@ -31,7 +32,8 @@ impl ExternalAddresses {
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
-    pub fn on_swarn_event<THandler>(&mut self, event: &FromSwarm<THandler>)
+    #[allow(deprecated)]
+    pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>)
     where
         THandler: IntoConnectionHandler,
     {
@@ -42,7 +44,7 @@ impl ExternalAddresses {
                 }
             }
             FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr, .. }) => {
-                self.addresses.insert((*addr).clone());
+                self.addresses.remove(addr);
             }
             _ => {}
         }

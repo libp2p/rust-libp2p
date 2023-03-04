@@ -43,6 +43,72 @@ use std::{
 };
 
 /// A Websocket transport.
+///
+/// DO NOT wrap this transport with a DNS transport if you want Secure Websockets to work.
+///
+/// A Secure Websocket transport needs to wrap DNS transport to resolve domain names after
+/// they are checked against the remote certificates. Use a combination of DNS and TCP transports
+/// to build a Secure Websocket transport.
+///
+/// If you don't need Secure Websocket's support, use a plain TCP transport as an inner transport.
+///
+/// # Examples
+///
+/// Secure Websocket transport:
+///
+/// ```
+/// # use futures::future;
+/// # use libp2p_core::Transport;
+/// # use libp2p_dns as dns;
+/// # use libp2p_tcp as tcp;
+/// # use libp2p_websocket as websocket;
+/// # use rcgen::generate_simple_self_signed;
+/// # use std::pin::Pin;
+/// #
+/// # #[async_std::main]
+/// # async fn main() {
+///
+/// let mut transport = websocket::WsConfig::new(dns::DnsConfig::system(
+///     tcp::async_io::Transport::new(tcp::Config::default()),
+/// ).await.unwrap());
+///
+/// let rcgen_cert = generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+/// let priv_key = websocket::tls::PrivateKey::new(rcgen_cert.serialize_private_key_der());
+/// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
+/// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
+///
+/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
+///
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+/// println!("Listening on {addr}");
+///
+/// # }
+/// ```
+///
+/// Plain Websocket transport:
+///
+/// ```
+/// # use futures::future;
+/// # use libp2p_core::Transport;
+/// # use libp2p_dns as dns;
+/// # use libp2p_tcp as tcp;
+/// # use libp2p_websocket as websocket;
+/// # use std::pin::Pin;
+/// #
+/// # #[async_std::main]
+/// # async fn main() {
+///
+/// let mut transport = websocket::WsConfig::new(
+///     tcp::async_io::Transport::new(tcp::Config::default()),
+/// );
+///
+/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+///
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+/// println!("Listening on {addr}");
+///
+/// # }
+/// ```
 #[derive(Debug)]
 pub struct WsConfig<T: Transport>
 where

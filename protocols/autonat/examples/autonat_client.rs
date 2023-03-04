@@ -116,6 +116,7 @@ impl Behaviour {
                     refresh_interval: Duration::from_secs(30),
                     boot_delay: Duration::from_secs(5),
                     throttle_server_period: Duration::ZERO,
+                    only_global_ips: false,
                     ..Default::default()
                 },
             ),

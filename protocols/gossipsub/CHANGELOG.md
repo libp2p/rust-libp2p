@@ -1,8 +1,26 @@
-# 0.44.0 [unreleased]
+# 0.44.0
+
+- Update to `prometheus-client` `v0.19.0`. See [PR 3207].
 
 - Update to `libp2p-core` `v0.39.0`.
 
 - Update to `libp2p-swarm` `v0.42.0`.
+
+- Initialize `ProtocolConfig` via `GossipsubConfig`. See [PR 3381].
+
+- Rename types as per [discussion 2174].
+  `Gossipsub` has been renamed to `Behaviour`.
+  The `Gossipsub` prefix has been removed from various types like `GossipsubConfig` or `GossipsubMessage`.
+  It is preferred to import the gossipsub protocol as a module (`use libp2p::gossipsub;`), and refer to its types via `gossipsub::`.
+  For example: `gossipsub::Behaviour` or `gossipsub::RawMessage`. See [PR 3303].
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
+[PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
+[PR 3303]: https://github.com/libp2p/rust-libp2p/pull/3303/
+[PR 3381]: https://github.com/libp2p/rust-libp2p/pull/3381/
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.43.0
 

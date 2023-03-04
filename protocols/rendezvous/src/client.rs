@@ -22,32 +22,28 @@ use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, 
 use crate::handler;
 use crate::handler::outbound;
 use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::SubstreamConnectionHandler;
+use crate::substream_handler::{InEvent, SubstreamConnectionHandler};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use instant::Duration;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
-use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{Endpoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
+use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<
-            Event,
-            SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-        >,
-    >,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent<outbound::OpenInfo, Void, Void>>>,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 
@@ -173,26 +169,58 @@ impl NetworkBehaviour for Behaviour {
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
-
-        SubstreamConnectionHandler::new_outbound_only(initial_keep_alive)
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_outbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        let addresses = self
+            .discovered_peers
             .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == peer).then_some(addresses))
+            .filter_map(|((candidate, _), addresses)| (candidate == &peer).then_some(addresses))
             .flatten()
             .cloned()
-            .collect()
+            .collect();
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_outbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: handler::OutboundOutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         let new_events = match event {
             handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
@@ -220,7 +248,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -270,7 +298,7 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarn_event(&event);
+        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionEstablished(_)
@@ -294,12 +322,7 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<
-    NetworkBehaviourAction<
-        Event,
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-    >,
-> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {

@@ -94,7 +94,7 @@ impl SubstreamHandler for Stream {
         }))
     }
 
-    fn inject_event(self, event: Self::InEvent) -> Self {
+    fn on_event(self, event: Self::InEvent) -> Self {
         void::unreachable(event)
     }
 
