@@ -39,9 +39,9 @@ use void::Void;
 
 mod error;
 mod handshake;
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod structs_proto {
-    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::structs::Exchange;
 }
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
