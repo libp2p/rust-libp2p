@@ -95,7 +95,7 @@ fn perf() {
                 SwarmEvent::IncomingConnection { .. } => panic!(),
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Dialing(_) => {}
-                SwarmEvent::Behaviour(client::behaviour::Event::Finished { stats: _ }) => break,
+                SwarmEvent::Behaviour(client::behaviour::Event { result: Ok(_), .. }) => break,
                 e => panic!("{e:?}"),
             }
         }

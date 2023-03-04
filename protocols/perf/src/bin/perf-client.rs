@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         },
     )?;
 
-    let (id, result) = block_on(async {
+    let result = block_on(async {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished {
@@ -110,8 +110,8 @@ fn main() -> Result<()> {
                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
-                SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id, result }) => {
-                    break (id, result)
+                SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id: _, result }) => {
+                    break result
                 }
                 e => panic!("{e:?}"),
             }
