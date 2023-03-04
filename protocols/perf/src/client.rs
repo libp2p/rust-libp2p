@@ -55,7 +55,7 @@ static NEXT_RUN_ID: AtomicUsize = AtomicUsize::new(1);
 pub struct RunId(usize);
 
 impl RunId {
-    /// Returns the next available [`ConnectionId`].
+    /// Returns the next available [`RunId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_RUN_ID.fetch_add(1, Ordering::SeqCst))
     }
