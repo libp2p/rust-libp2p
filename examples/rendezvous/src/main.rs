@@ -39,9 +39,9 @@
 use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
-    identify, identity, ping, rendezvous,
+    identify, identity, noise, ping, rendezvous,
     swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
-    PeerId, Transport,
+    tcp, yamux, PeerId, Transport,
 };
 use std::time::Duration;
 
@@ -52,10 +52,10 @@ async fn main() {
     let key_pair = identity::Keypair::generate_ed25519();
 
     let mut swarm = Swarm::with_tokio_executor(
-        libp2p::tcp::tokio::Transport::default()
+        tcp::tokio::Transport::default()
             .upgrade(Version::V1)
-            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&key_pair).unwrap())
-            .multiplex(libp2p::yamux::YamuxConfig::default())
+            .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
+            .multiplex(yamux::YamuxConfig::default())
             .boxed(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
