@@ -26,8 +26,12 @@ use std::{
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
+    handler::{
+        ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+        ListenUpgradeError,
+    },
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use void::Void;
 
@@ -97,7 +101,17 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 void::unreachable(info)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
+                match error {
+                    ConnectionHandlerUpgrErr::Timeout => {}
+                    ConnectionHandlerUpgrErr::Timer => {}
+                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
+                        libp2p_core::UpgradeError::Select(_) => {}
+                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
+                    },
+                }
+            }
         }
     }
 
