@@ -126,16 +126,16 @@ impl NetworkBehaviour for Behaviour {
                     assert!(self.connected.remove(&peer_id));
                 }
             }
-            FromSwarm::AddressChange(_) => todo!(),
-            FromSwarm::DialFailure(_) => todo!(),
-            FromSwarm::ListenFailure(_) => todo!(),
-            FromSwarm::NewListener(_) => todo!(),
-            FromSwarm::NewListenAddr(_) => todo!(),
-            FromSwarm::ExpiredListenAddr(_) => todo!(),
-            FromSwarm::ListenerError(_) => todo!(),
-            FromSwarm::ListenerClosed(_) => todo!(),
-            FromSwarm::NewExternalAddr(_) => todo!(),
-            FromSwarm::ExpiredExternalAddr(_) => todo!(),
+            FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
