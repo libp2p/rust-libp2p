@@ -88,7 +88,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_connection_handler_event(
         &mut self,
-        _event_source: PeerId,
+        event_source: PeerId,
         _connection_id: ConnectionId,
         handler_event: THandlerOutEvent<Self>,
     ) {
@@ -96,7 +96,7 @@ impl NetworkBehaviour for Behaviour {
             super::handler::Event::Finished { stats } => {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
-                        remote_peer_id: _event_source,
+                        remote_peer_id: event_source,
                         stats,
                     }))
             }

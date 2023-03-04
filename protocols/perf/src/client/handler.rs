@@ -117,19 +117,16 @@ impl ConnectionHandler for Handler {
             }) => void::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
-                info,
-            }) => match info {
-                Command { params, id } => {
-                    self.outbound.push(
-                        crate::protocol::send_receive(params, protocol)
-                            .map_ok(move |timers| Event {
-                                id,
-                                result: Ok(RunStats { params, timers }),
-                            })
-                            .boxed(),
-                    );
-                }
-            },
+                info: Command { params, id },
+            }) => self.outbound.push(
+                crate::protocol::send_receive(params, protocol)
+                    .map_ok(move |timers| Event {
+                        id,
+                        result: Ok(RunStats { params, timers }),
+                    })
+                    .boxed(),
+            ),
+
             ConnectionEvent::AddressChange(_) => {}
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 info: Command { id, .. },

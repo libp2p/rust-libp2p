@@ -122,20 +122,17 @@ fn main() -> Result<()> {
 
     let sent_mebibytes = stats.params.to_send as f64 / 1024.0 / 1024.0;
     let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();
-    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) as f64 / sent_time;
+    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
 
     let received_mebibytes = stats.params.to_receive as f64 / 1024.0 / 1024.0;
     let receive_time = (stats.timers.read_done - stats.timers.write_done).as_secs_f64();
-    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) as f64 / receive_time;
+    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
     println!(
-        "Finished run: Sent {} MiB in {} s with {} MiBit/s and received {} MiB in {} s with {} MiBit/s",
-        sent_mebibytes,
-        sent_time,
-        sent_bandwidth_mebibit_second,
-        received_mebibytes,
-        receive_time,
-        receive_bandwidth_mebibit_second
+        "Finished run: Sent {sent_mebibytes} MiB in {sent_time} s with \
+         {sent_bandwidth_mebibit_second} MiBit/s and received \
+         {received_mebibytes} MiB in {receive_time} s with \
+         {receive_bandwidth_mebibit_second} MiBit/s",
     );
 
     Ok(())

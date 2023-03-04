@@ -56,13 +56,11 @@ fn perf() {
             .multiplex(YamuxConfig::default())
             .boxed();
 
-        let client = Swarm::without_executor(
+        Swarm::without_executor(
             transport,
             client::behaviour::Behaviour::new(),
             local_peer_id,
-        );
-
-        client
+        )
     };
 
     client.dial(server_address).unwrap();
@@ -71,7 +69,7 @@ fn perf() {
             match client.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => return peer_id,
                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    panic!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                    panic!("Outgoing connection error to {peer_id:?}: {error:?}");
                 }
                 e => panic!("{e:?}"),
             }

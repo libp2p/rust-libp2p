@@ -70,7 +70,7 @@ impl Behaviour {
                 event: crate::client::handler::Command { id, params },
             });
 
-        return Ok(id);
+        Ok(id)
     }
 }
 
@@ -143,14 +143,10 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _event_source: PeerId,
         _connection_id: ConnectionId,
-        handler_event: THandlerOutEvent<Self>,
+        super::handler::Event { id, result }: THandlerOutEvent<Self>,
     ) {
-        match handler_event {
-            super::handler::Event { id, result } => {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event { id, result }));
-            }
-        }
+        self.queued_events
+            .push_back(NetworkBehaviourAction::GenerateEvent(Event { id, result }));
     }
 
     fn poll(
