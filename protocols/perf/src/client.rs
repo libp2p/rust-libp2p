@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::time::Instant;
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
+};
 
 pub mod behaviour;
 mod handler;
@@ -43,4 +46,17 @@ pub struct RunTimers {
 pub struct RunStats {
     pub params: RunParams,
     pub timers: RunTimers,
+}
+
+static NEXT_RUN_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RunId(usize);
+
+impl RunId {
+    /// Returns the next available [`ConnectionId`].
+    pub(crate) fn next() -> Self {
+        Self(NEXT_RUN_ID.fetch_add(1, Ordering::SeqCst))
+    }
 }

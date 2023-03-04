@@ -28,19 +28,23 @@ use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt,
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
+use void::Void;
 
-use super::{RunParams, RunStats};
+use super::{RunId, RunParams, RunStats};
 
 #[derive(Debug)]
-pub enum Event {
-    Finished { stats: RunStats },
+pub struct Command {
+    pub(crate) id: RunId,
+    pub(crate) params: RunParams,
 }
 
 #[derive(Debug)]
-pub enum Command {
-    Start { params: RunParams },
+pub struct Event {
+    pub(crate) id: RunId,
+    pub(crate) result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
 }
 
 pub struct Handler {
@@ -54,7 +58,7 @@ pub struct Handler {
         >,
     >,
 
-    outbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
+    outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
 
     keep_alive: KeepAlive,
 }
@@ -112,18 +116,27 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info,
             }) => match info {
-                Command::Start { params } => {
+                Command { params, id } => {
                     self.outbound.push(
                         crate::protocol::send_receive(params, protocol)
-                            .map_ok(move |timers| RunStats { params, timers })
+                            .map_ok(move |timers| Event {
+                                id,
+                                result: Ok(RunStats { params, timers }),
+                            })
                             .boxed(),
                     );
                 }
             },
-            ConnectionEvent::AddressChange(_) => todo!(),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => {
-                panic!("{error:?}")
-            }
+            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                info: Command { id, .. },
+                error,
+            }) => self
+                .queued_events
+                .push_back(ConnectionHandlerEvent::Custom(Event {
+                    id,
+                    result: Err(error),
+                })),
             ConnectionEvent::ListenUpgradeError(_) => todo!(),
         }
     }
@@ -150,9 +163,7 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(stats) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished { stats }))
-                }
+                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::Custom(event)),
                 Err(e) => {
                     panic!("{e:?}")
                 }

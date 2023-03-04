@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         },
     )?;
 
-    let stats = block_on(async {
+    let (id, result) = block_on(async {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished {
@@ -110,13 +110,15 @@ fn main() -> Result<()> {
                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
-                SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event::Finished {
-                    stats,
-                }) => break stats,
+                SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id, result }) => {
+                    break (id, result)
+                }
                 e => panic!("{e:?}"),
             }
         }
     });
+
+    let stats = result?;
 
     let sent_mebibytes = stats.params.to_send as f64 / 1024.0 / 1024.0;
     let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();

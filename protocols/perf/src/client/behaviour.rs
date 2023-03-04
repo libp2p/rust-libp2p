@@ -27,18 +27,20 @@ use std::{
 
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
-    THandlerOutEvent,
+    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionHandlerUpgrErr,
+    ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent, THandlerOutEvent,
 };
+use void::Void;
 
 use crate::client::handler::Handler;
 
-use super::{RunParams, RunStats};
+use super::{RunId, RunParams, RunStats};
 
 #[derive(Debug)]
-pub enum Event {
-    Finished { stats: RunStats },
+pub struct Event {
+    pub id: RunId,
+    pub result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
 }
 
 #[derive(Default)]
@@ -54,19 +56,21 @@ impl Behaviour {
         Self::default()
     }
 
-    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<(), PerfError> {
+    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<RunId, PerfError> {
         if !self.connected.contains(&server) {
             return Err(PerfError::NotConnected);
         }
+
+        let id = RunId::next();
 
         self.queued_events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: server,
                 handler: NotifyHandler::Any,
-                event: crate::client::handler::Command::Start { params },
+                event: crate::client::handler::Command { id, params },
             });
 
-        return Ok(());
+        return Ok(id);
     }
 }
 
@@ -142,11 +146,9 @@ impl NetworkBehaviour for Behaviour {
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
-            super::handler::Event::Finished { stats } => {
+            super::handler::Event { id, result } => {
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
-                        stats,
-                    }));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event { id, result }));
             }
         }
     }
