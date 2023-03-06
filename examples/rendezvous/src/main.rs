@@ -22,7 +22,7 @@
 ///
 /// 1. Run the rendezvous server:
 ///     ```
-///     RUST_LOG=info cargo run --bin rendezvous
+///     RUST_LOG=info cargo run --bin rendezvous-example
 ///     ```
 /// 2. Register a peer:
 ///     ```

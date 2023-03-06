@@ -23,9 +23,9 @@ use libp2p::{
     core::transport::upgrade::Version,
     identity,
     multiaddr::Protocol,
-    ping, rendezvous,
+    noise, ping, rendezvous,
     swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
-    Multiaddr, PeerId, Transport,
+    tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
 
@@ -42,10 +42,10 @@ async fn main() {
         .unwrap();
 
     let mut swarm = Swarm::with_tokio_executor(
-        libp2p::tcp::tokio::Transport::default()
+        tcp::tokio::Transport::default()
             .upgrade(Version::V1)
-            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&key_pair).unwrap())
-            .multiplex(libp2p::yamux::YamuxConfig::default())
+            .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
+            .multiplex(yamux::YamuxConfig::default())
             .boxed(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
