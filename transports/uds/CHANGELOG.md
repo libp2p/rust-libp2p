@@ -1,3 +1,7 @@
+# 0.38.0
+
+- Update to `libp2p-core` `v0.39.0`.
+
 # 0.37.0
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].

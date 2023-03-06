@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
+use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
 use crate::{HandlerError, ValidationError};
 use asynchronous_codec::Framed;
@@ -67,7 +68,7 @@ pub enum HandlerEvent {
 #[derive(Debug)]
 pub enum HandlerIn {
     /// A gossipsub message to send.
-    Message(crate::rpc_proto::Rpc),
+    Message(proto::RPC),
     /// The peer has joined the mesh.
     JoinedMesh,
     /// The peer has left the mesh.
@@ -93,7 +94,7 @@ pub struct Handler {
     inbound_substream: Option<InboundSubstreamState>,
 
     /// Queue of values that we want to send to the remote.
-    send_queue: SmallVec<[crate::rpc_proto::Rpc; 16]>,
+    send_queue: SmallVec<[proto::RPC; 16]>,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -149,10 +150,7 @@ enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(
-        Framed<NegotiatedSubstream, GossipsubCodec>,
-        crate::rpc_proto::Rpc,
-    ),
+    PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, proto::RPC),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// The substream is being closed. Used by either substream.
@@ -251,7 +249,7 @@ impl ConnectionHandler for Handler {
     type Error = HandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = crate::rpc_proto::Rpc;
+    type OutboundOpenInfo = proto::RPC;
     type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
