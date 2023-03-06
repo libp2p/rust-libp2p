@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{PeerKind, RawMessage, Rpc};
-use crate::{GossipsubCodec, ProtocolConfig};
 use crate::{HandlerError, ValidationError};
 use asynchronous_codec::Framed;
 use futures::prelude::*;
@@ -84,6 +85,7 @@ const MAX_SUBSTREAM_CREATION: usize = 5;
 /// Protocol Handler that manages a single long-lived substream with a peer.
 pub struct Handler {
     /// Upgrade configuration for the gossipsub protocol.
+    #[allow(deprecated)]
     listen_protocol: SubstreamProtocol<ProtocolConfig, ()>,
 
     /// The single long-lived outbound substream.
@@ -135,6 +137,7 @@ pub struct Handler {
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
+#[allow(deprecated)]
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
     WaitingInput(Framed<NegotiatedSubstream, GossipsubCodec>),
@@ -145,6 +148,7 @@ enum InboundSubstreamState {
 }
 
 /// State of the outbound substream, opened either by us or by the remote.
+#[allow(deprecated)]
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
     WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
@@ -161,6 +165,7 @@ enum OutboundSubstreamState {
     Poisoned,
 }
 
+#[allow(deprecated)]
 impl Handler {
     /// Builds a new [`Handler`].
     pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
@@ -245,6 +250,7 @@ impl Handler {
     }
 }
 
+#[allow(deprecated)]
 impl ConnectionHandler for Handler {
     type InEvent = HandlerIn;
     type OutEvent = HandlerEvent;

@@ -54,7 +54,9 @@ use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol_priv::{ProtocolConfig, SIGNING_PREFIX};
+
+#[allow(deprecated)]
+use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
@@ -453,6 +455,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<D, F> Behaviour<D, F>
 where
     D: DataTransform + Send + 'static,
@@ -3282,6 +3285,7 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     })
 }
 
+#[allow(deprecated)]
 impl<C, F> NetworkBehaviour for Behaviour<C, F>
 where
     C: Send + 'static + DataTransform,
@@ -3687,6 +3691,7 @@ impl fmt::Debug for PublishConfig {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod local_test {
     use super::*;
     use crate::IdentTopic;
