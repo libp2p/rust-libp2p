@@ -269,6 +269,7 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
+            #[allow(deprecated)]
             let dummy_handler =
                 Handler::new(ProtocolConfig::new(&Config::default()), Duration::ZERO);
 

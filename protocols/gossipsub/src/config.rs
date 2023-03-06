@@ -884,6 +884,7 @@ impl std::fmt::Debug for Config {
 #[cfg(test)]
 mod test {
     use super::*;
+    #[allow(deprecated)]
     use crate::protocol::ProtocolConfig;
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
@@ -979,6 +980,7 @@ mod test {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn create_config_with_protocol_id_prefix() {
         let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
@@ -1003,6 +1005,7 @@ mod test {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn create_config_with_custom_protocol_id() {
         let builder: Config = ConfigBuilder::default()
             .protocol_id("purple", Version::V1_0)
