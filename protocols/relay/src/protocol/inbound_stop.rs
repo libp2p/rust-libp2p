@@ -61,17 +61,16 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type = proto::StopMessageType::from(type_pb.ok_or(FatalUpgradeError::MissingTypeField)?);
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
             match r#type {
                 proto::StopMessageType::CONNECT => {
-                    let src_peer_id =
-                        PeerId::from_bytes(
-                            &peer
-                                .ok_or(FatalUpgradeError::MissingPeer)?
-                                .id
-                                .ok_or(FatalUpgradeError::MissingPeer)?
-                            )
-                            .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    let src_peer_id = PeerId::from_bytes(
+                        &peer
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::MissingPeer)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Circuit {
                         substream,
                         src_peer_id,

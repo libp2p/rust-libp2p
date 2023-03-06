@@ -86,7 +86,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type = proto::StopMessageType::from(type_pb.ok_or(FatalUpgradeError::MissingTypeField)?);
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
             match r#type {
                 proto::StopMessageType::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())

@@ -68,7 +68,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type = proto::HopMessageType::from(type_pb.ok_or(FatalUpgradeError::MissingTypeField)?);
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
             let req = match r#type {
                 proto::HopMessageType::RESERVE => Req::Reserve(ReservationReq {
                     substream,
@@ -82,8 +82,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .ok_or(FatalUpgradeError::MissingPeer)?
                             .id
                             .ok_or(FatalUpgradeError::MissingPeer)?,
-                        ) 
-                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
                 proto::HopMessageType::STATUS => {
