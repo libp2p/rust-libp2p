@@ -36,7 +36,6 @@ use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use log::info;
-use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
