@@ -1,7 +1,7 @@
-# 0.45.0 (unreleased)
+# 0.41.1 - unreleased
 
-- Signed messages use sequential integers in the sequence number field. See [PR
-	3551].
+- Signed messages now use sequential integers in the sequence number field.
+  See [PR 3551].
 
 [PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
 
