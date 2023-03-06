@@ -20,7 +20,7 @@ futures = "0.3.26"
 log = "0.4"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-prost = "0.11"
+quick-protobuf = "0.8"
 rand = "0.8"
 sha2 = "0.10.0"
 smallvec = "1.6.1"
@@ -38,9 +38,6 @@ futures-timer = "3.0"
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-
-[build-dependencies]
-prost-build = "0.11"
 
 [features]
 serde = ["dep:serde", "bytes/serde"]

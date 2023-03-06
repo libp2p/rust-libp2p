@@ -23,22 +23,26 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::message_proto;
+use crate::behaviour::handler::Handler;
+use crate::multiaddr_ext::MultiaddrExt;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::PeerId;
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use void::Void;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -249,17 +253,57 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype {
-            config: handler::Config {
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if local_addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
             },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+        )))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
         }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
+                reservation_duration: self.config.reservation_duration,
+                max_circuit_duration: self.config.max_circuit_duration,
+                max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+        )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -337,7 +381,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                     .into()
@@ -452,7 +496,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                 } else if let Some(dst_conn) = self
@@ -488,7 +532,7 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::NoReservation,
+                            status: proto::Status::NO_RESERVATION,
                         }),
                     }
                 };
@@ -642,7 +686,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
@@ -745,7 +789,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, Either<handler::In, Void>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -753,8 +797,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, Either<handler::In, Void>>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, Either<handler::In, Void>>) -> Self {
         Self::Done(action)
     }
 }
@@ -764,7 +808,7 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, Either<handler::In, Void>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

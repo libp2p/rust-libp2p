@@ -18,16 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, InEvent, Proto};
+use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
-    dial_opts::DialOpts,
-    AddressScore, ConnectionHandlerUpgrErr, ConnectionId, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerOutEvent,
+    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
+    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent,
 };
+use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::{
@@ -53,7 +53,7 @@ pub struct Behaviour {
     /// with current information about the local peer.
     requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 
@@ -198,10 +198,8 @@ impl Behaviour {
             if !self.requests.contains(&request) {
                 self.requests.push(request);
 
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    handler,
                 });
             }
         }
@@ -236,17 +234,43 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Proto;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        peer: PeerId,
+        _: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
             self.config.initial_delay,
             self.config.interval,
+            peer,
             self.config.local_public_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
-        )
+            remote_addr.clone(),
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+        ))
     }
 
     fn on_connection_handler_event(
@@ -309,7 +333,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -354,8 +378,19 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers.get(peer)
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self.discovered_peers.get(&peer))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {

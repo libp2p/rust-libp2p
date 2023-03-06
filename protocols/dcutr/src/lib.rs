@@ -26,9 +26,10 @@
 mod behaviour_impl; // TODO: Rename back `behaviour` once deprecation symbols are removed.
 mod handler;
 mod protocol;
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod message_proto {
-    include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
+
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
 }
 
 pub use behaviour_impl::Behaviour;

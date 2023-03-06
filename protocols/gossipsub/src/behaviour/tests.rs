@@ -21,10 +21,10 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
+use crate::ValidationError;
 use crate::{
     config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
 };
@@ -284,7 +284,7 @@ where
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> Rpc {
+fn proto_to_message(rpc: &proto::RPC) -> Rpc {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
@@ -1395,7 +1395,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id() == Some(peer),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1436,8 +1436,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1452,8 +1451,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1833,7 +1831,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();

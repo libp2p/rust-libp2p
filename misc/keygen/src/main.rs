@@ -1,3 +1,4 @@
+use base64::prelude::*;
 use std::error::Error;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
@@ -54,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let config = Zeroizing::new(config::Config::from_file(config.as_ref())?);
 
             let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
-                base64::decode(config.identity.priv_key.as_bytes())?,
+                BASE64_STANDARD.decode(config.identity.priv_key.as_bytes())?,
             ))?;
 
             let peer_id = keypair.public().into();
