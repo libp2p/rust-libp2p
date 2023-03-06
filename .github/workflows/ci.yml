@@ -262,38 +262,6 @@ jobs:
           WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
 
-  validate_pr_title:
-    name: Validate PR title
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - uses: amannn/action-semantic-pull-request@b6bca70dcd3e56e896605356ce09b76f7e1e0d39 # v5.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # Configure which types are allowed (newline delimited).
-          types: |
-            feat
-            fix
-            chore
-            docs
-            deps
-            test
-            ci
-            refactor
-          require_scope: false
-
-      - name: Check PR title length
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          title_length=${#TITLE}
-          if [ $title_length -gt 72 ]
-          then
-            echo "PR title is too long (greater than 72 characters)"
-            exit 1
-          fi
-
   check-proto-files:
     name: Check for changes in proto files
     runs-on: ubuntu-latest
