@@ -1,3 +1,10 @@
+# 0.45.0 (unreleased)
+
+- Signed messages use sequential integers in the sequence number field. See [PR
+	3551].
+
+[PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
+
 # 0.44.0
 
 - Update to `prometheus-client` `v0.19.0`. See [PR 3207].
