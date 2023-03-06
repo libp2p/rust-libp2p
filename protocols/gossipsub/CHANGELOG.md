@@ -1,3 +1,9 @@
+# 0.45.0 [unreleased]
+
+- Deprecate `protocol` module. See [PR 3495]
+
+[PR 3495]: https://github.com/libp2p/rust-libp2p/pull/3495
+
 # 0.44.0
 
 - Update to `prometheus-client` `v0.19.0`. See [PR 3207].
