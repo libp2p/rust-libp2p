@@ -2171,7 +2171,7 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5",
 ]
 
@@ -2201,7 +2201,7 @@ dependencies = [
  "p256 0.12.0",
  "parking_lot 0.12.1",
  "pin-project",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "quickcheck-ext",
  "rand 0.8.5",
  "ring",
@@ -2240,7 +2240,7 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
@@ -2287,7 +2287,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-swarm",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "smallvec",
@@ -2317,7 +2317,7 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "prometheus-client",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -2348,7 +2348,7 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "lru",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "smallvec",
  "thiserror",
@@ -2373,7 +2373,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-yamux",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "quickcheck-ext",
  "rand 0.8.5",
  "serde",
@@ -2480,7 +2480,7 @@ dependencies = [
  "libsodium-sys-stable",
  "log",
  "once_cell",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "quickcheck-ext",
  "rand 0.8.5",
  "sha2 0.10.6",
@@ -2522,7 +2522,7 @@ dependencies = [
  "futures",
  "libp2p-core",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "quickcheck-ext",
  "rand 0.8.5",
  "unsigned-varint",
@@ -2596,7 +2596,7 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -2625,7 +2625,7 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
@@ -2770,7 +2770,7 @@ dependencies = [
  "libp2p-swarm",
  "log",
  "multihash",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "quick-protobuf-codec",
  "quickcheck",
  "rand 0.8.5",
@@ -3650,12 +3650,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-protobuf"
+version = "0.8.1"
+source = "git+https://github.com/snproj/quick-protobuf?branch=field-presence#d5f0f042fadf91f0d2944d0c6759a8cde0cbc2db"
+dependencies = [
+ "byteorder",
+]
+
+[[package]]
 name = "quick-protobuf-codec"
 version = "0.1.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "quick-protobuf",
+ "quick-protobuf 0.8.1 (git+https://github.com/snproj/quick-protobuf?branch=field-presence)",
  "thiserror",
  "unsigned-varint",
 ]
