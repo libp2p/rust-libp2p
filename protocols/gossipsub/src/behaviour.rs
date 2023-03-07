@@ -51,6 +51,7 @@ use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
+#[allow(deprecated)]
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
@@ -308,6 +309,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     data_transform: D,
 
     /// Keep track of a set of internal metrics relating to gossipsub.
+    #[allow(deprecated)]
     metrics: Option<Metrics>,
 }
 
@@ -331,6 +333,7 @@ where
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`]. This has no subscription filter and uses no compression.
     /// Metrics can be evaluated by passing a reference to a [`Registry`].
+    #[allow(deprecated)]
     pub fn new_with_metrics(
         privacy: MessageAuthenticity,
         config: Config,
@@ -354,6 +357,7 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter.
+    #[allow(deprecated)]
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: Config,
@@ -377,6 +381,7 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom data transform.
+    #[allow(deprecated)]
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -400,6 +405,7 @@ where
 {
     /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter and data transform.
+    #[allow(deprecated)]
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
         config: Config,
@@ -964,6 +970,7 @@ where
 
         let fanaout_added = added_peers.len();
         if let Some(m) = self.metrics.as_mut() {
+            #[allow(deprecated)]
             m.peers_included(topic_hash, Inclusion::Fanout, fanaout_added)
         }
 
@@ -997,6 +1004,7 @@ where
 
         let random_added = added_peers.len() - fanaout_added;
         if let Some(m) = self.metrics.as_mut() {
+            #[allow(deprecated)]
             m.peers_included(topic_hash, Inclusion::Random, random_added)
         }
 
@@ -1406,6 +1414,7 @@ where
                             // add behavioural penalty
                             if let Some((peer_score, ..)) = &mut self.peer_score {
                                 if let Some(metrics) = self.metrics.as_mut() {
+                                    #[allow(deprecated)]
                                     metrics.register_score_penalty(Penalty::GraftBackoff);
                                 }
                                 peer_score.add_penalty(peer_id, 1);
@@ -1461,6 +1470,7 @@ where
 
                     if peers.insert(*peer_id) {
                         if let Some(m) = self.metrics.as_mut() {
+                            #[allow(deprecated)]
                             m.peers_included(&topic_hash, Inclusion::Subscribed, 1)
                         }
                     }
@@ -1519,6 +1529,7 @@ where
         debug!("Completed GRAFT handling for peer: {}", peer_id);
     }
 
+    #[allow(deprecated)]
     fn remove_peer_from_mesh(
         &mut self,
         peer_id: &PeerId,
@@ -1578,6 +1589,7 @@ where
         let (below_threshold, score) =
             self.score_below_threshold(peer_id, |pst| pst.accept_px_threshold);
         for (topic_hash, px, backoff) in prune_data {
+            #[allow(deprecated)]
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
@@ -1976,6 +1988,7 @@ where
                                     topic_hash
                                 );
                                 if let Some(m) = self.metrics.as_mut() {
+                                    #[allow(deprecated)]
                                     m.peers_included(topic_hash, Inclusion::Subscribed, 1)
                                 }
                                 // send graft to the peer
@@ -2028,6 +2041,7 @@ where
 
         // remove unsubscribed peers from the mesh if it exists
         for (peer_id, topic_hash) in unsubscribed_peers {
+            #[allow(deprecated)]
             self.remove_peer_from_mesh(&peer_id, &topic_hash, None, false, Churn::Unsub);
         }
 
@@ -2082,6 +2096,7 @@ where
             for (peer, count) in gossip_promises.get_broken_promises() {
                 peer_score.add_penalty(&peer, count);
                 if let Some(metrics) = self.metrics.as_mut() {
+                    #[allow(deprecated)]
                     metrics.register_score_penalty(Penalty::BrokenPromise);
                 }
             }
@@ -2160,6 +2175,7 @@ where
             }
 
             if let Some(m) = self.metrics.as_mut() {
+                #[allow(deprecated)]
                 m.peers_removed(topic_hash, Churn::BadScore, to_remove_peers.len())
             }
 
@@ -2196,6 +2212,7 @@ where
                 // update the mesh
                 debug!("Updating mesh, new mesh: {:?}", peer_list);
                 if let Some(m) = self.metrics.as_mut() {
+                    #[allow(deprecated)]
                     m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
                 }
                 peers.extend(peer_list);
@@ -2258,6 +2275,7 @@ where
                 }
 
                 if let Some(m) = self.metrics.as_mut() {
+                    #[allow(deprecated)]
                     m.peers_removed(topic_hash, Churn::Excess, removed)
                 }
             }
@@ -2290,6 +2308,7 @@ where
                     // update the mesh
                     debug!("Updating mesh, new mesh: {:?}", peer_list);
                     if let Some(m) = self.metrics.as_mut() {
+                        #[allow(deprecated)]
                         m.peers_included(topic_hash, Inclusion::Outbound, peer_list.len())
                     }
                     peers.extend(peer_list);
@@ -2360,6 +2379,7 @@ where
                             topic_hash, peer_list
                         );
                         if let Some(m) = self.metrics.as_mut() {
+                            #[allow(deprecated)]
                             m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
                         }
                         peers.extend(peer_list);
@@ -3180,6 +3200,7 @@ where
                         // check if the peer is in the mesh and remove it
                         if mesh_peers.remove(&peer_id) {
                             if let Some(m) = self.metrics.as_mut() {
+                                #[allow(deprecated)]
                                 m.peers_removed(topic, Churn::Dc, 1);
                                 m.set_mesh_peers(topic, mesh_peers.len());
                             }

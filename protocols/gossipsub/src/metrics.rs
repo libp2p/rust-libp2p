@@ -21,6 +21,7 @@
 //! A set of metrics used to help track and diagnose the network behaviour of the gossipsub
 //! protocol.
 
+#![allow(deprecated)]
 use std::collections::HashMap;
 
 use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
@@ -40,6 +41,10 @@ const DEFAULT_MAX_TOPICS: usize = 300;
 // store metrics.
 const DEFAULT_MAX_NEVER_SUBSCRIBED_TOPICS: usize = 50;
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`metrics` module and all it's included public structs are going to be deprecated in future release."
+)]
 #[derive(Debug, Clone)]
 pub struct Config {
     /// This provides an upper bound to the number of mesh topics we create metrics for. It
@@ -98,6 +103,10 @@ impl Default for Config {
 /// Whether we have ever been subscribed to this topic.
 type EverSubscribed = bool;
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`metrics` module and all it's included public structs are going to be deprecated in future release."
+)]
 /// A collection of metrics used throughout the Gossipsub behaviour.
 pub struct Metrics {
     /* Configuration parameters */
@@ -524,6 +533,10 @@ impl Metrics {
     }
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`metrics` module and all it's included public enums are going to be deprecated in future release."
+)]
 /// Reasons why a peer was included in the mesh.
 #[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Inclusion {
@@ -537,6 +550,10 @@ pub enum Inclusion {
     Outbound,
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`metrics` module and all it's included public enums are going to be deprecated in future release."
+)]
 /// Reasons why a peer was removed from the mesh.
 #[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Churn {
@@ -552,6 +569,10 @@ pub enum Churn {
     Excess,
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`metrics` module and all it's included public enums are going to be deprecated in future release."
+)]
 /// Kinds of reasons a peer's score has been penalized
 #[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Penalty {

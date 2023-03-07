@@ -21,6 +21,7 @@
 //!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
+#[allow(deprecated)]
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
@@ -220,6 +221,7 @@ impl PeerScore {
 
     /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
     /// increments the metric counts for penalties.
+    #[allow(deprecated)]
     pub fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
         let peer_stats = match self.peer_stats.get(peer_id) {
             Some(v) => v,
