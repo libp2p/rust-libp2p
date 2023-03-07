@@ -24,6 +24,8 @@ mod substream;
 pub use connecting::Connecting;
 pub use substream::Substream;
 
+use crate::{ConnectionError, Error};
+
 use futures::{future::BoxFuture, FutureExt};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use std::{
@@ -63,7 +65,7 @@ impl Connection {
 
 impl StreamMuxer for Connection {
     type Substream = Substream;
-    type Error = quinn::ConnectionError;
+    type Error = Error;
 
     fn poll_inbound(
         self: Pin<&mut Self>,
@@ -71,7 +73,8 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let (send, recv) = futures::ready!(this.incoming.poll_unpin(cx))?;
+        let (send, recv) =
+            futures::ready!(this.incoming.poll_unpin(cx)).map_err(ConnectionError)?;
         let connection = this.connection.clone();
         this.incoming = async move { connection.accept_bi().await }.boxed();
         let substream = Substream::new(send, recv);
@@ -84,7 +87,8 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let (send, recv) = futures::ready!(this.outgoing.poll_unpin(cx))?;
+        let (send, recv) =
+            futures::ready!(this.outgoing.poll_unpin(cx)).map_err(ConnectionError)?;
         let connection = this.connection.clone();
         this.outgoing = async move { connection.open_bi().await }.boxed();
         let substream = Substream::new(send, recv);
