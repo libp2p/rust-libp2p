@@ -37,22 +37,18 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
-}
-
-mod envelope_proto {
-    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
-}
-
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod peer_record_proto {
-    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::{
+        envelope_proto::*, keys_proto::*, peer_record_proto::mod_PeerRecord::*,
+        peer_record_proto::PeerRecord,
+    };
 }
 
 /// Multi-address re-export.
 pub use multiaddr;
+use std::fmt;
+use std::fmt::Formatter;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 mod peer_id;
@@ -80,6 +76,17 @@ pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+#[derive(Debug, thiserror::Error)]
+pub struct DecodeError(String);
+
+impl From<quick_protobuf::Error> for DecodeError {
+    fn from(e: quick_protobuf::Error) -> Self {
+        Self(e.to_string())
+    }
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}

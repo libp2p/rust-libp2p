@@ -27,7 +27,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::message_proto::{message::Flag, Message};
+use crate::proto::{Flag, Message};
 use crate::tokio::substream::framed_dc::FramedDc;
 
 #[must_use]
@@ -100,7 +100,7 @@ impl Future for DropListener {
                 State::SendingReset { mut stream } => match stream.poll_ready_unpin(cx)? {
                     Poll::Ready(()) => {
                         stream.start_send_unpin(Message {
-                            flag: Some(Flag::Reset.into()),
+                            flag: Some(Flag::RESET),
                             message: None,
                         })?;
                         *state = State::Flushing { stream };

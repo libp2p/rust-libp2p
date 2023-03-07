@@ -21,10 +21,10 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
+use crate::ValidationError;
 use crate::{
     config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
 };
@@ -284,7 +284,7 @@ where
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> Rpc {
+fn proto_to_message(rpc: &proto::RPC) -> Rpc {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();

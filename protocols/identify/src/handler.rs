@@ -27,69 +27,18 @@ use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use libp2p_core::upgrade::SelectUpgrade;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
+use libp2p_core::{Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::VecDeque;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
-
-pub struct Proto {
-    initial_delay: Duration,
-    interval: Duration,
-    public_key: PublicKey,
-    protocol_version: String,
-    agent_version: String,
-}
-
-impl Proto {
-    pub fn new(
-        initial_delay: Duration,
-        interval: Duration,
-        public_key: PublicKey,
-        protocol_version: String,
-        agent_version: String,
-    ) -> Self {
-        Proto {
-            initial_delay,
-            interval,
-            public_key,
-            protocol_version,
-            agent_version,
-        }
-    }
-}
-
-impl IntoConnectionHandler for Proto {
-    type Handler = Handler;
-
-    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        let observed_addr = match endpoint {
-            ConnectedPoint::Dialer { address, .. } => address,
-            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-        };
-
-        Handler::new(
-            self.initial_delay,
-            self.interval,
-            *remote_peer_id,
-            self.public_key,
-            self.protocol_version,
-            self.agent_version,
-            observed_addr.clone(),
-        )
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(Identify, Push::inbound())
-    }
-}
 
 /// Protocol handler for sending and receiving identification requests.
 ///

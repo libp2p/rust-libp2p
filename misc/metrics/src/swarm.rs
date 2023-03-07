@@ -244,6 +244,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::WrongPeerId { .. } => {
                         record(OutgoingConnectionError::WrongPeerId)
                     }
+                    libp2p_swarm::DialError::Denied { .. } => {
+                        record(OutgoingConnectionError::Denied)
+                    }
                 };
             }
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
@@ -344,6 +347,7 @@ enum OutgoingConnectionError {
     WrongPeerId,
     TransportMultiaddrNotSupported,
     TransportOther,
+    Denied,
 }
 
 #[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
@@ -360,6 +364,7 @@ enum IncomingConnectionError {
     TransportErrorOther,
     Aborted,
     ConnectionLimit,
+    Denied,
 }
 
 impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
@@ -377,6 +382,7 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
                 libp2p_core::transport::TransportError::Other(_),
             ) => IncomingConnectionError::TransportErrorOther,
             libp2p_swarm::ListenError::Aborted => IncomingConnectionError::Aborted,
+            libp2p_swarm::ListenError::Denied { .. } => IncomingConnectionError::Denied,
         }
     }
 }

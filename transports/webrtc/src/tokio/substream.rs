@@ -31,7 +31,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::message_proto::{message::Flag, Message};
+use crate::proto::{Flag, Message};
 use crate::tokio::{
     substream::drop_listener::GracefullyClosed,
     substream::framed_dc::FramedDc,
@@ -94,7 +94,7 @@ impl Substream {
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
-                        flag: Some(Flag::StopSending.into()),
+                        flag: Some(Flag::STOP_SENDING),
                         message: None,
                     })?;
                     self.state.close_read_message_sent();
@@ -150,7 +150,7 @@ impl AsyncRead for Substream {
                     }
                 }
                 None => {
-                    state.handle_inbound_flag(Flag::Fin, read_buffer);
+                    state.handle_inbound_flag(Flag::FIN, read_buffer);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -212,7 +212,7 @@ impl AsyncWrite for Substream {
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
-                        flag: Some(Flag::Fin.into()),
+                        flag: Some(Flag::FIN),
                         message: None,
                     })?;
                     self.state.close_write_message_sent();
@@ -238,22 +238,14 @@ impl AsyncWrite for Substream {
 }
 
 fn io_poll_next(
-    io: &mut Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
+    io: &mut Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
     match ready!(io.poll_next_unpin(cx))
         .transpose()
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
     {
-        Some(Message { flag, message }) => {
-            let flag = flag
-                .map(|f| {
-                    Flag::from_i32(f).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, ""))
-                })
-                .transpose()?;
-
-            Poll::Ready(Ok(Some((flag, message))))
-        }
+        Some(Message { flag, message }) => Poll::Ready(Ok(Some((flag, message)))),
         None => Poll::Ready(Ok(None)),
     }
 }
@@ -263,7 +255,7 @@ mod tests {
     use super::*;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
-    use prost::Message;
+    use quick_protobuf::{MessageWrite, Writer};
     use unsigned_varint::codec::UviBytes;
 
     #[test]
@@ -271,20 +263,21 @@ mod tests {
         // Largest possible message.
         let message = [0; MAX_DATA_LEN];
 
-        let protobuf = crate::message_proto::Message {
-            flag: Some(crate::message_proto::message::Flag::Fin.into()),
+        let protobuf = crate::proto::Message {
+            flag: Some(crate::proto::Flag::FIN),
             message: Some(message.to_vec()),
         };
 
-        let mut encoded_msg = BytesMut::new();
+        let mut encoded_msg = Vec::new();
+        let mut writer = Writer::new(&mut encoded_msg);
         protobuf
-            .encode(&mut encoded_msg)
-            .expect("BytesMut to have sufficient capacity.");
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
         assert_eq!(encoded_msg.len(), message.len() + PROTO_OVERHEAD);
 
         let mut uvi = UviBytes::default();
         let mut dst = BytesMut::new();
-        uvi.encode(encoded_msg.clone().freeze(), &mut dst).unwrap();
+        uvi.encode(encoded_msg.as_slice(), &mut dst).unwrap();
 
         // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
         // maximum limit specified in the libp2p WebRTC specification.

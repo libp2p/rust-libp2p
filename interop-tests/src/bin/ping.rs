@@ -17,14 +17,13 @@ use libp2p::{
     OutboundUpgradeExt, PeerId, Swarm, Transport as _,
 };
 use redis::AsyncCommands;
-use strum::EnumString;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport_param: Transport = from_env("transport").context("unsupported transport")?;
+    let transport_param: Transport = from_env("transport")?;
 
     let ip = env::var("ip").context("ip environment variable is not set")?;
 
@@ -172,7 +171,7 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
         MapSecOutputFn<C>,
     >,
 > {
-    let either_sec_upgrade = match from_env("security").context("unsupported secure channel")? {
+    let either_sec_upgrade = match from_env("security")? {
         SecProtocol::Noise => Either::Left(
             noise::NoiseAuthenticated::xx(identity).context("failed to intialise noise")?,
         ),
@@ -199,17 +198,14 @@ fn factor_peer_id<C>(
 }
 
 fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexConfig>> {
-    Ok(
-        match from_env("muxer").context("unsupported multiplexer")? {
-            Muxer::Yamux => Either::Left(yamux::YamuxConfig::default()),
-            Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
-        },
-    )
+    Ok(match from_env("muxer")? {
+        Muxer::Yamux => Either::Left(yamux::YamuxConfig::default()),
+        Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
+    })
 }
 
 /// Supported transports by rust-libp2p.
-#[derive(Clone, Debug, EnumString)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(Clone, Debug)]
 pub enum Transport {
     Tcp,
     QuicV1,
@@ -217,20 +213,56 @@ pub enum Transport {
     Ws,
 }
 
+impl FromStr for Transport {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
+            "tcp" => Self::Tcp,
+            "quic-v1" => Self::QuicV1,
+            "webrtc" => Self::Webrtc,
+            "ws" => Self::Ws,
+            other => bail!("unknown transport {other}"),
+        })
+    }
+}
+
 /// Supported stream multiplexers by rust-libp2p.
-#[derive(Clone, Debug, EnumString)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(Clone, Debug)]
 pub enum Muxer {
     Mplex,
     Yamux,
 }
 
+impl FromStr for Muxer {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
+            "mplex" => Self::Mplex,
+            "yamux" => Self::Yamux,
+            other => bail!("unknown muxer {other}"),
+        })
+    }
+}
+
 /// Supported security protocols by rust-libp2p.
-#[derive(Clone, Debug, EnumString)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(Clone, Debug)]
 pub enum SecProtocol {
     Noise,
     Tls,
+}
+
+impl FromStr for SecProtocol {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(match s {
+            "noise" => Self::Noise,
+            "tls" => Self::Tls,
+            other => bail!("unknown security protocol {other}"),
+        })
+    }
 }
 
 #[derive(NetworkBehaviour)]
@@ -242,8 +274,7 @@ struct Behaviour {
 /// Helper function to get a ENV variable into an test parameter like `Transport`.
 pub fn from_env<T>(env_var: &str) -> Result<T>
 where
-    T: FromStr,
-    T::Err: std::error::Error + Send + Sync + 'static,
+    T: FromStr<Err = anyhow::Error>,
 {
     env::var(env_var)
         .with_context(|| format!("{env_var} environment variable is not set"))?
