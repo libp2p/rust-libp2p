@@ -33,6 +33,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     SubstreamProtocol,
 };
+use log::error;
 use void::Void;
 
 use super::RunStats;
@@ -136,7 +137,7 @@ impl ConnectionHandler for Handler {
             match result {
                 Ok(stats) => return Poll::Ready(ConnectionHandlerEvent::Custom(Event { stats })),
                 Err(e) => {
-                    panic!("{e:?}")
+                    error!("{e:?}")
                 }
             }
         }
