@@ -80,7 +80,7 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 }
 
 async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
-    transport.listen_on(addr.parse().unwrap()).unwrap();
+    transport.listen_on(Default::default(), addr.parse().unwrap()).unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
         e => panic!("{e:?}"),

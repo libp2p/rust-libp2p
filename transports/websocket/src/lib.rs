@@ -102,7 +102,7 @@ use std::{
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// );
 ///
-/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -308,7 +308,7 @@ mod tests {
 
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();
-        ws_config.listen_on(listen_addr).expect("listener");
+        ws_config.listen_on(Default::default(), listen_addr).expect("listener");
 
         let addr = ws_config
             .next()

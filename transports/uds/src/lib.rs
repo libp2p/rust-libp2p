@@ -93,10 +93,10 @@ macro_rules! codegen {
 
             fn listen_on(
                 &mut self,
+                id: ListenerId,
                 addr: Multiaddr,
-            ) -> Result<ListenerId, TransportError<Self::Error>> {
+            ) -> Result<(), TransportError<Self::Error>> {
                 if let Ok(path) = multiaddr_to_path(&addr) {
-                    let id = ListenerId::new();
                     let listener = $build_listener(path)
                         .map_err(Err)
                         .map_ok(move |listener| {
@@ -138,7 +138,7 @@ macro_rules! codegen {
                         .try_flatten_stream()
                         .boxed();
                     self.listeners.push_back((id, listener));
-                    Ok(id)
+                    Ok(())
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))
                 }
@@ -292,7 +292,7 @@ mod tests {
 
         async_std::task::spawn(async move {
             let mut transport = UdsConfig::new().boxed();
-            transport.listen_on(addr).unwrap();
+            transport.listen_on(Default::default(), addr).unwrap();
 
             let listen_addr = transport
                 .select_next_some()
@@ -328,7 +328,7 @@ mod tests {
         let mut uds = UdsConfig::new();
 
         let addr = "/unix//foo/bar".parse::<Multiaddr>().unwrap();
-        assert!(uds.listen_on(addr).is_err());
+        assert!(uds.listen_on(Default::default(), addr).is_err());
     }
 
     #[test]

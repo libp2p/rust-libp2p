@@ -774,8 +774,9 @@ mod test {
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let id = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            let id = Default::default();
+            transport
+                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
 
             // Copy channel to use it later.
