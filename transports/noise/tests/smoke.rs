@@ -211,7 +211,7 @@ fn run<I, C>(
 {
     futures::executor::block_on(async {
         server
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let server_address = server

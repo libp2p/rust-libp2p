@@ -70,7 +70,7 @@ use thiserror::Error;
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -85,7 +85,7 @@ use thiserror::Error;
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
-///    transport.listen_on(relay_addr).unwrap();
+///    transport.listen_on(ListenerId::default(), relay_addr).unwrap();
 ///    ```
 pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,

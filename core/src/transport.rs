@@ -108,7 +108,7 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
-    /// Listens on the given [`Multiaddr`] for inbound connections.
+    /// Listens on the given [`Multiaddr`] for inbound connections with a provided [`ListenerId`].
     fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>>;
 
     /// Remove a listener.
