@@ -101,7 +101,7 @@ impl NetworkBehaviour for Behaviour {
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
-            super::handler::Event::Finished { stats } => {
+            super::handler::Event { stats } => {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event {
                         remote_peer_id: event_source,

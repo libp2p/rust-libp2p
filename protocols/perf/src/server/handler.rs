@@ -38,8 +38,8 @@ use void::Void;
 use super::RunStats;
 
 #[derive(Debug)]
-pub enum Event {
-    Finished { stats: RunStats },
+pub struct Event {
+    pub stats: RunStats,
 }
 
 pub struct Handler {
@@ -132,9 +132,7 @@ impl ConnectionHandler for Handler {
     > {
         while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
             match result {
-                Ok(stats) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished { stats }))
-                }
+                Ok(stats) => return Poll::Ready(ConnectionHandlerEvent::Custom(Event { stats })),
                 Err(e) => {
                     panic!("{e:?}")
                 }
