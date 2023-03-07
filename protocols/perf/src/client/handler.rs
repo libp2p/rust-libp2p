@@ -85,7 +85,7 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
-    type Error = std::io::Error;
+    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundOpenInfo = Command;
