@@ -67,4 +67,4 @@ jobs:
           shared-key: stable-cache
 
       - name: Compile workspace with stable Rust
-        run: cargo test --all-features --all-targets --workspace --no-run
+        run: cargo --locked test --all-features --all-targets --workspace --no-run

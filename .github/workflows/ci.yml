@@ -47,7 +47,7 @@ jobs:
           save-if: false
 
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
+        run: cargo --locked +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -57,10 +57,10 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo --locked test --package ${{ matrix.crate }} --all-features
 
       - name: Check if we compile without any features activated
-        run: cargo build --package ${{ matrix.crate }} --no-default-features
+        run: cargo --locked build --package ${{ matrix.crate }} --no-default-features
 
       - name: Check if crate has been released
         id: check-released
@@ -119,7 +119,7 @@ jobs:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
+      - run: cargo --locked check --package libp2p --all-features --target=${{ matrix.target }}
 
   feature_matrix: # Test various feature combinations work correctly
     name: Compile with select features (${{ matrix.features }})
@@ -144,7 +144,7 @@ jobs:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - run: cargo check --package libp2p --features="${{ matrix.features }}"
+      - run: cargo --locked check --package libp2p --features="${{ matrix.features }}"
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
@@ -164,7 +164,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Check rustdoc links
-        run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
+        run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo --locked doc --verbose --workspace --no-deps --all-features --document-private-items
 
   clippy:
     runs-on: ubuntu-latest
@@ -193,7 +193,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run cargo clippy
-        run: cargo custom-clippy # cargo alias to allow reuse of config locally
+        run: cargo --locked custom-clippy # cargo alias to allow reuse of config locally
 
   ipfs-integration-test:
     name: IPFS Integration tests
@@ -213,7 +213,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run ipfs-kad example
-        run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
+        run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo --locked run --example ipfs-kad --features full
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -227,7 +227,7 @@ jobs:
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
       - name: Check formatting
-        run: cargo fmt -- --check
+        run: cargo --locked fmt -- --check
 
   manifest_lint:
     runs-on: ubuntu-latest
@@ -270,7 +270,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
 
-      - run: cargo install --version 0.10.0 pb-rs --locked
+      - run: cargo --locked install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
         uses: tj-actions/glob@v16
