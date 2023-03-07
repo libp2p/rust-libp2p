@@ -43,7 +43,7 @@ pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
 #[deprecated(
     since = "0.45.0",
-    note = "`protocol` module and all it's included public structs module are going to be deprecated in future release."
+    note = "`protocol` module and all it's included public structs are going to be deprecated in future release."
 )]
 
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
@@ -106,7 +106,7 @@ impl ProtocolConfig {
 
 #[deprecated(
     since = "0.45.0",
-    note = "`protocol` module and all it's included public structs module are going to be deprecated in future release."
+    note = "`protocol` module and all it's included public structs are going to be deprecated in future release."
 )]
 /// The protocol ID
 #[derive(Clone, Debug)]
@@ -205,7 +205,7 @@ where
 
 #[deprecated(
     since = "0.45.0",
-    note = "`protocol` module and all it's included public structs module are going to be deprecated in future release."
+    note = "`protocol` module and all it's included public structs are going to be deprecated in future release."
 )]
 pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
