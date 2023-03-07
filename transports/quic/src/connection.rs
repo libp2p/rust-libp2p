@@ -50,9 +50,9 @@ impl Connection {
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     fn new(connection: quinn::Connection) -> Self {
         let connection_c = connection.clone();
-        let incoming = Box::pin(async move { connection_c.accept_bi().await });
+        let incoming = async move { connection_c.accept_bi().await }.boxed();
         let connection_c = connection.clone();
-        let outgoing = Box::pin(async move { connection_c.open_bi().await });
+        let outgoing = async move { connection_c.open_bi().await }.boxed();
         Self {
             connection,
             incoming,
@@ -73,7 +73,7 @@ impl StreamMuxer for Connection {
 
         let (send, recv) = futures::ready!(this.incoming.poll_unpin(cx))?;
         let connection = this.connection.clone();
-        this.incoming = Box::pin(async move { connection.accept_bi().await });
+        this.incoming = async move { connection.accept_bi().await }.boxed();
         let substream = Substream::new(send, recv);
         Poll::Ready(Ok(substream))
     }
@@ -86,7 +86,7 @@ impl StreamMuxer for Connection {
 
         let (send, recv) = futures::ready!(this.outgoing.poll_unpin(cx))?;
         let connection = this.connection.clone();
-        this.outgoing = Box::pin(async move { connection.open_bi().await });
+        this.outgoing = async move { connection.open_bi().await }.boxed();
         let substream = Substream::new(send, recv);
         Poll::Ready(Ok(substream))
     }

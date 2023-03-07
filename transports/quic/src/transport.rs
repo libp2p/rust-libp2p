@@ -307,7 +307,7 @@ impl<P: Provider> Listener<P> {
         }
 
         let endpoint_c = endpoint.clone();
-        let accept = Box::pin(async move { endpoint_c.accept().await });
+        let accept = async move { endpoint_c.accept().await }.boxed();
 
         Ok(Listener {
             endpoint,
@@ -404,7 +404,7 @@ impl<P: Provider> Stream for Listener<P> {
             match self.accept.poll_unpin(cx) {
                 Poll::Ready(Some(connecting)) => {
                     let endpoint = self.endpoint.clone();
-                    self.accept = Box::pin(async move { endpoint.accept().await });
+                    self.accept = async move { endpoint.accept().await }.boxed();
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let send_back_addr =
