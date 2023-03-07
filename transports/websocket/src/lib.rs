@@ -77,7 +77,7 @@ use std::{
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
-/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");

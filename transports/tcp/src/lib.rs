@@ -248,7 +248,7 @@ impl Config {
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
     /// let mut tcp1 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp1.listen_on( listen_addr1.clone()).expect("listener");
+    /// tcp1.listen_on(ListenerId::new(), listen_addr1.clone()).expect("listener");
     /// match tcp1.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
@@ -259,7 +259,7 @@ impl Config {
     /// }
     ///
     /// let mut tcp2 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp2.listen_on( listen_addr2).expect("listener");
+    /// tcp2.listen_on(ListenerId::new(), listen_addr2).expect("listener");
     /// match tcp2.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
     ///         println!("Listening on {:?}", listen_addr);
