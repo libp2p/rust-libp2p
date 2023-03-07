@@ -21,10 +21,8 @@
 mod behaviour;
 mod handler;
 
-use std::{
-    sync::atomic::{AtomicUsize, Ordering},
-    time::Instant,
-};
+use instant::Instant;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub use behaviour::{Behaviour, Event};
 pub use handler::Handler;

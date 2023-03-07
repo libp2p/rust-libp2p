@@ -21,7 +21,7 @@
 mod behaviour;
 mod handler;
 
-use std::time::Instant;
+use instant::Instant;
 
 pub use behaviour::{Behaviour, Event};
 pub use handler::Handler;

@@ -2501,6 +2501,7 @@ dependencies = [
  "clap 4.1.6",
  "env_logger 0.10.0",
  "futures",
+ "instant",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-noise",
