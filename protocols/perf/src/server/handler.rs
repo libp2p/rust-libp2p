@@ -63,7 +63,7 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = ();
+    type InEvent = Void;
     type OutEvent = Event;
     type Error = std::io::Error;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
@@ -75,7 +75,9 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+        void::unreachable(v)
+    }
 
     fn on_connection_event(
         &mut self,
