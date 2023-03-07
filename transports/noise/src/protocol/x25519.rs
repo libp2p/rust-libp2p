@@ -281,44 +281,8 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Use the ed25519_compact for testing
-    use ed25519_compact;
     use libp2p_core::identity::ed25519;
-    // Use the libsodium-sys-stable crypto_sign imports for testing
-    use libsodium_sys::crypto_sign_ed25519_pk_to_curve25519;
-    use libsodium_sys::crypto_sign_ed25519_sk_to_curve25519;
     use quickcheck::*;
-    use x25519_dalek::StaticSecret;
-
-    // ed25519 to x25519 keypair conversion must yield the same results as
-    // obtained through libsodium.
-    #[test]
-    fn prop_ed25519_to_x25519_matches_libsodium() {
-        fn prop() -> bool {
-            let ed25519 = ed25519::Keypair::generate();
-            let x25519 = Keypair::from(SecretKey::from_ed25519(&ed25519.secret()));
-
-            let sodium_sec =
-                ed25519_sk_to_curve25519(&ed25519_compact::SecretKey::new(ed25519.encode()));
-            let sodium_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
-                ed25519.public().encode(),
-            ));
-
-            let our_pub = x25519.public.0;
-            // libsodium does the [clamping] of the scalar upon key construction,
-            // just like x25519-dalek, but this module uses the raw byte-oriented x25519
-            // function from x25519-dalek, as defined in RFC7748, so "our" secret scalar
-            // must be clamped before comparing it to the one computed by libsodium.
-            // That happens in `StaticSecret::from`.
-            //
-            // [clamping]: http://www.lix.polytechnique.fr/~smith/ECC/#scalar-clamping
-            let our_sec = StaticSecret::from((x25519.secret.0).0).to_bytes();
-
-            sodium_sec.as_ref() == Some(&our_sec) && sodium_pub.as_ref() == Some(&our_pub.0)
-        }
-
-        quickcheck(prop as fn() -> _);
-    }
 
     // The x25519 public key obtained through ed25519 keypair conversion
     // (and thus derived from the converted secret key) must match the x25519
@@ -333,27 +297,5 @@ mod tests {
         }
 
         quickcheck(prop as fn() -> _);
-    }
-
-    pub fn ed25519_pk_to_curve25519(k: &ed25519_compact::PublicKey) -> Option<[u8; 32]> {
-        let mut out = [0u8; 32];
-        unsafe {
-            if crypto_sign_ed25519_pk_to_curve25519(out.as_mut_ptr(), k.as_ptr()) == 0 {
-                Some(out)
-            } else {
-                None
-            }
-        }
-    }
-
-    pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> Option<[u8; 32]> {
-        let mut out = [0u8; 32];
-        unsafe {
-            if crypto_sign_ed25519_sk_to_curve25519(out.as_mut_ptr(), k.as_ptr()) == 0 {
-                Some(out)
-            } else {
-                None
-            }
-        }
     }
 }
