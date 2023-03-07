@@ -20,7 +20,7 @@
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use futures::{executor::block_on, future::Either, StreamExt};
+use futures::{future::Either, StreamExt};
 use libp2p_core::{
     identity, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, PeerId, Transport,
 };
@@ -36,7 +36,8 @@ struct Opts {
     server_address: Multiaddr,
 }
 
-fn main() -> Result<()> {
+#[async_std::main]
+async fn main() -> Result<()> {
     env_logger::init();
 
     let opts = Opts::parse();
@@ -61,7 +62,9 @@ fn main() -> Result<()> {
             libp2p_quic::async_std::Transport::new(config)
         };
 
-        let dns = block_on(DnsConfig::system(OrTransport::new(quic, tcp))).unwrap();
+        let dns = DnsConfig::system(OrTransport::new(quic, tcp))
+            .await
+            .unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -79,17 +82,15 @@ fn main() -> Result<()> {
     .build();
 
     swarm.dial(opts.server_address).unwrap();
-    let server_peer_id = block_on(async {
-        loop {
-            match swarm.next().await.unwrap() {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => return Ok(peer_id),
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-                }
-                e => panic!("{e:?}"),
+    let server_peer_id = loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
+            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
             }
+            e => panic!("{e:?}"),
         }
-    })?;
+    };
 
     swarm.behaviour_mut().perf(
         server_peer_id,
@@ -99,26 +100,22 @@ fn main() -> Result<()> {
         },
     )?;
 
-    let result = block_on(async {
-        loop {
-            match swarm.next().await.unwrap() {
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                }
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-                }
-                SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id: _, result }) => {
-                    break result
-                }
-                e => panic!("{e:?}"),
+    let stats = loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                info!("Established connection to {:?} via {:?}", peer_id, endpoint);
             }
+            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+            }
+            SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id: _, result }) => {
+                break result?
+            }
+            e => panic!("{e:?}"),
         }
-    });
-
-    let stats = result?;
+    };
 
     let sent_mebibytes = stats.params.to_send as f64 / 1024.0 / 1024.0;
     let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();

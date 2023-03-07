@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use clap::Parser;
-use futures::{executor::block_on, future::Either, StreamExt};
+use futures::{future::Either, StreamExt};
 use libp2p_core::{
     identity, muxing::StreamMuxerBox, transport::OrTransport, upgrade, PeerId, Transport,
 };
@@ -31,7 +31,8 @@ use log::{error, info};
 #[clap(name = "libp2p perf server")]
 struct Opts {}
 
-fn main() {
+#[async_std::main]
+async fn main() {
     env_logger::init();
 
     let _opts = Opts::parse();
@@ -57,7 +58,9 @@ fn main() {
             libp2p_quic::async_std::Transport::new(config)
         };
 
-        let dns = block_on(DnsConfig::system(OrTransport::new(quic, tcp))).unwrap();
+        let dns = DnsConfig::system(OrTransport::new(quic, tcp))
+            .await
+            .unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -82,38 +85,34 @@ fn main() {
         .listen_on("/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap())
         .unwrap();
 
-    block_on(async {
-        loop {
-            match swarm.next().await.unwrap() {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("Listening on {:?}", address);
-                }
-                SwarmEvent::IncomingConnection { .. } => {}
-                e @ SwarmEvent::IncomingConnectionError { .. } => {
-                    error!("{e:?}");
-                }
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                }
-                SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::Behaviour(libp2p_perf::server::behaviour::Event::Finished {
-                    remote_peer_id,
-                    stats,
-                }) => {
-                    let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
-                    let receive_time =
-                        (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
-                    let receive_bandwidth_mebibit_second =
-                        (received_mebibytes * 8.0) / receive_time;
+    loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("Listening on {:?}", address);
+            }
+            SwarmEvent::IncomingConnection { .. } => {}
+            e @ SwarmEvent::IncomingConnectionError { .. } => {
+                error!("{e:?}");
+            }
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+            }
+            SwarmEvent::ConnectionClosed { .. } => {}
+            SwarmEvent::Behaviour(libp2p_perf::server::behaviour::Event::Finished {
+                remote_peer_id,
+                stats,
+            }) => {
+                let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
+                let receive_time = (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
+                let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
-                    let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
-                    let sent_time =
-                        (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
-                    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
+                let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
+                let sent_time = (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
+                let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
 
-                    info!(
+                info!(
                         "Finished run with {}: Received {} MiB in {} s with {} MiBit/s and sent {} MiB in {} s with {} MiBit/s",
                         remote_peer_id,
                         received_mebibytes,
@@ -123,9 +122,8 @@ fn main() {
                         sent_time,
                         sent_bandwidth_mebibit_second,
                     )
-                }
-                e => panic!("{e:?}"),
             }
+            e => panic!("{e:?}"),
         }
-    })
+    }
 }
