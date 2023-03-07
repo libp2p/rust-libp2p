@@ -36,7 +36,6 @@ use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use log::info;
-use std::convert::TryInto;
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -164,7 +163,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
         Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
     }
-    .dial_concurrency_factor(10_u8.try_into().unwrap())
     .build();
 
     swarm
