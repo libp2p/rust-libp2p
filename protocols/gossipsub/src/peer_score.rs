@@ -22,6 +22,7 @@
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
 use crate::metrics::{Metrics, Penalty};
+#[allow(deprecated)]
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
 use libp2p_core::PeerId;
@@ -51,6 +52,7 @@ pub(crate) struct PeerScore {
     /// Tracking peers per IP.
     peer_ips: HashMap<IpAddr, HashSet<PeerId>>,
     /// Message delivery tracking. This is a time-cache of [`DeliveryRecord`]s.
+    #[allow(deprecated)]
     deliveries: TimeCache<MessageId, DeliveryRecord>,
     /// callback for monitoring message delivery times
     message_delivery_time_callback: Option<fn(&PeerId, &TopicHash, f64)>,
@@ -208,6 +210,7 @@ impl PeerScore {
             params,
             peer_stats: HashMap::new(),
             peer_ips: HashMap::new(),
+            #[allow(deprecated)]
             deliveries: TimeCache::new(Duration::from_secs(TIME_CACHE_DURATION)),
             message_delivery_time_callback: callback,
         }

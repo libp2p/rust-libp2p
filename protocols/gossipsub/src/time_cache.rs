@@ -36,6 +36,10 @@ struct ExpiringElement<Element> {
     expires: Instant,
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`time_cache` module and all it's included public structs are going to be deprecated in future release."
+)]
 pub struct TimeCache<Key, Value> {
     /// Mapping a key to its value together with its latest expire time (can be updated through
     /// reinserts).
@@ -46,12 +50,17 @@ pub struct TimeCache<Key, Value> {
     ttl: Duration,
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`time_cache` module and all it's included public structs are going to be deprecated in future release."
+)]
 pub struct OccupiedEntry<'a, K, V> {
     expiration: Instant,
     entry: hash_map::OccupiedEntry<'a, K, ExpiringElement<V>>,
     list: &'a mut VecDeque<ExpiringElement<K>>,
 }
 
+#[allow(deprecated)]
 impl<'a, K, V> OccupiedEntry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
@@ -81,16 +90,22 @@ where
     }
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`time_cache` module and all it's included public structs are going to be deprecated in future release."
+)]
 pub struct VacantEntry<'a, K, V> {
     expiration: Instant,
     entry: hash_map::VacantEntry<'a, K, ExpiringElement<V>>,
     list: &'a mut VecDeque<ExpiringElement<K>>,
 }
 
+#[allow(deprecated)]
 impl<'a, K, V> VacantEntry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
+    #[allow(deprecated)]
     pub fn insert(self, value: V) -> &'a mut V {
         self.list.push_back(ExpiringElement {
             element: self.entry.key().clone(),
@@ -106,11 +121,17 @@ where
     }
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`time_cache` module and all it's public enums are going to be deprecated in future release."
+)]
+#[allow(deprecated)]
 pub enum Entry<'a, K: 'a, V: 'a> {
     Occupied(OccupiedEntry<'a, K, V>),
     Vacant(VacantEntry<'a, K, V>),
 }
 
+#[allow(deprecated)]
 impl<'a, K: 'a, V: 'a> Entry<'a, K, V>
 where
     K: Eq + std::hash::Hash + Clone,
@@ -123,6 +144,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<Key, Value> TimeCache<Key, Value>
 where
     Key: Eq + std::hash::Hash + Clone,
@@ -185,8 +207,14 @@ where
     }
 }
 
+#[deprecated(
+    since = "0.45.0",
+    note = "`time_cache` module and all it's public enums are going to be deprecated in future release."
+)]
+#[allow(deprecated)]
 pub struct DuplicateCache<Key>(TimeCache<Key, ()>);
 
+#[allow(deprecated)]
 impl<Key> DuplicateCache<Key>
 where
     Key: Eq + std::hash::Hash + Clone,
@@ -214,6 +242,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod test {
     use super::*;
 

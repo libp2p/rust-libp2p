@@ -55,6 +55,7 @@ use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
 use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
+#[allow(deprecated)]
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
@@ -226,6 +227,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// An LRU Time cache for storing seen messages (based on their ID). This cache prevents
     /// duplicates from being propagated to the application and on the network.
+    #[allow(deprecated)]
     duplicate_cache: DuplicateCache<MessageId>,
 
     /// A set of connected peers, indexed by their [`PeerId`] tracking both the [`PeerKind`] and
@@ -294,9 +296,11 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Short term cache for published message ids. This is used for penalizing peers sending
     /// our own messages back if the messages are anonymous or use a random author.
+    #[allow(deprecated)]
     published_message_ids: DuplicateCache<MessageId>,
 
     /// Short term cache for fast message ids mapping them to the real message ids
+    #[allow(deprecated)]
     fast_message_id_cache: TimeCache<FastMessageId, MessageId>,
 
     /// The filter used to handle message subscriptions.
@@ -413,6 +417,7 @@ where
         // were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
+        #[allow(deprecated)]
         Ok(Behaviour {
             metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
