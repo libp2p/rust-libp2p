@@ -116,7 +116,7 @@ async fn wrapped_with_delay() {
             &mut self,
             id: ListenerId,
             addr: Multiaddr,
-        ) -> Result<ListenerId, TransportError<Self::Error>> {
+        ) -> Result<(), TransportError<Self::Error>> {
             self.0.lock().unwrap().listen_on(id, addr)
         }
 
