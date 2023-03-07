@@ -88,7 +88,7 @@ async fn main() {
     loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {:?}", address);
+                info!("Listening on {address}");
             }
             SwarmEvent::IncomingConnection { .. } => {}
             e @ SwarmEvent::IncomingConnectionError { .. } => {
