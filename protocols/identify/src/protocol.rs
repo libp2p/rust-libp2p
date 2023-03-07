@@ -293,7 +293,7 @@ mod tests {
             let mut transport = tcp::async_io::Transport::default().boxed();
 
             transport
-                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                .listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
             let addr = transport

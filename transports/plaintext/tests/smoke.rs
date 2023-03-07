@@ -73,7 +73,7 @@ fn variable_msg_length() {
                     .parse()
                     .unwrap();
 
-            server.listen_on(server_address.clone()).unwrap();
+            server.listen_on(Default::default(), server_address.clone()).unwrap();
 
             // Ignore server listen address event.
             let _ = server
