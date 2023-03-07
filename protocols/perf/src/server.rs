@@ -18,10 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod behaviour;
+mod handler;
+
 use std::time::Instant;
 
-pub mod behaviour;
-pub mod handler;
+pub use behaviour::{Behaviour, Event};
+pub use handler::Handler;
 
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
 #[derive(Debug, Clone, Copy)]

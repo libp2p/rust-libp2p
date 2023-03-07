@@ -71,7 +71,7 @@ async fn main() {
 
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
-        libp2p_perf::server::behaviour::Behaviour::default(),
+        libp2p_perf::server::Behaviour::default(),
         local_peer_id,
     )
     .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
@@ -100,7 +100,7 @@ async fn main() {
                 info!("Established connection to {:?} via {:?}", peer_id, endpoint);
             }
             SwarmEvent::ConnectionClosed { .. } => {}
-            SwarmEvent::Behaviour(libp2p_perf::server::behaviour::Event::Finished {
+            SwarmEvent::Behaviour(libp2p_perf::server::Event::Finished {
                 remote_peer_id,
                 stats,
             }) => {

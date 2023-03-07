@@ -31,11 +31,8 @@ fn perf() {
             .multiplex(YamuxConfig::default())
             .boxed();
 
-        let mut server = Swarm::without_executor(
-            transport,
-            server::behaviour::Behaviour::new(),
-            local_peer_id,
-        );
+        let mut server =
+            Swarm::without_executor(transport, server::Behaviour::new(), local_peer_id);
 
         server.listen_on(server_address.clone()).unwrap();
 
@@ -56,11 +53,7 @@ fn perf() {
             .multiplex(YamuxConfig::default())
             .boxed();
 
-        Swarm::without_executor(
-            transport,
-            client::behaviour::Behaviour::new(),
-            local_peer_id,
-        )
+        Swarm::without_executor(transport, client::Behaviour::new(), local_peer_id)
     };
 
     client.dial(server_address).unwrap();
@@ -93,7 +86,7 @@ fn perf() {
                 SwarmEvent::IncomingConnection { .. } => panic!(),
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Dialing(_) => {}
-                SwarmEvent::Behaviour(client::behaviour::Event { result: Ok(_), .. }) => break,
+                SwarmEvent::Behaviour(client::Event { result: Ok(_), .. }) => break,
                 e => panic!("{e:?}"),
             }
         }

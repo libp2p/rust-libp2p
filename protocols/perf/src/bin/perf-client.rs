@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
 
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
-        libp2p_perf::client::behaviour::Behaviour::default(),
+        libp2p_perf::client::Behaviour::default(),
         local_peer_id,
     )
     .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
@@ -110,9 +110,7 @@ async fn main() -> Result<()> {
             SwarmEvent::OutgoingConnectionError { peer_id, error } => {
                 info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
             }
-            SwarmEvent::Behaviour(libp2p_perf::client::behaviour::Event { id: _, result }) => {
-                break result?
-            }
+            SwarmEvent::Behaviour(libp2p_perf::client::Event { id: _, result }) => break result?,
             e => panic!("{e:?}"),
         }
     };
