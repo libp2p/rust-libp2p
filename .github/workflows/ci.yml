@@ -47,7 +47,7 @@ jobs:
           save-if: false
 
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo --locked +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
+        run: cargo +${{ steps.parse-msrv.outputs.version }} --locked build --package ${{ matrix.crate }} --all-features
 
       - uses: dtolnay/rust-toolchain@stable
 
