@@ -165,9 +165,9 @@ enum OutboundSubstreamState {
     Poisoned,
 }
 
-#[allow(deprecated)]
 impl Handler {
     /// Builds a new [`Handler`].
+    #[allow(deprecated)]
     pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
         Handler {
             listen_protocol: SubstreamProtocol::new(protocol_config, ()),
@@ -250,14 +250,15 @@ impl Handler {
     }
 }
 
-#[allow(deprecated)]
 impl ConnectionHandler for Handler {
     type InEvent = HandlerIn;
     type OutEvent = HandlerEvent;
     type Error = HandlerError;
     type InboundOpenInfo = ();
+    #[allow(deprecated)]
     type InboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = crate::rpc_proto::Rpc;
+    #[allow(deprecated)]
     type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {

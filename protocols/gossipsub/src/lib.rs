@@ -153,7 +153,7 @@ mod mcache;
 mod peer_score;
 mod topic;
 mod transform;
-pub mod types;
+mod types;
 
 mod rpc_proto;
 

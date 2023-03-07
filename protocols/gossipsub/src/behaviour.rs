@@ -455,7 +455,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<D, F> Behaviour<D, F>
 where
     D: DataTransform + Send + 'static,
@@ -3285,7 +3284,6 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     })
 }
 
-#[allow(deprecated)]
 impl<C, F> NetworkBehaviour for Behaviour<C, F>
 where
     C: Send + 'static + DataTransform,
@@ -3301,6 +3299,7 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        #[allow(deprecated)]
         Ok(Handler::new(
             ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
@@ -3314,6 +3313,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        #[allow(deprecated)]
         Ok(Handler::new(
             ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
@@ -3691,7 +3691,6 @@ impl fmt::Debug for PublishConfig {
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod local_test {
     use super::*;
     use crate::IdentTopic;
@@ -3810,6 +3809,7 @@ mod local_test {
 
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
+            #[allow(deprecated)]
             let mut codec =
                 crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
 
