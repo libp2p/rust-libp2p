@@ -36,11 +36,9 @@ use crate::server::handler::Handler;
 use super::RunStats;
 
 #[derive(Debug)]
-pub enum Event {
-    Finished {
-        remote_peer_id: PeerId,
-        stats: RunStats,
-    },
+pub struct Event {
+    pub remote_peer_id: PeerId,
+    pub stats: RunStats,
 }
 
 #[derive(Default)]
@@ -95,7 +93,7 @@ impl NetworkBehaviour for Behaviour {
         match handler_event {
             super::handler::Event::Finished { stats } => {
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event {
                         remote_peer_id: event_source,
                         stats,
                     }))

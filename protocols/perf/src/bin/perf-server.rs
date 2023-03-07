@@ -100,7 +100,7 @@ async fn main() {
                 info!("Established connection to {:?} via {:?}", peer_id, endpoint);
             }
             SwarmEvent::ConnectionClosed { .. } => {}
-            SwarmEvent::Behaviour(libp2p_perf::server::Event::Finished {
+            SwarmEvent::Behaviour(libp2p_perf::server::Event {
                 remote_peer_id,
                 stats,
             }) => {
