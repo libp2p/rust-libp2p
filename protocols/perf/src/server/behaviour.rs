@@ -98,17 +98,13 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         _connection_id: ConnectionId,
-        handler_event: THandlerOutEvent<Self>,
+        super::handler::Event { stats }: THandlerOutEvent<Self>,
     ) {
-        match handler_event {
-            super::handler::Event { stats } => {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event {
-                        remote_peer_id: event_source,
-                        stats,
-                    }))
-            }
-        }
+        self.queued_events
+            .push_back(NetworkBehaviourAction::GenerateEvent(Event {
+                remote_peer_id: event_source,
+                stats,
+            }))
     }
 
     fn poll(
