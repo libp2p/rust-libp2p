@@ -119,6 +119,8 @@ pub use libp2p_tcp as tcp;
 #[doc(inline)]
 pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
+#[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
