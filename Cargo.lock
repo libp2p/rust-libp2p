@@ -2276,7 +2276,6 @@ dependencies = [
  "ring",
  "rmp-serde",
  "rw-stream-sink",
- "sec1 0.3.0",
  "serde",
  "serde_json",
  "sha2 0.10.6",

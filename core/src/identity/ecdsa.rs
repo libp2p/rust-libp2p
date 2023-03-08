@@ -109,7 +109,7 @@ impl SecretKey {
 
     /// Decode a secret key from a byte buffer.
     pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
-        SigningKey::from_bytes(buf)
+        SigningKey::from_slice(buf)
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
     }
