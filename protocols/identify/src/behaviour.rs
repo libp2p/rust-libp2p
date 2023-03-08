@@ -89,7 +89,7 @@ pub struct Config {
     ///
     /// Defaults to 0ms.
     #[deprecated(
-        since = "0.52.0",
+        since = "0.42.1",
         note = "The `initial_delay` is no longer necessary and will be 
                 completely removed since a remote should be able to instantly
                 answer to an identify request"
