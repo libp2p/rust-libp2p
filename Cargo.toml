@@ -1,6 +1,15 @@
 [workspace]
 members = [
     "core",
+    "examples/chat-example",
+    "examples/dcutr",
+    "examples/distributed-key-value-store",
+    "examples/file-sharing",
+    "examples/identify",
+    "examples/ipfs-kad",
+    "examples/ipfs-private",
+    "examples/ping-example",
+    "examples/rendezvous",
     "interop-tests",
     "libp2p",
     "misc/keygen",
@@ -25,6 +34,7 @@ members = [
     "protocols/request-response",
     "swarm",
     "swarm-derive",
+    "swarm-test",
     "transports/deflate",
     "transports/dns",
     "transports/noise",
