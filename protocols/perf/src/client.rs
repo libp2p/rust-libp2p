@@ -25,7 +25,6 @@ use instant::Instant;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub use behaviour::{Behaviour, Event};
-pub use handler::Handler;
 
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
 #[derive(Debug, Clone, Copy)]
