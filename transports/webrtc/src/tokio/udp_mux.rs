@@ -398,11 +398,19 @@ impl UDPMuxNewAddr {
 
                             continue;
                         }
-                        Poll::Ready(Err(err)) if err.kind() == ErrorKind::TimedOut => {}
                         Poll::Pending => {}
                         Poll::Ready(Err(err)) => {
-                            log::error!("Could not read udp packet: {}", err);
-                            return Poll::Ready(UDPMuxEvent::Error(err));
+                            match err.kind() {
+                                ErrorKind::TimedOut => {}
+                                // If client drops off and resets the connection, do nothing with the ListenStream
+                                ErrorKind::ConnectionReset => {
+                                    log::debug!("ConnectionReset by remote client {err:?}");
+                                }
+                                _ => {
+                                    log::error!("Could not read udp packet: {}", err);
+                                    return Poll::Ready(UDPMuxEvent::Error(err));
+                                }
+                            }
                         }
                     }
                 }
