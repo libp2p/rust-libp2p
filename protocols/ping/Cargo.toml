@@ -23,11 +23,9 @@ void = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-noise = { path = "../../transports/noise" }
-libp2p-swarm = { path = "../../swarm", features = ["async-std", "macros"] }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
-libp2p-yamux = { path = "../../muxers/yamux" }
+env_logger = "0.10.0"
+libp2p-swarm = { path = "../../swarm", features = ["macros"] }
+libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

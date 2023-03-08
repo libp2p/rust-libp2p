@@ -2197,6 +2197,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-request-response",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2251,6 +2252,7 @@ dependencies = [
 name = "libp2p-dcutr"
 version = "0.9.0"
 dependencies = [
+ "async-std",
  "asynchronous-codec",
  "clap 4.1.8",
  "either",
@@ -2266,6 +2268,7 @@ dependencies = [
  "libp2p-plaintext",
  "libp2p-relay",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2341,9 +2344,8 @@ dependencies = [
  "libp2p-core",
  "libp2p-mplex",
  "libp2p-noise",
- "libp2p-plaintext",
  "libp2p-swarm",
- "libp2p-yamux",
+ "libp2p-swarm-test",
  "log",
  "prometheus-client",
  "quick-protobuf",
@@ -2427,6 +2429,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-noise",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2524,15 +2527,13 @@ version = "0.42.0"
 dependencies = [
  "async-std",
  "either",
+ "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
  "libp2p-core",
- "libp2p-mplex",
- "libp2p-noise",
  "libp2p-swarm",
- "libp2p-tcp",
- "libp2p-yamux",
+ "libp2p-swarm-test",
  "log",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -2649,6 +2650,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-ping",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2672,6 +2674,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-noise",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "rand 0.8.5",
@@ -2713,6 +2716,22 @@ dependencies = [
  "heck",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "libp2p-swarm-test"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-plaintext",
+ "libp2p-swarm",
+ "libp2p-tcp",
+ "libp2p-yamux",
+ "log",
+ "rand 0.8.5",
 ]
 
 [[package]]
