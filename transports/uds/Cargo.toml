@@ -10,14 +10,14 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
-[target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
+[dependencies]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.26"
 tokio = { version = "1.15", default-features = false, features = ["net"], optional = true }
 
-[target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]
+[dev-dependencies]
 tempfile = "3.4"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
