@@ -347,11 +347,10 @@ fn proto_to_message(rpc: &proto::RPC) -> Rpc {
                 .filter_map(|info| {
                     info.peer_id
                         .and_then(|id| PeerId::from_bytes(&id).ok())
-                        .map(|peer_id|
-                            //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
-                            PeerInfo {
-                                peer_id: Some(peer_id),
-                            })
+                        .map(|peer_id| PeerInfo {
+                            peer_id: Some(peer_id),
+                            signed_peer_record: None,
+                        })
                 })
                 .collect::<Vec<PeerInfo>>();
 
@@ -1813,6 +1812,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
     for _ in 0..config.prune_peers() + 5 {
         px.push(PeerInfo {
             peer_id: Some(PeerId::random()),
+            signed_peer_record: None,
         });
     }
 
@@ -1849,6 +1849,65 @@ fn test_connect_to_px_peers_on_handle_prune() {
             .map(|i| *i.peer_id.as_ref().unwrap())
             .collect::<HashSet<_>>()
     ));
+}
+
+#[test]
+fn test_connect_to_px_peers_with_peer_record_on_handle_prune() {
+    let config: Config = Config::default();
+
+    let (mut gs, peers, topics) = inject_nodes1()
+        .peer_no(1)
+        .topics(vec!["test".into()])
+        .to_subscribe(true)
+        .create_network();
+
+    // handle prune from single peer with px peers
+
+    let mut px_peer_ids = Vec::new();
+    let mut px = Vec::new();
+    // propose more px peers than config.prune_peers()
+    for i in 0..config.prune_peers() + 5 {
+        let key = Keypair::generate_ed25519();
+        let address: Multiaddr = format!("/ip4/1.2.3.4/tcp/{i}").try_into().unwrap();
+        let peer_record = PeerRecord::new(&key, vec![address]).unwrap();
+
+        px_peer_ids.push(key.public().to_peer_id());
+        px.push(PeerInfo {
+            peer_id: None,
+            signed_peer_record: Some(peer_record.into_signed_envelope()),
+        });
+    }
+
+    gs.handle_prune(
+        &peers[0],
+        vec![(
+            topics[0].clone(),
+            px.clone(),
+            Some(config.prune_backoff().as_secs()),
+        )],
+    );
+
+    // Check DialPeer events for px peers
+    let dials: Vec<_> = gs
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            // TODO: How to extract addresses from DialOpts to assert them in the test?
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
+            _ => None,
+        })
+        .collect();
+
+    // Exactly config.prune_peers() many random peers should be dialled
+    assert_eq!(dials.len(), config.prune_peers());
+
+    let dials_set: HashSet<_> = dials.into_iter().collect();
+
+    // No duplicates
+    assert_eq!(dials_set.len(), config.prune_peers());
+
+    // all dial peers must be in px
+    assert!(dials_set.is_subset(&px_peer_ids.iter().copied().collect::<HashSet<_>>()));
 }
 
 #[test]
@@ -2473,6 +2532,7 @@ fn test_ignore_px_from_negative_scored_peer() {
     //handle prune from single peer with px peers
     let px = vec![PeerInfo {
         peer_id: Some(PeerId::random()),
+        signed_peer_record: None,
     }];
 
     gs.handle_prune(
@@ -3064,6 +3124,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
     // Handle prune from peer peers[0] with px peers
     let px = vec![PeerInfo {
         peer_id: Some(PeerId::random()),
+        signed_peer_record: None,
     }];
     gs.handle_prune(
         &peers[0],
@@ -3086,6 +3147,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
     //handle prune from peer peers[1] with px peers
     let px = vec![PeerInfo {
         peer_id: Some(PeerId::random()),
+        signed_peer_record: None,
     }];
     gs.handle_prune(
         &peers[1],

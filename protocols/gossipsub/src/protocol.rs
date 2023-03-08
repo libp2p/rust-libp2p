@@ -31,7 +31,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, SignedEnvelope, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, warn};
 use quick_protobuf::Writer;
@@ -508,14 +508,24 @@ impl Decoder for GossipsubCodec {
                     .peers
                     .into_iter()
                     .filter_map(|info| {
-                        info.peer_id
+                        let peer_id = info
+                            .peer_id
                             .as_ref()
-                            .and_then(|id| PeerId::from_bytes(id).ok())
-                            .map(|peer_id|
-                                    //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
-                                    PeerInfo {
-                                        peer_id: Some(peer_id),
-                                    })
+                            .and_then(|peer_id| PeerId::from_bytes(peer_id).ok());
+
+                        let signed_peer_record = info
+                            .signed_peer_record
+                            .as_ref()
+                            .and_then(|spr| SignedEnvelope::from_protobuf_encoding(spr).ok());
+
+                        if peer_id.is_none() && signed_peer_record.is_none() {
+                            None
+                        } else {
+                            Some(PeerInfo {
+                                peer_id,
+                                signed_peer_record,
+                            })
+                        }
                     })
                     .collect::<Vec<PeerInfo>>();
 

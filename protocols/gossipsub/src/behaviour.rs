@@ -34,7 +34,9 @@ use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr, PeerRecord,
+};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -1075,7 +1077,12 @@ where
                 |p| p != peer && !self.score_below_threshold(p, |_| 0.0).0,
             )
             .into_iter()
-            .map(|p| PeerInfo { peer_id: Some(p) })
+            .map(|p| PeerInfo {
+                peer_id: Some(p),
+                // TODO: Gossipsub must have access to a signed_peer_record store to serve them
+                // For context, see https://github.com/libp2p/rust-libp2p/issues/2398
+                signed_peer_record: None,
+            })
             .collect()
         } else {
             Vec::new()
@@ -1595,14 +1602,11 @@ where
                         continue;
                     }
 
-                    // NOTE: We cannot dial any peers from PX currently as we typically will not
-                    // know their multiaddr. Until SignedRecords are spec'd this
-                    // remains a stub. By default `config.prune_peers()` is set to zero and
-                    // this is skipped. If the user modifies this, this will only be able to
-                    // dial already known peers (from an external discovery mechanism for
-                    // example).
-                    if self.config.prune_peers() > 0 {
-                        self.px_connect(px);
+                    // mesh count already discounted prune's sender
+                    let max_px_to_connect = self.config.mesh_n_low()
+                        - self.mesh.get(&topic_hash).map(|x| x.len()).unwrap_or(0);
+                    if max_px_to_connect > 0 {
+                        self.px_connect(px, max_px_to_connect);
                     }
                 }
             }
@@ -1610,13 +1614,7 @@ where
         debug!("Completed PRUNE handling for peer: {}", peer_id.to_string());
     }
 
-    fn px_connect(&mut self, mut px: Vec<PeerInfo>) {
-        let n = self.config.prune_peers();
-        // Ignore peerInfo with no ID
-        //
-        //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
-        // signed peer record?
-        px.retain(|p| p.peer_id.is_some());
+    fn px_connect(&mut self, mut px: Vec<PeerInfo>, n: usize) {
         if px.len() > n {
             // only use at most prune_peers many random peers
             let mut rng = thread_rng();
@@ -1625,15 +1623,25 @@ where
         }
 
         for p in px {
-            // TODO: Once signed records are spec'd: extract signed peer record if given and handle
-            // it, see https://github.com/libp2p/specs/pull/217
-            if let Some(peer_id) = p.peer_id {
+            let dial_opts = if let Some(signed_peer_record) = p.signed_peer_record {
+                // If signed envelop is invalid, return None and ignore this and next peer exchanges
+                match PeerRecord::from_signed_envelope(signed_peer_record) {
+                    Ok(peer_record) => {
+                        Some((peer_record.peer_id(), peer_record.addresses().to_vec()))
+                    }
+                    Err(_) => return,
+                }
+            } else {
+                p.peer_id.map(|peer_id| (peer_id, vec![]))
+            };
+
+            if let Some((peer_id, addresses)) = dial_opts {
                 // mark as px peer
                 self.px_peers.insert(peer_id);
 
                 // dial peer
                 self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(peer_id).build(),
+                    opts: DialOpts::peer_id(peer_id).addresses(addresses).build(),
                 });
             }
         }

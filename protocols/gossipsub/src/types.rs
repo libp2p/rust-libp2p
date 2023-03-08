@@ -20,6 +20,7 @@
 
 //! A collection of types using the Gossipsub system.
 use crate::TopicHash;
+use libp2p_core::SignedEnvelope;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
@@ -200,9 +201,7 @@ pub enum SubscriptionAction {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PeerInfo {
     pub peer_id: Option<PeerId>,
-    //TODO add this when RFC: Signed Address Records got added to the spec (see pull request
-    // https://github.com/libp2p/specs/pull/217)
-    //pub signed_peer_record: ?,
+    pub signed_peer_record: Option<SignedEnvelope>,
 }
 
 /// A Control message received by the gossipsub system.
@@ -330,8 +329,9 @@ impl From<Rpc> for proto::RPC {
                             .into_iter()
                             .map(|info| proto::PeerInfo {
                                 peer_id: info.peer_id.map(|id| id.to_bytes()),
-                                /// TODO, see https://github.com/libp2p/specs/pull/217
-                                signed_peer_record: None,
+                                signed_peer_record: info
+                                    .signed_peer_record
+                                    .map(|spr| spr.into_protobuf_encoding()),
                             })
                             .collect(),
                         backoff,
