@@ -1,0 +1,13 @@
+[package]
+name = "dcutr"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+clap = { version = "4.1.6", features = ["derive"] }
+env_logger = "0.10.0"
+futures = "0.3.26"
+futures-timer = "3.0"
+libp2p = { path = "../../", features = ["async-std", "dns", "dcutr", "identify", "macros", "mplex", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
+log = "0.4"
