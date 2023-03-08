@@ -28,13 +28,13 @@ use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{OrTransport, Transport},
-        upgrade, PeerId,
+        upgrade,
     },
     dcutr,
     dns::DnsConfig,
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux,
+    tcp, yamux, PeerId,
 };
 use log::info;
 use std::error::Error;
