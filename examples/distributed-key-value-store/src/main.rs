@@ -44,15 +44,14 @@ use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key, AddProviderOk, Kademlia, KademliaEvent, PeerRecord, PutRecordOk, QueryResult,
-    Quorum, Record,
+    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
+    PutRecordOk, QueryResult, Quorum, Record,
 };
 use libp2p::{
     development_transport, identity, mdns,
     swarm::{NetworkBehaviour, SwarmEvent},
     PeerId, Swarm,
 };
-use libp2p_kad::{GetProvidersOk, GetRecordOk};
 use std::error::Error;
 
 #[async_std::main]

@@ -21,7 +21,7 @@ parking_lot = "0.12.0"
 quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
 rand = "0.8.5"
 rustls = { version = "0.20.2", default-features = false }
-thiserror = "1.0.26"
+thiserror = "1.0.39"
 tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
 
 [features]
