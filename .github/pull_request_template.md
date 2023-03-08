@@ -12,15 +12,11 @@ Related https://github.com/libp2p/rust-libp2p/issues/ABCD.
 Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
 -->
 
-## Notes
+## Notes & open questions
 
 <!--
-Any notes or remarks you'd like to make about the PR which don't need to go into the final commits messages.
+Any notes, remarks or open questions you have to make about the PR which don't need to go into the final commits messages.
 -->
-
-## Open Questions
-
-<!-- Unresolved questions, if any. -->
 
 ## Change checklist
 
