@@ -48,3 +48,4 @@ members = [
     "transports/webrtc",
     "interop-tests"
 ]
+resolver = "2"
