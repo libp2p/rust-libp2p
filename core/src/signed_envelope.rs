@@ -1,9 +1,9 @@
-use crate::{DecodeError, proto};
+use crate::{proto, DecodeError};
 use libp2p_identity::SigningError;
 use libp2p_identity::{Keypair, PublicKey};
+use quick_protobuf::{BytesReader, Writer};
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
-use quick_protobuf::{BytesReader, Writer};
 
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
 ///

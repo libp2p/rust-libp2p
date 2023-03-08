@@ -21,7 +21,7 @@
 use crate::error::{DecodingError, SigningError};
 use crate::proto;
 use quick_protobuf::{BytesReader, Writer};
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 
 #[cfg(feature = "ed25519")]
 use crate::ed25519;
@@ -250,7 +250,8 @@ impl Keypair {
 
         match private_key.Type {
             #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 => {
+            proto::KeyType::Ed25519 =>
+            {
                 #[allow(deprecated)]
                 ed25519::Keypair::decode(&mut private_key.Data).map(Keypair::Ed25519)
             }
