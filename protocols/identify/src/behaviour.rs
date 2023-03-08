@@ -146,7 +146,7 @@ impl Config {
         since = "0.52.0",
         note = "The `initial_delay` is no longer necessary and will be 
                 completely removed since a remote should be able to instantly
-                answer to a identify request thus also this setter will be removed"
+                answer to an identify request thus also this setter will be removed"
     )]
     pub fn with_initial_delay(mut self, d: Duration) -> Self {
         self.initial_delay = d;
