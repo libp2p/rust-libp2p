@@ -1,0 +1,14 @@
+[package]
+name = "ipfs-private"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+async-std = { version = "1.12", features = ["attributes"] }
+async-trait = "0.1"
+either = "1.8"
+env_logger = "0.10"
+futures = "0.3.26"
+libp2p = { path = "../../", features = ["async-std", "gossipsub", "dns", "identify", "kad", "macros", "mplex", "noise", "ping", "pnet", "tcp", "websocket", "yamux"] }
+multiaddr = { version = "0.17.0" }

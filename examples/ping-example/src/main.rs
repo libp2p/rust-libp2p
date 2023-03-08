@@ -25,7 +25,7 @@
 //! In the first terminal window, run:
 //!
 //! ```sh
-//! cargo run --example ping --features=full
+//! cargo run
 //! ```
 //!
 //! It will print the PeerId and the listening addresses, e.g. `Listening on
@@ -34,15 +34,18 @@
 //! In the second terminal window, start a new instance of the example with:
 //!
 //! ```sh
-//! cargo run --example ping --features=full -- /ip4/127.0.0.1/tcp/24915
+//! cargo run -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other.
 
 use futures::prelude::*;
-use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::{identity, ping, Multiaddr, PeerId};
+use libp2p::{
+    identity, ping,
+    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    Multiaddr, PeerId,
+};
 use std::error::Error;
 
 #[async_std::main]
@@ -78,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 /// Our network behaviour.
 ///
-/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
+/// For illustrative purposes, this includes the [`KeepAlive`](keep_alive::Behaviour) behaviour so a continuous sequence of
 /// pings can be observed.
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {

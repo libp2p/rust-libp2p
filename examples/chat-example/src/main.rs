@@ -24,7 +24,7 @@
 //! Using two terminal windows, start two instances, typing the following in each:
 //!
 //! ```sh
-//! cargo run --example gossipsub-chat --features=full
+//! cargo run
 //! ```
 //!
 //! Mutual mDNS discovery may take a few seconds. When each peer does discover the other
