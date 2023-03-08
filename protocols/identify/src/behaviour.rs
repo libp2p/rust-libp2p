@@ -92,7 +92,7 @@ pub struct Config {
         since = "0.52.0",
         note = "The `initial_delay` is no longer necessary and will be 
                 completely removed since a remote should be able to instantly
-                answer to a identify request"
+                answer to an identify request"
     )]
     pub initial_delay: Duration,
     /// The interval at which identification requests are sent to
