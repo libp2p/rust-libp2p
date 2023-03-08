@@ -24,7 +24,7 @@ use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
-use crate::{rpc_proto, Config};
+use crate::{rpc_proto::proto, Config};
 use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
@@ -35,7 +35,7 @@ use libp2p_core::{
     identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
 };
 use log::{debug, warn};
-use prost::Message as _;
+use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
 
@@ -191,12 +191,12 @@ pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
-    codec: prost_codec::Codec<rpc_proto::Rpc>,
+    codec: quick_protobuf_codec::Codec<proto::RPC>,
 }
 
 impl GossipsubCodec {
     pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = prost_codec::Codec::new(length_codec.max_len());
+        let codec = quick_protobuf_codec::Codec::new(length_codec.max_len());
         GossipsubCodec {
             validation_mode,
             codec,
@@ -206,7 +206,9 @@ impl GossipsubCodec {
     /// Verifies a gossipsub message. This returns either a success or failure. All errors
     /// are logged, which prevents error handling in the codec and handler. We simply drop invalid
     /// messages and log warnings, rather than propagating errors through the codec.
-    fn verify_signature(message: &rpc_proto::Message) -> bool {
+    fn verify_signature(message: &proto::Message) -> bool {
+        use quick_protobuf::MessageWrite;
+
         let from = match message.from.as_ref() {
             Some(v) => v,
             None => {
@@ -258,10 +260,11 @@ impl GossipsubCodec {
         let mut message_sig = message.clone();
         message_sig.signature = None;
         message_sig.key = None;
-        let mut buf = Vec::with_capacity(message_sig.encoded_len());
+        let mut buf = Vec::with_capacity(message_sig.get_size());
+        let mut writer = Writer::new(&mut buf);
         message_sig
-            .encode(&mut buf)
-            .expect("Buffer has sufficient capacity");
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
         let mut signature_bytes = SIGNING_PREFIX.to_vec();
         signature_bytes.extend_from_slice(&buf);
         public_key.verify(&signature_bytes, signature)
@@ -269,7 +272,7 @@ impl GossipsubCodec {
 }
 
 impl Encoder for GossipsubCodec {
-    type Item = rpc_proto::Rpc;
+    type Item = proto::RPC;
     type Error = HandlerError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
