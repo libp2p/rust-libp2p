@@ -20,7 +20,7 @@ pub trait SwarmExt {
 
     /// Create a new [`Swarm`] with an ephemeral identity.
     ///
-    /// The swarm will use a [`MemoryTransport`] together with a noise authentication layer and
+    /// The swarm will use a [`MemoryTransport`] together with [`Plaintext2Config`] authentication layer and
     /// yamux as the multiplexer. However, these details should not be relied upon by the test
     /// and may change at any time.
     fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
