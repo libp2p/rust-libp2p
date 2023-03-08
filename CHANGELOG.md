@@ -45,11 +45,6 @@
 
 # `libp2p` facade crate
 
-# 0.52.0 [unreleased]
-
-- Update individual crates.
-    - Update to [`libp2p-identify` `v0.42.1`](protocols/identify/CHANGELOG.md#0421-unreleased)
-
 # 0.51.0
 
 - Enable `NetworkBehaviour`s to manage connections.
