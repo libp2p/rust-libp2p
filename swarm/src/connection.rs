@@ -376,6 +376,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
+#[deprecated(note = "Use the `connection_limits::Behaviour` to implement connection limits.")]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
@@ -384,6 +385,7 @@ pub struct ConnectionLimit {
     pub current: u32,
 }
 
+#[allow(deprecated)]
 impl fmt::Display for ConnectionLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -395,6 +397,7 @@ impl fmt::Display for ConnectionLimit {
 }
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
+#[allow(deprecated)]
 impl std::error::Error for ConnectionLimit {}
 
 struct SubstreamUpgrade<UserData, Upgrade> {

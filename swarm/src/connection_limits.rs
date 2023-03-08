@@ -19,12 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, ConnectionLimit, ConnectionLimits,
-    FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -35,7 +35,7 @@ use void::Void;
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](crate::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`] will be emitted.
 /// The [`ListenError::Denied`](crate::ListenError::Denied) and respectively the [`DialError::Denied`](crate::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](crate::ConnectionDenied) type that can be downcast to [`ConnectionLimit`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`](crate::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
@@ -46,6 +46,7 @@ use void::Void;
 /// # use libp2p_identify as identify;
 /// # use libp2p_ping as ping;
 /// # use libp2p_swarm_derive::NetworkBehaviour;
+/// # use libp2p_swarm::connection_limits;
 ///
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
@@ -77,15 +78,125 @@ impl Behaviour {
         }
     }
 
-    fn check_limit(&mut self, limit: Option<u32>, current: usize) -> Result<(), ConnectionDenied> {
+    fn check_limit(
+        &mut self,
+        limit: Option<u32>,
+        current: usize,
+        kind: Kind,
+    ) -> Result<(), ConnectionDenied> {
         let limit = limit.unwrap_or(u32::MAX);
         let current = current as u32;
 
         if current >= limit {
-            return Err(ConnectionDenied::new(ConnectionLimit { limit, current }));
+            return Err(ConnectionDenied::new(Exceeded { limit, kind }));
         }
 
         Ok(())
+    }
+}
+
+/// A connection limit has been exceeded.
+#[derive(Debug, Clone, Copy)]
+pub struct Exceeded {
+    limit: u32,
+    kind: Kind,
+}
+
+impl Exceeded {
+    pub fn limit(&self) -> u32 {
+        self.limit
+    }
+}
+
+impl fmt::Display for Exceeded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "connection limit exceeded: at most {} {} are allowed",
+            self.limit, self.kind
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Kind {
+    PendingIncoming,
+    PendingOutgoing,
+    EstablishedIncoming,
+    EstablishedOutgoing,
+    EstablishedPerPeer,
+    EstablishedTotal,
+}
+
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Kind::PendingIncoming => write!(f, "pending incoming connections"),
+            Kind::PendingOutgoing => write!(f, "pending outgoing connections"),
+            Kind::EstablishedIncoming => write!(f, "established incoming connections"),
+            Kind::EstablishedOutgoing => write!(f, "established outgoing connections"),
+            Kind::EstablishedPerPeer => write!(f, "established connections per peer"),
+            Kind::EstablishedTotal => write!(f, "established connections"),
+        }
+    }
+}
+
+impl std::error::Error for Exceeded {}
+
+/// The configurable connection limits.
+///
+/// By default no connection limits apply.
+#[derive(Debug, Clone, Default)]
+pub struct ConnectionLimits {
+    pub(crate) max_pending_incoming: Option<u32>,
+    pub(crate) max_pending_outgoing: Option<u32>,
+    pub(crate) max_established_incoming: Option<u32>,
+    pub(crate) max_established_outgoing: Option<u32>,
+    pub(crate) max_established_per_peer: Option<u32>,
+    pub(crate) max_established_total: Option<u32>,
+}
+
+impl ConnectionLimits {
+    /// Configures the maximum number of concurrently incoming connections being established.
+    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_incoming = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrently outgoing connections being established.
+    pub fn with_max_pending_outgoing(mut self, limit: Option<u32>) -> Self {
+        self.max_pending_outgoing = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established inbound connections.
+    pub fn with_max_established_incoming(mut self, limit: Option<u32>) -> Self {
+        self.max_established_incoming = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established outbound connections.
+    pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
+        self.max_established_outgoing = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established connections (both
+    /// inbound and outbound).
+    ///
+    /// Note: This should be used in conjunction with
+    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
+    /// eclipse attacks (all connections being inbound).
+    pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
+        self.max_established_total = limit;
+        self
+    }
+
+    /// Configures the maximum number of concurrent established connections per peer,
+    /// regardless of direction (incoming or outgoing).
+    pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
+        self.max_established_per_peer = limit;
+        self
     }
 }
 
@@ -102,6 +213,7 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
+            Kind::PendingIncoming,
         )?;
 
         self.pending_inbound_connections.insert(connection_id);
@@ -121,6 +233,7 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
+            Kind::EstablishedIncoming,
         )?;
         self.check_limit(
             self.limits.max_established_per_peer,
@@ -128,11 +241,13 @@ impl NetworkBehaviour for Behaviour {
                 .get(&peer)
                 .map(|connections| connections.len())
                 .unwrap_or(0),
+            Kind::EstablishedPerPeer,
         )?;
         self.check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
+            Kind::EstablishedTotal,
         )?;
 
         self.established_inbound_connections.insert(connection_id);
@@ -154,6 +269,7 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit(
             self.limits.max_pending_outgoing,
             self.pending_outbound_connections.len(),
+            Kind::PendingOutgoing,
         )?;
 
         self.pending_outbound_connections.insert(connection_id);
@@ -173,6 +289,7 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
+            Kind::EstablishedOutgoing,
         )?;
         self.check_limit(
             self.limits.max_established_per_peer,
@@ -180,11 +297,13 @@ impl NetworkBehaviour for Behaviour {
                 .get(&peer)
                 .map(|connections| connections.len())
                 .unwrap_or(0),
+            Kind::EstablishedPerPeer,
         )?;
         self.check_limit(
             self.limits.max_established_total,
             self.established_inbound_connections.len()
                 + self.established_outbound_connections.len(),
+            Kind::EstablishedTotal,
         )?;
 
         self.established_outbound_connections.insert(connection_id);
@@ -281,12 +400,11 @@ mod tests {
             .expect_err("Unexpected dialing success.")
         {
             DialError::Denied { cause } => {
-                let limit = cause
-                    .downcast::<ConnectionLimit>()
+                let exceeded = cause
+                    .downcast::<Exceeded>()
                     .expect("connection denied because of limit");
 
-                assert_eq!(limit.current, outgoing_limit);
-                assert_eq!(limit.limit, outgoing_limit);
+                assert_eq!(exceeded.limit(), outgoing_limit);
             }
             e => panic!("Unexpected error: {e:?}"),
         }
@@ -353,11 +471,10 @@ mod tests {
                                 ..
                             })) => {
                                 let err = cause
-                                    .downcast::<ConnectionLimit>()
+                                    .downcast::<Exceeded>()
                                     .expect("connection denied because of limit");
 
-                                assert_eq!(err.limit, limit);
-                                assert_eq!(err.limit, err.current);
+                                assert_eq!(err.limit(), limit);
                                 let info = network1.network_info();
                                 let counters = info.connection_counters();
                                 assert_eq!(counters.num_established_incoming(), limit);

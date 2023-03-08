@@ -18,12 +18,14 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::connection::{Connection, ConnectionId, PendingPoint};
+#[allow(deprecated)]
+use crate::connection::{Connection, ConnectionId, ConnectionLimit, PendingPoint};
+use crate::connection_limits::ConnectionLimits;
 #[allow(deprecated)]
 use crate::IntoConnectionHandler;
 use crate::{
     connection::{
-        Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
+        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::TransportError,
@@ -407,6 +409,7 @@ where
     ///
     /// Returns an error if the limit of pending outgoing connections
     /// has been reached.
+    #[allow(deprecated)]
     pub fn add_outgoing(
         &mut self,
         dials: Vec<
@@ -461,6 +464,7 @@ where
     ///
     /// Returns an error if the limit of pending incoming connections
     /// has been reached.
+    #[allow(deprecated)]
     pub fn add_incoming<TFut>(
         &mut self,
         future: TFut,
@@ -978,14 +982,17 @@ impl ConnectionCounters {
         }
     }
 
+    #[allow(deprecated)]
     fn check_max_pending_outgoing(&self) -> Result<(), ConnectionLimit> {
         Self::check(self.pending_outgoing, self.limits.max_pending_outgoing)
     }
 
+    #[allow(deprecated)]
     fn check_max_pending_incoming(&self) -> Result<(), ConnectionLimit> {
         Self::check(self.pending_incoming, self.limits.max_pending_incoming)
     }
 
+    #[allow(deprecated)]
     fn check_max_established(&self, endpoint: &ConnectedPoint) -> Result<(), ConnectionLimit> {
         // Check total connection limit.
         Self::check(self.num_established(), self.limits.max_established_total)?;
@@ -1002,10 +1009,12 @@ impl ConnectionCounters {
         }
     }
 
+    #[allow(deprecated)]
     fn check_max_established_per_peer(&self, current: u32) -> Result<(), ConnectionLimit> {
         Self::check(current, self.limits.max_established_per_peer)
     }
 
+    #[allow(deprecated)]
     fn check(current: u32, limit: Option<u32>) -> Result<(), ConnectionLimit> {
         if let Some(limit) = limit {
             if current >= limit {
@@ -1024,63 +1033,6 @@ fn num_peer_established<TInEvent>(
     established.get(&peer).map_or(0, |conns| {
         u32::try_from(conns.len()).expect("Unexpectedly large number of connections for a peer.")
     })
-}
-
-/// The configurable connection limits.
-///
-/// By default no connection limits apply.
-#[derive(Debug, Clone, Default)]
-pub struct ConnectionLimits {
-    pub(crate) max_pending_incoming: Option<u32>,
-    pub(crate) max_pending_outgoing: Option<u32>,
-    pub(crate) max_established_incoming: Option<u32>,
-    pub(crate) max_established_outgoing: Option<u32>,
-    pub(crate) max_established_per_peer: Option<u32>,
-    pub(crate) max_established_total: Option<u32>,
-}
-
-impl ConnectionLimits {
-    /// Configures the maximum number of concurrently incoming connections being established.
-    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_incoming = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrently outgoing connections being established.
-    pub fn with_max_pending_outgoing(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_outgoing = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established inbound connections.
-    pub fn with_max_established_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_established_incoming = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established outbound connections.
-    pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
-        self.max_established_outgoing = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established connections (both
-    /// inbound and outbound).
-    ///
-    /// Note: This should be used in conjunction with
-    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
-    /// eclipse attacks (all connections being inbound).
-    pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
-        self.max_established_total = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established connections per peer,
-    /// regardless of direction (incoming or outgoing).
-    pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
-        self.max_established_per_peer = limit;
-        self
-    }
 }
 
 /// Configuration options when creating a [`Pool`].

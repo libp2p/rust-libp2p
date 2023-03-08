@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
-use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
+use crate::{ConnectedPoint, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -93,6 +95,7 @@ pub enum PendingConnectionError<TTransErr> {
     #[deprecated(
         note = "Use `libp2p_swarm::connection_limits::Behaviour` instead and handle `{Dial,Listen}Error::Denied::cause`."
     )]
+    #[allow(deprecated)]
     ConnectionLimit(ConnectionLimit),
 
     /// Pending connection attempt has been aborted.
