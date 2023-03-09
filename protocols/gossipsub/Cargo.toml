@@ -36,15 +36,14 @@ instant = "0.1.11"
 prometheus-client = "0.19.0"
 
 [dev-dependencies]
-async-std = "1.6.3"
+async-std = { version = "1.6.3", features = ["unstable"] }
 env_logger = "0.10.0"
 hex = "0.4.2"
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-noise = { path = "../../transports/noise" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
-libp2p-swarm = { path = "../../swarm" }
-libp2p-yamux = { path = "../../muxers/yamux" }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-core = { path = "../../core"}
+libp2p-mplex = { path = "../../muxers/mplex"}
+libp2p-noise = { path = "../../transports/noise"}
+libp2p-swarm-test = { path = "../../swarm-test"}
+quickcheck-ext = { path = "../../misc/quickcheck-ext" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
