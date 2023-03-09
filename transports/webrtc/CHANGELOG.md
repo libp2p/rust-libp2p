@@ -1,6 +1,9 @@
-[unreleased]
+# 0.4.0-alpha.3 - unreleased
 
--   fix for [#3574](https://github.com/libp2p/rust-libp2p/issues/3574) by not emitting `UDPMuxEvent::Error` when `ErrorKind::ConnectionReset` occurs from remote client
+- Gracefully handle errors on individual connections, avoiding shutdown of the entire listener upon disconnect of a single client.
+  See [PR 3575].
+  
+[PR 3575]: https://github.com/libp2p/rust-libp2p/pull/3575
 
 # 0.4.0-alpha.2
 
