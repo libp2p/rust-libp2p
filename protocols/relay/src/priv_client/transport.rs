@@ -111,7 +111,11 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Connection, Error>>;
 
-    fn listen_on(&mut self, listener_id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
             RelayedMultiaddr {
                 relay_peer_id: None,

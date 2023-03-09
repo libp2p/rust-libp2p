@@ -349,7 +349,11 @@ where
         self.0.dial_as_listener(addr)
     }
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.0.listen_on(id, addr)
     }
 
@@ -428,7 +432,11 @@ where
         })
     }
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.inner
             .listen_on(id, addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))

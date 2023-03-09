@@ -169,7 +169,11 @@ where
         }
     }
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         use TransportError::*;
         match self {
             Either::Left(a) => a.listen_on(id, addr).map_err(|e| match e {

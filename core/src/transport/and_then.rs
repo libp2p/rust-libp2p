@@ -54,7 +54,11 @@ where
     type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
     type Dial = AndThenFuture<T::Dial, C, F>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.transport
             .listen_on(id, addr)
             .map_err(|err| err.map(Either::Left))

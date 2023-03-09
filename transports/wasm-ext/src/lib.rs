@@ -198,7 +198,11 @@ impl Transport for ExtTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
 
-    fn listen_on(&mut self, listener_id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
             if is_not_supported_error(&err) {
                 TransportError::MultiaddrNotSupported(addr)

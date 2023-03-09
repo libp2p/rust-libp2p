@@ -35,7 +35,9 @@ where
         .and_then(move |c, e| upgrade::apply(c, MC::default(), e, upgrade::Version::V1))
         .boxed();
 
-    alice.listen_on(Default::default(), Protocol::Memory(0).into()).unwrap();
+    alice
+        .listen_on(Default::default(), Protocol::Memory(0).into())
+        .unwrap();
     let listen_address = alice.next().await.unwrap().into_new_address().unwrap();
 
     futures::future::join(

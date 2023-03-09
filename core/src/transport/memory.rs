@@ -179,7 +179,11 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -469,15 +473,21 @@ mod tests {
         let listener_id_3 = ListenerId::new();
         transport.listen_on(listener_id_3, addr_2.clone()).unwrap();
 
-        assert!(transport.listen_on(ListenerId::new(), addr_1.clone()).is_err());
-        assert!(transport.listen_on(ListenerId::new(), addr_2.clone()).is_err());
+        assert!(transport
+            .listen_on(ListenerId::new(), addr_1.clone())
+            .is_err());
+        assert!(transport
+            .listen_on(ListenerId::new(), addr_2.clone())
+            .is_err());
 
         assert!(
             transport.remove_listener(listener_id_2),
             "Listener doesn't exist."
         );
         assert!(transport.listen_on(ListenerId::new(), addr_1).is_ok());
-        assert!(transport.listen_on(ListenerId::new(), addr_2.clone()).is_err());
+        assert!(transport
+            .listen_on(ListenerId::new(), addr_2.clone())
+            .is_err());
 
         assert!(
             transport.remove_listener(listener_id_3),
@@ -493,7 +503,10 @@ mod tests {
             .dial("/memory/810172461024613".parse().unwrap())
             .is_err());
         transport
-            .listen_on(ListenerId::new(), "/memory/810172461024613".parse().unwrap())
+            .listen_on(
+                ListenerId::new(),
+                "/memory/810172461024613".parse().unwrap(),
+            )
             .unwrap();
         assert!(transport
             .dial("/memory/810172461024613".parse().unwrap())
@@ -581,7 +594,9 @@ mod tests {
         let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            listener_transport.listen_on(ListenerId::new(), listener_addr.clone()).unwrap();
+            listener_transport
+                .listen_on(ListenerId::new(), listener_addr.clone())
+                .unwrap();
             loop {
                 if let TransportEvent::Incoming { send_back_addr, .. } =
                     listener_transport.select_next_some().await
@@ -618,7 +633,9 @@ mod tests {
         let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            listener_transport.listen_on(ListenerId::new(), listener_addr.clone()).unwrap();
+            listener_transport
+                .listen_on(ListenerId::new(), listener_addr.clone())
+                .unwrap();
             loop {
                 if let TransportEvent::Incoming { send_back_addr, .. } =
                     listener_transport.select_next_some().await

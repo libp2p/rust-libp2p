@@ -198,7 +198,11 @@ where
         BoxFuture<'static, Result<Self::Output, Self::Error>>,
     >;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.inner
             .lock()
             .listen_on(id, addr)

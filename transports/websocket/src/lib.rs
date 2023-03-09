@@ -189,7 +189,11 @@ where
     type ListenerUpgrade = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.transport.listen_on(id, addr)
     }
 
@@ -308,7 +312,9 @@ mod tests {
 
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();
-        ws_config.listen_on(Default::default(), listen_addr).expect("listener");
+        ws_config
+            .listen_on(Default::default(), listen_addr)
+            .expect("listener");
 
         let addr = ws_config
             .next()

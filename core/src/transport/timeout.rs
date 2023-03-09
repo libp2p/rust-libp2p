@@ -85,7 +85,11 @@ where
     type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
     type Dial = Timeout<InnerTrans::Dial>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.inner
             .listen_on(id, addr)
             .map_err(|err| err.map(TransportTimeoutError::Other))

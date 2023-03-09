@@ -870,7 +870,10 @@ mod test {
 
         // Start listening so that the dialer and driver are dropped.
         transport
-            .listen_on(Default::default(), "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            .listen_on(
+                Default::default(),
+                "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+            )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
 

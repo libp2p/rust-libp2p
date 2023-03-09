@@ -437,7 +437,11 @@ where
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let socket_addr = if let Ok(sa) = multiaddr_to_socketaddr(addr.clone()) {
             sa
         } else {
@@ -1057,7 +1061,7 @@ mod tests {
             port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
         ) {
             let mut tcp = Transport::<T>::new(Config::new()).boxed();
-            tcp.listen_on(Default::default(),addr).unwrap();
+            tcp.listen_on(Default::default(), addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
                     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -1320,8 +1324,7 @@ mod tests {
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();
             let listener_id = Default::default();
-            tcp
-                .listen_on(listener_id, "/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            tcp.listen_on(listener_id, "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
             tcp.remove_listener(listener_id)
         }

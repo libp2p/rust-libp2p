@@ -61,7 +61,11 @@ where
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(&mut self, id: ListenerId, addr: Multiaddr) -> Result<(), TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.transport.listen_on(id, addr)
     }
 

@@ -23,7 +23,10 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
     let mut listener = new_transport().boxed();
 
     listener
-        .listen_on(Default::default(), "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap())
+        .listen_on(
+            Default::default(),
+            "/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap(),
+        )
         .unwrap();
     let listen_address = listener.next().await.unwrap().into_new_address().unwrap();
 

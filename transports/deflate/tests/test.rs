@@ -59,7 +59,10 @@ async fn run(message1: Vec<u8>) {
     };
     let mut listener_transport = new_transport();
     listener_transport
-        .listen_on(Default::default(), "/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
+        .listen_on(
+            Default::default(),
+            "/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"),
+        )
         .expect("listener");
 
     let listen_addr = listener_transport
