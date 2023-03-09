@@ -296,6 +296,17 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     Dialing(PeerId),
 }
 
+impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr> {
+    /// Extract the `TBehaviourOutEvent` from this [`SwarmEvent`] in case it is the `Behaviour` variant, otherwise fail.
+    #[allow(clippy::result_large_err)]
+    pub fn try_into_behaviour_event(self) -> Result<TBehaviourOutEvent, Self> {
+        match self {
+            SwarmEvent::Behaviour(inner) => Ok(inner),
+            other => Err(other),
+        }
+    }
+}
+
 /// Contains the state of the network, plus the way it should behave.
 ///
 /// Note: Needs to be polled via `<Swarm as Stream>` in order to make
