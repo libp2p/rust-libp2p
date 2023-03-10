@@ -47,7 +47,7 @@ pub async fn new(
 
     // Build the Swarm, connecting the lower layer transport logic with the
     // higher layer network behaviour logic.
-    let swarm = SwarmBuilder::with_threadpool_executor(
+    let swarm = SwarmBuilder::with_async_std_executor(
         libp2p::development_transport(id_keys).await?,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),

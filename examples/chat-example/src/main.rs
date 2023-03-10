@@ -48,7 +48,10 @@
 use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::{
-    gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
+    gossipsub, identity, mdns,
+    swarm::NetworkBehaviour,
+    swarm::{SwarmBuilder, SwarmEvent},
+    PeerId,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -104,7 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
         let behaviour = MyBehaviour { gossipsub, mdns };
-        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Read full lines from stdin
