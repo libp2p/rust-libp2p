@@ -45,6 +45,10 @@
 
 # `libp2p` facade crate
 
+# 0.51.1 [unreleased]
+
+- Depend on `libp2p-tls` `v0.1.0`.
+
 # 0.51.0
 
 - Enable `NetworkBehaviour`s to manage connections.
