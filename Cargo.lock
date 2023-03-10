@@ -2143,7 +2143,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.51.0"
+version = "0.51.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2191,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2216,7 +2216,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.39.0"
+version = "0.39.1"
 dependencies = [
  "async-std",
  "either",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2309,7 +2309,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "asynchronous-codec",
  "cuckoofilter",
@@ -2328,7 +2328,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.44.0"
+version = "0.44.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2364,7 +2364,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2420,7 +2420,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "arrayvec",
  "asynchronous-codec",
@@ -2535,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-io",
  "bytes",
@@ -2580,7 +2580,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.39.0"
+version = "0.39.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2619,7 +2619,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.7.0-alpha.2"
+version = "0.7.0-alpha.3"
 dependencies = [
  "async-std",
  "bytes",
@@ -2646,7 +2646,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2677,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -2800,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 dependencies = [
  "futures",
  "futures-rustls",
@@ -2846,7 +2846,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.4.0-alpha.2"
+version = "0.4.0-alpha.3"
 dependencies = [
  "anyhow",
  "async-trait",
