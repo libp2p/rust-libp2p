@@ -1,3 +1,9 @@
+# 0.15.1 - unreleased
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
+
 # 0.15.0
 
 - Rename types as per [discussion 2174].
@@ -11,11 +17,8 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
-- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
-
 [PR 3238]: https://github.com/libp2p/rust-libp2p/pull/3238
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
-[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.14.0
 

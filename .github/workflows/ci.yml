@@ -288,3 +288,10 @@ jobs:
 
             echo $git_status
             test -z "$git_status"
+
+  ensure-lockfile-uptodate:
+    name: Ensure that `Cargo.lock` is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: cargo metadata --frozen --format-version=1 > /dev/null

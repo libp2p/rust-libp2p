@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.7.0-alpha.2"
+version = "0.7.0-alpha.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = "1.62.0"
@@ -15,7 +15,7 @@ futures = "0.3.26"
 futures-timer = "3.0.2"
 if-watch = "3.0.0"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-tls = { version = "=0.1.0-alpha.2", path = "../tls" }
+libp2p-tls = { version = "0.1.0", path = "../tls" }
 log = "0.4"
 parking_lot = "0.12.0"
 quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
