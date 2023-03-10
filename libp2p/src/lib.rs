@@ -49,12 +49,12 @@ pub use libp2p_core as core;
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
 #[cfg(feature = "deflate")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
 #[cfg(feature = "floodsub")]
@@ -71,7 +71,7 @@ pub use libp2p_identify as identify;
 #[doc(inline)]
 pub use libp2p_kad as kad;
 #[cfg(feature = "mdns")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
@@ -94,7 +94,7 @@ pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "quic")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_quic as quic;
 #[cfg(feature = "relay")]
@@ -109,18 +109,18 @@ pub use libp2p_request_response as request_response;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
 #[cfg(feature = "tcp")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
 #[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
@@ -128,11 +128,11 @@ pub use libp2p_uds as uds;
 pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_webrtc as webrtc;
 #[cfg(feature = "websocket")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[cfg(feature = "yamux")]
@@ -168,7 +168,7 @@ pub use self::transport_ext::TransportExt;
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
-    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+    not(target_arch = "wasm32"),
     any(
         all(feature = "tcp-async-io", feature = "dns-async-std"),
         all(feature = "tcp", feature = "dns", feature = "async-std")
@@ -228,7 +228,7 @@ pub async fn development_transport(
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
-    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
+    not(target_arch = "wasm32"),
     any(
         all(feature = "tcp-tokio", feature = "dns-tokio"),
         all(feature = "tcp", feature = "dns", feature = "tokio")
