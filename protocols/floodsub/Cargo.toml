@@ -22,7 +22,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
 rand = "0.8"
 smallvec = "1.6.1"
-thiserror = "1.0.37"
+thiserror = "1.0.39"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
