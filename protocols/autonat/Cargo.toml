@@ -31,6 +31,7 @@ libp2p-noise = { path = "../../transports/noise" }
 libp2p-swarm = { path = "../../swarm", features = ["async-std", "macros"] }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

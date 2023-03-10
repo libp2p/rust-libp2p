@@ -1,0 +1,20 @@
+[package]
+name = "libp2p-swarm-test"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.57"
+libp2p-core = { path = "../core" }
+libp2p-swarm = { path = "../swarm" }
+libp2p-yamux = { path = "../muxers/yamux" }
+libp2p-plaintext = { path = "../transports/plaintext" }
+libp2p-tcp = { path = "../transports/tcp", features = ["async-io"] }
+futures = "0.3.24"
+log = "0.4.17"
+rand = "0.8.5"
+futures-timer = "3.0.2"

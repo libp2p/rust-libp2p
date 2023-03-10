@@ -37,6 +37,7 @@ libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["tokio"] }
 rand = "0.8"
 tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
