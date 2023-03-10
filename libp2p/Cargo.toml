@@ -121,7 +121,7 @@ libp2p-quic = { version = "=0.7.0-alpha.2", path = "../transports/quic", optiona
 libp2p-tcp = { version = "0.39.0", path = "../transports/tcp", optional = true }
 libp2p-tls = { version = "=0.1.0-alpha.2", path = "../transports/tls", optional = true }
 libp2p-uds = { version = "0.38.0", path = "../transports/uds", optional = true }
-libp2p-webrtc = { version = "=0.4.0-alpha.2", path = "../transports/webrtc", optional = true }
+libp2p-webrtc = { version = "=0.4.0-alpha.3", path = "../transports/webrtc", optional = true }
 libp2p-websocket = { version = "0.41.0", path = "../transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
