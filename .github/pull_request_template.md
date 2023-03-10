@@ -15,7 +15,7 @@ Fixes https://github.com/libp2p/rust-libp2p/issues/XYZ.
 ## Notes & open questions
 
 <!--
-Any notes, remarks or open questions you have to make about the PR which don't need to go into the final commits messages.
+Any notes, remarks or open questions you have to make about the PR which don't need to go into the final commit message.
 -->
 
 ## Change checklist
