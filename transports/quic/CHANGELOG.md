@@ -1,6 +1,10 @@
+# 0.7.0-alpha.3
+
+- Depend `libp2p-tls` `v0.1.0`.
+
 # 0.7.0-alpha.2
 
-- Update to `libp2p-tls` `v0.2.0`.
+- Update to `libp2p-tls` `v0.1.0-alpha.2`.
 
 - Update to `libp2p-core` `v0.39.0`.
 
