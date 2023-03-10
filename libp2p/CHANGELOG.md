@@ -45,7 +45,9 @@
 
 # `libp2p` facade crate
 
-# 0.51.1 - unreleased
+# 0.51.1 [unreleased]
+
+- Depend on `libp2p-tls` `v0.1.0`.
 
 - Introduce `ed25519` feature.
   For backwards-compatibility, the `ed25519` identity keys are still available without activating this feature.
