@@ -376,7 +376,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
-#[deprecated(note = "Use the `connection_limits::Behaviour` to implement connection limits.")]
+#[deprecated(note = "Use `libp2p::connection_limits` instead.")]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.

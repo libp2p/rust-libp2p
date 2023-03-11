@@ -93,7 +93,7 @@ pub enum PendingConnectionError<TTransErr> {
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
     #[deprecated(
-        note = "Use `libp2p_swarm::connection_limits::Behaviour` instead and handle `{Dial,Listen}Error::Denied::cause`."
+        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`."
     )]
     #[allow(deprecated)]
     ConnectionLimit(ConnectionLimit),
