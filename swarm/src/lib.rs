@@ -247,7 +247,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         error: DialError,
     },
     /// We connected to a peer, but we immediately closed the connection because that peer is banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
     BannedPeer {
         /// Identity of the banned peer.
         peer_id: PeerId,
@@ -726,7 +726,7 @@ where
     ///
     /// Any incoming connection and any dialing attempt will immediately be rejected.
     /// This function has no effect if the peer is already banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
     pub fn ban_peer_id(&mut self, peer_id: PeerId) {
         if self.banned_peers.insert(peer_id) {
             // Note that established connections to the now banned peer are closed but not
@@ -738,7 +738,7 @@ where
     }
 
     /// Unbans a peer.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
     pub fn unban_peer_id(&mut self, peer_id: PeerId) {
         self.banned_peers.remove(&peer_id);
     }
@@ -1681,7 +1681,7 @@ where
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
     Banned,
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
