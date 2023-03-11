@@ -16,8 +16,8 @@ use libp2p::{
     identity, mplex, noise, ping, tcp, tls, yamux, InboundUpgradeExt, Multiaddr,
     OutboundUpgradeExt, PeerId, Swarm, Transport as _,
 };
-use libp2p_webrtc as webrtc;
 use libp2p_quic as quic;
+use libp2p_webrtc as webrtc;
 use redis::AsyncCommands;
 
 #[tokio::main]
