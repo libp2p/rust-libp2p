@@ -294,4 +294,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: cargo metadata --frozen --format-version=1 > /dev/null
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - run: cargo metadata --locked --format-version=1 > /dev/null
