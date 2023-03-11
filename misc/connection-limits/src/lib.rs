@@ -32,10 +32,10 @@ use void::Void;
 ///
 /// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
 ///
-/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](crate::SwarmEvent::IncomingConnectionError)
-/// or [`SwarmEvent::OutgoingConnectionError`](crate::SwarmEvent::OutgoingConnectionError) will be emitted.
-/// The [`ListenError::Denied`](crate::ListenError::Denied) and respectively the [`DialError::Denied`](crate::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](crate::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
+/// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
+/// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
+/// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
+/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
