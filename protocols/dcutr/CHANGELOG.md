@@ -1,3 +1,9 @@
+# 0.9.1 - unreleased
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
+
 # 0.9.0
 
 - Update to `libp2p-core` `v0.39.0`.
@@ -11,13 +17,10 @@
 
 - Rename types in public API to follow naming conventions defined in [issue 2217]. See [PR 3214].
 
-- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
-
 [PR 3213]: https://github.com/libp2p/rust-libp2p/pull/3213
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
-[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.8.1
 
