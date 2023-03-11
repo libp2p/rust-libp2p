@@ -4,6 +4,7 @@
 - Deprecate the `quic` and `webrtc` feature.
   These two crates are only in alpha state.
   To properly communicate this to users, we want them to add the dependency directly which makes the `alpha` version visible.
+  It is recommended to pin the versions of `libp2p-quic` and `libp2p-webrtc` using `=`.
   See [PR 3580].
 
 [PR 3580]: https://github.com/libp2p/rust-libp2p/pull/3580
