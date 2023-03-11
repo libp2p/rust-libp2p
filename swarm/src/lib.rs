@@ -62,6 +62,7 @@ mod test;
 mod upgrade;
 
 pub mod behaviour;
+pub mod blocklist;
 pub mod dial_opts;
 pub mod dummy;
 mod executor;
