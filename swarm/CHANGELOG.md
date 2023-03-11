@@ -1,9 +1,9 @@
 # 0.42.1 - unreleased
 
 - Deprecate `Swarm::ban_peer_id` in favor of the new `libp2p::allow_block_list` module.
-  See [PR XXXX].
+  See [PR 3590].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
 
 # 0.42.0
 
