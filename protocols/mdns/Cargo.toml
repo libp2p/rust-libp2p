@@ -37,6 +37,7 @@ libp2p-swarm = { path = "../../swarm", features = ["tokio", "async-std"] }
 libp2p-tcp = { path = "../../transports/tcp", features = ["tokio", "async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 tokio = { version = "1.19", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 [[test]]
 name = "use-async-std"

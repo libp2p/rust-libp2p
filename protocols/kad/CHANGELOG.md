@@ -1,3 +1,9 @@
+# 0.43.1 - unreleased
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
+
 # 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
@@ -10,11 +16,8 @@
 
 - Bump MSRV to 1.65.0.
 
-- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
-
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 [PR 3287]: https://github.com/libp2p/rust-libp2p/pull/3287
-[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.42.1
 
