@@ -62,7 +62,6 @@ mod test;
 mod upgrade;
 
 pub mod behaviour;
-pub mod connection_limits;
 pub mod dial_opts;
 pub mod dummy;
 mod executor;
@@ -107,7 +106,6 @@ pub mod derive_prelude {
 
 #[allow(deprecated)]
 pub use crate::connection::ConnectionLimit;
-pub use crate::connection_limits::ConnectionLimits;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
     ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
@@ -128,6 +126,8 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+#[allow(deprecated)]
+use crate::connection::pool::ConnectionLimits;
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
@@ -1507,6 +1507,7 @@ pub struct SwarmBuilder<TBehaviour> {
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
     pool_config: PoolConfig,
+    #[allow(deprecated)]
     connection_limits: ConnectionLimits,
 }
 
@@ -1628,7 +1629,7 @@ where
     }
 
     /// Configures the connection limits.
-    #[deprecated(note = "Use `libp2p_swarm::connection_limits::Behaviour` instead.")]
+    #[allow(deprecated)]
     pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
         self.connection_limits = limits;
         self
@@ -2485,13 +2486,13 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn max_outgoing() {
         use rand::Rng;
 
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
-        #[allow(deprecated)]
         let mut network = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
             .connection_limits(limits)
             .build();
@@ -2540,6 +2541,7 @@ mod tests {
             }
         }
 
+        #[allow(deprecated)]
         fn limits(limit: u32) -> ConnectionLimits {
             ConnectionLimits::default().with_max_established_incoming(Some(limit))
         }

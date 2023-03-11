@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_swarm::{
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
     NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::task::{Context, Poll};
@@ -144,16 +144,14 @@ impl fmt::Display for Kind {
 impl std::error::Error for Exceeded {}
 
 /// The configurable connection limits.
-///
-/// By default no connection limits apply.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionLimits {
-    pub(crate) max_pending_incoming: Option<u32>,
-    pub(crate) max_pending_outgoing: Option<u32>,
-    pub(crate) max_established_incoming: Option<u32>,
-    pub(crate) max_established_outgoing: Option<u32>,
-    pub(crate) max_established_per_peer: Option<u32>,
-    pub(crate) max_established_total: Option<u32>,
+    max_pending_incoming: Option<u32>,
+    max_pending_outgoing: Option<u32>,
+    max_established_incoming: Option<u32>,
+    max_established_outgoing: Option<u32>,
+    max_established_per_peer: Option<u32>,
+    max_established_total: Option<u32>,
 }
 
 impl ConnectionLimits {
@@ -364,14 +362,9 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DialError, DialOpts, ListenError, Swarm, SwarmEvent};
-    use futures::future;
-    use futures::ready;
-    use futures::StreamExt;
-    use libp2p_core::{identity, multiaddr::multiaddr, transport, upgrade, Transport};
-    use libp2p_plaintext as plaintext;
-    use libp2p_yamux as yamux;
-    use quickcheck::*;
+    use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
+    use libp2p_swarm_test::SwarmExt;
+    use quickcheck_ext::*;
 
     #[test]
     fn max_outgoing() {
@@ -379,12 +372,15 @@ mod tests {
 
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
-        let mut network =
-            new_swarm(ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)));
+        let mut network = Swarm::new_ephemeral(|_| {
+            Behaviour::new(
+                ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)),
+            )
+        });
 
         let addr: Multiaddr = "/memory/1234".parse().unwrap();
-
         let target = PeerId::random();
+
         for _ in 0..outgoing_limit {
             network
                 .dial(
@@ -419,6 +415,43 @@ mod tests {
 
     #[test]
     fn max_established_incoming() {
+        fn prop(Limit(limit): Limit) {
+            let mut swarm1 = Swarm::new_ephemeral(|_| {
+                Behaviour::new(
+                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                )
+            });
+            let mut swarm2 = Swarm::new_ephemeral(|_| {
+                Behaviour::new(
+                    ConnectionLimits::default().with_max_established_incoming(Some(limit)),
+                )
+            });
+
+            async_std::task::block_on(async {
+                let (listen_addr, _) = swarm1.listen().await;
+
+                for _ in 0..limit {
+                    swarm2.connect(&mut swarm1).await;
+                }
+
+                swarm2.dial(listen_addr).unwrap();
+
+                async_std::task::spawn(swarm2.loop_on_next());
+
+                let cause = swarm1
+                    .wait(|event| match event {
+                        SwarmEvent::IncomingConnectionError {
+                            error: ListenError::Denied { cause },
+                            ..
+                        } => Some(cause),
+                        _ => None,
+                    })
+                    .await;
+
+                assert_eq!(cause.downcast::<Exceeded>().unwrap().limit, limit);
+            });
+        }
+
         #[derive(Debug, Clone)]
         struct Limit(u32);
 
@@ -428,139 +461,22 @@ mod tests {
             }
         }
 
-        fn limits(limit: u32) -> ConnectionLimits {
-            ConnectionLimits::default().with_max_established_incoming(Some(limit))
-        }
-
-        fn prop(limit: Limit) {
-            let limit = limit.0;
-
-            let mut network1 = new_swarm(limits(limit));
-            let mut network2 = new_swarm(limits(limit));
-
-            let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
-            let listen_addr = async_std::task::block_on(future::poll_fn(|cx| {
-                match ready!(network1.poll_next_unpin(cx)).unwrap() {
-                    SwarmEvent::NewListenAddr { address, .. } => Poll::Ready(address),
-                    e => panic!("Unexpected network event: {e:?}"),
-                }
-            }));
-
-            // Spawn and block on the dialer.
-            async_std::task::block_on({
-                let mut n = 0;
-                network2.dial(listen_addr.clone()).unwrap();
-
-                let mut expected_closed = false;
-                let mut network_1_established = false;
-                let mut network_2_established = false;
-                let mut network_1_limit_reached = false;
-                let mut network_2_limit_reached = false;
-                future::poll_fn(move |cx| {
-                    loop {
-                        let mut network_1_pending = false;
-                        let mut network_2_pending = false;
-
-                        match network1.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::IncomingConnection { .. })) => {}
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
-                                network_1_established = true;
-                            }
-                            Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                                error: ListenError::Denied { cause },
-                                ..
-                            })) => {
-                                let err = cause
-                                    .downcast::<Exceeded>()
-                                    .expect("connection denied because of limit");
-
-                                assert_eq!(err.limit(), limit);
-                                let info = network1.network_info();
-                                let counters = info.connection_counters();
-                                assert_eq!(counters.num_established_incoming(), limit);
-                                assert_eq!(counters.num_established(), limit);
-                                network_1_limit_reached = true;
-                            }
-                            Poll::Pending => {
-                                network_1_pending = true;
-                            }
-                            e => panic!("Unexpected network event: {e:?}"),
-                        }
-
-                        match network2.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
-                                network_2_established = true;
-                            }
-                            Poll::Ready(Some(SwarmEvent::ConnectionClosed { .. })) => {
-                                assert!(expected_closed);
-                                let info = network2.network_info();
-                                let counters = info.connection_counters();
-                                assert_eq!(counters.num_established_outgoing(), limit);
-                                assert_eq!(counters.num_established(), limit);
-                                network_2_limit_reached = true;
-                            }
-                            Poll::Pending => {
-                                network_2_pending = true;
-                            }
-                            e => panic!("Unexpected network event: {e:?}"),
-                        }
-
-                        if network_1_pending && network_2_pending {
-                            return Poll::Pending;
-                        }
-
-                        if network_1_established && network_2_established {
-                            network_1_established = false;
-                            network_2_established = false;
-
-                            if n <= limit {
-                                // Dial again until the limit is exceeded.
-                                n += 1;
-                                network2.dial(listen_addr.clone()).unwrap();
-
-                                if n == limit {
-                                    // The the next dialing attempt exceeds the limit, this
-                                    // is the connection we expected to get closed.
-                                    expected_closed = true;
-                                }
-                            } else {
-                                panic!("Expect networks not to establish connections beyond the limit.")
-                            }
-                        }
-
-                        if network_1_limit_reached && network_2_limit_reached {
-                            return Poll::Ready(());
-                        }
-                    }
-                })
-            });
-        }
-
         quickcheck(prop as fn(_));
     }
 
-    fn new_swarm(limits: ConnectionLimits) -> Swarm<Behaviour> {
-        let id_keys = identity::Keypair::generate_ed25519();
-        let local_public_key = id_keys.public();
-        let transport = transport::MemoryTransport::default()
-            .upgrade(upgrade::Version::V1)
-            .authenticate(plaintext::PlainText2Config {
-                local_public_key: local_public_key.clone(),
-            })
-            .multiplex(yamux::YamuxConfig::default())
-            .boxed();
-        let behaviour = Behaviour {
-            limits: super::Behaviour::new(limits),
-            keep_alive: crate::keep_alive::Behaviour,
-        };
-
-        Swarm::without_executor(transport, behaviour, local_public_key.to_peer_id())
+    #[derive(libp2p_swarm_derive::NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Behaviour {
+        limits: super::Behaviour,
+        keep_alive: libp2p_swarm::keep_alive::Behaviour,
     }
 
-    #[derive(libp2p_swarm_derive::NetworkBehaviour)]
-    #[behaviour(prelude = "crate::derive_prelude")]
-    struct Behaviour {
-        limits: crate::connection_limits::Behaviour,
-        keep_alive: crate::keep_alive::Behaviour,
+    impl Behaviour {
+        fn new(limits: ConnectionLimits) -> Self {
+            Self {
+                limits: super::Behaviour::new(limits),
+                keep_alive: libp2p_swarm::keep_alive::Behaviour,
+            }
+        }
     }
 }

@@ -2149,6 +2149,7 @@ dependencies = [
  "getrandom 0.2.8",
  "instant",
  "libp2p-autonat",
+ "libp2p-connection-limits",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-deflate",
@@ -2203,6 +2204,22 @@ dependencies = [
  "log",
  "quick-protobuf",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "libp2p-connection-limits"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p-core",
+ "libp2p-swarm",
+ "libp2p-swarm-derive",
+ "libp2p-swarm-test",
+ "quickcheck-ext",
+ "rand 0.8.5",
+ "void",
 ]
 
 [[package]]
@@ -2699,6 +2716,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-swarm-derive",
+ "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
  "quickcheck-ext",

@@ -1,6 +1,8 @@
 # 0.42.1 [unreleased]
 
-- Deprecate `SwarmBuilder::connection_limits` in favor of `libp2p::swarm::connection_limits::Behaviour`. See [PR 3386].
+- Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
+  See [PR 3386].
+
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 
 # 0.42.0
