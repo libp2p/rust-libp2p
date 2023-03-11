@@ -112,7 +112,8 @@ pub use behaviour::{
     ListenerClosed, ListenerError, NetworkBehaviour, NetworkBehaviourAction, NewExternalAddr,
     NewListenAddr, NotifyHandler, PollParameters,
 };
-pub use connection::pool::ConnectionCounters;
+#[allow(deprecated)]
+pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{ConnectionError, ConnectionId};
 pub use executor::Executor;
 #[allow(deprecated)]
