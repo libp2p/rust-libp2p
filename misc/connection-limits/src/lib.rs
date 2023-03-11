@@ -46,7 +46,7 @@ use void::Void;
 /// # use libp2p_identify as identify;
 /// # use libp2p_ping as ping;
 /// # use libp2p_swarm_derive::NetworkBehaviour;
-/// # use libp2p_swarm::connection_limits;
+/// # use libp2p_connection_limits as connection_limits;
 ///
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]

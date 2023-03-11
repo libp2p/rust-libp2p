@@ -15,9 +15,10 @@ libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 void = "1"
 
 [dev-dependencies]
-libp2p-swarm-test = { path = "../../swarm-test" }
-libp2p-swarm-derive = { path = "../../swarm-derive" }
-quickcheck-ext = { path = "../quickcheck-ext" }
-futures = "0.3.26"
-rand = "0.8.5"
 async-std = { version = "1.12.0", features = ["attributes"] }
+libp2p-identify = { path = "../../protocols/identify" }
+libp2p-ping = { path = "../../protocols/ping" }
+libp2p-swarm-derive = { path = "../../swarm-derive" }
+libp2p-swarm-test = { path = "../../swarm-test" }
+quickcheck-ext = { path = "../quickcheck-ext" }
+rand = "0.8.5"

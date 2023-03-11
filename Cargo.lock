@@ -2211,8 +2211,9 @@ name = "libp2p-connection-limits"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "futures",
  "libp2p-core",
+ "libp2p-identify",
+ "libp2p-ping",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
