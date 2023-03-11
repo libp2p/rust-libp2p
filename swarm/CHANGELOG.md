@@ -1,3 +1,10 @@
+# 0.42.1 - unreleased
+
+- Deprecate `Swarm::ban_peer_id` in favor of the new `libp2p::allow_block_list` module.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.42.0
 
 - Allow `NetworkBehaviour`s to manage connections.

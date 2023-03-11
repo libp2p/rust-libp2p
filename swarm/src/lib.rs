@@ -247,6 +247,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         error: DialError,
     },
     /// We connected to a peer, but we immediately closed the connection because that peer is banned.
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
     BannedPeer {
         /// Identity of the banned peer.
         peer_id: PeerId,
@@ -543,6 +544,7 @@ where
         if let Some(peer_id) = peer_id {
             // Check if peer is banned.
             if self.banned_peers.contains(&peer_id) {
+                #[allow(deprecated)]
                 let error = DialError::Banned;
                 self.behaviour
                     .on_swarm_event(FromSwarm::DialFailure(DialFailure {
@@ -724,6 +726,7 @@ where
     ///
     /// Any incoming connection and any dialing attempt will immediately be rejected.
     /// This function has no effect if the peer is already banned.
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
     pub fn ban_peer_id(&mut self, peer_id: PeerId) {
         if self.banned_peers.insert(peer_id) {
             // Note that established connections to the now banned peer are closed but not
@@ -735,6 +738,7 @@ where
     }
 
     /// Unbans a peer.
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
     pub fn unban_peer_id(&mut self, peer_id: PeerId) {
         self.banned_peers.remove(&peer_id);
     }
@@ -795,6 +799,7 @@ where
                 established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
+                    #[allow(deprecated)]
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
                 }
 
@@ -1676,6 +1681,7 @@ where
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
+    #[deprecated(note = "Use `libp2p::allow_block_list` instead.")]
     Banned,
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
@@ -1729,6 +1735,7 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: tried to dial local peer id at {endpoint:?}."
             ),
+            #[allow(deprecated)]
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(f, "Dial error: condition {c:?} for dialing peer was false.")
@@ -1779,6 +1786,7 @@ impl error::Error for DialError {
             DialError::ConnectionLimit(err) => Some(err),
             DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
+            #[allow(deprecated)]
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
@@ -1880,6 +1888,19 @@ impl ConnectionDenied {
         Self {
             inner: Box::new(cause),
         }
+    }
+
+    /// Attempt to downcast to a particular reason for why the connection was denied.
+    pub fn downcast<E>(self) -> Result<E, Self>
+    where
+        E: error::Error + Send + Sync + 'static,
+    {
+        let inner = self
+            .inner
+            .downcast::<E>()
+            .map_err(|inner| ConnectionDenied { inner })?;
+
+        Ok(*inner)
     }
 }
 
@@ -2047,6 +2068,7 @@ mod tests {
     /// [`FromSwarm::ConnectionEstablished`], [`FromSwarm::ConnectionClosed`]
     /// calls should be registered.
     #[test]
+    #[allow(deprecated)]
     fn test_connect_disconnect_ban() {
         let _ = env_logger::try_init();
 

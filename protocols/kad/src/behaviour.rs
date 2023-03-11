@@ -1922,6 +1922,7 @@ where
         };
 
         match error {
+            #[allow(deprecated)]
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId { .. }
