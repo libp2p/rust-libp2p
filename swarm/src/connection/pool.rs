@@ -1042,7 +1042,7 @@ fn num_peer_established<TInEvent>(
 ///
 /// By default no connection limits apply.
 #[derive(Debug, Clone, Default)]
-#[deprecated(note = "Use `libp2p::connection_limits` instead.")]
+#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
 pub struct ConnectionLimits {
     max_pending_incoming: Option<u32>,
     max_pending_outgoing: Option<u32>,
