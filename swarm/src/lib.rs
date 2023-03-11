@@ -127,8 +127,6 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-#[allow(deprecated)]
-use crate::connection::pool::ConnectionLimits;
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
