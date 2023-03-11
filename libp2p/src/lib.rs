@@ -40,6 +40,8 @@ pub use libp2p_core::multihash;
 #[doc(inline)]
 pub use multiaddr;
 
+#[doc(inline)]
+pub use libp2p_allow_block_list as allow_block_list;
 #[cfg(feature = "autonat")]
 #[doc(inline)]
 pub use libp2p_autonat as autonat;

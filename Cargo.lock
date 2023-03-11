@@ -2148,6 +2148,7 @@ dependencies = [
  "futures-timer",
  "getrandom 0.2.8",
  "instant",
+ "libp2p-allow-block-list",
  "libp2p-autonat",
  "libp2p-core",
  "libp2p-dcutr",
@@ -2179,6 +2180,22 @@ dependencies = [
  "multiaddr",
  "pin-project",
  "tokio",
+]
+
+[[package]]
+name = "libp2p-allow-block-list"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "libp2p-core",
+ "libp2p-identify",
+ "libp2p-ping",
+ "libp2p-swarm",
+ "libp2p-swarm-derive",
+ "libp2p-swarm-test",
+ "quickcheck-ext",
+ "rand 0.8.5",
+ "void",
 ]
 
 [[package]]
