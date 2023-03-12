@@ -21,7 +21,7 @@
 use super::*;
 
 use crate::kbucket;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};

@@ -20,7 +20,9 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
@@ -559,7 +561,9 @@ mod tests {
     use super::*;
     use futures::pin_mut;
     use futures::prelude::*;
-    use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
+    use libp2p_core::{muxing::StreamMuxerBox, transport, upgrade, Transport};
+    use libp2p_identity as identity;
+    use libp2p_identity::PeerId;
     use libp2p_mplex::MplexConfig;
     use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};

@@ -27,7 +27,7 @@ pub mod proto {
 mod test {
     use crate::rpc_proto::proto::compat;
     use crate::IdentTopic as Topic;
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
     use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
     use rand::Rng;
 

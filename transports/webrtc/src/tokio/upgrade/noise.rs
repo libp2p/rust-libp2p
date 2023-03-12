@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 
 use crate::tokio::fingerprint::Fingerprint;

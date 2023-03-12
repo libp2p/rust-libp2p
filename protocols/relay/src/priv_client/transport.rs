@@ -31,7 +31,7 @@ use futures::stream::SelectAll;
 use futures::stream::{Stream, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerId, TransportError, TransportEvent};
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
