@@ -1,4 +1,4 @@
-# 0.51.1 [unreleased]
+# 0.51.1
 
 - Depend on `libp2p-tls` `v0.1.0`.
 
