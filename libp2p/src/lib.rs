@@ -147,14 +147,15 @@ pub mod bandwidth;
 pub mod tutorials;
 
 pub use self::core::{
-    identity,
     transport::TransportError,
     upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
-    PeerId, Transport,
+    Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
+pub use libp2p_identity as identity;
+pub use libp2p_identity::PeerId;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///

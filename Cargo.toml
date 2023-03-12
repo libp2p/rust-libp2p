@@ -10,6 +10,7 @@ members = [
     "examples/ipfs-private",
     "examples/ping-example",
     "examples/rendezvous",
+    "identity",
     "misc/metrics",
     "misc/multistream-select",
     "misc/rw-stream-sink",

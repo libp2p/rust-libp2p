@@ -15,6 +15,7 @@ futures-rustls = "0.22"
 either = "1.5.3"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.8"
 parking_lot = "0.12.0"
 quicksink = "0.1"

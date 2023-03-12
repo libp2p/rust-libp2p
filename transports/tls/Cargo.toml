@@ -12,6 +12,7 @@ exclude = ["src/test_assets"]
 futures = { version = "0.3.26", default-features = false }
 futures-rustls = "0.22.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 rcgen = "0.10.0"
 ring = "0.16.20"
 thiserror = "1.0.39"
@@ -28,7 +29,8 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.3.4"
-libp2p-core = { path = "../../core", features = ["rsa", "ecdsa", "secp256k1"] }
+libp2p-core = { path = "../../core" }
+libp2p-identity = { path = "../../identity", features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
 libp2p-swarm = { path = "../../swarm" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 tokio = { version = "1.21.1", features = ["full"] }

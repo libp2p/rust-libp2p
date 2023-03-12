@@ -16,6 +16,7 @@ futures-timer = "3.0.2"
 if-watch = "3.0.0"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-tls = { version = "0.1.0", path = "../tls" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4"
 parking_lot = "0.12.0"
 quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }

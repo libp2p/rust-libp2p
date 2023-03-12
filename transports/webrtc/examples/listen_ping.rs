@@ -1,8 +1,8 @@
 use anyhow::Result;
 use futures::StreamExt;
-use libp2p_core::identity;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::Transport;
+use libp2p_identity as identity;
 use libp2p_ping as ping;
 use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm};
 use rand::thread_rng;

@@ -22,10 +22,12 @@ use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    identity, multiaddr,
+    multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr, PublicKey,
+    Multiaddr,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
@@ -266,7 +268,7 @@ pub enum UpgradeError {
     #[error("Failed decoding multiaddr")]
     Multiaddr(#[from] multiaddr::Error),
     #[error("Failed decoding public key")]
-    PublicKey(#[from] identity::error::DecodingError),
+    PublicKey(#[from] identity::DecodingError),
 }
 
 #[cfg(test)]
@@ -274,10 +276,10 @@ mod tests {
     use super::*;
     use futures::channel::oneshot;
     use libp2p_core::{
-        identity,
         upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
+    use libp2p_identity as identity;
     use libp2p_tcp as tcp;
 
     #[test]

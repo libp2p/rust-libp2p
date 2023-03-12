@@ -8,8 +8,9 @@ use crate::{
     SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::{Endpoint, PeerId};
+use libp2p_core::Endpoint;
 use libp2p_core::{Multiaddr, UpgradeError};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 

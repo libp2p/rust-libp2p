@@ -20,7 +20,7 @@
 
 //! A collection of types using the Gossipsub system.
 use crate::TopicHash;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
 use quick_protobuf::MessageWrite;

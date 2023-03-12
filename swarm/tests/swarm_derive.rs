@@ -435,7 +435,7 @@ fn generated_out_event_derive_debug() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
     use libp2p_swarm::{ConnectionId, NetworkBehaviourAction, PollParameters};
     use std::task::Context;
     use std::task::Poll;
