@@ -28,9 +28,8 @@ use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use instant::Duration;
-use libp2p_core::identity::error::SigningError;
-use libp2p_core::identity::Keypair;
-use libp2p_core::{Endpoint, Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
+use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,

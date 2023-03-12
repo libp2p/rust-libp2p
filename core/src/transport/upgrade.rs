@@ -33,9 +33,10 @@ use crate::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
         OutboundUpgradeApply, UpgradeError,
     },
-    Negotiated, PeerId,
+    Negotiated,
 };
 use futures::{prelude::*, ready};
+use libp2p_identity::PeerId;
 use multiaddr::Multiaddr;
 use std::{
     error::Error,

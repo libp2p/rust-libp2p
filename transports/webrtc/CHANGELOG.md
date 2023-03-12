@@ -1,4 +1,4 @@
-# 0.4.0-alpha.3 - unreleased
+# 0.4.0-alpha.3
 
 - Gracefully handle `ConnectionReset` error on individual connections, avoiding shutdown of the entire listener upon disconnect of a single client.
   See [PR 3575].

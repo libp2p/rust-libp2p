@@ -1,4 +1,4 @@
-# 0.1.0 [unreleased]
+# 0.1.0
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 

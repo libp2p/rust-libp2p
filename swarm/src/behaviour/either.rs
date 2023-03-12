@@ -22,7 +22,8 @@ use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParam
 use crate::connection::ConnectionId;
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.

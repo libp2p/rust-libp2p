@@ -22,7 +22,8 @@ use futures::{
     io::{AsyncReadExt, AsyncWriteExt},
     StreamExt,
 };
-use libp2p_core::{identity, multiaddr::Multiaddr, transport::Transport, upgrade};
+use libp2p_core::{multiaddr::Multiaddr, transport::Transport, upgrade};
+use libp2p_identity as identity;
 use libp2p_plaintext::PlainText2Config;
 use log::debug;
 use quickcheck::QuickCheck;
