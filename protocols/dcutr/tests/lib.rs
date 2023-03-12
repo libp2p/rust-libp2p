@@ -21,8 +21,9 @@
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::{identity, PeerId};
 use libp2p_dcutr as dcutr;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
