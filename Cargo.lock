@@ -2222,6 +2222,7 @@ dependencies = [
  "async-std",
  "libp2p-core",
  "libp2p-identify",
+ "libp2p-identity",
  "libp2p-ping",
  "libp2p-swarm",
  "libp2p-swarm-derive",
