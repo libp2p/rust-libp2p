@@ -2196,6 +2196,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "libp2p-core",
+ "libp2p-identity",
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
