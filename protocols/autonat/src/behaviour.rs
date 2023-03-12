@@ -28,7 +28,8 @@ use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_request_response::{
     self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };

@@ -9,7 +9,8 @@ use futures_timer::Delay;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
 use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, PeerId, Transport};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
 use libp2p_tcp as tcp;
@@ -207,7 +208,7 @@ async fn wrapped_with_delay() {
 #[async_std::test]
 #[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
 
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
@@ -492,8 +493,8 @@ macro_rules! swap_protocol {
     };
 }
 
-fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
-    libp2p_core::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
 }
 
 fn create_default_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {

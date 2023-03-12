@@ -47,7 +47,8 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent,

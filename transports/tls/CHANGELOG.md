@@ -1,4 +1,4 @@
-# 0.1.0 [unreleased]
+# 0.1.0
 
 - Promote to `v0.1.0`.
 

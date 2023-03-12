@@ -25,7 +25,7 @@ use crate::PlainText2Config;
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, trace};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};

@@ -91,7 +91,7 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
+    pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
         let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
         let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
         Self {

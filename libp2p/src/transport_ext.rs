@@ -23,12 +23,12 @@
 use crate::core::{
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::Boxed,
-    PeerId,
 };
 use crate::{
     bandwidth::{BandwidthLogging, BandwidthSinks},
     Transport,
 };
+use libp2p_identity::PeerId;
 use std::sync::Arc;
 
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some

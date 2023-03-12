@@ -8,8 +8,8 @@ use std::thread;
 mod config;
 
 use clap::Parser;
-use libp2p_core::identity::{self, ed25519};
-use libp2p_core::PeerId;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]
@@ -94,19 +94,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                     let tx = tx.clone();
 
                     thread::spawn(move || loop {
-                        let keypair = ed25519::Keypair::generate();
-                        let peer_id = identity::PublicKey::Ed25519(keypair.public()).to_peer_id();
+                        let keypair = identity::Keypair::generate_ed25519();
+                        let peer_id = keypair.public().to_peer_id();
                         let base58 = peer_id.to_base58();
                         if base58[8..].starts_with(&prefix) {
-                            tx.send((peer_id, identity::Keypair::Ed25519(keypair)))
-                                .expect("to send");
+                            tx.send((peer_id, keypair)).expect("to send");
                         }
                     });
                 }
 
                 rx.recv().expect("to recv")
             } else {
-                let keypair = identity::Keypair::Ed25519(ed25519::Keypair::generate());
+                let keypair = identity::Keypair::generate_ed25519();
                 (keypair.public().into(), keypair)
             }
         }

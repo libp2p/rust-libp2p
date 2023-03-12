@@ -20,6 +20,7 @@ pin-project = "1.0.2"
 
 [dev-dependencies]
 libp2p-core = { path = "../../core", features = ["rsa", "ecdsa", "secp256k1"] }
+libp2p-identity = { path = "../../identity", features = ["ed25519"] }
 libp2p-noise = { path = "../noise" }
 libp2p-swarm = { path = "../../swarm", features = ["tokio"] }
 libp2p-tcp = { path = "../tcp", features = ["tokio"] }
