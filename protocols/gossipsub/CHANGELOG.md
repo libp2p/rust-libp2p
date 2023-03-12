@@ -1,4 +1,4 @@
-# 0.44.1 - unreleased
+# 0.44.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 
