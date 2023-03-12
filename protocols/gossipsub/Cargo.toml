@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 bytes = "1.4"
 byteorder = "1.3.4"
 fnv = "1.0.7"

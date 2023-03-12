@@ -34,7 +34,8 @@ use crate::{
     AddressRecord, AddressScore, ConnectionDenied, DialError, ListenError, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
