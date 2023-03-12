@@ -62,7 +62,7 @@ async fn connected_peers() -> (quic::Connection, quic::Connection) {
 }
 
 fn new_transport() -> quic::async_std::Transport {
-    let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+    let keypair = libp2p_identity::Keypair::generate_ed25519();
     let mut config = quic::Config::new(&keypair);
     config.handshake_timeout = Duration::from_secs(1);
 

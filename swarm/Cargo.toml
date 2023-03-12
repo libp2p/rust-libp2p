@@ -17,6 +17,7 @@ futures = "0.3.26"
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../core" }
+libp2p-identity = { version = "0.1.0", path = "../identity" }
 libp2p-swarm-derive = { version = "0.32.0", path = "../swarm-derive", optional = true }
 log = "0.4"
 rand = "0.8"
@@ -41,6 +42,7 @@ either = "1.6.0"
 env_logger = "0.10"
 futures = "0.3.26"
 libp2p-identify = { path = "../protocols/identify" }
+libp2p-identity = { version = "0.1.0", path = "../identity", features = ["ed25519"] }
 libp2p-kad = { path = "../protocols/kad" }
 libp2p-ping = { path = "../protocols/ping" }
 libp2p-plaintext = { path = "../transports/plaintext" }

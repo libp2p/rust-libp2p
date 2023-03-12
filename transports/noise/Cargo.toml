@@ -13,6 +13,7 @@ bytes = "1"
 curve25519-dalek = "3.0.0"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity", features = ["ed25519"] }
 log = "0.4"
 quick-protobuf = "0.8"
 once_cell = "1.17.1"

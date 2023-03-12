@@ -24,8 +24,10 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::upgrade;
-use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+use libp2p_core::{Multiaddr, Transport};
 use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_relay as relay;
@@ -103,9 +105,7 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
     bytes[0] = secret_key_seed;
 
-    let secret_key = identity::ed25519::SecretKey::from_bytes(&mut bytes)
-        .expect("this returns `Err` only if the length is wrong; the length is correct; qed");
-    identity::Keypair::Ed25519(secret_key.into())
+    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
 }
 
 #[derive(Debug, Parser)]

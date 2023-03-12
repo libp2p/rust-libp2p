@@ -101,7 +101,7 @@ pub mod derive_prelude {
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
-    pub use libp2p_core::PeerId;
+    pub use libp2p_identity::PeerId;
 }
 
 pub use behaviour::{
@@ -139,8 +139,9 @@ use libp2p_core::{
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, PeerId, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
 };
+use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
@@ -1955,8 +1956,9 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
-    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_core::{multiaddr, transport, upgrade};
     use libp2p_core::{Endpoint, UpgradeError};
+    use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;

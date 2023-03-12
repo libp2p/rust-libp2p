@@ -19,13 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use libp2p_core::{identity, PeerId};
+use libp2p_identity::{Keypair, PeerId};
 
 fn from_bytes(c: &mut Criterion) {
-    let peer_id_bytes = identity::Keypair::generate_ed25519()
-        .public()
-        .to_peer_id()
-        .to_bytes();
+    let peer_id_bytes = Keypair::generate_ed25519().public().to_peer_id().to_bytes();
 
     c.bench_function("from_bytes", |b| {
         b.iter(|| {
@@ -35,7 +32,7 @@ fn from_bytes(c: &mut Criterion) {
 }
 
 fn clone(c: &mut Criterion) {
-    let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+    let peer_id = Keypair::generate_ed25519().public().to_peer_id();
 
     c.bench_function("clone", |b| {
         b.iter(|| {
@@ -46,7 +43,7 @@ fn clone(c: &mut Criterion) {
 
 fn sort_vec(c: &mut Criterion) {
     let peer_ids: Vec<_> = (0..100)
-        .map(|_| identity::Keypair::generate_ed25519().public().to_peer_id())
+        .map(|_| Keypair::generate_ed25519().public().to_peer_id())
         .collect();
 
     c.bench_function("sort_vec", |b| {

@@ -29,7 +29,8 @@ pub mod certificate;
 mod upgrade;
 mod verifier;
 
-use libp2p_core::{identity::Keypair, PeerId};
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 use std::sync::Arc;
 
 pub use futures_rustls::TlsStream;

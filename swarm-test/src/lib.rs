@@ -23,8 +23,9 @@ use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
     identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
-    Multiaddr, PeerId, Transport,
+    Multiaddr, Transport,
 };
+use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,

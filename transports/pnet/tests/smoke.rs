@@ -106,7 +106,7 @@ where
     <T as libp2p_core::Transport>::ListenerUpgrade: Send,
     <T as libp2p_core::Transport>::Dial: Send,
 {
-    let identity = libp2p_core::identity::Keypair::generate_ed25519();
+    let identity = libp2p_identity::Keypair::generate_ed25519();
     let transport = transport
         .and_then(move |socket, _| pnet.handshake(socket))
         .upgrade(Version::V1)
