@@ -90,6 +90,8 @@
 - Deprecate methods `Swarm::with_executor`, `Swarm::with_*_executor`, `Swarm::without_executor`.
   Introduce similar methods in `SwarmBuilder`. See [PR 3588].
 
+- Gracefully disable oneshot handler on dial upgrade errors. See [PR 3577].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -106,6 +108,7 @@
 [PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
 [PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
 [PR 3588]: https://github.com/libp2p/rust-libp2p/pull/3588
+[PR 3577]: https://github.com/libp2p/rust-libp2p/pull/3577
 
 # 0.41.1
 
