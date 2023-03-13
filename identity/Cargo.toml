@@ -38,7 +38,7 @@ secp256k1 = [ "libsecp256k1", "asn1_der", "prost", "rand", "sha2", "zeroize" ]
 ecdsa = [ "p256", "prost", "rand", "void", "zeroize", "sec1" ]
 rsa = [ "dep:ring", "asn1_der", "prost", "rand", "zeroize" ]
 ed25519 = [ "ed25519-dalek", "prost", "rand", "zeroize" ]
-peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror" ]
+peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror", "sha2" ]
 
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
