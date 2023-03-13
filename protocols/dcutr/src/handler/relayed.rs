@@ -214,8 +214,6 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        // Anything else is considered a fatal error or misbehaviour of
-        // the remote peer and results in closing the connection.
         self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
             match error {
                 Either::Left(e) => Either::Left(e),
