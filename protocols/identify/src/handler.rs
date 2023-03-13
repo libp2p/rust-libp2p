@@ -27,7 +27,9 @@ use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use libp2p_core::upgrade::SelectUpgrade;
-use libp2p_core::{Multiaddr, PeerId, PublicKey};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };

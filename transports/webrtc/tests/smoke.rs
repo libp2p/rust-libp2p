@@ -24,7 +24,8 @@ use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::transport::{Boxed, TransportEvent};
-use libp2p_core::{Multiaddr, PeerId, Transport};
+use libp2p_core::{Multiaddr, Transport};
+use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
 use std::future::Future;
@@ -61,8 +62,8 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop as fn(_, _) -> _);
 }
 
-fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
-    libp2p_core::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
 }
 
 fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {

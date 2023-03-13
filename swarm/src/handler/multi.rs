@@ -32,7 +32,8 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::ConnectedPoint;
+use libp2p_identity::PeerId;
 use rand::Rng;
 use std::{
     cmp,
