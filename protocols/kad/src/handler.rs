@@ -38,10 +38,7 @@ use libp2p_swarm::{
 };
 use log::trace;
 use std::collections::VecDeque;
-use std::task::Waker;
-use std::{
-    error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
-};
+use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
@@ -146,95 +143,6 @@ enum OutboundSubstreamState<TUserData> {
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
-}
-
-/// State of an active inbound substream.
-enum InboundSubstreamState<TUserData> {
-    /// Waiting for a request from the remote.
-    WaitingMessage {
-        /// Whether it is the first message to be awaited on this stream.
-        first: bool,
-        connection_id: UniqueConnecId,
-        substream: Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
-    },
-    /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
-    WaitingBehaviour(
-        UniqueConnecId,
-        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
-        Option<Waker>,
-    ),
-    /// Waiting to send an answer back to the remote.
-    PendingSend(
-        UniqueConnecId,
-        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
-        KadResponseMsg,
-    ),
-    /// Waiting to flush an answer back to the remote.
-    PendingFlush(
-        UniqueConnecId,
-        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
-    ),
-    /// The substream is being closed.
-    Closing(Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>),
-    /// The substream was cancelled in favor of a new one.
-    Cancelled,
-
-    Poisoned {
-        phantom: PhantomData<TUserData>,
-    },
-}
-
-impl<TUserData> InboundSubstreamState<TUserData> {
-    fn try_answer_with(
-        &mut self,
-        id: KademliaRequestId,
-        msg: KadResponseMsg,
-    ) -> Result<(), KadResponseMsg> {
-        match std::mem::replace(
-            self,
-            InboundSubstreamState::Poisoned {
-                phantom: PhantomData,
-            },
-        ) {
-            InboundSubstreamState::WaitingBehaviour(conn_id, substream, mut waker)
-                if conn_id == id.connec_unique_id =>
-            {
-                *self = InboundSubstreamState::PendingSend(conn_id, substream, msg);
-
-                if let Some(waker) = waker.take() {
-                    waker.wake();
-                }
-
-                Ok(())
-            }
-            other => {
-                *self = other;
-
-                Err(msg)
-            }
-        }
-    }
-
-    fn close(&mut self) {
-        match std::mem::replace(
-            self,
-            InboundSubstreamState::Poisoned {
-                phantom: PhantomData,
-            },
-        ) {
-            InboundSubstreamState::WaitingMessage { substream, .. }
-            | InboundSubstreamState::WaitingBehaviour(_, substream, _)
-            | InboundSubstreamState::PendingSend(_, substream, _)
-            | InboundSubstreamState::PendingFlush(_, substream)
-            | InboundSubstreamState::Closing(substream) => {
-                *self = InboundSubstreamState::Closing(substream);
-            }
-            InboundSubstreamState::Cancelled => {
-                *self = InboundSubstreamState::Cancelled;
-            }
-            InboundSubstreamState::Poisoned { .. } => unreachable!(),
-        }
-    }
 }
 
 /// Event produced by the Kademlia handler.
