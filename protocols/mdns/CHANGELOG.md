@@ -2,6 +2,7 @@
 
 - Deriving `Clone` for `mdns::Event`. See [PR 3606].
 
+[PR 3606]: https://github.com/libp2p/rust-libp2p/pull/3606
 # 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
