@@ -27,7 +27,8 @@ use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
@@ -527,7 +528,8 @@ mod tests {
     use instant::SystemTime;
     use std::option::Option::None;
 
-    use libp2p_core::{identity, PeerRecord};
+    use libp2p_core::PeerRecord;
+    use libp2p_identity as identity;
 
     use super::*;
 

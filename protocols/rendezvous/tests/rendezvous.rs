@@ -20,7 +20,7 @@
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use libp2p_core::identity;
+use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;

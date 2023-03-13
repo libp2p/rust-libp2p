@@ -28,7 +28,8 @@ use crate::upgrade::SendWrapper;
 use crate::ConnectionHandlerUpgrErr;
 use either::Either;
 use futures::future;
-use libp2p_core::{ConnectedPoint, PeerId, UpgradeError};
+use libp2p_core::{ConnectedPoint, UpgradeError};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 
 /// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is

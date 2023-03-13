@@ -38,10 +38,10 @@
 
 use futures::prelude::*;
 use libp2p::{
-    core::{multiaddr::Multiaddr, upgrade::Version, PeerId},
+    core::{multiaddr::Multiaddr, upgrade::Version},
     identify, identity, noise,
     swarm::{Swarm, SwarmEvent},
-    tcp, yamux, Transport,
+    tcp, yamux, PeerId, Transport,
 };
 use std::error::Error;
 

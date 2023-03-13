@@ -522,7 +522,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
     use quickcheck::*;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
