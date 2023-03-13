@@ -101,7 +101,7 @@ pub mod derive_prelude {
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
-    pub use libp2p_core::PeerId;
+    pub use libp2p_identity::PeerId;
 }
 
 pub use behaviour::{
@@ -139,8 +139,9 @@ use libp2p_core::{
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, PeerId, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
 };
+use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
@@ -296,6 +297,17 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     Dialing(PeerId),
 }
 
+impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr> {
+    /// Extract the `TBehaviourOutEvent` from this [`SwarmEvent`] in case it is the `Behaviour` variant, otherwise fail.
+    #[allow(clippy::result_large_err)]
+    pub fn try_into_behaviour_event(self) -> Result<TBehaviourOutEvent, Self> {
+        match self {
+            SwarmEvent::Behaviour(inner) => Ok(inner),
+            other => Err(other),
+        }
+    }
+}
+
 /// Contains the state of the network, plus the way it should behave.
 ///
 /// Note: Needs to be polled via `<Swarm as Stream>` in order to make
@@ -338,11 +350,13 @@ where
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
 
+#[allow(deprecated)]
 impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
     /// Builds a new `Swarm` with a provided executor.
+    #[deprecated(note = "Use `SwarmBuilder::with_executor` instead.")]
     pub fn with_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -357,6 +371,7 @@ where
         feature = "tokio",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
+    #[deprecated(note = "Use `SwarmBuilder::with_tokio_executor` instead.")]
     pub fn with_tokio_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -375,6 +390,7 @@ where
         feature = "async-std",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
+    #[deprecated(note = "Use `SwarmBuilder::with_async_std_executor` instead.")]
     pub fn with_async_std_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -389,6 +405,9 @@ where
     }
 
     /// Builds a new `Swarm` with a threadpool executor.
+    #[deprecated(
+        note = "The `futures::executor::ThreadPool` executor is deprecated. See https://github.com/libp2p/rust-libp2p/issues/3107."
+    )]
     pub fn with_threadpool_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -417,6 +436,7 @@ where
     /// }
     /// ```
     #[cfg(feature = "wasm-bindgen")]
+    #[deprecated(note = "Use `SwarmBuilder::with_wasm_executor` instead.")]
     pub fn with_wasm_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -436,6 +456,7 @@ where
     /// All connections will be polled on the current task, thus quite bad performance
     /// characteristics should be expected. Whenever possible use an executor and
     /// [`Swarm::with_executor`].
+    #[deprecated(note = "Use `SwarmBuilder::without_executor` instead.")]
     pub fn without_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -481,17 +502,17 @@ where
     /// See also [`DialOpts`].
     ///
     /// ```
-    /// # use libp2p_swarm::Swarm;
+    /// # use libp2p_swarm::SwarmBuilder;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::without_executor(
+    /// let mut swarm = SwarmBuilder::without_executor(
     ///     DummyTransport::new().boxed(),
     ///     dummy::Behaviour,
     ///     PeerId::random(),
-    /// );
+    /// ).build();
     ///
     /// // Dial a known peer.
     /// swarm.dial(PeerId::random());
@@ -1515,6 +1536,29 @@ where
         }
     }
 
+    /// Sets executor to the `wasm` executor.
+    /// Background tasks will be executed by the browser on the next micro-tick.
+    ///
+    /// Spawning a task is similar too:
+    /// ```typescript
+    /// function spawn(task: () => Promise<void>) {
+    ///     task()
+    /// }
+    /// ```
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::WasmBindgenExecutor,
+        )
+    }
+
     /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
     /// `tokio` executor.
     #[cfg(all(
@@ -1944,8 +1988,9 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
-    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_core::{multiaddr, transport, upgrade};
     use libp2p_core::{Endpoint, UpgradeError};
+    use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;
