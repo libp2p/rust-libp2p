@@ -1,72 +1,46 @@
+// Copyright 2023 Protocol Labs.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+
 use futures::{executor::LocalPool, task::Spawn, FutureExt, StreamExt};
-use libp2p_core::{
-    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
-};
 use libp2p_perf::{
     client::{self, RunParams},
     server,
 };
-use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux::YamuxConfig;
+use libp2p_swarm_test::SwarmExt;
 
 #[test]
 fn perf() {
     let _ = env_logger::try_init();
     let mut pool = LocalPool::new();
 
-    let server_address = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
+    let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
+    let server_peer_id = *server.local_peer_id();
+    let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
 
-    // Spawn server
-    {
-        let local_key = libp2p_identity::Keypair::generate_ed25519();
-        let local_public_key = local_key.public();
-        let local_peer_id = local_public_key.to_peer_id();
+    pool.run_until(server.listen());
+    pool.run_until(client.connect(&mut server));
 
-        let transport = MemoryTransport::default()
-            .boxed()
-            .upgrade(Version::V1)
-            .authenticate(PlainText2Config { local_public_key })
-            .multiplex(YamuxConfig::default())
-            .boxed();
-
-        let mut server =
-            Swarm::without_executor(transport, server::Behaviour::new(), local_peer_id);
-
-        server.listen_on(server_address.clone()).unwrap();
-
-        pool.spawner()
-            .spawn_obj(server.collect::<Vec<_>>().map(|_| ()).boxed().into())
-            .unwrap();
-    }
-
-    let mut client = {
-        let local_key = libp2p_identity::Keypair::generate_ed25519();
-        let local_public_key = local_key.public();
-        let local_peer_id = local_public_key.to_peer_id();
-
-        let transport = MemoryTransport::default()
-            .boxed()
-            .upgrade(Version::V1)
-            .authenticate(PlainText2Config { local_public_key })
-            .multiplex(YamuxConfig::default())
-            .boxed();
-
-        Swarm::without_executor(transport, client::Behaviour::new(), local_peer_id)
-    };
-
-    client.dial(server_address).unwrap();
-    let server_peer_id = pool.run_until(async {
-        loop {
-            match client.next().await.unwrap() {
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => return peer_id,
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    panic!("Outgoing connection error to {peer_id:?}: {error:?}");
-                }
-                e => panic!("{e:?}"),
-            }
-        }
-    });
+    pool.spawner()
+        .spawn_obj(server.loop_on_next().boxed().into())
+        .unwrap();
 
     client
         .behaviour_mut()
