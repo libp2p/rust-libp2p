@@ -1691,12 +1691,12 @@ where
                     }
                     Err(e) => {
                         info!("Record not stored: {:?}", e);
-                        // self.queued_events
-                        //     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        //         peer_id: source,
-                        //         handler: NotifyHandler::One(connection),
-                        //         event: KademliaHandlerIn::Reset(request_id),
-                        //     });
+                        self.queued_events
+                            .push_back(NetworkBehaviourAction::NotifyHandler {
+                                peer_id: source,
+                                handler: NotifyHandler::One(connection),
+                                event: KademliaHandlerIn::Reset(request_id),
+                            });
 
                         return;
                     }
