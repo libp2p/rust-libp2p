@@ -1,7 +1,6 @@
 use futures::{executor::LocalPool, task::Spawn, FutureExt, StreamExt};
 use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr,
-    Transport,
+    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
 use libp2p_perf::{
     client::{self, RunParams},
@@ -20,7 +19,7 @@ fn perf() {
 
     // Spawn server
     {
-        let local_key = identity::Keypair::generate_ed25519();
+        let local_key = libp2p_identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let local_peer_id = local_public_key.to_peer_id();
 
@@ -42,7 +41,7 @@ fn perf() {
     }
 
     let mut client = {
-        let local_key = identity::Keypair::generate_ed25519();
+        let local_key = libp2p_identity::Keypair::generate_ed25519();
         let local_public_key = local_key.public();
         let local_peer_id = local_public_key.to_peer_id();
 

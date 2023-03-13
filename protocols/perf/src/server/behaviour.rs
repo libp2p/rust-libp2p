@@ -25,7 +25,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     THandlerInEvent, THandlerOutEvent,

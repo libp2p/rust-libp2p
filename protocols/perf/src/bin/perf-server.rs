@@ -20,10 +20,9 @@
 
 use clap::Parser;
 use futures::{future::Either, StreamExt};
-use libp2p_core::{
-    identity, muxing::StreamMuxerBox, transport::OrTransport, upgrade, PeerId, Transport,
-};
+use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Transport};
 use libp2p_dns::DnsConfig;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{SwarmBuilder, SwarmEvent};
 use log::{error, info};
 
@@ -38,7 +37,7 @@ async fn main() {
     let _opts = Opts::parse();
 
     // Create a random PeerId
-    let local_key = identity::Keypair::generate_ed25519();
+    let local_key = libp2p_identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id}");
 

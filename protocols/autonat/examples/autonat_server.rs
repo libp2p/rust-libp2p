@@ -29,8 +29,10 @@
 use clap::Parser;
 use futures::prelude::*;
 use libp2p_autonat as autonat;
-use libp2p_core::{identity, multiaddr::Protocol, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_core::{multiaddr::Protocol, upgrade::Version, Multiaddr, Transport};
 use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_tcp as tcp;

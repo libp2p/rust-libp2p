@@ -25,7 +25,8 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionHandlerUpgrErr,
     ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
