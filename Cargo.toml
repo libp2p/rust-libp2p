@@ -50,3 +50,6 @@ members = [
     "interop-tests"
 ]
 resolver = "2"
+
+[patch.crates-io]
+asynchronous-codec = { git = "https://github.com/thomaseizinger/asynchronous-codec", branch = "send-recv-futures" }

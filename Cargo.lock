@@ -412,8 +412,7 @@ dependencies = [
 [[package]]
 name = "asynchronous-codec"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a0daa378f5fd10634e44b0a29b2a87b890657658e072a30d6f26e57ddee182"
+source = "git+https://github.com/thomaseizinger/asynchronous-codec?branch=send-recv-futures#4701ddec804ccc716d1d53dd50d219b515e46c69"
 dependencies = [
  "bytes",
  "futures-sink",

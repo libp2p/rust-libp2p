@@ -182,12 +182,12 @@ impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Framed<C, Codec<KadRequestMsg, KadResponseMsg>>;
+    type Output = C;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
     type Error = quick_protobuf_codec::Error;
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        future::ok(Framed::new(incoming, Codec::new(self.max_packet_size)))
+        future::ok(incoming)
     }
 }
 
@@ -210,7 +210,7 @@ pub struct Codec<In, Out> {
 }
 
 impl<In, Out> Codec<In, Out> {
-    fn new(max_message_length: usize) -> Self {
+    pub(crate) fn new(max_message_length: usize) -> Self {
         Self {
             inner: quick_protobuf_codec::Codec::new(max_message_length),
             phantom_data: PhantomData,

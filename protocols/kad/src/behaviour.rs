@@ -25,11 +25,10 @@ mod test;
 use crate::addresses::Addresses;
 use crate::handler::{
     KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
-    KademliaRequestId,
 };
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+use crate::protocol::{KadConnectionType, KadPeer, KadResponseMsg, KademliaProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
@@ -37,6 +36,7 @@ use crate::record::{
     ProviderRecord, Record,
 };
 use crate::K_VALUE;
+use asynchronous_codec::Responder;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -1617,23 +1617,17 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        request_id: KademliaRequestId,
+        responder: Responder<KadResponseMsg>,
         mut record: Record,
     ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
             // the original publisher should never change as a result of replication
             // and the publisher is always assumed to have the "right" value.
-            self.queued_events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id: source,
-                    handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::PutRecordRes {
-                        key: record.key,
-                        value: record.value,
-                        request_id,
-                    },
-                });
+            responder.respond(KadResponseMsg::PutValue {
+                key: record.key,
+                value: record.value,
+            });
             return;
         }
 
@@ -1697,12 +1691,12 @@ where
                     }
                     Err(e) => {
                         info!("Record not stored: {:?}", e);
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::NotifyHandler {
-                                peer_id: source,
-                                handler: NotifyHandler::One(connection),
-                                event: KademliaHandlerIn::Reset(request_id),
-                            });
+                        // self.queued_events
+                        //     .push_back(NetworkBehaviourAction::NotifyHandler {
+                        //         peer_id: source,
+                        //         handler: NotifyHandler::One(connection),
+                        //         event: KademliaHandlerIn::Reset(request_id),
+                        //     });
 
                         return;
                     }
@@ -1729,16 +1723,10 @@ where
         // closest nodes to the target. In addition returning
         // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
         // information to a possibly malicious remote node.
-        self.queued_events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: source,
-                handler: NotifyHandler::One(connection),
-                event: KademliaHandlerIn::PutRecordRes {
-                    key: record.key,
-                    value: record.value,
-                    request_id,
-                },
-            })
+        responder.respond(KadResponseMsg::PutValue {
+            key: record.key,
+            value: record.value,
+        });
     }
 
     /// Processes a provider record received from a peer.
@@ -2080,7 +2068,7 @@ where
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
-            KademliaHandlerEvent::FindNodeReq { key, request_id } => {
+            KademliaHandlerEvent::FindNodeReq { key, responder } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
@@ -2091,16 +2079,7 @@ where
                             },
                         },
                     ));
-
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::FindNodeRes {
-                            closer_peers,
-                            request_id,
-                        },
-                    });
+                responder.respond(KadResponseMsg::FindNode { closer_peers });
             }
 
             KademliaHandlerEvent::FindNodeRes {
@@ -2110,7 +2089,7 @@ where
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
+            KademliaHandlerEvent::GetProvidersReq { key, responder } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
@@ -2124,16 +2103,10 @@ where
                         },
                     ));
 
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::GetProvidersRes {
-                            closer_peers,
-                            provider_peers,
-                            request_id,
-                        },
-                    });
+                responder.respond(KadResponseMsg::GetProviders {
+                    closer_peers,
+                    provider_peers,
+                });
             }
 
             KademliaHandlerEvent::GetProvidersRes {
@@ -2197,7 +2170,7 @@ where
                 self.provider_received(key, provider);
             }
 
-            KademliaHandlerEvent::GetRecord { key, request_id } => {
+            KademliaHandlerEvent::GetRecord { key, responder } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
@@ -2222,17 +2195,10 @@ where
                             },
                         },
                     ));
-
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: source,
-                        handler: NotifyHandler::One(connection),
-                        event: KademliaHandlerIn::GetRecordRes {
-                            record,
-                            closer_peers,
-                            request_id,
-                        },
-                    });
+                responder.respond(KadResponseMsg::GetValue {
+                    record,
+                    closer_peers,
+                });
             }
 
             KademliaHandlerEvent::GetRecordRes {
@@ -2291,8 +2257,8 @@ where
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::PutRecord { record, request_id } => {
-                self.record_received(source, connection, request_id, record);
+            KademliaHandlerEvent::PutRecord { record, responder } => {
+                self.record_received(source, connection, responder, record);
             }
 
             KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
