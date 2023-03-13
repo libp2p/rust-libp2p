@@ -590,7 +590,6 @@ where
             }
         }
 
-        // TODO: At the moment these will always fail because we always close the stream on the other end.
         while let Poll::Ready(Some(event)) = self
             .outbound_substreams_without_response
             .poll_next_unpin(cx)
