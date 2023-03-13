@@ -18,11 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
-    KademliaProtocolConfig,
-};
+use crate::protocol::{Codec, KadPeer, KadRequestMsg, KadResponseMsg, KademliaProtocolConfig};
 use crate::record::{self, Record};
+use asynchronous_codec::Framed;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
@@ -118,19 +116,25 @@ pub struct KademliaHandlerConfig {
 enum OutboundSubstreamState<TUserData> {
     /// Waiting to send a message to the remote.
     PendingSend(
-        KadOutStreamSink<NegotiatedSubstream>,
+        Framed<NegotiatedSubstream, Codec<KadResponseMsg, KadRequestMsg>>,
         KadRequestMsg,
         Option<TUserData>,
     ),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<NegotiatedSubstream>, Option<TUserData>),
+    PendingFlush(
+        Framed<NegotiatedSubstream, Codec<KadResponseMsg, KadRequestMsg>>,
+        Option<TUserData>,
+    ),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<NegotiatedSubstream>, TUserData),
+    WaitingAnswer(
+        Framed<NegotiatedSubstream, Codec<KadResponseMsg, KadRequestMsg>>,
+        TUserData,
+    ),
     /// An error happened on the substream and we should report the error to the user.
     ReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    Closing(KadOutStreamSink<NegotiatedSubstream>),
+    Closing(Framed<NegotiatedSubstream, Codec<KadResponseMsg, KadRequestMsg>>),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -143,24 +147,27 @@ enum InboundSubstreamState<TUserData> {
         /// Whether it is the first message to be awaited on this stream.
         first: bool,
         connection_id: UniqueConnecId,
-        substream: KadInStreamSink<NegotiatedSubstream>,
+        substream: Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
     },
     /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
     WaitingBehaviour(
         UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
+        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
         Option<Waker>,
     ),
     /// Waiting to send an answer back to the remote.
     PendingSend(
         UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
+        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
         KadResponseMsg,
     ),
     /// Waiting to flush an answer back to the remote.
-    PendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
+    PendingFlush(
+        UniqueConnecId,
+        Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>,
+    ),
     /// The substream is being closed.
-    Closing(KadInStreamSink<NegotiatedSubstream>),
+    Closing(Framed<NegotiatedSubstream, Codec<KadRequestMsg, KadResponseMsg>>),
     /// The substream was cancelled in favor of a new one.
     Cancelled,
 
@@ -362,9 +369,17 @@ impl error::Error for KademliaHandlerQueryErr {
     }
 }
 
-impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
-        KademliaHandlerQueryErr::Upgrade(err)
+impl From<ConnectionHandlerUpgrErr<quick_protobuf_codec::Error>> for KademliaHandlerQueryErr {
+    fn from(err: ConnectionHandlerUpgrErr<quick_protobuf_codec::Error>) -> Self {
+        KademliaHandlerQueryErr::Upgrade(
+            err.map_upgrade_err(|e| e.map_err(|e| io::Error::new(io::ErrorKind::Other, e))),
+        )
+    }
+}
+
+impl From<quick_protobuf_codec::Error> for KademliaHandlerQueryErr {
+    fn from(err: quick_protobuf_codec::Error) -> Self {
+        KademliaHandlerQueryErr::Io(io::Error::new(io::ErrorKind::Other, err))
     }
 }
 
@@ -846,7 +861,7 @@ where
                                 let event = user_data.map(|user_data| {
                                     ConnectionHandlerEvent::Custom(
                                         KademliaHandlerEvent::QueryError {
-                                            error: KademliaHandlerQueryErr::Io(error),
+                                            error: KademliaHandlerQueryErr::Io(error.into()),
                                             user_data,
                                         },
                                     )
@@ -863,7 +878,7 @@ where
                             *this = OutboundSubstreamState::Done;
                             let event = user_data.map(|user_data| {
                                 ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
+                                    error: KademliaHandlerQueryErr::Io(error.into()),
                                     user_data,
                                 })
                             });
@@ -889,7 +904,7 @@ where
                             *this = OutboundSubstreamState::Done;
                             let event = user_data.map(|user_data| {
                                 ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
+                                    error: KademliaHandlerQueryErr::Io(error.into()),
                                     user_data,
                                 })
                             });
@@ -913,7 +928,7 @@ where
                         Poll::Ready(Some(Err(error))) => {
                             *this = OutboundSubstreamState::Done;
                             let event = KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
+                                error: KademliaHandlerQueryErr::Io(error.into()),
                                 user_data,
                             };
 

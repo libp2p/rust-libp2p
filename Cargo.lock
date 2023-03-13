@@ -2438,6 +2438,7 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
  "serde",
