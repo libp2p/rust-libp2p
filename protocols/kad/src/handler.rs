@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::indexed_stream::IndexedStream;
 use crate::protocol::{
     Codec, KadPeer, KadRequestMsg, KadResponseMsg, KademliaProtocolConfig, DEFAULT_MAX_PACKET_SIZE,
 };
@@ -69,10 +70,13 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<
-        asynchronous_codec::RecvSend<
-            NegotiatedSubstream,
-            Codec<KadRequestMsg, KadResponseMsg>,
-            ReturnStream,
+        IndexedStream<
+            UniqueConnecId,
+            asynchronous_codec::RecvSend<
+                NegotiatedSubstream,
+                Codec<KadRequestMsg, KadResponseMsg>,
+                ReturnStream,
+            >,
         >,
     >,
 
@@ -444,13 +448,19 @@ where
         }
 
         debug_assert!(self.config.allow_listening);
-        // let connec_unique_id = self.next_connec_unique_id;
-        // self.next_connec_unique_id.0 += 1;
+        let connec_unique_id = self.next_connection_id();
+
         self.inbound_substreams
-            .push(asynchronous_codec::RecvSend::new(
+            .push(IndexedStream::new(connec_unique_id, asynchronous_codec::RecvSend::new(
                 protocol,
                 Codec::new(DEFAULT_MAX_PACKET_SIZE),
-            ));
+            )));
+    }
+
+    fn next_connection_id(&mut self) -> UniqueConnecId {
+        let connec_unique_id = self.next_connec_unique_id;
+        self.next_connec_unique_id.0 += 1;
+        connec_unique_id
     }
 
     fn on_dial_upgrade_error(
@@ -498,19 +508,14 @@ where
 
     fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
-            KademliaHandlerIn::Reset(_request_id) => {
-                // if let Some(state) = self
-                //     .inbound_substreams
-                //     .iter_mut()
-                //     .find(|state| match state {
-                //         InboundSubstreamState::WaitingBehaviour(conn_id, _, _) => {
-                //             conn_id == &request_id.connec_unique_id
-                //         }
-                //         _ => false,
-                //     })
-                // {
-                //     state.close();
-                // }
+            KademliaHandlerIn::Reset(request_id) => {
+                if let Some(stream) = self
+                    .inbound_substreams
+                    .iter_mut()
+                    .find(|stream| stream.index() == &request_id.connec_unique_id)
+                {
+                    stream.stream_pin_mut().abort();
+                }
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
@@ -581,11 +586,13 @@ where
         while let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
             match event {
                 Ok(asynchronous_codec::Event::Completed { stream }) => {
+                    let unique_connec_id = self.next_connection_id();
+
                     self.inbound_substreams
-                        .push(asynchronous_codec::RecvSend::new(
+                        .push(IndexedStream::new(unique_connec_id, asynchronous_codec::RecvSend::new(
                             stream,
                             Codec::new(DEFAULT_MAX_PACKET_SIZE),
-                        ));
+                        )));
                 }
                 Ok(asynchronous_codec::Event::NewRequest { request, responder }) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(match request {

@@ -47,6 +47,7 @@ mod addresses;
 mod behaviour;
 mod jobs;
 mod query;
+mod indexed_stream;
 
 mod proto {
     include!("generated/mod.rs");
