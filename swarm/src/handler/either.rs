@@ -22,13 +22,12 @@
 use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, ListenUpgradeErrorKind, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::ConnectionHandlerUpgrErr;
 use either::Either;
 use futures::future;
-use libp2p_core::{ConnectedPoint, UpgradeError};
+use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 
@@ -125,59 +124,31 @@ where
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
+                error: ListenUpgradeErrorKind::Failed(Either::Left(error)),
                 info: Either::Left(info),
             } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                error: ListenUpgradeErrorKind::Failed(error),
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
+                error: ListenUpgradeErrorKind::Failed(Either::Right(error)),
                 info: Either::Right(info),
             } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                error: ListenUpgradeErrorKind::Failed(error),
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: ListenUpgradeErrorKind::Timeout,
                 info: Either::Left(info),
             } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: ListenUpgradeErrorKind::Timeout,
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: ListenUpgradeErrorKind::Timeout,
                 info: Either::Right(info),
             } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: ListenUpgradeErrorKind::Timeout,
                 info,
             }),
             _ => unreachable!(),

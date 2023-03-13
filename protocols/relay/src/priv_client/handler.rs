@@ -33,7 +33,7 @@ use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    ListenUpgradeError, ListenUpgradeErrorKind,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -305,24 +305,8 @@ impl Handler {
         >,
     ) {
         let non_fatal_error = match error {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )),
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::ProtocolError(e),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
-                ));
-                return;
-            }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                inbound_stop::UpgradeError::Fatal(error),
-            )) => {
+            ListenUpgradeErrorKind::Timeout => ConnectionHandlerUpgrErr::Timeout, // TODO: non-fatal-error can only be timeout, should we even report that?
+            ListenUpgradeErrorKind::Failed(inbound_stop::UpgradeError::Fatal(error)) => {
                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Apply(Either::Left(error)),
                 ));

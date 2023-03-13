@@ -25,7 +25,7 @@ use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    ListenUpgradeError, ListenUpgradeErrorKind,
 };
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
@@ -172,22 +172,12 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            ListenUpgradeErrorKind::Timeout => {
                 self.pending_events.push_back(Event::InboundTimeout(info))
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The local peer merely doesn't support the protocol(s) requested.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                // An event is reported to permit user code to react to the fact that
-                // the local peer does not support the requested protocol(s).
-                self.pending_events
-                    .push_back(Event::InboundUnsupportedProtocols(info));
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
+            ListenUpgradeErrorKind::Failed(e) => {
+                self.pending_error =
+                    Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)));
             }
         }
     }

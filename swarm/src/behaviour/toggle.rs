@@ -21,9 +21,9 @@
 use crate::behaviour::FromSwarm;
 use crate::connection::ConnectionId;
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
+    ListenUpgradeErrorKind, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{
@@ -252,14 +252,11 @@ where
         };
 
         let err = match err {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    Either::Left(e) => e,
-                    Either::Right(v) => void::unreachable(v),
-                }))
-            }
+            ListenUpgradeErrorKind::Timeout => ListenUpgradeErrorKind::Timeout,
+            ListenUpgradeErrorKind::Failed(e) => ListenUpgradeErrorKind::Failed(match e {
+                Either::Left(e) => e,
+                Either::Right(v) => void::unreachable(v),
+            }),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
@@ -397,7 +394,7 @@ mod tests {
 
         handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
             info: Either::Right(()),
-            error: ConnectionHandlerUpgrErr::Timeout,
+            error: ListenUpgradeErrorKind::Timeout,
         }));
     }
 }

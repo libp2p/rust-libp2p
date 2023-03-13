@@ -30,7 +30,7 @@ use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    ListenUpgradeError, ListenUpgradeErrorKind,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -215,42 +215,22 @@ impl Handler {
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            ListenUpgradeErrorKind::Timeout => {
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::InboundNegotiationFailed {
                         error: ConnectionHandlerUpgrErr::Timeout,
                     },
                 ));
             }
-            ConnectionHandlerUpgrErr::Timer => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    },
-                ));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The remote merely doesn't support the DCUtR protocol.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                self.keep_alive = KeepAlive::No;
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    },
-                ));
-            }
-            _ => {
+            ListenUpgradeErrorKind::Failed(e) => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| {
-                    e.map_err(|e| match e {
+                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+                    match e {
                         Either::Left(e) => Either::Left(e),
                         Either::Right(v) => void::unreachable(v),
-                    })
-                }));
+                    },
+                )));
             }
         }
     }
