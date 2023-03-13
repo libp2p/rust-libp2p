@@ -475,7 +475,7 @@ enum PeerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::{Multihash};
+    use libp2p_core::multihash::Multihash;
     use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
