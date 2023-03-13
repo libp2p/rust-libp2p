@@ -23,7 +23,7 @@ use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
     FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
-    ListenUpgradeErrorKind, SubstreamProtocol,
+    SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{
@@ -252,11 +252,8 @@ where
         };
 
         let err = match err {
-            ListenUpgradeErrorKind::Timeout => ListenUpgradeErrorKind::Timeout,
-            ListenUpgradeErrorKind::Failed(e) => ListenUpgradeErrorKind::Failed(match e {
-                Either::Left(e) => e,
-                Either::Right(v) => void::unreachable(v),
-            }),
+            Either::Left(e) => e,
+            Either::Right(v) => void::unreachable(v),
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
@@ -366,35 +363,5 @@ where
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::dummy;
-
-    /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
-    /// the following two cases:
-    ///
-    /// 1. Protocol negotiation on an incoming stream failed with no protocol
-    ///    being agreed on.
-    ///
-    /// 2. When combining [`ConnectionHandler`] implementations a single
-    ///    [`ConnectionHandler`] might be notified of an inbound upgrade error
-    ///    unrelated to its own upgrade logic. For example when nesting a
-    ///    [`ToggleConnectionHandler`] in a
-    ///    [`ConnectionHandlerSelect`](crate::connection_handler::ConnectionHandlerSelect)
-    ///    the former might receive an inbound upgrade error even when disabled.
-    ///
-    /// [`ToggleConnectionHandler`] should ignore the error in both of these cases.
-    #[test]
-    fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleConnectionHandler::<dummy::ConnectionHandler> { inner: None };
-
-        handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info: Either::Right(()),
-            error: ListenUpgradeErrorKind::Timeout,
-        }));
     }
 }

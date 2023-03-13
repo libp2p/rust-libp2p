@@ -250,12 +250,7 @@ pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
 /// that upgrading an inbound substream to the given protocol has failed.
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,
-    pub error: ListenUpgradeErrorKind<IP::Error>,
-}
-
-pub enum ListenUpgradeErrorKind<E> {
-    Failed(E),
-    Timeout,
+    pub error: IP::Error,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)

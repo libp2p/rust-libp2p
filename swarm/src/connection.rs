@@ -29,7 +29,7 @@ pub use error::{
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError, ListenUpgradeErrorKind,
+    FullyNegotiatedOutbound, ListenUpgradeError,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
@@ -267,31 +267,22 @@ where
                     unreachable!()
                 }
                 Poll::Ready(Some((
+                    info,
+                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error))),
+                ))) => {
+                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                        ListenUpgradeError { info, error },
+                    ));
+                    continue;
+                }
+                Poll::Ready(Some((
                     _,
                     Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e))),
                 ))) => {
                     log::debug!("failed to upgrade inbound stream: {e}");
                     continue;
                 }
-                Poll::Ready(Some((info, Err(ConnectionHandlerUpgrErr::Timeout)))) => {
-                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                        ListenUpgradeError {
-                            info,
-                            error: ListenUpgradeErrorKind::Timeout,
-                        },
-                    ));
-                    continue;
-                }
-                Poll::Ready(Some((
-                    info,
-                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error))),
-                ))) => {
-                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                        ListenUpgradeError {
-                            info,
-                            error: ListenUpgradeErrorKind::Failed(error),
-                        },
-                    ));
+                Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Timeout)))) => {
                     continue;
                 }
             }

@@ -22,7 +22,7 @@
 use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, ListenUpgradeErrorKind, SubstreamProtocol,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -124,33 +124,13 @@ where
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
             ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Failed(Either::Left(error)),
+                error: Either::Left(error),
                 info: Either::Left(info),
-            } => Either::Left(ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Failed(error),
-                info,
-            }),
+            } => Either::Left(ListenUpgradeError { error, info }),
             ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Failed(Either::Right(error)),
+                error: Either::Right(error),
                 info: Either::Right(info),
-            } => Either::Right(ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Failed(error),
-                info,
-            }),
-            ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Timeout,
-                info: Either::Left(info),
-            } => Either::Left(ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Timeout,
-                info,
-            }),
-            ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Timeout,
-                info: Either::Right(info),
-            } => Either::Right(ListenUpgradeError {
-                error: ListenUpgradeErrorKind::Timeout,
-                info,
-            }),
+            } => Either::Right(ListenUpgradeError { error, info }),
             _ => unreachable!(),
         }
     }

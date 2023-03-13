@@ -23,8 +23,7 @@ use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, ListenUpgradeErrorKind, OutboundUpgradeSend,
-    SubstreamProtocol,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -239,31 +238,18 @@ where
         >,
     ) {
         match error {
-            ListenUpgradeErrorKind::Timeout => {
+            Either::Left(error) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ListenUpgradeErrorKind::Timeout,
+                        error,
                     }));
-
+            }
+            Either::Right(error) => {
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ListenUpgradeErrorKind::Timeout,
-                    }));
-            }
-            ListenUpgradeErrorKind::Failed(Either::Left(e)) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ListenUpgradeErrorKind::Failed(e),
-                    }));
-            }
-            ListenUpgradeErrorKind::Failed(Either::Right(e)) => {
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ListenUpgradeErrorKind::Failed(e),
+                        error,
                     }));
             }
         }

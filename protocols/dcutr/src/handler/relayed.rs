@@ -30,7 +30,7 @@ use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, ListenUpgradeErrorKind,
+    ListenUpgradeError,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -214,25 +214,14 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        match error {
-            ListenUpgradeErrorKind::Timeout => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    },
-                ));
-            }
-            ListenUpgradeErrorKind::Failed(e) => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
-                    match e {
-                        Either::Left(e) => Either::Left(e),
-                        Either::Right(v) => void::unreachable(v),
-                    },
-                )));
-            }
-        }
+        // Anything else is considered a fatal error or misbehaviour of
+        // the remote peer and results in closing the connection.
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+            match error {
+                Either::Left(e) => Either::Left(e),
+                Either::Right(v) => void::unreachable(v),
+            },
+        )));
     }
 
     fn on_dial_upgrade_error(

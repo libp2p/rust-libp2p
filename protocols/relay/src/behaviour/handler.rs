@@ -34,7 +34,7 @@ use libp2p_core::{upgrade, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, ListenUpgradeErrorKind,
+    ListenUpgradeError,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId, KeepAlive,
@@ -474,25 +474,16 @@ impl Handler {
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError {
+            error: inbound_hop::UpgradeError::Fatal(error),
+            ..
+        }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        let non_fatal_error = match error {
-            ListenUpgradeErrorKind::Timeout => ConnectionHandlerUpgrErr::Timeout, // TODO: non-fatal-error can only be timeout, should we even report that?
-            ListenUpgradeErrorKind::Failed(inbound_hop::UpgradeError::Fatal(e)) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(Either::Left(e)),
-                ));
-                return;
-            }
-        };
-
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::CircuitReqReceiveFailed {
-                error: non_fatal_error,
-            },
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
+            upgrade::UpgradeError::Apply(Either::Left(error)),
         ));
     }
 

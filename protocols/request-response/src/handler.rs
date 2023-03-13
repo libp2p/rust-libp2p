@@ -25,7 +25,7 @@ use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, ListenUpgradeErrorKind,
+    ListenUpgradeError,
 };
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
@@ -166,20 +166,14 @@ where
     }
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { info, error }: ListenUpgradeError<
+        ListenUpgradeError { error, .. }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        match error {
-            ListenUpgradeErrorKind::Timeout => {
-                self.pending_events.push_back(Event::InboundTimeout(info))
-            }
-            ListenUpgradeErrorKind::Failed(e) => {
-                self.pending_error =
-                    Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)));
-            }
-        }
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+            error,
+        )));
     }
 }
 
