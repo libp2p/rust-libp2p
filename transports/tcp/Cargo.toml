@@ -15,7 +15,7 @@ async-io = { version = "1.2.0", optional = true }
 futures = "0.3.26"
 futures-timer = "3.0"
 if-watch = "3.0.0"
-libc = "0.2.80"
+libc = "0.2.140"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.11"
