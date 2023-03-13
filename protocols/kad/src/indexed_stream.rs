@@ -24,12 +24,20 @@ impl<I, S> IndexedStream<I, S> {
 
 impl<I, S> Stream for IndexedStream<I, S>
 where
+    I: Clone,
     S: Stream,
 {
-    type Item = S::Item;
+    type Item = (I, S::Item);
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Safety: We never expose an unpinned reference.
-        unsafe { Pin::new_unchecked(&mut self.get_unchecked_mut().stream).poll_next(cx) }
+        let index = self.index.clone();
+
+        match futures::ready!(unsafe {
+            Pin::new_unchecked(&mut self.get_unchecked_mut().stream).poll_next(cx)
+        }) {
+            None => Poll::Ready(None),
+            Some(item) => Poll::Ready(Some((index, item))),
+        }
     }
 }

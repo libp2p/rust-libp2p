@@ -28,7 +28,7 @@
 
 use crate::proto;
 use crate::record::{self, Record};
-use asynchronous_codec::{Decoder, Encoder, Framed};
+use asynchronous_codec::{Decoder, Encoder};
 use bytes::BytesMut;
 use futures::prelude::*;
 use instant::Instant;
@@ -195,12 +195,12 @@ impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Framed<C, Codec<KadResponseMsg, KadRequestMsg>>;
+    type Output = C;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
     type Error = quick_protobuf_codec::Error;
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        future::ok(Framed::new(incoming, Codec::new(self.max_packet_size)))
+        future::ok(incoming)
     }
 }
 
