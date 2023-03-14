@@ -31,7 +31,7 @@ use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
     };
 
-    let mut swarm = Swarm::without_executor(transport, behaviour, local_peer_id);
+    let mut swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
 
     // Listen on all interfaces
     let listen_addr = Multiaddr::empty()

@@ -566,7 +566,7 @@ mod tests {
     use libp2p_identity::PeerId;
     use libp2p_mplex::MplexConfig;
     use libp2p_noise as noise;
-    use libp2p_swarm::{Swarm, SwarmEvent};
+    use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
     use libp2p_tcp as tcp;
     use std::time::Duration;
 
@@ -594,7 +594,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -603,7 +605,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -671,7 +675,9 @@ mod tests {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -680,7 +686,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -752,7 +760,7 @@ mod tests {
                     .with_initial_delay(Duration::from_secs(10)),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let mut swarm2 = {
@@ -761,7 +769,7 @@ mod tests {
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let swarm1_peer_id = *swarm1.local_peer_id();
