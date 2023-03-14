@@ -1,4 +1,11 @@
-# 0.44.1 - unreleased
+# 0.44.2 - unreleased
+
+- Signed messages now use sequential integers in the sequence number field.
+  See [PR 3551].
+
+[PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
+
+# 0.44.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 

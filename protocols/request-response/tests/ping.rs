@@ -24,8 +24,9 @@ use async_trait::async_trait;
 use futures::{prelude::*, AsyncWriteExt};
 use libp2p_core::{
     upgrade::{read_length_prefixed, write_length_prefixed},
-    PeerId, ProtocolName,
+    ProtocolName,
 };
+use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
 use libp2p_swarm::{Swarm, SwarmEvent};

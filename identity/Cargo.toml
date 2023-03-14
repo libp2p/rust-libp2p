@@ -1,0 +1,55 @@
+[package]
+name = "libp2p-identity"
+version = "0.1.0"
+edition = "2021"
+description = "Data structures and algorithms for identifying peers in libp2p."
+rust-version = "1.60.0"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking", "cryptography"]
+categories = ["cryptography"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+asn1_der = { version = "0.7.4", optional = true }
+bs58 = { version = "0.4.0", optional = true }
+ed25519-dalek = { version = "1.0.1", optional = true }
+libsecp256k1 = { version = "0.7.0", optional = true }
+log = "0.4"
+multiaddr = { version = "0.17.0", optional = true }
+multihash = { version = "0.17.0", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"], optional = true }
+p256 = { version = "0.12", default-features = false, features = ["ecdsa", "std"], optional = true }
+prost = { version = "0.11", optional = true }
+quick-protobuf = "0.8.1"
+rand = { version = "0.8", optional = true }
+sec1 = { version = "0.3.0", features = ["std"], optional = true } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
+serde = { version = "1", optional = true, features = ["derive"] }
+sha2 = { version = "0.10.0", optional = true }
+thiserror = { version = "1.0", optional = true }
+void = { version = "1.0", optional = true }
+zeroize = { version = "1.0", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
+
+[features]
+secp256k1 = [ "libsecp256k1", "asn1_der", "prost", "rand", "sha2", "zeroize" ]
+ecdsa = [ "p256", "prost", "rand", "void", "zeroize", "sec1" ]
+rsa = [ "dep:ring", "asn1_der", "prost", "rand", "zeroize" ]
+ed25519 = [ "ed25519-dalek", "prost", "rand", "zeroize" ]
+peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror" ]
+
+[dev-dependencies]
+quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+base64 = "0.21.0"
+serde_json = "1.0"
+rmp-serde = "1.0"
+criterion = "0.4"
+
+[build-dependencies]
+prost-build = "0.11"
+
+[[bench]]
+name = "peer_id"
+harness = false

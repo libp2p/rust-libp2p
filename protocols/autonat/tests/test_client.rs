@@ -22,7 +22,8 @@ use async_std::task::JoinHandle;
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;

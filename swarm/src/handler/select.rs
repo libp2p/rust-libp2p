@@ -30,8 +30,9 @@ use either::Either;
 use futures::future;
 use libp2p_core::{
     upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
-    ConnectedPoint, PeerId,
+    ConnectedPoint,
 };
+use libp2p_identity::PeerId;
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of `IntoConnectionHandler` that combines two protocols into one.

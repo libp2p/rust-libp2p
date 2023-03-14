@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.26"
+futures = "0.3.27"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 thiserror = "1.0"
 yamux = "0.10.0"
