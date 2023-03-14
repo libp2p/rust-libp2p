@@ -24,7 +24,7 @@ use libp2p::{
     identity,
     multiaddr::Protocol,
     noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -41,7 +41,7 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let mut swarm = Swarm::with_tokio_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
@@ -53,7 +53,8 @@ async fn main() {
             keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
-    );
+    )
+    .build();
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 

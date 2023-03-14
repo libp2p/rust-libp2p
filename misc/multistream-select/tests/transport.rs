@@ -29,7 +29,7 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex::MplexConfig;
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{dummy, Swarm, SwarmEvent};
+use libp2p_swarm::{dummy, SwarmBuilder, SwarmEvent};
 use rand::random;
 use std::task::Poll;
 
@@ -63,9 +63,14 @@ fn transport_upgrade() {
         let listen_addr = Multiaddr::from(Protocol::Memory(random::<u64>()));
 
         let mut dialer =
-            Swarm::with_async_std_executor(dialer_transport, dummy::Behaviour, dialer_id);
-        let mut listener =
-            Swarm::with_async_std_executor(listener_transport, dummy::Behaviour, listener_id);
+            SwarmBuilder::with_async_std_executor(dialer_transport, dummy::Behaviour, dialer_id)
+                .build();
+        let mut listener = SwarmBuilder::with_async_std_executor(
+            listener_transport,
+            dummy::Behaviour,
+            listener_id,
+        )
+        .build();
 
         listener.listen_on(listen_addr).unwrap();
         let (addr_sender, addr_receiver) = oneshot::channel();
