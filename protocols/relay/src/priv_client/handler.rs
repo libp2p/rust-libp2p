@@ -326,7 +326,6 @@ impl Handler {
             OutboundOpenInfo::Reserve { mut to_listener } => {
                 let non_fatal_error = match error {
                     ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-                    ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
                     ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
@@ -389,7 +388,6 @@ impl Handler {
             OutboundOpenInfo::Connect { send_back } => {
                 let non_fatal_error = match error {
                     ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-                    ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
                     ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(

@@ -163,13 +163,6 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Timeout,
             } => Either::Left(DialUpgradeError {
                 info,
@@ -188,13 +181,6 @@ where
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
             }),
             DialUpgradeError {
                 info: Either::Right(info),

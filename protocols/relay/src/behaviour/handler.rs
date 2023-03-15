@@ -502,10 +502,6 @@ impl Handler {
                 ConnectionHandlerUpgrErr::Timeout,
                 proto::Status::CONNECTION_FAILED,
             ),
-            ConnectionHandlerUpgrErr::Timer => (
-                ConnectionHandlerUpgrErr::Timer,
-                proto::Status::CONNECTION_FAILED,
-            ),
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => {

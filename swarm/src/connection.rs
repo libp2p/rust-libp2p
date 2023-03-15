@@ -272,9 +272,6 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Timer)))) => {
-                    unreachable!()
-                }
                 Poll::Ready(Some((
                     _,
                     Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e))),

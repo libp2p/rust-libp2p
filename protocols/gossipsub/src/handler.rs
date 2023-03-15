@@ -293,9 +293,7 @@ impl ConnectionHandler for Handler {
         if let Some(error) = self.upgrade_errors.pop_front() {
             let reported_error = match error {
                 // Timeout errors get mapped to NegotiationTimeout and we close the connection.
-                ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                    Some(HandlerError::NegotiationTimeout)
-                }
+                ConnectionHandlerUpgrErr::Timeout => Some(HandlerError::NegotiationTimeout),
                 // There was an error post negotiation, close the connection.
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
