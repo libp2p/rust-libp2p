@@ -1,7 +1,7 @@
 # 0.16.0
 
-- Remove `Event::CircuitReqReceiveFailed` variant.
-  This variant is no longer constructed.
+- Remove `Event::CircuitReqReceiveFailed` and `Event::InboundCircuitReqFailed` variants.
+  These variants are no longer constructed.
   See [PR 3605].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605

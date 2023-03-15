@@ -97,10 +97,6 @@ pub enum Event {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    /// An inbound circuit request has failed.
-    InboundCircuitReqFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
