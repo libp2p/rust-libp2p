@@ -40,7 +40,7 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 use std::time::Duration;
@@ -51,7 +51,7 @@ async fn main() {
 
     let key_pair = identity::Keypair::generate_ed25519();
 
-    let mut swarm = Swarm::with_tokio_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
@@ -67,7 +67,8 @@ async fn main() {
             keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
-    );
+    )
+    .build();
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 

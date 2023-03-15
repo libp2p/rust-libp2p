@@ -12,7 +12,7 @@ This repository is the central place for Rust development of the [libp2p](https:
 
 - **Main documentation** can be found on https://docs.rs/libp2p.
 
-- The **[examples](libp2p/examples)** folder contains small binaries showcasing the
+- The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
 - For **security related issues** please [file a private security vulnerability
