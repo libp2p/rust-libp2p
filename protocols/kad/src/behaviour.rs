@@ -25,6 +25,7 @@ mod test;
 use crate::addresses::Addresses;
 use crate::handler::{
     KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
+    KademliaRequestId,
 };
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
@@ -1619,6 +1620,7 @@ where
         connection: ConnectionId,
         responder: Responder<KadResponseMsg>,
         mut record: Record,
+        request_id: KademliaRequestId,
     ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
             // If the (alleged) publisher is the local node, do nothing. The record of
@@ -2257,8 +2259,12 @@ where
                 self.discovered(&user_data, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::PutRecord { record, responder } => {
-                self.record_received(source, connection, responder, record);
+            KademliaHandlerEvent::PutRecord {
+                record,
+                responder,
+                request_id,
+            } => {
+                self.record_received(source, connection, responder, record, request_id);
             }
 
             KademliaHandlerEvent::PutRecordRes { user_data, .. } => {

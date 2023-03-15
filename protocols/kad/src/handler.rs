@@ -222,6 +222,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     PutRecord {
         record: Record,
         responder: Responder<KadResponseMsg>, // TODO: Narrow down this type.
+        request_id: KademliaRequestId,
     },
 
     /// Response to a request to store a record.
@@ -476,7 +477,7 @@ where
         &mut self,
         DialUpgradeError {
             info: (_, user_data),
-            error,
+            error: _, // TODO
             ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
@@ -485,7 +486,7 @@ where
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
-        if let Some(user_data) = user_data {
+        if let Some(_user_data) = user_data {
             todo!("Implement this without streams!")
             // self.outbound_substreams
             //     .push(OutboundSubstreamState::ReportError(error.into(), user_data));
@@ -604,7 +605,7 @@ where
             }
         }
 
-        while let Poll::Ready(Some((_connection_id, event))) =
+        while let Poll::Ready(Some((connection_id, event))) =
             self.inbound_substreams.poll_next_unpin(cx)
         {
             match event {
@@ -638,9 +639,13 @@ where
                         KadRequestMsg::GetValue { key } => {
                             KademliaHandlerEvent::GetRecord { key, responder }
                         }
-                        KadRequestMsg::PutValue { record } => {
-                            KademliaHandlerEvent::PutRecord { record, responder }
-                        }
+                        KadRequestMsg::PutValue { record } => KademliaHandlerEvent::PutRecord {
+                            record,
+                            responder,
+                            request_id: KademliaRequestId {
+                                connec_unique_id: connection_id,
+                            },
+                        },
                     }));
                 }
                 Err(e) => {
