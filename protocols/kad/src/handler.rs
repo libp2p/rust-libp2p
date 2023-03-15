@@ -104,6 +104,8 @@ pub struct KademliaHandler<TUserData> {
 
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
+
+    events: VecDeque<KademliaHandlerEvent<TUserData>>,
 }
 
 /// The states of protocol confirmation that a connection
@@ -367,6 +369,7 @@ where
             requested_streams: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unconfirmed,
+            events: Default::default(),
         }
     }
 
@@ -454,7 +457,7 @@ where
         &mut self,
         DialUpgradeError {
             info: (_, user_data),
-            error: _, // TODO
+            error,
             ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
@@ -463,10 +466,11 @@ where
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
-        if let Some(_user_data) = user_data {
-            todo!("Implement this without streams!")
-            // self.outbound_substreams
-            //     .push(OutboundSubstreamState::ReportError(error.into(), user_data));
+        if let Some(user_data) = user_data {
+            self.events.push_back(KademliaHandlerEvent::QueryError {
+                error: error.into(),
+                user_data,
+            });
         }
         self.num_requested_outbound_streams -= 1;
     }
@@ -534,6 +538,10 @@ where
             Self::Error,
         >,
     > {
+        if let Some(event) = self.events.pop_front() {
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+        }
+
         if let ProtocolStatus::Confirmed = self.protocol_status {
             self.protocol_status = ProtocolStatus::Reported;
             return Poll::Ready(ConnectionHandlerEvent::Custom(
