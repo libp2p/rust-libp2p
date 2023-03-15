@@ -25,24 +25,38 @@
 //! ```rust
 //! # use libp2p_swarm::{Swarm, NetworkBehaviour};
 //! # use libp2p_allow_block_list as allow_block_list;
+//! # use libp2p_allow_block_list::AllowedPeers;
 //! #
 //! #[derive(NetworkBehaviour)]
 //! # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 //! struct MyBehaviour {
-//!    allowed_peers: allow_block_list::Allow,
+//!    allowed_peers: allow_block_list::Behaviour<AllowedPeers>,
 //! }
+//!
+//! # fn main() {
+//! let behaviour = MyBehaviour {
+//!     allowed_peers: allow_block_list::Behaviour::default()
+//! };
+//! # }
 //! ```
 //! # Block list example
 //!
 //! ```rust
 //! # use libp2p_swarm::{Swarm, NetworkBehaviour};
 //! # use libp2p_allow_block_list as allow_block_list;
+//! # use libp2p_allow_block_list::BlockedPeers;
 //! #
 //! #[derive(NetworkBehaviour)]
 //! # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 //! struct MyBehaviour {
-//!    allowed_peers: allow_block_list::Block,
+//!    blocked_peers: allow_block_list::Behaviour<BlockedPeers>,
 //! }
+//!
+//! # fn main() {
+//! let behaviour = MyBehaviour {
+//!     blocked_peers: allow_block_list::Behaviour::default()
+//! };
+//! # }
 //! ```
 
 use libp2p_core::{Endpoint, Multiaddr};
@@ -56,54 +70,24 @@ use std::fmt;
 use std::task::{Context, Poll, Waker};
 use void::Void;
 
-/// A [`NetworkBehaviour`] that manages an allow list.
-///
-/// Unless a peer is present in this list, any connection will be denied immediately.
-pub type Allow = Behaviour<AllowedPeers>;
-
-/// A [`NetworkBehaviour`] that manages a block list.
-///
-/// In case a peer is present in this list, any connection will be denied immediately.
-pub type Block = Behaviour<BlockedPeers>;
-
-#[doc(hidden)]
-#[derive(Debug)]
+/// A [`NetworkBehaviour`] that can act as an allow or block list.
+#[derive(Default, Debug)]
 pub struct Behaviour<S> {
     state: S,
     close_connections: VecDeque<PeerId>,
     waker: Option<Waker>,
 }
 
-#[doc(hidden)]
+/// The list of explicitly allowed peers.
 #[derive(Default)]
 pub struct AllowedPeers {
     peers: HashSet<PeerId>,
 }
 
-#[doc(hidden)]
+/// The list of explicitly blocked peers.
 #[derive(Default)]
 pub struct BlockedPeers {
     peers: HashSet<PeerId>,
-}
-
-impl<S> Behaviour<S> {
-    /// Construct a new allow list.
-    pub fn allow() -> Behaviour<AllowedPeers> {
-        Behaviour {
-            state: AllowedPeers::default(),
-            close_connections: Default::default(),
-            waker: None,
-        }
-    }
-
-    /// Construct a new block list.
-    pub fn block() -> Behaviour<BlockedPeers> {
-        Behaviour {
-            state: BlockedPeers::default(),
-            close_connections: Default::default(),
-            waker: None,
-        }
-    }
 }
 
 impl Behaviour<AllowedPeers> {
@@ -296,8 +280,8 @@ mod tests {
 
     #[async_std::test]
     async fn cannot_dial_blocked_peer() {
-        let mut dialer = Swarm::new_ephemeral(|_| Block::new());
-        let mut listener = Swarm::new_ephemeral(|_| Block::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
         listener.listen().await;
 
         dialer
@@ -313,8 +297,8 @@ mod tests {
 
     #[async_std::test]
     async fn blocked_peer_cannot_dial_us() {
-        let mut dialer = Swarm::new_ephemeral(|_| Block::new());
-        let mut listener = Swarm::new_ephemeral(|_| Block::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
         listener.listen().await;
 
         listener
@@ -338,8 +322,8 @@ mod tests {
 
     #[async_std::test]
     async fn connections_get_closed_upon_blocked() {
-        let mut dialer = Swarm::new_ephemeral(|_| Block::new());
-        let mut listener = Swarm::new_ephemeral(|_| Block::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
         listener.listen().await;
         dialer.connect(&mut listener).await;
 
@@ -360,8 +344,8 @@ mod tests {
 
     #[async_std::test]
     async fn cannot_dial_peer_unless_allowed() {
-        let mut dialer = Swarm::new_ephemeral(|_| Allow::new());
-        let mut listener = Swarm::new_ephemeral(|_| Allow::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
         listener.listen().await;
 
         let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
@@ -378,8 +362,8 @@ mod tests {
 
     #[async_std::test]
     async fn not_allowed_peer_cannot_dial_us() {
-        let mut dialer = Swarm::new_ephemeral(|_| Allow::new());
-        let mut listener = Swarm::new_ephemeral(|_| Allow::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
         listener.listen().await;
 
         dialer
@@ -408,8 +392,8 @@ mod tests {
 
     #[async_std::test]
     async fn connections_get_closed_upon_disallow() {
-        let mut dialer = Swarm::new_ephemeral(|_| Allow::new());
-        let mut listener = Swarm::new_ephemeral(|_| Allow::new());
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
         listener.listen().await;
         dialer
             .behaviour_mut()
