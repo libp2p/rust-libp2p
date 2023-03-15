@@ -132,7 +132,7 @@ impl Behaviour<BlockedPeers> {
     }
 }
 
-/// A connection to this peer is not explicitly allowed and was thus [`Denied`](ConnectionDenied).
+/// A connection to this peer is not explicitly allowed and was thus [`denied`](ConnectionDenied).
 #[derive(Debug)]
 pub struct NotAllowed {
     peer: PeerId,
@@ -146,7 +146,7 @@ impl fmt::Display for NotAllowed {
 
 impl std::error::Error for NotAllowed {}
 
-/// A connection to this peer was explicitly blocked and was thus [`Denied`](ConnectionDenied).
+/// A connection to this peer was explicitly blocked and was thus [`denied`](ConnectionDenied).
 #[derive(Debug)]
 pub struct Blocked {
     peer: PeerId,
