@@ -1879,6 +1879,9 @@ impl error::Error for ListenError {
     }
 }
 
+/// A connection was denied.
+///
+/// To figure out which [`NetworkBehaviour`] denied the connection, use [`ConnectionDenied::downcast`].
 #[derive(Debug)]
 pub struct ConnectionDenied {
     inner: Box<dyn error::Error + Send + Sync + 'static>,
