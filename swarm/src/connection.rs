@@ -283,6 +283,7 @@ where
                     continue;
                 }
                 Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Timeout)))) => {
+                    log::debug!("inbound stream upgrade timed out");
                     continue;
                 }
             }
