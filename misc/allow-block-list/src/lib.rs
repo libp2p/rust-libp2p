@@ -23,7 +23,8 @@
 //! # Allow list example
 //!
 //! ```rust
-//! # use libp2p_swarm::{Swarm, NetworkBehaviour};
+//! # use libp2p_swarm::Swarm;
+//! # use libp2p_swarm_derive::NetworkBehaviour;
 //! # use libp2p_allow_block_list as allow_block_list;
 //! # use libp2p_allow_block_list::AllowedPeers;
 //! #
@@ -42,7 +43,8 @@
 //! # Block list example
 //!
 //! ```rust
-//! # use libp2p_swarm::{Swarm, NetworkBehaviour};
+//! # use libp2p_swarm::Swarm;
+//! # use libp2p_swarm_derive::NetworkBehaviour;
 //! # use libp2p_allow_block_list as allow_block_list;
 //! # use libp2p_allow_block_list::BlockedPeers;
 //! #
