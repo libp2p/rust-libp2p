@@ -1,3 +1,11 @@
+# 0.16.0
+
+- Remove `Event::CircuitReqReceiveFailed` variant.
+  This variant is no longer constructed.
+  See [PR 3605].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+
 # 0.15.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

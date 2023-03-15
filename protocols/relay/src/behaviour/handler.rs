@@ -166,10 +166,6 @@ pub enum Event {
         inbound_circuit_req: inbound_hop::CircuitReq,
         endpoint: ConnectedPoint,
     },
-    /// Receiving an inbound circuit request failed.
-    CircuitReqReceiveFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -254,10 +250,6 @@ impl fmt::Debug for Event {
             } => f
                 .debug_struct("Event::CircuitReqReceived")
                 .field("endpoint", endpoint)
-                .finish(),
-            Event::CircuitReqReceiveFailed { error } => f
-                .debug_struct("Event::CircuitReqReceiveFailed")
-                .field("error", error)
                 .finish(),
             Event::CircuitReqDenied {
                 circuit_id,
