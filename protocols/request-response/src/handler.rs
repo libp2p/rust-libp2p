@@ -209,11 +209,6 @@ where
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
-    /// An inbound request timed out while waiting for the request
-    /// or sending the response.
-    InboundTimeout(RequestId),
-    /// An inbound request failed to negotiate a mutually supported protocol.
-    InboundUnsupportedProtocols(RequestId),
 }
 
 impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
@@ -248,14 +243,6 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 .finish(),
             Event::OutboundUnsupportedProtocols(request_id) => f
                 .debug_tuple("Event::OutboundUnsupportedProtocols")
-                .field(request_id)
-                .finish(),
-            Event::InboundTimeout(request_id) => f
-                .debug_tuple("Event::InboundTimeout")
-                .field(request_id)
-                .finish(),
-            Event::InboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("Event::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
         }
