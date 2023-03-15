@@ -54,9 +54,6 @@ pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
     config: KademliaHandlerConfig,
 
-    /// Next unique ID of a connection.
-    next_connec_unique_id: UniqueConnecId,
-
     /// List of active outbound substreams with the state they are in.
     outbound_substreams_with_response: SelectAll<
         IndexedStream<
@@ -88,13 +85,10 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<
-        IndexedStream<
-            UniqueConnecId,
-            asynchronous_codec::RecvSend<
-                NegotiatedSubstream,
-                Codec<KadRequestMsg, KadResponseMsg>,
-                ReturnStream,
-            >,
+        asynchronous_codec::RecvSend<
+            NegotiatedSubstream,
+            Codec<KadRequestMsg, KadResponseMsg>,
+            ReturnStream,
         >,
     >,
 
@@ -222,7 +216,6 @@ pub enum KademliaHandlerEvent<TUserData> {
     PutRecord {
         record: Record,
         responder: Responder<KadResponseMsg>, // TODO: Narrow down this type.
-        request_id: KademliaRequestId,
     },
 
     /// Response to a request to store a record.
@@ -293,15 +286,6 @@ impl From<quick_protobuf_codec::Error> for KademliaHandlerQueryErr {
 /// Event to send to the handler.
 #[derive(Debug)]
 pub enum KademliaHandlerIn<TUserData> {
-    /// Resets the (sub)stream associated with the given request ID,
-    /// thus signaling an error to the remote.
-    ///
-    /// Explicitly resetting the (sub)stream associated with a request
-    /// can be used as an alternative to letting requests simply time
-    /// out on the remote peer, thus potentially avoiding some delay
-    /// for the query on the remote.
-    Reset(KademliaRequestId),
-
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
@@ -375,7 +359,6 @@ where
             config,
             endpoint,
             remote_peer_id,
-            next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams_with_response: Default::default(),
             outbound_substreams_without_response: Default::default(),
@@ -459,18 +442,12 @@ where
         }
 
         debug_assert!(self.config.allow_listening);
-        let connec_unique_id = self.next_connection_id();
 
-        self.inbound_substreams.push(IndexedStream::new(
-            connec_unique_id,
-            asynchronous_codec::RecvSend::new(protocol, Codec::new(DEFAULT_MAX_PACKET_SIZE)),
-        ));
-    }
-
-    fn next_connection_id(&mut self) -> UniqueConnecId {
-        let connec_unique_id = self.next_connec_unique_id;
-        self.next_connec_unique_id.0 += 1;
-        connec_unique_id
+        self.inbound_substreams
+            .push(asynchronous_codec::RecvSend::new(
+                protocol,
+                Codec::new(DEFAULT_MAX_PACKET_SIZE),
+            ));
     }
 
     fn on_dial_upgrade_error(
@@ -519,15 +496,6 @@ where
 
     fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
-            KademliaHandlerIn::Reset(request_id) => {
-                if let Some(stream) = self
-                    .inbound_substreams
-                    .iter_mut()
-                    .find(|stream| stream.index() == &request_id.connec_unique_id)
-                {
-                    stream.stream_pin_mut().abort();
-                }
-            }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
                 self.request_new_stream(Some(user_data), msg);
@@ -605,20 +573,14 @@ where
             }
         }
 
-        while let Poll::Ready(Some((connection_id, event))) =
-            self.inbound_substreams.poll_next_unpin(cx)
-        {
+        while let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
             match event {
                 Ok(asynchronous_codec::Event::Completed { stream }) => {
-                    let unique_connec_id = self.next_connection_id(); // TODO: Should we reuse the previous ID here?
-
-                    self.inbound_substreams.push(IndexedStream::new(
-                        unique_connec_id,
-                        asynchronous_codec::RecvSend::new(
+                    self.inbound_substreams
+                        .push(asynchronous_codec::RecvSend::new(
                             stream,
                             Codec::new(DEFAULT_MAX_PACKET_SIZE),
-                        ),
-                    ));
+                        ));
                 }
                 Ok(asynchronous_codec::Event::NewRequest { request, responder }) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(match request {
@@ -639,13 +601,9 @@ where
                         KadRequestMsg::GetValue { key } => {
                             KademliaHandlerEvent::GetRecord { key, responder }
                         }
-                        KadRequestMsg::PutValue { record } => KademliaHandlerEvent::PutRecord {
-                            record,
-                            responder,
-                            request_id: KademliaRequestId {
-                                connec_unique_id: connection_id,
-                            },
-                        },
+                        KadRequestMsg::PutValue { record } => {
+                            KademliaHandlerEvent::PutRecord { record, responder }
+                        }
                     }));
                 }
                 Err(e) => {
