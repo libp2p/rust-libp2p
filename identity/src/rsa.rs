@@ -69,6 +69,13 @@ impl Keypair {
     }
 }
 
+impl From<self::Keypair> for crate::keypair::Keypair {
+    fn from(kp: self::Keypair) -> Self {
+        #[allow(deprecated)]
+        crate::Keypair::Rsa(kp)
+    }
+}
+
 /// An RSA public key.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey(Vec<u8>);

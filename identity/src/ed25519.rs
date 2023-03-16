@@ -95,6 +95,13 @@ impl Clone for Keypair {
     }
 }
 
+impl From<self::Keypair> for crate::keypair::Keypair {
+    fn from(kp: self::Keypair) -> Self {
+        #[allow(deprecated)]
+        crate::Keypair::Ed25519(kp)
+    }
+}
+
 /// Demote an Ed25519 keypair to a secret key.
 impl From<Keypair> for SecretKey {
     fn from(kp: Keypair) -> SecretKey {

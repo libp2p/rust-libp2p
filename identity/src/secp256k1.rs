@@ -76,6 +76,13 @@ impl From<Keypair> for SecretKey {
     }
 }
 
+impl From<self::Keypair> for crate::keypair::Keypair {
+    fn from(kp: self::Keypair) -> Self {
+        #[allow(deprecated)]
+        crate::Keypair::Secp256k1(kp)
+    }
+}
+
 /// A Secp256k1 secret key.
 #[derive(Clone)]
 pub struct SecretKey(libsecp256k1::SecretKey);
