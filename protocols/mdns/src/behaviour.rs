@@ -304,9 +304,7 @@ where
             }
         }
         if !discovered.is_empty() {
-            let event = Event::Discovered(DiscoveredAddrsIter {
-                inner: discovered.into_iter(),
-            });
+            let event = Event::Discovered(discovered);
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         // Emit expired event.
@@ -323,9 +321,7 @@ where
             true
         });
         if !expired.is_empty() {
-            let event = Event::Expired(ExpiredAddrsIter {
-                inner: expired.into_iter(),
-            });
+            let event = Event::Expired(expired);
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
@@ -342,67 +338,11 @@ where
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Discovered nodes through mDNS.
-    Discovered(DiscoveredAddrsIter),
+    Discovered(SmallVec<[(PeerId, Multiaddr); 4]>),
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
     /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
     /// been refreshed, we remove it from the list and emit it as an `Expired` event.
-    Expired(ExpiredAddrsIter),
-}
-
-/// Iterator that produces the list of addresses that have been discovered.
-#[derive(Clone)]
-pub struct DiscoveredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
-}
-
-impl Iterator for DiscoveredAddrsIter {
-    type Item = (PeerId, Multiaddr);
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl ExactSizeIterator for DiscoveredAddrsIter {}
-
-impl fmt::Debug for DiscoveredAddrsIter {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("DiscoveredAddrsIter").finish()
-    }
-}
-
-/// Iterator that produces the list of addresses that have expired.
-#[derive(Clone)]
-pub struct ExpiredAddrsIter {
-    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
-}
-
-impl Iterator for ExpiredAddrsIter {
-    type Item = (PeerId, Multiaddr);
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl ExactSizeIterator for ExpiredAddrsIter {}
-
-impl fmt::Debug for ExpiredAddrsIter {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("ExpiredAddrsIter").finish()
-    }
+    Expired(SmallVec<[(PeerId, Multiaddr); 4]>),
 }
