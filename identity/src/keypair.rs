@@ -288,7 +288,7 @@ impl From<secp256k1::Keypair> for Keypair {
     }
 }
 
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 impl From<rsa::Keypair> for Keypair {
     fn from(kp: rsa::Keypair) -> Self {
         #[allow(deprecated)]
