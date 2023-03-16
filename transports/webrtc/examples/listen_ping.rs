@@ -4,7 +4,7 @@ use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::Transport;
 use libp2p_identity as identity;
 use libp2p_ping as ping;
-use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm};
+use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmBuilder};
 use rand::thread_rng;
 use void::Void;
 
@@ -33,11 +33,7 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(Swarm::with_tokio_executor(
-        transport,
-        Behaviour::default(),
-        peer_id,
-    ))
+    Ok(SwarmBuilder::with_tokio_executor(transport, Behaviour::default(), peer_id).build())
 }
 
 #[derive(NetworkBehaviour, Default)]

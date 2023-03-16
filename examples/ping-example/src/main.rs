@@ -43,7 +43,7 @@
 use futures::prelude::*;
 use libp2p::{
     identity, ping,
-    swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     Multiaddr, PeerId,
 };
 use std::error::Error;
@@ -56,7 +56,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = libp2p::development_transport(local_key).await?;
 
-    let mut swarm = Swarm::with_async_std_executor(transport, Behaviour::default(), local_peer_id);
+    let mut swarm =
+        SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
+            .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

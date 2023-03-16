@@ -350,11 +350,13 @@ where
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
 
+#[allow(deprecated)]
 impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
     /// Builds a new `Swarm` with a provided executor.
+    #[deprecated(note = "Use `SwarmBuilder::with_executor` instead.")]
     pub fn with_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -369,6 +371,7 @@ where
         feature = "tokio",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
+    #[deprecated(note = "Use `SwarmBuilder::with_tokio_executor` instead.")]
     pub fn with_tokio_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -387,6 +390,7 @@ where
         feature = "async-std",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
+    #[deprecated(note = "Use `SwarmBuilder::with_async_std_executor` instead.")]
     pub fn with_async_std_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -401,6 +405,9 @@ where
     }
 
     /// Builds a new `Swarm` with a threadpool executor.
+    #[deprecated(
+        note = "The `futures::executor::ThreadPool` executor is deprecated. See https://github.com/libp2p/rust-libp2p/issues/3107."
+    )]
     pub fn with_threadpool_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -429,6 +436,7 @@ where
     /// }
     /// ```
     #[cfg(feature = "wasm-bindgen")]
+    #[deprecated(note = "Use `SwarmBuilder::with_wasm_executor` instead.")]
     pub fn with_wasm_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -448,6 +456,7 @@ where
     /// All connections will be polled on the current task, thus quite bad performance
     /// characteristics should be expected. Whenever possible use an executor and
     /// [`Swarm::with_executor`].
+    #[deprecated(note = "Use `SwarmBuilder::without_executor` instead.")]
     pub fn without_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -493,17 +502,17 @@ where
     /// See also [`DialOpts`].
     ///
     /// ```
-    /// # use libp2p_swarm::Swarm;
+    /// # use libp2p_swarm::SwarmBuilder;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::without_executor(
+    /// let mut swarm = SwarmBuilder::without_executor(
     ///     DummyTransport::new().boxed(),
     ///     dummy::Behaviour,
     ///     PeerId::random(),
-    /// );
+    /// ).build();
     ///
     /// // Dial a known peer.
     /// swarm.dial(PeerId::random());
@@ -1525,6 +1534,29 @@ where
             pool_config: PoolConfig::new(Some(Box::new(executor))),
             connection_limits: Default::default(),
         }
+    }
+
+    /// Sets executor to the `wasm` executor.
+    /// Background tasks will be executed by the browser on the next micro-tick.
+    ///
+    /// Spawning a task is similar too:
+    /// ```typescript
+    /// function spawn(task: () => Promise<void>) {
+    ///     task()
+    /// }
+    /// ```
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::WasmBindgenExecutor,
+        )
     }
 
     /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
