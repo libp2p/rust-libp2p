@@ -70,13 +70,6 @@ impl fmt::Debug for Keypair {
     }
 }
 
-impl From<self::Keypair> for crate::keypair::Keypair {
-    fn from(kp: self::Keypair) -> Self {
-        #[allow(deprecated)]
-        crate::Keypair::Ecdsa(kp)
-    }
-}
-
 /// Promote an ECDSA secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(secret: SecretKey) -> Keypair {
