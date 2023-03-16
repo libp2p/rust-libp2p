@@ -13,6 +13,7 @@
 - [`libp2p-floodsub` CHANGELOG](protocols/floodsub/CHANGELOG.md)
 - [`libp2p-gossipsub` CHANGELOG](protocols/gossipsub/CHANGELOG.md)
 - [`libp2p-identify` CHANGELOG](protocols/identify/CHANGELOG.md)
+- [`libp2p-identity` CHANGELOG](protocols/identity/CHANGELOG.md)
 - [`libp2p-kad` CHANGELOG](protocols/kad/CHANGELOG.md)
 - [`libp2p-mdns` CHANGELOG](protocols/mdns/CHANGELOG.md)
 - [`libp2p-ping` CHANGELOG](protocols/ping/CHANGELOG.md)
