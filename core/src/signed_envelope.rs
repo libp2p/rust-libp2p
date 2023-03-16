@@ -1,8 +1,7 @@
-use crate::identity::error::SigningError;
-use crate::identity::Keypair;
-use crate::{identity, proto, DecodeError, PublicKey};
+use crate::{proto, DecodeError};
+use libp2p_identity::SigningError;
+use libp2p_identity::{Keypair, PublicKey};
 use quick_protobuf::{BytesReader, Writer};
-use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 
@@ -77,7 +76,7 @@ impl SignedEnvelope {
         use quick_protobuf::MessageWrite;
 
         let envelope = proto::Envelope {
-            public_key: Some((&self.key).into()),
+            public_key: self.key.to_protobuf_encoding(),
             payload_type: self.payload_type,
             payload: self.payload,
             signature: self.signature,
@@ -102,10 +101,7 @@ impl SignedEnvelope {
             proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError::from)?;
 
         Ok(Self {
-            key: envelope
-                .public_key
-                .ok_or(DecodingError::MissingPublicKey)?
-                .try_into()?,
+            key: PublicKey::from_protobuf_encoding(&envelope.public_key)?,
             payload_type: envelope.payload_type.to_vec(),
             payload: envelope.payload.to_vec(),
             signature: envelope.signature.to_vec(),
@@ -152,7 +148,7 @@ pub enum DecodingError {
     InvalidEnvelope(#[from] DecodeError),
     /// The public key in the envelope could not be converted to our internal public key type.
     #[error("Failed to convert public key")]
-    InvalidPublicKey(#[from] identity::error::DecodingError),
+    InvalidPublicKey(#[from] libp2p_identity::DecodingError),
     /// The public key in the envelope could not be converted to our internal public key type.
     #[error("Public key is missing from protobuf struct")]
     MissingPublicKey,

@@ -27,7 +27,8 @@ use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
-use libp2p_core::{upgrade, ConnectedPoint, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint};
+use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };

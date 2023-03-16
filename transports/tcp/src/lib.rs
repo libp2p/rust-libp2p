@@ -858,8 +858,8 @@ mod tests {
         channel::{mpsc, oneshot},
         future::poll_fn,
     };
-    use libp2p_core::PeerId;
     use libp2p_core::Transport as _;
+    use libp2p_identity::PeerId;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {

@@ -28,7 +28,7 @@ use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
 use libp2p::{
     development_transport, identity,
-    swarm::{Swarm, SwarmEvent},
+    swarm::{SwarmBuilder, SwarmEvent},
     PeerId,
 };
 use std::{env, error::Error, time::Duration};
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
         }
 
-        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Order Kademlia to search for a peer.
