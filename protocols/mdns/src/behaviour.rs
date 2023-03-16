@@ -285,7 +285,7 @@ where
             }
         }
         // Emit discovered event.
-        let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
+        let mut discovered = Vec::new();
         for iface_state in self.iface_states.values_mut() {
             while let Poll::Ready((peer, addr, expiration)) =
                 iface_state.poll(cx, &self.listen_addresses)
@@ -310,7 +310,7 @@ where
         // Emit expired event.
         let now = Instant::now();
         let mut closest_expiration = None;
-        let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
+        let mut expired = Vec::new();
         self.discovered_nodes.retain(|(peer, addr, expiration)| {
             if *expiration <= now {
                 log::info!("expired: {} {}", peer, addr);
@@ -338,11 +338,11 @@ where
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Discovered nodes through mDNS.
-    Discovered(SmallVec<[(PeerId, Multiaddr); 4]>),
+    Discovered(Vec<(PeerId, Multiaddr)>),
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
     /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
     /// been refreshed, we remove it from the list and emit it as an `Expired` event.
-    Expired(SmallVec<[(PeerId, Multiaddr); 4]>),
+    Expired(Vec<(PeerId, Multiaddr)>),
 }
