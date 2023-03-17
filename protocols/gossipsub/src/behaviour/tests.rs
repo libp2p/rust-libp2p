@@ -578,7 +578,7 @@ fn test_join() {
     // add 3 random peers to the fanout[topic1]
     gs.fanout
         .insert(topic_hashes[1].clone(), Default::default());
-    let new_peers: Vec<PeerId> = vec![];
+    let mut new_peers: Vec<PeerId> = vec![];
     for _ in 0..3 {
         let random_peer = PeerId::random();
         // inform the behaviour of a new peer
@@ -597,6 +597,7 @@ fn test_join() {
         // add the new peer to the fanout
         let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
         fanout_peers.insert(random_peer);
+        new_peers.push(random_peer);
     }
 
     // subscribe to topic1
