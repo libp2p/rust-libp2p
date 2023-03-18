@@ -15,7 +15,7 @@ libp2p-plaintext = { path = "../transports/plaintext" }
 libp2p-swarm = { path = "../swarm" }
 libp2p-tcp = { path = "../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../muxers/yamux" }
-futures = "0.3.24"
+futures = "0.3.27"
 log = "0.4.17"
 rand = "0.8.5"
 futures-timer = "3.0.2"

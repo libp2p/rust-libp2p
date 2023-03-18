@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identity, noise, ping, rendezvous,
-    swarm::{keep_alive, AddressScore, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{keep_alive, AddressScore, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -37,7 +37,7 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let mut swarm = Swarm::with_tokio_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
@@ -49,7 +49,8 @@ async fn main() {
             keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
-    );
+    )
+    .build();
 
     // In production the external address should be the publicly facing IP address of the rendezvous point.
     // This address is recorded in the registration entry by the rendezvous point.

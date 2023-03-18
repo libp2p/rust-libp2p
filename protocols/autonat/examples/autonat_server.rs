@@ -34,7 +34,7 @@ use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use std::error::Error;
@@ -65,7 +65,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour::new(local_key.public());
 
-    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
+    let mut swarm =
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(
         Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))

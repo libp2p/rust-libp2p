@@ -458,7 +458,7 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
 
 impl<TUpgrErr> fmt::Display for ConnectionHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: fmt::Display,
+    TUpgrErr: error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -468,7 +468,10 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
+            ConnectionHandlerUpgrErr::Upgrade(err) => {
+                write!(f, "Upgrade: ")?;
+                crate::print_error_chain(f, err)
+            }
         }
     }
 }
@@ -481,7 +484,7 @@ where
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
             ConnectionHandlerUpgrErr::Timer => None,
-            ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
+            ConnectionHandlerUpgrErr::Upgrade(_) => None,
         }
     }
 }
