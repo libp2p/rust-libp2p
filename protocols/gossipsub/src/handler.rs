@@ -36,7 +36,6 @@ use libp2p_swarm::NegotiatedSubstream;
 use log::{error, trace, warn};
 use smallvec::SmallVec;
 use std::{
-    collections::VecDeque,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -123,9 +122,6 @@ pub struct Handler {
     /// The amount of time we allow idle connections before disconnecting.
     idle_timeout: Duration,
 
-    /// Collection of errors from attempting an upgrade.
-    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<HandlerError>>,
-
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
 
@@ -173,7 +169,6 @@ impl Handler {
             peer_kind_sent: false,
             protocol_unsupported: false,
             idle_timeout,
-            upgrade_errors: VecDeque::new(),
             keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
             in_mesh: false,
         }
@@ -288,45 +283,15 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        // Handle any upgrade errors
-        if let Some(error) = self.upgrade_errors.pop_front() {
-            match error {
-                // Timeout errors get mapped to NegotiationTimeout and we close the connection.
-                ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                    self.keep_alive = KeepAlive::No;
-                    log::info!("Gossipsub error: {}", HandlerError::NegotiationTimeout);
-                }
-                // There was an error post negotiation, close the connection.
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
-                    self.keep_alive = KeepAlive::No;
-                    log::info!("Gossipsub error: {e}");
-                }
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
-                    match negotiation_error {
-                        NegotiationError::Failed => {
-                            // The protocol is not supported
-                            self.protocol_unsupported = true;
-                            if !self.peer_kind_sent {
-                                self.peer_kind_sent = true;
-                                // clear all substreams so the keep alive returns false
-                                self.inbound_substream = None;
-                                self.outbound_substream = None;
-                                self.keep_alive = KeepAlive::No;
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    HandlerEvent::PeerKind(PeerKind::NotSupported),
-                                ));
-                            }
-                        }
-                        NegotiationError::ProtocolError(e) => {
-                            self.keep_alive = KeepAlive::No;
-                            log::info!(
-                                "Gossipsub error: {}",
-                                HandlerError::NegotiationProtocolError(e)
-                            );
-                        }
-                    }
-                }
-            }
+        if self.protocol_unsupported && !self.peer_kind_sent {
+            self.peer_kind_sent = true;
+            // clear all substreams so the keep alive returns false
+            self.inbound_substream = None;
+            self.outbound_substream = None;
+            self.keep_alive = KeepAlive::No;
+            return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
+                PeerKind::NotSupported,
+            )));
         }
 
         if !self.peer_kind_sent {
@@ -564,10 +529,37 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { error: e, .. }) => {
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 self.outbound_substream_establishing = false;
-                warn!("Dial upgrade error {:?}", e);
-                self.upgrade_errors.push_back(e);
+
+                match error {
+                    // Timeout errors get mapped to NegotiationTimeout and we close the connection.
+                    ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
+                        self.keep_alive = KeepAlive::No;
+                        log::info!("Dial upgrade error: {}", HandlerError::NegotiationTimeout);
+                    }
+                    // There was an error post negotiation, close the connection.
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
+                        self.keep_alive = KeepAlive::No;
+                        log::info!("Dial upgrade error: {e}");
+                    }
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
+                        match negotiation_error {
+                            NegotiationError::Failed => {
+                                // The protocol is not supported
+                                self.protocol_unsupported = true;
+                                log::info!("Dial upgrade error: {}", NegotiationError::Failed);
+                            }
+                            NegotiationError::ProtocolError(e) => {
+                                self.keep_alive = KeepAlive::No;
+                                log::info!(
+                                    "Gossipsub error: {}",
+                                    HandlerError::NegotiationProtocolError(e)
+                                );
+                            }
+                        }
+                    }
+                }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
