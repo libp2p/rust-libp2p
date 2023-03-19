@@ -37,9 +37,11 @@ struct Opts {
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let opts = Opts::parse();
+
+    info!("Initiating performance tests with {}", opts.server_address);
 
     // Create a random PeerId
     let local_key = libp2p_identity::Keypair::generate_ed25519();
@@ -80,7 +82,7 @@ async fn main() -> Result<()> {
     .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
     .build();
 
-    swarm.dial(opts.server_address).unwrap();
+    swarm.dial(opts.server_address.clone()).unwrap();
     let server_peer_id = loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
@@ -90,6 +92,11 @@ async fn main() -> Result<()> {
             e => panic!("{e:?}"),
         }
     };
+
+    info!(
+        "Connection to {} established. Launching benchmarks.",
+        opts.server_address
+    );
 
     swarm.behaviour_mut().perf(
         server_peer_id,
@@ -122,7 +129,7 @@ async fn main() -> Result<()> {
     let receive_time = (stats.timers.read_done - stats.timers.write_done).as_secs_f64();
     let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
-    println!(
+    info!(
         "Finished run: Sent {sent_mebibytes:.2} MiB in {sent_time:.2} s with \
          {sent_bandwidth_mebibit_second:.2} MiBit/s and received \
          {received_mebibytes:.2} MiB in {receive_time:.2} s with \
