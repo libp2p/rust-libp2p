@@ -70,7 +70,8 @@ pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
 use handler::{Handler, RequestProtocol};
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,

@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::path::Path;
 
-use libp2p_core::identity::Keypair;
-use libp2p_core::PeerId;
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]

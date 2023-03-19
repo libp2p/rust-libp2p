@@ -40,10 +40,10 @@ use libp2p::{
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviour, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp,
     yamux::YamuxConfig,
-    Multiaddr, PeerId, Swarm, Transport,
+    Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Subscribing to {gossipsub_topic:?}");
         behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Reach out to other nodes if specified

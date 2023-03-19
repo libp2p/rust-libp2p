@@ -51,15 +51,14 @@
 use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_core::{upgrade::Version, Multiaddr, Transport};
 use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_metrics::{Metrics, Recorder};
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_swarm::keep_alive;
-use libp2p_swarm::NetworkBehaviour;
-use libp2p_swarm::Swarm;
-use libp2p_swarm::SwarmEvent;
+use libp2p_swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use log::info;
@@ -77,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_pub_key = local_key.public();
     info!("Local peer id: {local_peer_id:?}");
 
-    let mut swarm = Swarm::without_executor(
+    let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
@@ -85,7 +84,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .boxed(),
         Behaviour::new(local_pub_key),
         local_peer_id,
-    );
+    )
+    .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
