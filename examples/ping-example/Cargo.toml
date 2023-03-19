@@ -11,3 +11,6 @@ async-trait = "0.1"
 futures = "0.3.26"
 libp2p = { path = "../../libp2p", features = ["async-std", "dns", "macros", "mplex", "noise", "ping", "tcp", "websocket", "yamux"] }
 multiaddr = { version = "0.17.0" }
+
+[[example]]
+name = "ping"
