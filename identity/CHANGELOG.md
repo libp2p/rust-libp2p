@@ -1,4 +1,4 @@
-# 0.1.1 [unreleased]
+# 0.1.1
 
 - Add `From` impl for specific keypairs.
   See [PR 3626].
