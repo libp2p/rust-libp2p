@@ -15,7 +15,7 @@ use libp2p::{
     },
     multiaddr::Protocol,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     PeerId,
 };
 
@@ -47,7 +47,7 @@ pub async fn new(
 
     // Build the Swarm, connecting the lower layer transport logic with the
     // higher layer network behaviour logic.
-    let swarm = Swarm::with_threadpool_executor(
+    let swarm = SwarmBuilder::with_async_std_executor(
         libp2p::development_transport(id_keys).await?,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -58,7 +58,8 @@ pub async fn new(
             ),
         },
         peer_id,
-    );
+    )
+    .build();
 
     let (command_sender, command_receiver) = mpsc::channel(0);
     let (event_sender, event_receiver) = mpsc::channel(0);
