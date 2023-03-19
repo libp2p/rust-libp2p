@@ -2163,6 +2163,7 @@ dependencies = [
  "libp2p-metrics",
  "libp2p-mplex",
  "libp2p-noise",
+ "libp2p-perf",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
@@ -2549,6 +2550,32 @@ dependencies = [
  "thiserror",
  "x25519-dalek 1.1.1",
  "zeroize",
+]
+
+[[package]]
+name = "libp2p-perf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "clap 4.1.8",
+ "env_logger 0.10.0",
+ "futures",
+ "instant",
+ "libp2p-core",
+ "libp2p-dns",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-plaintext",
+ "libp2p-quic",
+ "libp2p-swarm",
+ "libp2p-swarm-test",
+ "libp2p-tcp",
+ "libp2p-yamux",
+ "log",
+ "rand 0.8.5",
+ "thiserror",
+ "void",
 ]
 
 [[package]]
