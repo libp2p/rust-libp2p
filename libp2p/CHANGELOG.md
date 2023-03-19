@@ -1,6 +1,13 @@
-# 0.51.1 [unreleased]
+# 0.51.1
 
 - Depend on `libp2p-tls` `v0.1.0`.
+
+- Introduce `ed25519` feature.
+  For backwards-compatibility, the `ed25519` identity keys are still available without activating this feature.
+  However, going forward, you should explicitly activate it to avoid compile errors going forward.
+  See [PR 3350].
+
+[PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
 
 # 0.51.0
 

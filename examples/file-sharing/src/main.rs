@@ -81,10 +81,7 @@ use clap::Parser;
 
 use futures::prelude::*;
 use futures::StreamExt;
-use libp2p::{
-    core::{Multiaddr, PeerId},
-    multiaddr::Protocol,
-};
+use libp2p::{core::Multiaddr, multiaddr::Protocol, PeerId};
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;

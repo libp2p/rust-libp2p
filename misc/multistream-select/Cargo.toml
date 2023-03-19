@@ -25,6 +25,7 @@ libp2p-core = { path = "../../core" }
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-swarm = { path = "../../swarm", features = ["async-std"] }
+libp2p-identity = { path = "../../identity", features = ["ed25519"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }

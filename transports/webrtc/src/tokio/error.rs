@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use thiserror::Error;
 
 /// Error in WebRTC.
