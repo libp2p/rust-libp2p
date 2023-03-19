@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{executor::LocalPool, task::Spawn, FutureExt, StreamExt};
 use libp2p_perf::{
     client::{self, RunParams},
     server,
@@ -26,21 +25,18 @@ use libp2p_perf::{
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 
-#[test]
-fn perf() {
+#[async_std::test]
+async fn perf() {
     let _ = env_logger::try_init();
-    let mut pool = LocalPool::new();
 
     let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();
     let mut client = Swarm::new_ephemeral(|_| client::Behaviour::new());
 
-    pool.run_until(server.listen());
-    pool.run_until(client.connect(&mut server));
+    server.listen().await;
+    client.connect(&mut server).await;
 
-    pool.spawner()
-        .spawn_obj(server.loop_on_next().boxed().into())
-        .unwrap();
+    async_std::task::spawn(server.loop_on_next());
 
     client
         .behaviour_mut()
@@ -53,15 +49,14 @@ fn perf() {
         )
         .unwrap();
 
-    pool.run_until(async {
-        loop {
-            match client.select_next_some().await {
-                SwarmEvent::IncomingConnection { .. } => panic!(),
-                SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::Dialing(_) => {}
-                SwarmEvent::Behaviour(client::Event { result: Ok(_), .. }) => break,
-                e => panic!("{e:?}"),
-            }
-        }
-    });
+    client
+        .wait(|e| match e {
+            SwarmEvent::IncomingConnection { .. } => panic!(),
+            SwarmEvent::ConnectionEstablished { .. } => None,
+            SwarmEvent::Dialing(_) => None,
+            SwarmEvent::Behaviour(client::Event { result, .. }) => Some(result),
+            e => panic!("{e:?}"),
+        })
+        .await
+        .unwrap();
 }
