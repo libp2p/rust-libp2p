@@ -123,10 +123,10 @@ async fn main() -> Result<()> {
     let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
     println!(
-        "Finished run: Sent {sent_mebibytes} MiB in {sent_time} s with \
-         {sent_bandwidth_mebibit_second} MiBit/s and received \
-         {received_mebibytes} MiB in {receive_time} s with \
-         {receive_bandwidth_mebibit_second} MiBit/s",
+        "Finished run: Sent {sent_mebibytes:.2} MiB in {sent_time:.2} s with \
+         {sent_bandwidth_mebibit_second:.2} MiBit/s and received \
+         {received_mebibytes:.2} MiB in {receive_time:.2} s with \
+         {receive_bandwidth_mebibit_second:.2} MiBit/s",
     );
 
     Ok(())

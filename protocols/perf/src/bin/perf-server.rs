@@ -112,7 +112,7 @@ async fn main() {
                 let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
 
                 info!(
-                        "Finished run with {}: Received {} MiB in {} s with {} MiBit/s and sent {} MiB in {} s with {} MiBit/s",
+                        "Finished run with {}: Received {:.2} MiB in {:.2} s with {:.2} MiBit/s and sent {:.2} MiB in {:.2} s with {:.2} MiBit/s",
                         remote_peer_id,
                         received_mebibytes,
                         receive_time,
