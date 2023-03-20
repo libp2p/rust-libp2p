@@ -25,7 +25,6 @@ use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
     Token,
