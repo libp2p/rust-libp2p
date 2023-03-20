@@ -61,6 +61,10 @@ pub struct Handler {
         >,
     >,
 
+    new_commands: VecDeque<Command>,
+
+    pending_command: Option<Command>,
+
     outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
 
     keep_alive: KeepAlive,
@@ -70,6 +74,8 @@ impl Handler {
     pub fn new() -> Self {
         Self {
             queued_events: Default::default(),
+            new_commands: Default::default(),
+            pending_command: Default::default(),
             outbound: Default::default(),
             keep_alive: KeepAlive::Yes,
         }
@@ -87,8 +93,8 @@ impl ConnectionHandler for Handler {
     type OutEvent = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundOpenInfo = Command;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8; 11]>;
+    type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -96,10 +102,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, command: Self::InEvent) {
-        self.queued_events
-            .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), command),
-            })
+        self.new_commands.push_back(command);
     }
 
     fn on_connection_event(
@@ -117,24 +120,24 @@ impl ConnectionHandler for Handler {
             }) => void::unreachable(protocol),
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
-                info: Command { params, id },
-            }) => self.outbound.push(
-                crate::protocol::send_receive(params, protocol)
-                    .map_ok(move |timers| Event {
-                        id,
-                        result: Ok(RunStats { params, timers }),
-                    })
-                    .boxed(),
-            ),
+                info: (),
+            }) => {
+                let Command { params, id } = self.pending_command.take().unwrap();
+                self.outbound.push(
+                    crate::protocol::send_receive(params, protocol)
+                        .map_ok(move |timers| Event {
+                            id,
+                            result: Ok(RunStats { params, timers }),
+                        })
+                        .boxed(),
+                )
+            }
 
             ConnectionEvent::AddressChange(_) => {}
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                info: Command { id, .. },
-                error,
-            }) => self
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info: (), error }) => self
                 .queued_events
                 .push_back(ConnectionHandlerEvent::Custom(Event {
-                    id,
+                    id: self.pending_command.take().unwrap().id,
                     result: Err(error),
                 })),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
@@ -176,6 +179,16 @@ impl ConnectionHandler for Handler {
                 Err(e) => {
                     panic!("{e:?}")
                 }
+            }
+        }
+
+        if self.pending_command.is_none() {
+            if let Some(command) = self.new_commands.pop_front() {
+                self.pending_command = Some(command);
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
+                        .with_timeout(Duration::from_secs(60)),
+                });
             }
         }
 
