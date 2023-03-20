@@ -444,6 +444,14 @@ fn multiple_behaviour_attributes() {
     }
 
     require_net_behaviour::<Foo>();
+
+    struct FooEvent;
+
+    impl From<ping::Event> for FooEvent {
+        fn from(_: ping::Event) -> Self {
+            unimplemented!()
+        }
+    }
 }
 
 #[test]

@@ -855,85 +855,76 @@ struct BehaviourAttributes {
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
 fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
-    let mut prelude_path = None;
-    let mut user_specified_out_event = None;
-
-    let attr = match ast
-        .attrs
-        .iter()
-        .find(|attr| attr.path().is_ident("behaviour"))
-    {
-        Some(attr) => attr,
-        None => {
-            return Ok(BehaviourAttributes {
-                prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
-                user_specified_out_event: None,
-            })
-        }
+    let mut attributes = BehaviourAttributes {
+        prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
+        user_specified_out_event: None,
     };
 
-    let nested = attr
-        .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-        .expect("`parse_args_with` never fails when parsing nested meta");
+    for attr in ast
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("behaviour"))
+    {
+        let nested = attr
+            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+            .expect("`parse_args_with` never fails when parsing nested meta");
 
-    for meta in nested {
-        if meta.path().is_ident("prelude") {
-            match meta {
-                Meta::Path(_) => unimplemented!(),
-                Meta::List(_) => unimplemented!(),
-                Meta::NameValue(MetaNameValue {
-                    value:
-                        Expr::Lit(ExprLit {
-                            lit: Lit::Str(s), ..
-                        }),
-                    ..
-                }) => {
-                    prelude_path = Some(syn::parse_str(&s.value()).unwrap());
+        for meta in nested {
+            if meta.path().is_ident("prelude") {
+                match meta {
+                    Meta::Path(_) => unimplemented!(),
+                    Meta::List(_) => unimplemented!(),
+                    Meta::NameValue(MetaNameValue {
+                        value:
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(s), ..
+                            }),
+                        ..
+                    }) => {
+                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
+                    }
+                    Meta::NameValue(name_value) => {
+                        return Err(syn::Error::new_spanned(
+                            name_value.value,
+                            "`prelude` value must be a quoted path",
+                        )
+                        .to_compile_error()
+                        .into());
+                    }
                 }
-                Meta::NameValue(name_value) => {
-                    return Err(syn::Error::new_spanned(
-                        name_value.value,
-                        "`prelude` value must be a quoted path",
-                    )
-                    .to_compile_error()
-                    .into());
-                }
+
+                continue;
             }
 
-            continue;
-        }
+            if meta.path().is_ident("out_event") {
+                match meta {
+                    Meta::Path(_) => unimplemented!(),
+                    Meta::List(_) => unimplemented!(),
 
-        if meta.path().is_ident("out_event") {
-            match meta {
-                Meta::Path(_) => unimplemented!(),
-                Meta::List(_) => unimplemented!(),
+                    Meta::NameValue(MetaNameValue {
+                        value:
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(s), ..
+                            }),
+                        ..
+                    }) => {
+                        attributes.user_specified_out_event =
+                            Some(syn::parse_str(&s.value()).unwrap());
+                    }
+                    Meta::NameValue(name_value) => {
+                        return Err(syn::Error::new_spanned(
+                            name_value.value,
+                            "`out_event` value must be a quoted type",
+                        )
+                        .to_compile_error()
+                        .into());
+                    }
+                }
 
-                Meta::NameValue(MetaNameValue {
-                    value:
-                        Expr::Lit(ExprLit {
-                            lit: Lit::Str(s), ..
-                        }),
-                    ..
-                }) => {
-                    user_specified_out_event = Some(syn::parse_str(&s.value()).unwrap());
-                }
-                Meta::NameValue(name_value) => {
-                    return Err(syn::Error::new_spanned(
-                        name_value.value,
-                        "`out_event` value must be a quoted type",
-                    )
-                    .to_compile_error()
-                    .into());
-                }
+                continue;
             }
-
-            continue;
         }
     }
 
-    Ok(BehaviourAttributes {
-        prelude_path: prelude_path
-            .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude }),
-        user_specified_out_event,
-    })
+    Ok(attributes)
 }
