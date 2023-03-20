@@ -21,6 +21,7 @@
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::{future::Either, StreamExt};
+use instant::Instant;
 use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, Transport};
 use libp2p_dns::DnsConfig;
 use libp2p_identity::PeerId;
@@ -93,10 +94,9 @@ async fn main() -> Result<()> {
         }
     };
 
-    info!(
-        "Connection to {} established. Launching benchmarks.",
-        opts.server_address
-    );
+    info!("Connection to {} established.\n", opts.server_address);
+
+    info!("Starting: single connection single channel throughput benchmark.");
 
     swarm.behaviour_mut().perf(
         server_peer_id,
@@ -130,10 +130,60 @@ async fn main() -> Result<()> {
     let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
     info!(
-        "Finished run: Sent {sent_mebibytes:.2} MiB in {sent_time:.2} s with \
+        "Finished: sent {sent_mebibytes:.2} MiB in {sent_time:.2} s with \
          {sent_bandwidth_mebibit_second:.2} MiBit/s and received \
          {received_mebibytes:.2} MiB in {receive_time:.2} s with \
-         {receive_bandwidth_mebibit_second:.2} MiBit/s",
+         {receive_bandwidth_mebibit_second:.2} MiBit/s\n",
+    );
+
+    info!("Starting: single connection requests per second benchmark.");
+
+    let num = 10_000;
+    let to_send = 1;
+    let to_receive = 1;
+
+    for _ in 0..num {
+        swarm.behaviour_mut().perf(
+            server_peer_id,
+            RunParams {
+                to_send,
+                to_receive,
+            },
+        )?;
+    }
+
+    let mut finished = 0;
+    let start = Instant::now();
+
+    loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::ConnectionEstablished {
+                peer_id, endpoint, ..
+            } => {
+                info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+            }
+            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+            }
+            SwarmEvent::Behaviour(libp2p_perf::client::Event {
+                id: _,
+                result: Ok(_),
+            }) => {
+                finished += 1;
+
+                if finished == num {
+                    break;
+                }
+            }
+            e => panic!("{e:?}"),
+        }
+    }
+
+    let duration = start.elapsed().as_secs_f64();
+    let requests_per_second = num as f64 / duration;
+
+    info!(
+        "Finsihed: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s thus {requests_per_second} req/s.\n",
     );
 
     Ok(())
