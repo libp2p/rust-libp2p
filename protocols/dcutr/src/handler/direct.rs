@@ -92,7 +92,8 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::AddressChange(_) => {}
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ProtocolsChange(_) => {}
         }
     }
 }

@@ -99,7 +99,8 @@ impl ConnectionHandler for PendingConnectionHandler {
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_)
-            | ConnectionEvent::ListenUpgradeError(_) => {}
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::ProtocolsChange(_) => {}
         }
     }
 }

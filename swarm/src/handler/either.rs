@@ -322,6 +322,12 @@ where
                     handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
                 }
             },
+            ConnectionEvent::ProtocolsChange(supported_protocols) => match self {
+                Either::Left(handler) => handler
+                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols)),
+                Either::Right(handler) => handler
+                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols)),
+            },
         }
     }
 }

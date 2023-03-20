@@ -477,6 +477,12 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
+            ConnectionEvent::ProtocolsChange(supported_protocols) => {
+                self.proto1
+                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols));
+                self.proto2
+                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols));
+            }
         }
     }
 }

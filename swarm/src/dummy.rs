@@ -139,7 +139,9 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::ProtocolsChange(_) => {}
         }
     }
 }

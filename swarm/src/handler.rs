@@ -210,6 +210,8 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+    /// The [`ConnectionHandler`] now supports a different set of protocols.
+    ProtocolsChange(ProtocolsChange<'a>),
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about
@@ -237,6 +239,12 @@ pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
 /// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+#[derive(Clone, Copy)]
+pub struct ProtocolsChange<'a> {
+    pub protocols: &'a [String],
 }
 
 /// [`ConnectionEvent`] variant that informs the handler

@@ -29,9 +29,9 @@ pub use error::{
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError,
+    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolsChange,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
@@ -43,7 +43,7 @@ use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::Endpoint;
-use libp2p_core::{upgrade, UpgradeError};
+use libp2p_core::{upgrade, ProtocolName as _, UpgradeError};
 use libp2p_identity::PeerId;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -145,6 +145,8 @@ where
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
+
+    supported_protocols: Vec<String>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -182,6 +184,7 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
+            supported_protocols: vec![],
         }
     }
 
@@ -211,6 +214,7 @@ where
             shutdown,
             max_negotiating_inbound_streams,
             substream_upgrade_protocol_override,
+            supported_protocols,
         } = self.get_mut();
 
         loop {
@@ -354,6 +358,23 @@ where
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
+
+                        let mut new_protocols = protocol
+                            .upgrade()
+                            .protocol_info()
+                            .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
+                            .collect::<Vec<_>>();
+
+                        new_protocols.sort();
+
+                        if supported_protocols != &new_protocols {
+                            handler.on_connection_event(ConnectionEvent::ProtocolsChange(
+                                ProtocolsChange {
+                                    protocols: &new_protocols,
+                                },
+                            ));
+                            *supported_protocols = new_protocols;
+                        }
 
                         negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
 
@@ -610,9 +631,10 @@ enum Shutdown {
 mod tests {
     use super::*;
     use crate::keep_alive;
+    use futures::future;
     use futures::AsyncRead;
     use futures::AsyncWrite;
-    use libp2p_core::upgrade::DeniedUpgrade;
+    use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
@@ -671,6 +693,33 @@ mod tests {
             connection.handler.error.unwrap(),
             ConnectionHandlerUpgrErr::Timeout
         ))
+    }
+
+    #[test]
+    fn propagates_changes_to_supported_inbound_protocols() {
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(DummyStreamMuxer {
+                counter: Arc::new(()),
+            }),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            2,
+        );
+        connection.handler.active_protocols = vec!["/foo"];
+
+        // DummyStreamMuxer will yield a new stream
+        let _ = Pin::new(&mut connection)
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        assert_eq!(connection.handler.reported_protocols, vec!["/foo"]);
+
+        connection.handler.active_protocols = vec!["/foo", "/bar"];
+        connection.negotiating_in.clear(); // Hack to request more substreams from the muxer.
+
+        // DummyStreamMuxer will yield a new stream
+        let _ = Pin::new(&mut connection)
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+
+        assert_eq!(connection.handler.reported_protocols, vec!["/bar", "/foo"])
     }
 
     struct DummyStreamMuxer {
@@ -790,6 +839,12 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct ConfigurableProtocolConnectionHandler {
+        active_protocols: Vec<&'static str>,
+        reported_protocols: Vec<String>,
+    }
+
     impl ConnectionHandler for MockConnectionHandler {
         type InEvent = Void;
         type OutEvent = Void;
@@ -826,7 +881,9 @@ mod tests {
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                     self.error = Some(error)
                 }
-                ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                ConnectionEvent::AddressChange(_)
+                | ConnectionEvent::ListenUpgradeError(_)
+                | ConnectionEvent::ProtocolsChange(_) => {}
             }
         }
 
@@ -858,6 +915,97 @@ mod tests {
             }
 
             Poll::Pending
+        }
+    }
+
+    impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
+        type InEvent = Void;
+        type OutEvent = Void;
+        type Error = Void;
+        type InboundProtocol = ManyProtocolsUpgrade;
+        type OutboundProtocol = DeniedUpgrade;
+        type InboundOpenInfo = ();
+        type OutboundOpenInfo = ();
+
+        fn listen_protocol(
+            &self,
+        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+            SubstreamProtocol::new(
+                ManyProtocolsUpgrade {
+                    protocols: self.active_protocols.clone(),
+                },
+                (),
+            )
+        }
+
+        fn on_connection_event(
+            &mut self,
+            event: ConnectionEvent<
+                Self::InboundProtocol,
+                Self::OutboundProtocol,
+                Self::InboundOpenInfo,
+                Self::OutboundOpenInfo,
+            >,
+        ) {
+            if let ConnectionEvent::ProtocolsChange(ProtocolsChange { protocols }) = event {
+                self.reported_protocols = protocols
+                    .to_vec();
+            }
+        }
+
+        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+            void::unreachable(event)
+        }
+
+        fn connection_keep_alive(&self) -> KeepAlive {
+            KeepAlive::Yes
+        }
+
+        fn poll(
+            &mut self,
+            _: &mut Context<'_>,
+        ) -> Poll<
+            ConnectionHandlerEvent<
+                Self::OutboundProtocol,
+                Self::OutboundOpenInfo,
+                Self::OutEvent,
+                Self::Error,
+            >,
+        > {
+            Poll::Pending
+        }
+    }
+
+    struct ManyProtocolsUpgrade {
+        protocols: Vec<&'static str>,
+    }
+
+    impl UpgradeInfo for ManyProtocolsUpgrade {
+        type Info = &'static str;
+        type InfoIter = std::vec::IntoIter<Self::Info>;
+
+        fn protocol_info(&self) -> Self::InfoIter {
+            self.protocols.clone().into_iter()
+        }
+    }
+
+    impl<C> InboundUpgrade<C> for ManyProtocolsUpgrade {
+        type Output = C;
+        type Error = Void;
+        type Future = future::Ready<Result<Self::Output, Self::Error>>;
+
+        fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
+            future::ready(Ok(stream))
+        }
+    }
+
+    impl<C> OutboundUpgrade<C> for ManyProtocolsUpgrade {
+        type Output = C;
+        type Error = Void;
+        type Future = future::Ready<Result<Self::Output, Self::Error>>;
+
+        fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
+            future::ready(Ok(stream))
         }
     }
 }

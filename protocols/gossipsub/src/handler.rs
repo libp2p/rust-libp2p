@@ -576,7 +576,9 @@ impl ConnectionHandler for Handler {
                 warn!("Dial upgrade error {:?}", e);
                 self.upgrade_errors.push_back(e);
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::ProtocolsChange(_) => {}
         }
     }
 }
