@@ -1,6 +1,6 @@
 [package]
 name = "chat-example"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 publish = false
 license = "MIT"
@@ -10,4 +10,4 @@ async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.27"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "gossipsub", "mdns", "mplex", "noise", "macros", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../libp2p", features = ["async-std", "dns", "gossipsub", "mdns", "mplex", "noise", "macros", "tcp", "websocket", "yamux", "quic"] }
