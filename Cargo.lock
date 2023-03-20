@@ -2572,7 +2572,6 @@ dependencies = [
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-noise",
- "libp2p-plaintext",
  "libp2p-quic",
  "libp2p-swarm",
  "libp2p-swarm-test",
