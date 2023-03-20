@@ -20,6 +20,7 @@
 
 use anyhow::{bail, Result};
 use clap::Parser;
+use colored::*;
 use futures::{future::Either, StreamExt};
 use instant::Instant;
 use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, Transport};
@@ -42,7 +43,14 @@ async fn main() -> Result<()> {
 
     let opts = Opts::parse();
 
-    info!("Initiating performance tests with {}", opts.server_address);
+    info!(
+        "{}",
+        format!(
+            "Initiating performance tests with {}\n",
+            opts.server_address
+        )
+        .bold()
+    );
 
     // Create a random PeerId
     let local_key = libp2p_identity::Keypair::generate_ed25519();
@@ -96,7 +104,10 @@ async fn main() -> Result<()> {
 
     info!("Connection to {} established.\n", opts.server_address);
 
-    info!("Starting: single connection single channel throughput benchmark.");
+    info!(
+        "{}",
+        "Start benchmark: single connection single channel throughput".underline(),
+    );
 
     swarm.behaviour_mut().perf(
         server_peer_id,
@@ -123,20 +134,25 @@ async fn main() -> Result<()> {
 
     let sent_mebibytes = stats.params.to_send as f64 / 1024.0 / 1024.0;
     let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();
-    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
+    let sent_bandwidth_mebibit_second =
+        format!("{:.2} MiBit/s", (sent_mebibytes * 8.0) / sent_time).bold();
 
     let received_mebibytes = stats.params.to_receive as f64 / 1024.0 / 1024.0;
     let receive_time = (stats.timers.read_done - stats.timers.write_done).as_secs_f64();
-    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
+    let receive_bandwidth_mebibit_second =
+        format!("{:.2} MiBit/s", (received_mebibytes * 8.0) / receive_time).bold();
 
     info!(
         "Finished: sent {sent_mebibytes:.2} MiB in {sent_time:.2} s with \
-         {sent_bandwidth_mebibit_second:.2} MiBit/s and received \
+         {sent_bandwidth_mebibit_second} and received \
          {received_mebibytes:.2} MiB in {receive_time:.2} s with \
-         {receive_bandwidth_mebibit_second:.2} MiBit/s\n",
+         {receive_bandwidth_mebibit_second}\n",
     );
 
-    info!("Starting: single connection requests per second benchmark.");
+    info!(
+        "{}",
+        "Start benchmark: single connection requests per second".underline(),
+    );
 
     let num = 10_000;
     let to_send = 1;
@@ -180,10 +196,10 @@ async fn main() -> Result<()> {
     }
 
     let duration = start.elapsed().as_secs_f64();
-    let requests_per_second = num as f64 / duration;
+    let requests_per_second = format!("{:.2} req/s", num as f64 / duration).bold();
 
     info!(
-        "Finsihed: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s thus {requests_per_second} req/s.\n",
+        "Finished: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s thus {requests_per_second}\n",
     );
 
     Ok(())
