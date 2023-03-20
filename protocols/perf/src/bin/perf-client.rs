@@ -188,8 +188,8 @@ impl Benchmark for Throughput {
             "Finished: sent {sent_mebibytes:.2} MiB in {sent_time:.2} s \
              and received {received_mebibytes:.2} MiB in {receive_time:.2} s",
         );
-        info!("- {sent_bandwidth_mebibit_second:.2}");
-        info!("- {receive_bandwidth_mebibit_second:.2}\n");
+        info!("- {sent_bandwidth_mebibit_second:.2} MiBit/s up");
+        info!("- {receive_bandwidth_mebibit_second:.2} MiBit/s down\n");
 
         Ok(())
     }
@@ -307,7 +307,6 @@ impl Benchmark for ConnectionsPerSecond {
         }
 
         let duration = start.elapsed().as_secs_f64();
-        let connections_per_second = num as f64 / duration;
 
         latency_connection_establishment.sort_by(|a, b| a.partial_cmp(b).unwrap());
         latency_connection_establishment_plus_request.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -319,7 +318,6 @@ impl Benchmark for ConnectionsPerSecond {
         info!(
             "Finished: established {num} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
         );
-        info!("- {connections_per_second:.2} conns/s");
         info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
         info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
