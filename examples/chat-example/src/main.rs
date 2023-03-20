@@ -49,10 +49,10 @@ use async_std::io;
 use futures::{future::Either, prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity, mdns, mplex, noise, quic,
+    gossipsub, identity, mdns, noise, quic,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
-    tcp, PeerId, Transport,
+    tcp, yamux, PeerId, Transport,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .authenticate(
             noise::NoiseAuthenticated::xx(&id_keys).expect("signing libp2p-noise static keypair"),
         )
-        .multiplex(mplex::MplexConfig::new())
+        .multiplex(yamux::YamuxConfig::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
     let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
-    // swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
 
@@ -164,7 +164,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         String::from_utf8_lossy(&message.data),
                     ),
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Local node is listening on {:?}", address);
+                    println!("Local node is listening on {address}");
                 }
                 _ => {}
             }
