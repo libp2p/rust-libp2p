@@ -2572,7 +2572,6 @@ dependencies = [
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-noise",
- "libp2p-plaintext",
  "libp2p-quic",
  "libp2p-swarm",
  "libp2p-swarm-test",
@@ -2842,7 +2841,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "webpki 0.22.0",
- "x509-parser 0.14.0",
+ "x509-parser 0.15.0",
  "yasna",
 ]
 
@@ -3844,9 +3843,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.25"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5308e8208729c3e1504a6cfad0d5daacc4614c9a2e65d1ea312a34b5cb00fe84"
+checksum = "4424af4bf778aae2051a77b60283332f386554255d722233d09fbfc7e30da2fc"
 dependencies = [
  "proc-macro2",
 ]
@@ -5623,12 +5622,11 @@ dependencies = [
 
 [[package]]
 name = "x509-parser"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0ecbeb7b67ce215e40e3cc7f2ff902f94a223acf44995934763467e7b1febc8"
+checksum = "bab0c2f54ae1d92f4fcb99c0b7ccf0b1e3451cbd395e5f115ccbdbcb18d4f634"
 dependencies = [
  "asn1-rs 0.5.1",
- "base64 0.13.1",
  "data-encoding",
  "der-parser 8.1.0",
  "lazy_static",

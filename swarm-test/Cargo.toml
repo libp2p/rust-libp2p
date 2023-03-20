@@ -2,8 +2,12 @@
 name = "libp2p-swarm-test"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.65.0"
 license = "MIT"
-publish = false
+description = "Test framework for code building on top of libp2p-swarm"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
