@@ -88,7 +88,7 @@ impl Certificate {
 }
 
 #[derive(thiserror::Error, Debug)]
-#[error("Failed to generate certificate")]
+#[error("Failed to generate certificate: {0}")]
 pub struct Error(#[from] Kind);
 
 #[derive(thiserror::Error, Debug)]
