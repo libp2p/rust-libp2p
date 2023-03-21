@@ -46,6 +46,8 @@ pub use libp2p_allow_block_list as allow_block_list;
 #[doc(inline)]
 pub use libp2p_autonat as autonat;
 #[doc(inline)]
+pub use libp2p_connection_limits as connection_limits;
+#[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]

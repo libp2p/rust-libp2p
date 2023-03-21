@@ -33,9 +33,6 @@ jobs:
       matrix:
         rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@master
@@ -55,9 +52,6 @@ jobs:
   make_stable_rust_cache:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable

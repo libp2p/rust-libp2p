@@ -1,8 +1,12 @@
 # 0.52.2 - unreleased
 
+- Introduce `libp2p::connection_limits` module.
+  See [PR 3386].
+
 - Introduce `libp2p::allow_block_list` module and deprecate `libp2p::Swarm::ban_peer_id`.
   See [PR 3590].
 
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
 
 # 0.51.1

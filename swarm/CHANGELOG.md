@@ -1,8 +1,12 @@
 # 0.42.1 - unreleased
 
+- Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
+  See [PR 3386].
+
 - Deprecate `Swarm::ban_peer_id` in favor of the new `libp2p::allow_block_list` module.
   See [PR 3590].
 
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
 
 # 0.42.0
@@ -94,6 +98,11 @@
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
+- Deprecate methods `Swarm::with_executor`, `Swarm::with_*_executor`, `Swarm::without_executor`.
+  Introduce similar methods in `SwarmBuilder`. See [PR 3588].
+
+- Gracefully disable oneshot handler on dial upgrade errors. See [PR 3577].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -109,6 +118,8 @@
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
 [PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
 [PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
+[PR 3588]: https://github.com/libp2p/rust-libp2p/pull/3588
+[PR 3577]: https://github.com/libp2p/rust-libp2p/pull/3577
 
 # 0.41.1
 

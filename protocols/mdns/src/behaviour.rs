@@ -339,7 +339,7 @@ where
 }
 
 /// Event that can be produced by the `Mdns` behaviour.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(DiscoveredAddrsIter),
@@ -352,6 +352,7 @@ pub enum Event {
 }
 
 /// Iterator that produces the list of addresses that have been discovered.
+#[derive(Clone)]
 pub struct DiscoveredAddrsIter {
     inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
@@ -379,6 +380,7 @@ impl fmt::Debug for DiscoveredAddrsIter {
 }
 
 /// Iterator that produces the list of addresses that have expired.
+#[derive(Clone)]
 pub struct ExpiredAddrsIter {
     inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }

@@ -1925,7 +1925,6 @@ where
         match error {
             #[allow(deprecated)]
             DialError::Banned
-            | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
@@ -1952,6 +1951,8 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
+            #[allow(deprecated)]
+            DialError::ConnectionLimit(_) => {}
         }
     }
 
