@@ -37,6 +37,7 @@ use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
+use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
@@ -147,7 +148,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -168,7 +169,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {

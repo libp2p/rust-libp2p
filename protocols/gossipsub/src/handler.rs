@@ -550,8 +550,8 @@ impl ConnectionHandler for Handler {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout.");
                     }
                     // There was an error post negotiation, close the connection.
-                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(_)) => {
-                        unreachable!("Error occurred during stream upgrade");
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
+                        void::unreachable(e)
                     }
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                         NegotiationError::Failed,

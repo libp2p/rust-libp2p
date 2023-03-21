@@ -2359,6 +2359,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
+ "void",
  "wasm-timer",
 ]
 
