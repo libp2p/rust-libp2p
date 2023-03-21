@@ -1,3 +1,9 @@
+# 0.4.0-alpha.4 - unreleased
+
+- Make `Fingerprint` type public. See [PR 3648].
+
+[PR 3648]: https://github.com/libp2p/rust-libp2p/pull/3648
+
 # 0.4.0-alpha.3
 
 - Gracefully handle `ConnectionReset` error on individual connections, avoiding shutdown of the entire listener upon disconnect of a single client.
