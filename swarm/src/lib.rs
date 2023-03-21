@@ -104,14 +104,17 @@ pub mod derive_prelude {
     pub use libp2p_identity::PeerId;
 }
 
+#[allow(deprecated)]
+pub use crate::connection::ConnectionLimit;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
     ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
     ListenerClosed, ListenerError, NetworkBehaviour, NetworkBehaviourAction, NewExternalAddr,
     NewListenAddr, NotifyHandler, PollParameters,
 };
+#[allow(deprecated)]
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
-pub use connection::{ConnectionError, ConnectionId, ConnectionLimit};
+pub use connection::{ConnectionError, ConnectionId};
 pub use executor::Executor;
 #[allow(deprecated)]
 pub use handler::IntoConnectionHandler;
@@ -651,6 +654,7 @@ where
         ) {
             Ok(()) => Ok(()),
             Err(connection_limit) => {
+                #[allow(deprecated)]
                 let error = DialError::ConnectionLimit(connection_limit);
                 self.behaviour
                     .on_swarm_event(FromSwarm::DialFailure(DialFailure {
@@ -1089,6 +1093,7 @@ where
                         });
                     }
                     Err(connection_limit) => {
+                        #[allow(deprecated)]
                         let error = ListenError::ConnectionLimit(connection_limit);
                         self.behaviour
                             .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
@@ -1511,6 +1516,7 @@ pub struct SwarmBuilder<TBehaviour> {
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
     pool_config: PoolConfig,
+    #[allow(deprecated)]
     connection_limits: ConnectionLimits,
 }
 
@@ -1655,6 +1661,7 @@ where
     }
 
     /// Configures the connection limits.
+    #[allow(deprecated)]
     pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
         self.connection_limits = limits;
         self
@@ -1712,6 +1719,11 @@ pub enum DialError {
     Banned,
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
+    #[deprecated(
+        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
+        since = "0.42.1"
+    )]
+    #[allow(deprecated)]
     ConnectionLimit(ConnectionLimit),
     /// The peer identity obtained on the connection matches the local peer.
     LocalPeerId {
@@ -1742,6 +1754,7 @@ pub enum DialError {
 impl From<PendingOutboundConnectionError> for DialError {
     fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
@@ -1756,6 +1769,7 @@ impl From<PendingOutboundConnectionError> for DialError {
 impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[allow(deprecated)]
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId { endpoint } => write!(
@@ -1809,6 +1823,7 @@ fn print_error_chain(f: &mut fmt::Formatter<'_>, e: &dyn error::Error) -> fmt::R
 impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            #[allow(deprecated)]
             DialError::ConnectionLimit(err) => Some(err),
             DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
@@ -1828,6 +1843,11 @@ impl error::Error for DialError {
 pub enum ListenError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
+    #[deprecated(
+        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
+        since = "0.42.1"
+    )]
+    #[allow(deprecated)]
     ConnectionLimit(ConnectionLimit),
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -1851,6 +1871,7 @@ impl From<PendingInboundConnectionError> for ListenError {
     fn from(error: PendingInboundConnectionError) -> Self {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
+            #[allow(deprecated)]
             PendingInboundConnectionError::ConnectionLimit(inner) => {
                 ListenError::ConnectionLimit(inner)
             }
@@ -1868,6 +1889,7 @@ impl From<PendingInboundConnectionError> for ListenError {
 impl fmt::Display for ListenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[allow(deprecated)]
             ListenError::ConnectionLimit(_) => write!(f, "Listen error"),
             ListenError::Aborted => write!(
                 f,
@@ -1893,6 +1915,7 @@ impl fmt::Display for ListenError {
 impl error::Error for ListenError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            #[allow(deprecated)]
             ListenError::ConnectionLimit(err) => Some(err),
             ListenError::WrongPeerId { .. } => None,
             ListenError::Transport(err) => Some(err),
@@ -1913,6 +1936,19 @@ impl ConnectionDenied {
         Self {
             inner: Box::new(cause),
         }
+    }
+
+    /// Attempt to downcast to a particular reason for why the connection was denied.
+    pub fn downcast<E>(self) -> Result<E, Self>
+    where
+        E: error::Error + Send + Sync + 'static,
+    {
+        let inner = self
+            .inner
+            .downcast::<E>()
+            .map_err(|inner| ConnectionDenied { inner })?;
+
+        Ok(*inner)
     }
 }
 
@@ -2485,6 +2521,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn max_outgoing() {
         use rand::Rng;
 
@@ -2512,6 +2549,7 @@ mod tests {
             .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
             .expect_err("Unexpected dialing success.")
         {
+            #[allow(deprecated)]
             DialError::ConnectionLimit(limit) => {
                 assert_eq!(limit.current, outgoing_limit);
                 assert_eq!(limit.limit, outgoing_limit);
@@ -2538,6 +2576,7 @@ mod tests {
             }
         }
 
+        #[allow(deprecated)]
         fn limits(limit: u32) -> ConnectionLimits {
             ConnectionLimits::default().with_max_established_incoming(Some(limit))
         }
@@ -2545,9 +2584,11 @@ mod tests {
         fn prop(limit: Limit) {
             let limit = limit.0;
 
+            #[allow(deprecated)]
             let mut network1 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();
+            #[allow(deprecated)]
             let mut network2 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();
@@ -2580,6 +2621,7 @@ mod tests {
                             Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
                                 network_1_established = true;
                             }
+                            #[allow(deprecated)]
                             Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
                                 error: ListenError::ConnectionLimit(err),
                                 ..

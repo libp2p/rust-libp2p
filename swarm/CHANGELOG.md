@@ -1,3 +1,14 @@
+# 0.42.1 [unreleased]
+
+- Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
+  See [PR 3386].
+
+- Introduce `ConnectionId::new_unchecked` to allow for more sophisticated, manual tests of `NetworkBehaviour`.
+  See [PR 3652].
+
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
+[PR 3652]: https://github.com/libp2p/rust-libp2p/pull/3652
+
 # 0.42.0
 
 - Allow `NetworkBehaviour`s to manage connections.

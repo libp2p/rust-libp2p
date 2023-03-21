@@ -67,6 +67,16 @@ impl ConnectionId {
     )]
     pub const DUMMY: ConnectionId = ConnectionId(0);
 
+    /// Creates an _unchecked_ [`ConnectionId`].
+    ///
+    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
+    /// This constructor does not, hence the _unchecked_.
+    ///
+    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    pub fn new_unchecked(id: usize) -> Self {
+        Self(id)
+    }
+
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
@@ -377,6 +387,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
+#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
@@ -385,6 +396,7 @@ pub struct ConnectionLimit {
     pub current: u32,
 }
 
+#[allow(deprecated)]
 impl fmt::Display for ConnectionLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -396,6 +408,7 @@ impl fmt::Display for ConnectionLimit {
 }
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
+#[allow(deprecated)]
 impl std::error::Error for ConnectionLimit {}
 
 struct SubstreamUpgrade<UserData, Upgrade> {
