@@ -27,8 +27,11 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
    `CHANGELOG.md`. Create a pull request with the changes against the
    rust-libp2p `master` branch.
 
-2. Once merged, run `cargo release --workspace --sign-tag --no-push --execute`
-   on the (squash-) merged commit on the `master` branch.
+2. Once merged, run the two commands below on the (squash-) merged commit on the `master` branch.
+
+    1. `cargo release publish --execute`
+
+    2. `cargo release tag --sign-tag --execute`
 
 3. Confirm that `cargo release` tagged the commit correctly via `git push
    $YOUR_ORIGIN --tag --dry-run` and then push the new tags via `git push
