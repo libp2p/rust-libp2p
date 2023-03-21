@@ -264,6 +264,38 @@ impl Keypair {
     }
 }
 
+#[cfg(feature = "ecdsa")]
+impl From<ecdsa::Keypair> for Keypair {
+    fn from(kp: ecdsa::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Ecdsa(kp)
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl From<ed25519::Keypair> for Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Ed25519(kp)
+    }
+}
+
+#[cfg(feature = "secp256k1")]
+impl From<secp256k1::Keypair> for Keypair {
+    fn from(kp: secp256k1::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Secp256k1(kp)
+    }
+}
+
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+impl From<rsa::Keypair> for Keypair {
+    fn from(kp: rsa::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Rsa(kp)
+    }
+}
+
 /// The public key of a node's identity keypair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PublicKey {

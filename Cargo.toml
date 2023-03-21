@@ -29,6 +29,7 @@ members = [
     "protocols/identify",
     "protocols/kad",
     "protocols/mdns",
+    "protocols/perf",
     "protocols/ping",
     "protocols/relay",
     "protocols/rendezvous",
