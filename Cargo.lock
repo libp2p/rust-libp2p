@@ -2143,7 +2143,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.51.1"
+version = "0.51.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2156,6 +2156,7 @@ dependencies = [
  "getrandom 0.2.8",
  "instant",
  "libp2p-autonat",
+ "libp2p-connection-limits",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-deflate",
@@ -2213,6 +2214,23 @@ dependencies = [
  "log",
  "quick-protobuf",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "libp2p-connection-limits"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "libp2p-core",
+ "libp2p-identify",
+ "libp2p-identity",
+ "libp2p-ping",
+ "libp2p-swarm",
+ "libp2p-swarm-derive",
+ "libp2p-swarm-test",
+ "quickcheck-ext",
+ "rand 0.8.5",
+ "void",
 ]
 
 [[package]]
@@ -2752,7 +2770,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
@@ -2769,6 +2787,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-swarm-derive",
+ "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
  "quickcheck-ext",
