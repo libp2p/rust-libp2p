@@ -517,28 +517,38 @@ impl ConnectionHandler for Handler {
             Self::OutboundOpenInfo,
         >,
     ) {
+        // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
+        if matches!(
+            event,
+            ConnectionEvent::FullyNegotiatedInbound(_)
+                | ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
+                    ..
+                })
+        ) && self.inbound_substreams_created == MAX_SUBSTREAM_CREATION
+        {
+            // Too many inbound substreams have been created, disable the handler.
+            self.keep_alive = KeepAlive::No;
+            log::info!("The maximum number of inbound substreams created has been exceeded.");
+            return;
+        }
+
+        if matches!(
+            event,
+            ConnectionEvent::FullyNegotiatedOutbound(_) | ConnectionEvent::DialUpgradeError(_)
+        ) && self.outbound_substreams_created == MAX_SUBSTREAM_CREATION
+        {
+            // Too many outbound substreams have been created, disable the handler.
+            self.keep_alive = KeepAlive::No;
+            log::info!("The maximum number of outbound substreams created has been exceeded.");
+            return;
+        }
+
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
-                if self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
-                    // Too many inbound substreams have been created, end the connection.
-                    self.keep_alive = KeepAlive::No;
-                    log::info!(
-                        "The maximum number of inbound substreams created has been exceeded."
-                    );
-                    return;
-                }
-
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
-                if self.outbound_substreams_created == MAX_SUBSTREAM_CREATION {
-                    self.keep_alive = KeepAlive::No;
-                    log::info!(
-                        "The maximum number of outbound substreams created has been exceeded"
-                    );
-                    return;
-                }
-
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
