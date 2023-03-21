@@ -1,7 +1,9 @@
 # 0.42.1 - unreleased
 
 - Introduce `ConnectionId::new_unchecked` to allow for more sophisticated, manual tests of `NetworkBehaviour`.
-  See [PR]
+  See [PR 3652].
+
+[PR 3652]: https://github.com/libp2p/rust-libp2p/pull/3652
 
 # 0.42.0
 
