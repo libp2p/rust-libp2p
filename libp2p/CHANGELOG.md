@@ -1,3 +1,10 @@
+# 0.52.2 - unreleased
+
+- Introduce `libp2p::connection_limits` module.
+  See [PR 3386].
+
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
+
 # 0.51.1
 
 - Depend on `libp2p-tls` `v0.1.0`.

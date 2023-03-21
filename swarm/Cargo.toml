@@ -47,6 +47,7 @@ libp2p-kad = { path = "../protocols/kad" }
 libp2p-ping = { path = "../protocols/ping" }
 libp2p-plaintext = { path = "../transports/plaintext" }
 libp2p-swarm-derive = { path = "../swarm-derive" }
+libp2p-swarm-test = { path = "../swarm-test" }
 libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 void = "1"
