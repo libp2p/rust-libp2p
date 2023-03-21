@@ -12,6 +12,7 @@ members = [
     "examples/rendezvous",
     "identity",
     "interop-tests",
+    "misc/allow-block-list",
     "misc/connection-limits",
     "misc/keygen",
     "misc/metrics",

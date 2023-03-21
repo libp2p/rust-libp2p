@@ -96,6 +96,7 @@ futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` featu
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
 
+libp2p-allow-block-list = { version = "0.1.0", path = "../misc/allow-block-list" }
 libp2p-autonat = { version = "0.10.0", path = "../protocols/autonat", optional = true }
 libp2p-connection-limits = { version = "0.1.0", path = "../misc/connection-limits" }
 libp2p-core = { version = "0.39.0", path = "../core" }
