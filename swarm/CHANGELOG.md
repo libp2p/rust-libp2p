@@ -1,3 +1,8 @@
+# 0.42.1 - unreleased
+
+- Introduce `ConnectionId::new_unchecked` to allow for more sophisticated, manual tests of `NetworkBehaviour`.
+  See [PR]
+
 # 0.42.0
 
 - Allow `NetworkBehaviour`s to manage connections.
