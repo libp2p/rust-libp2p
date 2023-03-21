@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod certificate;
-pub mod fingerprint;
 
 mod connection;
 mod error;
+mod fingerprint;
 mod req_res_chan;
 mod sdp;
 mod substream;

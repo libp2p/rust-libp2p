@@ -1,6 +1,6 @@
 # 0.4.0-alpha.4
 
-- Make `Fingerprint` type public. See [PR 3648]
+- Make `Fingerprint` type public. See [PR 3648].
 
 [PR 3648]: https://github.com/libp2p/rust-libp2p/pull/3648
 
