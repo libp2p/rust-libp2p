@@ -1,4 +1,4 @@
-# 0.42.1 - unreleased
+# 0.42.1
 
 - Introduce `ConnectionId::new_unchecked` to allow for more sophisticated, manual tests of `NetworkBehaviour`.
   See [PR 3652].
