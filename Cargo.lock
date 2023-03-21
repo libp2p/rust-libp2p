@@ -2785,7 +2785,7 @@ version = "0.32.0"
 dependencies = [
  "heck",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.2",
 ]
 
 [[package]]
