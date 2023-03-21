@@ -3,7 +3,13 @@
 - Introduce `libp2p::connection_limits` module.
   See [PR 3386].
 
+- Deprecate the `quic` and `webrtc` feature.
+  These two crates are only in alpha state.
+  To properly communicate this to users, we want them to add the dependency directly which makes the `alpha` version visible.
+  See [PR 3580].
+
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
+[PR 3580]: https://github.com/libp2p/rust-libp2p/pull/3580
 
 # 0.51.1
 

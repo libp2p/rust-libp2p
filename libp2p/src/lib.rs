@@ -97,8 +97,12 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_quic as quic;
+#[deprecated(
+    note = "`quic` is only in alpha status. Please depend on `libp2p-quic` directly and don't ues the `quic` feature of `libp2p`."
+)]
+pub mod quic {
+    pub use libp2p_quic::*;
+}
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -131,8 +135,12 @@ pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_webrtc as webrtc;
+#[deprecated(
+    note = "`webrtc` is only in alpha status. Please depend on `libp2p-webrtc` directly and don't ues the `webrtc` feature of `libp2p`."
+)]
+pub mod webrtc {
+    pub use libp2p_webrtc::*;
+}
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
