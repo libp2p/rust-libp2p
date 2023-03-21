@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub mod certificate;
-
 mod connection;
 mod error;
 mod fingerprint;
@@ -33,4 +32,5 @@ mod upgrade;
 pub use certificate::Certificate;
 pub use connection::Connection;
 pub use error::Error;
+pub use fingerprint::Fingerprint;
 pub use transport::Transport;
