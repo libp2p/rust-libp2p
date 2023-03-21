@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = "1.65.0"
 description = "Peer-to-peer networking library"
-version = "0.51.1"
+version = "0.51.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -28,6 +28,7 @@ full = [
     "metrics",
     "mplex",
     "noise",
+    "perf",
     "ping",
     "plaintext",
     "pnet",
@@ -66,6 +67,7 @@ mdns = ["dep:libp2p-mdns"]
 metrics = ["dep:libp2p-metrics"]
 mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
+perf = ["dep:libp2p-perf"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -95,6 +97,7 @@ getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
 
 libp2p-autonat = { version = "0.10.0", path = "../protocols/autonat", optional = true }
+libp2p-connection-limits = { version = "0.1.0", path = "../misc/connection-limits" }
 libp2p-core = { version = "0.39.0", path = "../core" }
 libp2p-dcutr = { version = "0.9.0", path = "../protocols/dcutr", optional = true }
 libp2p-floodsub = { version = "0.42.0", path = "../protocols/floodsub", optional = true }
@@ -120,6 +123,7 @@ pin-project = "1.0.0"
 libp2p-deflate = { version = "0.39.0", path = "../transports/deflate", optional = true }
 libp2p-dns = { version = "0.39.0", path = "../transports/dns", optional = true }
 libp2p-mdns = { version = "0.43.0", path = "../protocols/mdns", optional = true }
+libp2p-perf = { version = "0.1.0", path = "../protocols/perf", optional = true }
 libp2p-quic = { version = "0.7.0-alpha.3", path = "../transports/quic", optional = true }
 libp2p-tcp = { version = "0.39.0", path = "../transports/tcp", optional = true }
 libp2p-tls = { version = "0.1.0", path = "../transports/tls", optional = true }

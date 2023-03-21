@@ -6,6 +6,13 @@
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 
+# 0.42.1 [unreleased]
+
+- Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
+  See [PR 3386].
+
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
+
 # 0.42.0
 
 - Allow `NetworkBehaviour`s to manage connections.
