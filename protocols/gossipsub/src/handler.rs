@@ -181,13 +181,6 @@ impl Handler {
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        if self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
-            // Too many inbound substreams have been created, end the connection.
-            self.keep_alive = KeepAlive::No;
-            log::info!("Gossipsub error: The maximum number of inbound substreams created has been exceeded.");
-            return;
-        }
-
         let (substream, peer_kind) = protocol;
 
         // If the peer doesn't support the protocol, reject all substreams
@@ -217,12 +210,6 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        if self.outbound_substreams_created == MAX_SUBSTREAM_CREATION {
-            self.keep_alive = KeepAlive::No;
-            log::info!("Gossipsub error: The maximum number of outbound substreams created has been exceeded");
-            return;
-        }
-
         let (substream, peer_kind) = protocol;
 
         // If the peer doesn't support the protocol, reject all substreams
@@ -533,9 +520,26 @@ impl ConnectionHandler for Handler {
     ) {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                if self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
+                    // Too many inbound substreams have been created, end the connection.
+                    self.keep_alive = KeepAlive::No;
+                    log::info!(
+                        "The maximum number of inbound substreams created has been exceeded."
+                    );
+                    return;
+                }
+
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                if self.outbound_substreams_created == MAX_SUBSTREAM_CREATION {
+                    self.keep_alive = KeepAlive::No;
+                    log::info!(
+                        "The maximum number of outbound substreams created has been exceeded"
+                    );
+                    return;
+                }
+
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
@@ -544,25 +548,22 @@ impl ConnectionHandler for Handler {
                 match error {
                     // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                     ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                        self.keep_alive = KeepAlive::No;
                         log::info!("Dial upgrade error: Protocol negotiation timeout.");
                     }
                     // There was an error post negotiation, close the connection.
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
                         log::info!("Dial upgrade error: {e}");
                     }
-                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
-                        match negotiation_error {
-                            NegotiationError::Failed => {
-                                // The protocol is not supported
-                                self.protocol_unsupported = true;
-                                log::info!("Dial upgrade error: {}", NegotiationError::Failed);
-                            }
-                            NegotiationError::ProtocolError(e) => {
-                                log::info!("Gossipsub error: Protocol negotiation failed. {e}");
-                            }
-                        }
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                        NegotiationError::Failed,
+                    )) => {
+                        // The protocol is not supported
+                        self.protocol_unsupported = true;
+                        log::info!("Dial upgrade error: {}", NegotiationError::Failed);
                     }
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                        NegotiationError::ProtocolError(e),
+                    )) => log::info!("Protocol negotiation failed. {e}"),
                 }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}

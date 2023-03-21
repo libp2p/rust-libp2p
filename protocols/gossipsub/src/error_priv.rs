@@ -21,6 +21,7 @@
 //! Error types that can result from gossipsub.
 
 use libp2p_core::identity::error::SigningError;
+use libp2p_core::upgrade::ProtocolError;
 use thiserror::Error;
 
 /// Error associated with publishing a gossipsub message.
@@ -88,8 +89,20 @@ impl From<SigningError> for PublishError {
 /// Errors that can occur in the protocols handler.
 #[derive(Debug, Error)]
 pub enum HandlerError {
+    #[deprecated(note = "This error will not be emitted")]
+    #[error("The maximum number of inbound substreams created has been exceeded.")]
+    MaxInboundSubstreams,
+    #[deprecated(note = "This error will not be emitted")]
+    #[error("The maximum number of outbound substreams created has been exceeded.")]
+    MaxOutboundSubstreams,
     #[error("The message exceeds the maximum transmission size.")]
     MaxTransmissionSize,
+    #[deprecated(note = "This error will not be emitted")]
+    #[error("Protocol negotiation timeout.")]
+    NegotiationTimeout,
+    #[deprecated(note = "This error will not be emitted")]
+    #[error("Protocol negotiation failed.")]
+    NegotiationProtocolError(ProtocolError),
     #[error("Failed to encode or decode")]
     Codec(#[from] quick_protobuf_codec::Error),
 }
