@@ -33,7 +33,6 @@ use libp2p_swarm::handler::{
     SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
-use log::{error, trace, warn};
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -196,7 +195,7 @@ impl Handler {
         }
 
         // new inbound substream. Replace the current one, if it exists.
-        trace!("New inbound substream request");
+        log::trace!("New inbound substream request");
         self.inbound_substream = Some(InboundSubstreamState::WaitingInput(substream));
     }
 
@@ -228,7 +227,7 @@ impl Handler {
         // Should never establish a new outbound substream if one already exists.
         // If this happens, an outbound message is not sent.
         if self.outbound_substream.is_some() {
-            warn!("Established an outbound substream with one already available");
+            log::warn!("Established an outbound substream with one already available");
             // Add the message back to the send queue
             self.send_queue.push(message);
         } else {
@@ -339,12 +338,12 @@ impl ConnectionHandler for Handler {
                         Poll::Ready(Some(Err(error))) => {
                             match error {
                                 HandlerError::MaxTransmissionSize => {
-                                    warn!("Message exceeded the maximum transmission size");
+                                    log::warn!("Message exceeded the maximum transmission size");
                                     self.inbound_substream =
                                         Some(InboundSubstreamState::WaitingInput(substream));
                                 }
                                 _ => {
-                                    warn!("Inbound stream error: {}", error);
+                                    log::warn!("Inbound stream error: {}", error);
                                     // More serious errors, close this side of the stream. If the
                                     // peer is still around, they will re-establish their
                                     // connection
@@ -355,7 +354,7 @@ impl ConnectionHandler for Handler {
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
-                            warn!("Peer closed their outbound stream");
+                            log::warn!("Peer closed their outbound stream");
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -373,7 +372,7 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Inbound substream error while closing: {:?}", e);
+                                log::warn!("Inbound substream error while closing: {e}");
                             }
                             self.inbound_substream = None;
                             if self.outbound_substream.is_none() {
@@ -426,7 +425,7 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(HandlerError::MaxTransmissionSize) => {
-                                    error!("Message exceeded the maximum transmission size and was not sent.");
+                                    log::error!("Message exceeded the maximum transmission size and was not sent.");
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::WaitingOutput(substream));
                                 }
@@ -440,7 +439,7 @@ impl ConnectionHandler for Handler {
                             }
                         }
                         Poll::Ready(Err(e)) => {
-                            error!("Outbound substream error while sending output: {e:?}");
+                            log::debug!("Outbound substream error while sending output: {e}");
                             break;
                         }
                         Poll::Pending => {
@@ -485,7 +484,7 @@ impl ConnectionHandler for Handler {
                             break;
                         }
                         Poll::Ready(Err(e)) => {
-                            warn!("Outbound substream error while closing: {e:?}");
+                            log::debug!("Outbound substream error while closing: {e}");
                             break;
                         }
                         Poll::Pending => {
@@ -548,22 +547,24 @@ impl ConnectionHandler for Handler {
                 match error {
                     // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                     ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                        log::info!("Dial upgrade error: Protocol negotiation timeout.");
+                        log::debug!("Dial upgrade error: Protocol negotiation timeout.");
                     }
                     // There was an error post negotiation, close the connection.
-                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
-                        log::info!("Dial upgrade error: {e}");
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(_)) => {
+                        unreachable!("Error occurred during stream upgrade");
                     }
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                         NegotiationError::Failed,
                     )) => {
                         // The protocol is not supported
                         self.protocol_unsupported = true;
-                        log::info!("Dial upgrade error: {}", NegotiationError::Failed);
+                        log::debug!(
+                            "The remote peer does not support gossipsub on this connection"
+                        );
                     }
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                         NegotiationError::ProtocolError(e),
-                    )) => log::info!("Protocol negotiation failed. {e}"),
+                    )) => log::debug!("Protocol negotiation failed: {e}"),
                 }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
