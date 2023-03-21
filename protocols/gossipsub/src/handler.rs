@@ -181,6 +181,13 @@ impl Handler {
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
+        if self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
+            // Too many inbound substreams have been created, end the connection.
+            self.keep_alive = KeepAlive::No;
+            log::info!("Gossipsub error: The maximum number of inbound substreams created has been exceeded.");
+            return;
+        }
+
         let (substream, peer_kind) = protocol;
 
         // If the peer doesn't support the protocol, reject all substreams
@@ -210,6 +217,12 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
+        if self.outbound_substreams_created == MAX_SUBSTREAM_CREATION {
+            self.keep_alive = KeepAlive::No;
+            log::info!("Gossipsub error: The maximum number of outbound substreams created has been exceeded");
+            return;
+        }
+
         let (substream, peer_kind) = protocol;
 
         // If the peer doesn't support the protocol, reject all substreams
@@ -303,21 +316,14 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
-            // Too many inbound substreams have been created, end the connection.
-            self.keep_alive = KeepAlive::No;
-            log::info!("Gossipsub error: {}", HandlerError::MaxInboundSubstreams);
-        }
+        // Invariant: `self.inbound_substreams_created < MAX_SUBSTREAM_CREATION`.
 
         // determine if we need to create the stream
         if !self.send_queue.is_empty()
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
-            if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
-                self.keep_alive = KeepAlive::No;
-                log::info!("Gossipsub error: {}", HandlerError::MaxInboundSubstreams);
-            }
+            // Invariant: `self.outbound_substreams_created < MAX_SUBSTREAM_CREATION`.
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
             self.outbound_substream_establishing = true;
@@ -438,7 +444,10 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::WaitingOutput(substream));
                                 }
                                 Err(e) => {
-                                    error!("Error sending message: {e}");
+                                    log::debug!(
+                                        "Outbound substream error while sending output: {e}"
+                                    );
+                                    self.outbound_substream = None;
                                     break;
                                 }
                             }
@@ -467,7 +476,7 @@ impl ConnectionHandler for Handler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            log::info!("NegotaitedSubstream error: {e}");
+                            log::debug!("Outbound substream error while flushing output: {e}");
                             break;
                         }
                         Poll::Pending => {
@@ -536,11 +545,10 @@ impl ConnectionHandler for Handler {
                     // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                     ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
                         self.keep_alive = KeepAlive::No;
-                        log::info!("Dial upgrade error: {}", HandlerError::NegotiationTimeout);
+                        log::info!("Dial upgrade error: Protocol negotiation timeout.");
                     }
                     // There was an error post negotiation, close the connection.
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
-                        self.keep_alive = KeepAlive::No;
                         log::info!("Dial upgrade error: {e}");
                     }
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
@@ -551,11 +559,7 @@ impl ConnectionHandler for Handler {
                                 log::info!("Dial upgrade error: {}", NegotiationError::Failed);
                             }
                             NegotiationError::ProtocolError(e) => {
-                                self.keep_alive = KeepAlive::No;
-                                log::info!(
-                                    "Gossipsub error: {}",
-                                    HandlerError::NegotiationProtocolError(e)
-                                );
+                                log::info!("Gossipsub error: Protocol negotiation failed. {e}");
                             }
                         }
                     }
