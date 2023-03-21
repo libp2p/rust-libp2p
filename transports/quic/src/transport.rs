@@ -33,8 +33,9 @@ use if_watch::IfEvent;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    PeerId, Transport,
+    Transport,
 };
+use libp2p_identity::PeerId;
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -761,7 +762,7 @@ mod test {
     #[cfg(feature = "async-std")]
     #[async_std::test]
     async fn test_close_listener() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::async_std::Transport::new(config);
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
@@ -830,7 +831,7 @@ mod test {
     #[cfg(feature = "tokio")]
     #[tokio::test]
     async fn test_dialer_drop() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::tokio::Transport::new(config);
 

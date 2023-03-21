@@ -34,10 +34,9 @@ use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
-use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr,
-    PeerId,
-};
+use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
@@ -81,7 +80,7 @@ mod tests;
 #[derive(Clone)]
 pub enum MessageAuthenticity {
     /// Message signing is enabled. The author will be the owner of the key and the sequence number
-    /// will be a random number.
+    /// will be linearly increasing.
     Signed(Keypair),
     /// Message signing is disabled.
     ///
@@ -156,6 +155,8 @@ enum PublishConfig {
         keypair: Keypair,
         author: PeerId,
         inline_key: Option<Vec<u8>>,
+        last_seq_no: u64, // This starts from a random number and increases then overflows (if
+                          // required)
     },
     Author(PeerId),
     RandomAuthor,
@@ -191,6 +192,7 @@ impl From<MessageAuthenticity> for PublishConfig {
                     keypair,
                     author: public_key.to_peer_id(),
                     inline_key: key,
+                    last_seq_no: rand::random(),
                 }
             }
             MessageAuthenticity::Author(peer_id) => PublishConfig::Author(peer_id),
@@ -2750,18 +2752,21 @@ where
 
     /// Constructs a [`RawMessage`] performing message signing if required.
     pub(crate) fn build_raw_message(
-        &self,
+        &mut self,
         topic: TopicHash,
         data: Vec<u8>,
     ) -> Result<RawMessage, PublishError> {
-        match &self.publish_config {
+        match &mut self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
                 author,
                 inline_key,
+                mut last_seq_no,
             } => {
-                // Build and sign the message
-                let sequence_number: u64 = rand::random();
+                // Increment the last sequence number
+                last_seq_no = last_seq_no.wrapping_add(1);
+
+                let sequence_number = last_seq_no;
 
                 let signature = {
                     let message = proto::Message {
@@ -3689,7 +3694,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck::*;
+    use quickcheck_ext::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {

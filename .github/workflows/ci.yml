@@ -41,7 +41,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: msrv-cache
           save-if: false
@@ -51,7 +51,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -96,16 +96,6 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install Protoc
-        if: ${{ matrix.os != 'ubuntu-latest' }}
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Protoc
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable
@@ -114,7 +104,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -130,16 +120,13 @@ jobs:
           - features: "mdns tcp dns tokio"
           - features: "mdns tcp dns async-std"
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -150,16 +137,13 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -172,13 +156,10 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.67.1, # current stable
+          1.68.0, # current stable
           beta
         ]
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@master
@@ -188,7 +169,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -199,21 +180,18 @@ jobs:
     name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run ipfs-kad example
-        run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -268,7 +246,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -288,3 +266,11 @@ jobs:
 
             echo $git_status
             test -z "$git_status"
+
+  ensure-lockfile-uptodate:
+    name: Ensure that `Cargo.lock` is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - run: cargo metadata --locked --format-version=1 > /dev/null

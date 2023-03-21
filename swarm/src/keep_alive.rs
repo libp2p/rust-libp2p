@@ -6,7 +6,8 @@ use crate::handler::{
 };
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 

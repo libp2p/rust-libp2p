@@ -21,7 +21,8 @@
 //! (M)DNS encoding and decoding on top of the `dns_parser` library.
 
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::{borrow::Cow, cmp, error, fmt, str, time::Duration};
@@ -395,7 +396,7 @@ impl error::Error for MdnsResponseError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::identity;
+    use libp2p_identity as identity;
     use std::time::Duration;
     use trust_dns_proto::op::Message;
 

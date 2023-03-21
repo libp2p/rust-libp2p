@@ -39,7 +39,8 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
@@ -1923,7 +1924,6 @@ where
 
         match error {
             DialError::Banned
-            | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
@@ -1950,6 +1950,8 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
+            #[allow(deprecated)]
+            DialError::ConnectionLimit(_) => {}
         }
     }
 

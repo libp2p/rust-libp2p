@@ -33,16 +33,13 @@ jobs:
       matrix:
         rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: msrv-cache
 
@@ -55,14 +52,11 @@ jobs:
   make_stable_rust_cache:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: stable-cache
 

@@ -21,11 +21,11 @@
 use futures::{future::BoxFuture, prelude::*, stream::SelectAll, stream::Stream};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
-    identity,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    PeerId,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
 use std::net::IpAddr;

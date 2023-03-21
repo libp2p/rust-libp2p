@@ -56,7 +56,7 @@ The main components of this repository are structured as follows:
 
   * `misc/`: Utility libraries.
 
-  * `examples/`: Worked examples of built-in application protocols (see `protocols/`)
+  * `libp2p/examples/`: Worked examples of built-in application protocols (see `protocols/`)
     with common `Transport` configurations.
 
 ## Community Guidelines
