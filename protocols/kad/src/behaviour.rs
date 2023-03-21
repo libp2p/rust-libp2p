@@ -1923,6 +1923,7 @@ where
         };
 
         match error {
+            #[allow(deprecated)]
             DialError::Banned
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
