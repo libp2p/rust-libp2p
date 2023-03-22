@@ -20,11 +20,12 @@ runs:
     - shell: bash
       run: |
         rustc --version | tee .rustc-version
+        cargo semver-checks | tee .semver-checks-version
 
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: semver-checks-cache-${{ hashFiles('.rustc-version') }}-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
+        key: semver-checks-cache-${{ hashFiles('.rustc-version') }}-${{ hashFiles('.semver-checks-version') }}-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
 
     - run: cargo semver-checks check-release --package ${{ inputs.crate }} --verbose
       shell: bash
