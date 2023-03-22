@@ -49,8 +49,8 @@ use libp2p::kad::{
 };
 use libp2p::{
     development_transport, identity, mdns,
-    swarm::{NetworkBehaviour, SwarmEvent},
-    PeerId, Swarm,
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    PeerId,
 };
 use std::error::Error;
 
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let kademlia = Kademlia::new(local_peer_id, store);
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
         let behaviour = MyBehaviour { kademlia, mdns };
-        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Read full lines from stdin
