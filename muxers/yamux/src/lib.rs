@@ -29,7 +29,7 @@ use std::collections::VecDeque;
 use std::io::{IoSlice, IoSliceMut};
 use std::task::Waker;
 use std::{
-    fmt, io, iter,
+    io, iter,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -37,6 +37,7 @@ use thiserror::Error;
 use yamux::ConnectionError;
 
 /// A Yamux connection.
+#[derive(Debug)]
 pub struct Yamux<S> {
     connection: yamux::Connection<S>,
     /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
@@ -54,12 +55,6 @@ pub struct Yamux<S> {
 }
 
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
-
-impl<S> fmt::Debug for Yamux<S> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Yamux")
-    }
-}
 
 impl<C> Yamux<C>
 where
@@ -243,6 +238,7 @@ impl YamuxConfig {
 }
 
 /// A stream produced by the yamux multiplexer.
+#[derive(Debug)]
 pub struct Stream(yamux::Stream);
 
 impl AsyncRead for Stream {
