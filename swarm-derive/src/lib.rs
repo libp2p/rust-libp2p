@@ -24,8 +24,11 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::parse::Parse;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
+use syn::punctuated::Punctuated;
+use syn::{
+    parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
+    Token,
+};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
@@ -48,8 +51,13 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let prelude_path = parse_attribute_value_by_key::<syn::Path>(ast, "prelude")
-        .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
+    let BehaviourAttributes {
+        prelude_path,
+        user_specified_out_event,
+    } = match parse_attributes(ast) {
+        Ok(attrs) => attrs,
+        Err(e) => return e,
+    };
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
@@ -91,10 +99,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `OutEvent` is
         // generated.
-        let user_provided_out_event_name =
-            parse_attribute_value_by_key::<syn::Type>(ast, "out_event");
-
-        match user_provided_out_event_name {
+        match user_specified_out_event {
             // User provided `OutEvent`.
             Some(name) => {
                 let definition = None;
@@ -111,7 +116,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             // User did not provide `OutEvent`. Generate it.
             None => {
                 let enum_name_str = ast.ident.to_string() + "Event";
-                let enum_name: syn::Type = syn::parse_str(&enum_name_str).unwrap();
+                let enum_name: syn::Type =
+                    syn::parse_str(&enum_name_str).expect("ident + `Event` is a valid type");
                 let definition = {
                     let fields = data_struct.fields.iter().map(|field| {
                         let variant: syn::Variant = syn::parse_str(
@@ -122,7 +128,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                                 .to_string()
                                 .to_upper_camel_case(),
                         )
-                        .unwrap();
+                        .expect("uppercased field name to be a valid enum variant");
                         let ty = &field.ty;
                         (variant, ty)
                     });
@@ -680,7 +686,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     &field
                         .to_string()
                         .to_upper_camel_case()
-                ).unwrap();
+                ).expect("uppercased field name to be a valid enum variant name");
                 quote! { #out_event_name::#event_variant(event) }
             } else {
                 quote! { event.into() }
@@ -842,41 +848,83 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     final_quote.into()
 }
 
-/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
-///
-/// Only `String` values are supported, e.g. `#[behaviour(foo="bar")]`.
-fn parse_attribute_value_by_key<T>(ast: &DeriveInput, key: &str) -> Option<T>
-where
-    T: Parse,
-{
-    ast.attrs
-        .iter()
-        .filter_map(get_meta_items)
-        .flatten()
-        .filter_map(|meta_item| {
-            if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
-                if m.path.is_ident(key) {
-                    if let syn::Lit::Str(ref s) = m.lit {
-                        return Some(syn::parse_str(&s.value()).unwrap());
-                    }
-                }
-            }
-            None
-        })
-        .next()
+struct BehaviourAttributes {
+    prelude_path: syn::Path,
+    user_specified_out_event: Option<syn::Type>,
 }
 
-fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
-    if attr.path.segments.len() == 1 && attr.path.segments[0].ident == "behaviour" {
-        match attr.parse_meta() {
-            Ok(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
-            Ok(_) => None,
-            Err(e) => {
-                eprintln!("error parsing attribute metadata: {e}");
-                None
+/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
+fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
+    let mut attributes = BehaviourAttributes {
+        prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
+        user_specified_out_event: None,
+    };
+
+    for attr in ast
+        .attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("behaviour"))
+    {
+        let nested = attr
+            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+            .expect("`parse_args_with` never fails when parsing nested meta");
+
+        for meta in nested {
+            if meta.path().is_ident("prelude") {
+                match meta {
+                    Meta::Path(_) => unimplemented!(),
+                    Meta::List(_) => unimplemented!(),
+                    Meta::NameValue(MetaNameValue {
+                        value:
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(s), ..
+                            }),
+                        ..
+                    }) => {
+                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
+                    }
+                    Meta::NameValue(name_value) => {
+                        return Err(syn::Error::new_spanned(
+                            name_value.value,
+                            "`prelude` value must be a quoted path",
+                        )
+                        .to_compile_error()
+                        .into());
+                    }
+                }
+
+                continue;
+            }
+
+            if meta.path().is_ident("out_event") {
+                match meta {
+                    Meta::Path(_) => unimplemented!(),
+                    Meta::List(_) => unimplemented!(),
+
+                    Meta::NameValue(MetaNameValue {
+                        value:
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(s), ..
+                            }),
+                        ..
+                    }) => {
+                        attributes.user_specified_out_event =
+                            Some(syn::parse_str(&s.value()).unwrap());
+                    }
+                    Meta::NameValue(name_value) => {
+                        return Err(syn::Error::new_spanned(
+                            name_value.value,
+                            "`out_event` value must be a quoted type",
+                        )
+                        .to_compile_error()
+                        .into());
+                    }
+                }
+
+                continue;
             }
         }
-    } else {
-        None
     }
+
+    Ok(attributes)
 }
