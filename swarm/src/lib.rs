@@ -90,11 +90,11 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
-    pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
     pub use crate::THandlerOutEvent;
+    pub use crate::ToSwarm;
     pub use either::Either;
     pub use futures::prelude as futures;
     pub use libp2p_core::transport::ListenerId;
@@ -109,8 +109,8 @@ pub use crate::connection::ConnectionLimit;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
     ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NetworkBehaviourAction, NewExternalAddr,
-    NewListenAddr, NotifyHandler, PollParameters,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddr, NewListenAddr, NotifyHandler,
+    PollParameters, ToSwarm,
 };
 #[allow(deprecated)]
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
@@ -699,7 +699,7 @@ where
     /// order in which addresses are used to connect to) as well as
     /// how long the address is retained in the list, depending on
     /// how frequently it is reported by the `NetworkBehaviour` via
-    /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
+    /// [`ToSwarm::ReportObservedAddr`] or explicitly
     /// through this method.
     pub fn add_external_address(&mut self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
         let result = self.external_addrs.add(a.clone(), s);
@@ -1188,13 +1188,11 @@ where
 
     fn handle_behaviour_event(
         &mut self,
-        event: NetworkBehaviourAction<TBehaviour::OutEvent, THandlerInEvent<TBehaviour>>,
+        event: ToSwarm<TBehaviour::OutEvent, THandlerInEvent<TBehaviour>>,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
-            NetworkBehaviourAction::GenerateEvent(event) => {
-                return Some(SwarmEvent::Behaviour(event))
-            }
-            NetworkBehaviourAction::Dial { opts } => {
+            ToSwarm::GenerateEvent(event) => return Some(SwarmEvent::Behaviour(event)),
+            ToSwarm::Dial { opts } => {
                 let peer_id = opts.get_or_parse_peer_id();
                 if let Ok(()) = self.dial(opts) {
                     if let Ok(Some(peer_id)) = peer_id {
@@ -1202,7 +1200,7 @@ where
                     }
                 }
             }
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
                 event,
@@ -1221,7 +1219,7 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
+            ToSwarm::ReportObservedAddr { address, score } => {
                 // Maps the given `observed_addr`, representing an address of the local
                 // node observed by a remote peer, onto the locally known listen addresses
                 // to yield one or more addresses of the local node that may be publicly
@@ -1251,7 +1249,7 @@ where
                     self.add_external_address(addr, score);
                 }
             }
-            NetworkBehaviourAction::CloseConnection {
+            ToSwarm::CloseConnection {
                 peer_id,
                 connection,
             } => match connection {
@@ -2314,7 +2312,7 @@ mod tests {
 
     /// Establishes multiple connections between two peers,
     /// after which one peer disconnects the other
-    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
+    /// using [`ToSwarm::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via calls to [`NetworkBehaviour::on_swarm_event`]
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
@@ -2352,12 +2350,14 @@ mod tests {
                         if reconnected {
                             return Poll::Ready(());
                         }
-                        swarm2.behaviour.inner().next_action.replace(
-                            NetworkBehaviourAction::CloseConnection {
+                        swarm2
+                            .behaviour
+                            .inner()
+                            .next_action
+                            .replace(ToSwarm::CloseConnection {
                                 peer_id: swarm1_id,
                                 connection: CloseConnection::All,
-                            },
-                        );
+                            });
                         state = State::Disconnecting;
                         continue;
                     }
@@ -2382,7 +2382,7 @@ mod tests {
 
     /// Establishes multiple connections between two peers,
     /// after which one peer closes a single connection
-    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
+    /// using [`ToSwarm::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via calls to [`NetworkBehaviour::on_swarm_event`]
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
@@ -2421,7 +2421,7 @@ mod tests {
                             let conn_id =
                                 swarm2.behaviour.on_connection_established[num_connections / 2].1;
                             swarm2.behaviour.inner().next_action.replace(
-                                NetworkBehaviourAction::CloseConnection {
+                                ToSwarm::CloseConnection {
                                     peer_id: swarm1_id,
                                     connection: CloseConnection::One(conn_id),
                                 },
