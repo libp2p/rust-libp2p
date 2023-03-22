@@ -57,7 +57,7 @@ impl Fingerprint {
         Some(Self(buf))
     }
 
-    /// Converts [`type@Multihash`] to [`Fingerprint`].
+    /// Converts [`Multihash`](MultihashGeneric) to [`Fingerprint`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
         if hash.code() != MULTIHASH_SHA256_CODE {
             // Only support SHA256 for now.
@@ -69,7 +69,7 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
-    /// Converts this fingerprint to [`type@Multihash`].
+    /// Converts this fingerprint to [`Multihash`](MultihashGeneric).
     pub fn to_multihash(self) -> Multihash {
         Multihash::wrap(MULTIHASH_SHA256_CODE, &self.0).expect("fingerprint's len to be 32 bytes")
     }
