@@ -90,6 +90,8 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
+    #[allow(deprecated)]
+    pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
