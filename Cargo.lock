@@ -446,6 +446,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "autonat-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "clap 4.1.11",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+]
+
+[[package]]
 name = "base-x"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2213,20 +2224,15 @@ version = "0.10.1"
 dependencies = [
  "async-std",
  "async-trait",
- "clap 4.1.11",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
  "libp2p-core",
- "libp2p-identify",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "libp2p-tcp",
- "libp2p-yamux",
  "log",
  "quick-protobuf",
  "rand 0.8.5",
