@@ -212,6 +212,31 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
 }
 
+impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
+    ConnectionEvent<'a, IP, OP, IOI, OOI>
+{
+    /// Whether the event concerns an outbound stream.
+    pub fn is_outbound(&self) -> bool {
+        matches!(
+            self,
+            Self::FullyNegotiatedOutbound(_) | Self::DialUpgradeError(_)
+        )
+    }
+
+    /// Whether the event concerns an inbound stream.
+    pub fn is_inbound(&self) -> bool {
+        // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
+        matches!(
+            self,
+            Self::FullyNegotiatedInbound(_)
+                | Self::DialUpgradeError(DialUpgradeError {
+                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
+                    ..
+                })
+        )
+    }
+}
+
 /// [`ConnectionEvent`] variant that informs the handler about
 /// the output of a successful upgrade on a new inbound substream.
 ///
