@@ -1,0 +1,21 @@
+[package]
+name = "libp2p-allow-block-list"
+edition = "2021"
+rust-version = "1.62.0"
+description = "Allow/block list connection management for libp2p."
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
+libp2p-identity = { version = "0.1.0", path = "../../identity", features = ["peerid"] }
+void = "1"
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+libp2p-swarm-derive = { path = "../../swarm-derive" }
+libp2p-swarm-test = { path = "../../swarm-test" }

@@ -50,8 +50,9 @@
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
 //! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
 //! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
-//! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
-//! the current go implementation.
+//! integers. When messages are signed, they are monotonically increasing integers starting from a
+//! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
+//! NOTE: These numbers are sequential in the current go implementation.
 //!
 //! # Peer Discovery
 //!
