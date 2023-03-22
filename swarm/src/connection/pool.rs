@@ -18,12 +18,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use crate::connection::{Connection, ConnectionId, PendingPoint};
+#[allow(deprecated)]
+use crate::connection::{Connection, ConnectionId, ConnectionLimit, PendingPoint};
 #[allow(deprecated)]
 use crate::IntoConnectionHandler;
 use crate::{
     connection::{
-        Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
+        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::TransportError,
@@ -304,6 +305,7 @@ where
     THandler: ConnectionHandler,
 {
     /// Creates a new empty `Pool`.
+    #[allow(deprecated)]
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
         let executor = match config.executor {
@@ -407,6 +409,7 @@ where
     ///
     /// Returns an error if the limit of pending outgoing connections
     /// has been reached.
+    #[allow(deprecated)]
     pub fn add_outgoing(
         &mut self,
         dials: Vec<
@@ -461,6 +464,7 @@ where
     ///
     /// Returns an error if the limit of pending incoming connections
     /// has been reached.
+    #[allow(deprecated)]
     pub fn add_incoming<TFut>(
         &mut self,
         future: TFut,
@@ -679,6 +683,8 @@ where
                         ),
                     };
 
+                    #[allow(deprecated)]
+                    // Remove once `PendingConnectionError::ConnectionLimit` is gone.
                     let error = self
                         .counters
                         // Check general established connection limit.
@@ -865,6 +871,7 @@ impl Drop for NewConnection {
 #[derive(Debug, Clone)]
 pub struct ConnectionCounters {
     /// The effective connection limits.
+    #[allow(deprecated)]
     limits: ConnectionLimits,
     /// The current number of incoming connections.
     pending_incoming: u32,
@@ -877,6 +884,7 @@ pub struct ConnectionCounters {
 }
 
 impl ConnectionCounters {
+    #[allow(deprecated)]
     fn new(limits: ConnectionLimits) -> Self {
         Self {
             limits,
@@ -888,6 +896,8 @@ impl ConnectionCounters {
     }
 
     /// The effective connection limits.
+    #[deprecated(note = "Use the `libp2p::connection_limits` instead.")]
+    #[allow(deprecated)]
     pub fn limits(&self) -> &ConnectionLimits {
         &self.limits
     }
@@ -975,14 +985,17 @@ impl ConnectionCounters {
         }
     }
 
+    #[allow(deprecated)]
     fn check_max_pending_outgoing(&self) -> Result<(), ConnectionLimit> {
         Self::check(self.pending_outgoing, self.limits.max_pending_outgoing)
     }
 
+    #[allow(deprecated)]
     fn check_max_pending_incoming(&self) -> Result<(), ConnectionLimit> {
         Self::check(self.pending_incoming, self.limits.max_pending_incoming)
     }
 
+    #[allow(deprecated)]
     fn check_max_established(&self, endpoint: &ConnectedPoint) -> Result<(), ConnectionLimit> {
         // Check total connection limit.
         Self::check(self.num_established(), self.limits.max_established_total)?;
@@ -999,10 +1012,12 @@ impl ConnectionCounters {
         }
     }
 
+    #[allow(deprecated)]
     fn check_max_established_per_peer(&self, current: u32) -> Result<(), ConnectionLimit> {
         Self::check(current, self.limits.max_established_per_peer)
     }
 
+    #[allow(deprecated)]
     fn check(current: u32, limit: Option<u32>) -> Result<(), ConnectionLimit> {
         if let Some(limit) = limit {
             if current >= limit {
@@ -1027,6 +1042,7 @@ fn num_peer_established<TInEvent>(
 ///
 /// By default no connection limits apply.
 #[derive(Debug, Clone, Default)]
+#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
 pub struct ConnectionLimits {
     max_pending_incoming: Option<u32>,
     max_pending_outgoing: Option<u32>,
@@ -1036,6 +1052,7 @@ pub struct ConnectionLimits {
     max_established_total: Option<u32>,
 }
 
+#[allow(deprecated)]
 impl ConnectionLimits {
     /// Configures the maximum number of concurrently incoming connections being established.
     pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
