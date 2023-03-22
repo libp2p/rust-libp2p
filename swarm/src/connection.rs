@@ -67,6 +67,16 @@ impl ConnectionId {
     )]
     pub const DUMMY: ConnectionId = ConnectionId(0);
 
+    /// Creates an _unchecked_ [`ConnectionId`].
+    ///
+    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
+    /// This constructor does not, hence the _unchecked_.
+    ///
+    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    pub fn new_unchecked(id: usize) -> Self {
+        Self(id)
+    }
+
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))

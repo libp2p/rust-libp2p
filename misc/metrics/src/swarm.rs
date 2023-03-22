@@ -223,7 +223,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             };
                         }
                     }
-
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
                     #[allow(deprecated)]
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
@@ -250,6 +250,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     }
                 };
             }
+            #[allow(deprecated)]
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
                 self.connected_to_banned_peer
                     .get_or_create(&AddressLabels {
