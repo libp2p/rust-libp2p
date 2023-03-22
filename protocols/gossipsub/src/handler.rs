@@ -216,7 +216,6 @@ impl Handler {
             return;
         }
 
-        self.outbound_substream_establishing = false;
         self.outbound_substreams_created += 1;
 
         // update the known kind of peer
@@ -517,6 +516,10 @@ impl ConnectionHandler for Handler {
             Self::OutboundOpenInfo,
         >,
     ) {
+        if event.is_outbound() {
+            self.outbound_substream_establishing = false;
+        }
+
         if event.is_inbound() && self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, disable the handler.
             self.keep_alive = KeepAlive::No;
@@ -539,8 +542,6 @@ impl ConnectionHandler for Handler {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                self.outbound_substream_establishing = false;
-
                 match error {
                     ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout.");
