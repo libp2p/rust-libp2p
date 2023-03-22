@@ -13,9 +13,11 @@ use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
 use libp2p::{
-    identity, mplex, noise, ping, quic, swarm::SwarmBuilder, tcp, tls, webrtc, yamux,
-    InboundUpgradeExt, Multiaddr, OutboundUpgradeExt, PeerId, Transport as _,
+    identity, mplex, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, InboundUpgradeExt,
+    Multiaddr, OutboundUpgradeExt, PeerId, Transport as _,
 };
+use libp2p_quic as quic;
+use libp2p_webrtc as webrtc;
 use redis::AsyncCommands;
 
 #[tokio::main]
