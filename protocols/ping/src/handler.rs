@@ -413,7 +413,8 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::ProtocolsChange(_) => {}
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

@@ -248,6 +248,14 @@ where
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
                     return Poll::Ready(Err(ConnectionError::Handler(err)));
                 }
+                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
+                    handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        ProtocolsChange {
+                            protocols: &protocols,
+                        },
+                    ));
+                    continue;
+                }
             }
 
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
@@ -368,7 +376,7 @@ where
                         new_protocols.sort();
 
                         if supported_protocols != &new_protocols {
-                            handler.on_connection_event(ConnectionEvent::ProtocolsChange(
+                            handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                                 ProtocolsChange {
                                     protocols: &new_protocols,
                                 },
@@ -883,7 +891,8 @@ mod tests {
                 }
                 ConnectionEvent::AddressChange(_)
                 | ConnectionEvent::ListenUpgradeError(_)
-                | ConnectionEvent::ProtocolsChange(_) => {}
+                | ConnectionEvent::LocalProtocolsChange(_)
+                | ConnectionEvent::RemoteProtocolsChange(_) => {}
             }
         }
 
@@ -947,9 +956,8 @@ mod tests {
                 Self::OutboundOpenInfo,
             >,
         ) {
-            if let ConnectionEvent::ProtocolsChange(ProtocolsChange { protocols }) = event {
-                self.reported_protocols = protocols
-                    .to_vec();
+            if let ConnectionEvent::LocalProtocolsChange(ProtocolsChange { protocols }) = event {
+                self.reported_protocols = protocols.to_vec();
             }
         }
 

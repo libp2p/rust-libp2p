@@ -318,9 +318,18 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::ProtocolsChange(supported_protocols) => {
+            ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
                 for h in self.handlers.values_mut() {
-                    h.on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols));
+                    h.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        supported_protocols,
+                    ));
+                }
+            }
+            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        supported_protocols,
+                    ));
                 }
             }
         }

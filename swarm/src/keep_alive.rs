@@ -137,7 +137,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ProtocolsChange(_) => {}
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

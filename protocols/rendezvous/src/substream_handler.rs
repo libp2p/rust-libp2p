@@ -397,7 +397,8 @@ where
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::DialUpgradeError(_)
-            | ConnectionEvent::ProtocolsChange(_) => {}
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 

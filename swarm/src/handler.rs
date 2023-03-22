@@ -210,8 +210,10 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
-    /// The [`ConnectionHandler`] now supports a different set of protocols.
-    ProtocolsChange(ProtocolsChange<'a>),
+    /// The local [`ConnectionHandler`] now supports a different set of protocols.
+    LocalProtocolsChange(ProtocolsChange<'a>),
+    /// The remote [`ConnectionHandler`] now supports a different set of protocols.
+    RemoteProtocolsChange(ProtocolsChange<'a>),
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about
@@ -241,7 +243,7 @@ pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
-/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
 #[derive(Clone, Copy)]
 pub struct ProtocolsChange<'a> {
     pub protocols: &'a [String],
@@ -338,7 +340,7 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
 }
 
 /// Event produced by a handler.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
@@ -355,6 +357,15 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// the connection, return [`KeepAlive::No`] in
     /// [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
+
+    /// We learned that the remote supports the provided protocols on this connection.
+    ///
+    /// This list will directly be passed back to the [`ConnectionHandler`] in [`ConnectionHandler::on_connection_event`].
+    /// Due to the composed nature of [`ConnectionHandler`]s,
+    /// this mechanism effectively shares this list with all other handlers on a connection.
+    ///
+    /// Other handlers MAY use this to preemptively enable / disable themselves.
+    ReportRemoteProtocols { protocols: Vec<String> },
 
     /// Other event.
     Custom(TCustom),
@@ -381,6 +392,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
+                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            }
         }
     }
 
@@ -401,6 +415,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
+                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            }
         }
     }
 
@@ -418,6 +435,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
+                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            }
         }
     }
 
@@ -435,6 +455,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
+            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
+                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            }
         }
     }
 }

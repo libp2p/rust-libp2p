@@ -127,7 +127,7 @@ impl ConnectionHandler for Handler {
                     .boxed(),
             ),
 
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ProtocolsChange(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::LocalProtocolsChange(_) => {}
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 info: Command { id, .. },
                 error,
@@ -147,6 +147,7 @@ impl ConnectionHandler for Handler {
                     },
                 }
             }
+            ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 

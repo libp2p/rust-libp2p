@@ -400,6 +400,9 @@ where
                         .map_info(Either::Left),
                 });
             }
+            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
+                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols });
+            }
             Poll::Pending => (),
         };
 
@@ -416,6 +419,9 @@ where
                         .map_upgrade(|u| Either::Right(SendWrapper(u)))
                         .map_info(Either::Right),
                 });
+            }
+            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
+                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols });
             }
             Poll::Pending => (),
         };
@@ -477,11 +483,25 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::ProtocolsChange(supported_protocols) => {
+            ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
                 self.proto1
-                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols));
+                    .on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        supported_protocols,
+                    ));
                 self.proto2
-                    .on_connection_event(ConnectionEvent::ProtocolsChange(supported_protocols));
+                    .on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        supported_protocols,
+                    ));
+            }
+            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
+                self.proto1
+                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        supported_protocols,
+                    ));
+                self.proto2
+                    .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        supported_protocols,
+                    ));
             }
         }
     }

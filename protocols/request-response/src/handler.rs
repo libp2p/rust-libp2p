@@ -425,7 +425,9 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ProtocolsChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

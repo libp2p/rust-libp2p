@@ -788,7 +788,26 @@ where
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::ProtocolsChange(_) => {}
+            | ConnectionEvent::LocalProtocolsChange(_) => {}
+            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange { protocols }) => {
+                // TODO: We should cache this / it will get simpler with #2831.
+                let kademlia_protocols = self
+                    .config
+                    .protocol_config
+                    .protocol_names()
+                    .iter()
+                    .filter_map(|b| String::from_utf8(b.to_vec()).ok())
+                    .collect::<Vec<_>>();
+
+                let remote_supports_our_kademlia_protocols =
+                    kademlia_protocols.iter().all(|p| protocols.contains(p));
+
+                if remote_supports_our_kademlia_protocols {
+                    self.protocol_status = ProtocolStatus::Confirmed;
+                } else {
+                    self.protocol_status = ProtocolStatus::NotSupported;
+                }
+            }
         }
     }
 }

@@ -104,7 +104,9 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 void::unreachable(info)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ProtocolsChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
                 match error {
                     ConnectionHandlerUpgrErr::Timeout => {}

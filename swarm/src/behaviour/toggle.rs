@@ -368,7 +368,10 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            ConnectionEvent::ProtocolsChange(_) => {
+            ConnectionEvent::LocalProtocolsChange(_) => {
+                todo!()
+            }
+            ConnectionEvent::RemoteProtocolsChange(_) => {
                 todo!()
             }
         }
