@@ -13,9 +13,11 @@ use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
 use libp2p::{
-    identity, mplex, noise, ping, quic, tcp, tls, webrtc, yamux, InboundUpgradeExt, Multiaddr,
-    OutboundUpgradeExt, PeerId, Swarm, Transport as _,
+    identity, mplex, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, InboundUpgradeExt,
+    Multiaddr, OutboundUpgradeExt, PeerId, Transport as _,
 };
+use libp2p_quic as quic;
+use libp2p_webrtc as webrtc;
 use redis::AsyncCommands;
 
 #[tokio::main]
@@ -78,14 +80,15 @@ async fn main() -> Result<()> {
         ),
     };
 
-    let mut swarm = Swarm::with_tokio_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         boxed_transport,
         Behaviour {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
         },
         local_peer_id,
-    );
+    )
+    .build();
 
     let mut conn = client.get_async_connection().await?;
 

@@ -23,7 +23,7 @@ pub use generic::{
 };
 use instant::Instant;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::net::IpAddr;
 
 /// Allows rate limiting access to some resource based on the [`PeerId`] and

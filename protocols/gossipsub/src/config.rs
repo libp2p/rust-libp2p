@@ -22,7 +22,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 
 use crate::types::{FastMessageId, Message, MessageId, RawMessage};
 

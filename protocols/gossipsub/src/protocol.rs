@@ -31,9 +31,8 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{
-    identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
-};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
@@ -563,7 +562,7 @@ mod tests {
     use crate::Behaviour;
     use crate::IdentTopic as Topic;
     use libp2p_core::identity::Keypair;
-    use quickcheck::*;
+    use quickcheck_ext::*;
 
     #[derive(Clone, Debug)]
     struct Message(RawMessage);
@@ -574,7 +573,7 @@ mod tests {
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = Config::default();
-            let gs: Behaviour =
+            let mut gs: Behaviour =
                 Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))

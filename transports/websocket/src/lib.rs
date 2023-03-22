@@ -287,7 +287,8 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
+    use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
+    use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
     #[test]
