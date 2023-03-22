@@ -29,7 +29,7 @@ thiserror = "1.0"
 void = "1"
 
 [dev-dependencies]
-clap = { version = "4.1.6", features = ["derive"] }
+clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10.0"
 libp2p-identify = { path = "../../protocols/identify" }
 libp2p-noise = { path = "../../transports/noise" }

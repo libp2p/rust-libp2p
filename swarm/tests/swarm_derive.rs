@@ -434,6 +434,27 @@ fn generated_out_event_derive_debug() {
 }
 
 #[test]
+fn multiple_behaviour_attributes() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "FooEvent")]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo {
+        ping: ping::Behaviour,
+    }
+
+    require_net_behaviour::<Foo>();
+
+    struct FooEvent;
+
+    impl From<ping::Event> for FooEvent {
+        fn from(_: ping::Event) -> Self {
+            unimplemented!()
+        }
+    }
+}
+
+#[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p_identity::PeerId;
     use libp2p_swarm::{ConnectionId, NetworkBehaviourAction, PollParameters};
