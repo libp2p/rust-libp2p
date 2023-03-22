@@ -555,11 +555,9 @@ impl ConnectionHandler for Handler {
                 self.outbound_substream_establishing = false;
 
                 match error {
-                    // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                     ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout.");
                     }
-                    // There was an error post negotiation, close the connection.
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
                         void::unreachable(e)
                     }
