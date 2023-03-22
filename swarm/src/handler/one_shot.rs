@@ -213,7 +213,8 @@ where
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 if self.pending_error.is_none() {
-                    self.pending_error = Some(error);
+                    log::debug!("DialUpgradeError: {error}");
+                    self.keep_alive = KeepAlive::No;
                 }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}

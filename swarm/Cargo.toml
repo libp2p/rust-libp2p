@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = "1.62.0"
 description = "The libp2p swarm"
-version = "0.42.0"
+version = "0.42.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -13,16 +13,15 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.6.0"
 fnv = "1.0"
-futures = "0.3.26"
+futures = "0.3.27"
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../core" }
+libp2p-identity = { version = "0.1.0", path = "../identity" }
 libp2p-swarm-derive = { version = "0.32.0", path = "../swarm-derive", optional = true }
 log = "0.4"
-pin-project = "1.0.0"
 rand = "0.8"
 smallvec = "1.6.1"
-thiserror = "1.0"
 void = "1"
 wasm-bindgen-futures = { version = "0.4.34", optional = true }
 getrandom = { version = "0.2.3", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
@@ -41,12 +40,14 @@ wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.6.0"
 env_logger = "0.10"
-futures = "0.3.26"
+futures = "0.3.27"
 libp2p-identify = { path = "../protocols/identify" }
+libp2p-identity = { version = "0.1.0", path = "../identity", features = ["ed25519"] }
 libp2p-kad = { path = "../protocols/kad" }
 libp2p-ping = { path = "../protocols/ping" }
 libp2p-plaintext = { path = "../transports/plaintext" }
 libp2p-swarm-derive = { path = "../swarm-derive" }
+libp2p-swarm-test = { path = "../swarm-test" }
 libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 void = "1"

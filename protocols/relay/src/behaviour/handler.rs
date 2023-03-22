@@ -20,7 +20,7 @@
 
 use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
-use crate::message_proto::Status;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use bytes::Bytes;
 use either::Either;
@@ -30,7 +30,8 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
@@ -58,12 +59,12 @@ pub enum In {
     },
     DenyReservationReq {
         inbound_reservation_req: inbound_hop::ReservationReq,
-        status: Status,
+        status: proto::Status,
     },
     DenyCircuitReq {
         circuit_id: Option<CircuitId>,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
+        status: proto::Status,
     },
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
@@ -208,7 +209,7 @@ pub enum Event {
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
+        status: proto::Status,
         error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// An inbound circuit has closed.
@@ -522,12 +523,14 @@ impl Handler {
         >,
     ) {
         let (non_fatal_error, status) = match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                (ConnectionHandlerUpgrErr::Timeout, Status::ConnectionFailed)
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                (ConnectionHandlerUpgrErr::Timer, Status::ConnectionFailed)
-            }
+            ConnectionHandlerUpgrErr::Timeout => (
+                ConnectionHandlerUpgrErr::Timeout,
+                proto::Status::CONNECTION_FAILED,
+            ),
+            ConnectionHandlerUpgrErr::Timer => (
+                ConnectionHandlerUpgrErr::Timer,
+                proto::Status::CONNECTION_FAILED,
+            ),
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => {
@@ -556,10 +559,10 @@ impl Handler {
                 outbound_stop::UpgradeError::CircuitFailed(error) => {
                     let status = match error {
                         outbound_stop::CircuitFailedReason::ResourceLimitExceeded => {
-                            Status::ResourceLimitExceeded
+                            proto::Status::RESOURCE_LIMIT_EXCEEDED
                         }
                         outbound_stop::CircuitFailedReason::PermissionDenied => {
-                            Status::PermissionDenied
+                            proto::Status::PERMISSION_DENIED
                         }
                     };
                     (

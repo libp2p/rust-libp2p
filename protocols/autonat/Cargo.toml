@@ -3,15 +3,12 @@ name = "libp2p-autonat"
 edition = "2021"
 rust-version = "1.62.0"
 description = "NAT and firewall detection for libp2p"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
-
-[build-dependencies]
-prost-build = "0.11"
 
 [dependencies]
 async-trait = "0.1"
@@ -21,19 +18,21 @@ instant = "0.1"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 libp2p-request-response = { version = "0.24.0", path = "../request-response" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4"
 rand = "0.8"
-prost = "0.11"
+quick-protobuf = "0.8"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-clap = { version = "4.1.6", features = ["derive"] }
+clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-swarm = { path = "../../swarm", features = ["async-std", "macros"] }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

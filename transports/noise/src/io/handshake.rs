@@ -20,9 +20,9 @@
 
 //! Noise protocol handshake I/O.
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod payload_proto {
-    include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
+mod proto {
+    include!("../generated/mod.rs");
+    pub use self::payload::proto::NoiseHandshakePayload;
 }
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
@@ -30,8 +30,8 @@ use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
-use libp2p_core::identity;
-use prost::Message;
+use libp2p_identity as identity;
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
 
 /// The identity of the remote established during a handshake.
@@ -170,7 +170,8 @@ where
     T: AsyncRead + Unpin,
 {
     let msg = recv(state).await?;
-    let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])?;
+    let mut reader = BytesReader::from_bytes(&msg[..]);
+    let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..])?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
@@ -194,7 +195,7 @@ pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::NoiseHandshakePayload {
+    let mut pb = proto::NoiseHandshakePayload {
         identity_key: state.identity.public.to_protobuf_encoding(),
         ..Default::default()
     };
@@ -203,10 +204,11 @@ where
         pb.identity_sig = sig.clone()
     }
 
-    let mut msg = Vec::with_capacity(pb.encoded_len());
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    #[allow(deprecated)]
+    let mut msg = Vec::with_capacity(pb.get_size());
 
+    let mut writer = Writer::new(&mut msg);
+    pb.write_message(&mut writer).expect("Encoding to succeed");
     state.io.send(&msg).await?;
 
     Ok(())
@@ -217,16 +219,16 @@ pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseErr
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::NoiseHandshakePayload::default();
+    let mut pb = proto::NoiseHandshakePayload::default();
 
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
     }
 
-    let mut msg = Vec::with_capacity(pb.encoded_len());
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    let mut msg = Vec::with_capacity(pb.get_size());
 
+    let mut writer = Writer::new(&mut msg);
+    pb.write_message(&mut writer).expect("Encoding to succeed");
     state.io.send(&msg).await?;
 
     Ok(())

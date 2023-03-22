@@ -37,49 +37,108 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
-}
-
-mod envelope_proto {
-    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
-}
-
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod peer_record_proto {
-    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::{
+        envelope_proto::*, peer_record_proto::mod_PeerRecord::*, peer_record_proto::PeerRecord,
+    };
 }
 
 /// Multi-address re-export.
 pub use multiaddr;
+use std::fmt;
+use std::fmt::Formatter;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-mod peer_id;
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub mod identity {
+    pub use libp2p_identity::Keypair;
+    pub use libp2p_identity::PublicKey;
+
+    pub mod ed25519 {
+        pub use libp2p_identity::ed25519::Keypair;
+        pub use libp2p_identity::ed25519::PublicKey;
+        pub use libp2p_identity::ed25519::SecretKey;
+    }
+
+    #[cfg(feature = "ecdsa")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `ecdsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
+    pub mod ecdsa {
+        pub use libp2p_identity::ecdsa::Keypair;
+        pub use libp2p_identity::ecdsa::PublicKey;
+        pub use libp2p_identity::ecdsa::SecretKey;
+    }
+
+    #[cfg(feature = "secp256k1")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `secp256k1` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
+    pub mod secp256k1 {
+        pub use libp2p_identity::secp256k1::Keypair;
+        pub use libp2p_identity::secp256k1::PublicKey;
+        pub use libp2p_identity::secp256k1::SecretKey;
+    }
+
+    #[cfg(feature = "rsa")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `rsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
+    pub mod rsa {
+        pub use libp2p_identity::rsa::Keypair;
+        pub use libp2p_identity::rsa::PublicKey;
+    }
+
+    pub mod error {
+        pub use libp2p_identity::DecodingError;
+        pub use libp2p_identity::SigningError;
+    }
+}
+
 mod translation;
 
 pub mod connection;
 pub mod either;
-pub mod identity;
 pub mod muxing;
 pub mod peer_record;
 pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
 
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type PublicKey = libp2p_identity::PublicKey;
+
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type PeerId = libp2p_identity::PeerId;
+
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type ParseError = libp2p_identity::ParseError;
+
 pub use connection::{ConnectedPoint, Endpoint};
-pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
-pub use peer_id::ParseError;
-pub use peer_id::PeerId;
 pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+#[derive(Debug, thiserror::Error)]
+pub struct DecodeError(String);
+
+impl From<quick_protobuf::Error> for DecodeError {
+    fn from(e: quick_protobuf::Error) -> Self {
+        Self(e.to_string())
+    }
+}
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}

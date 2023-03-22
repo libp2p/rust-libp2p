@@ -20,7 +20,7 @@
 
 use crate::topic::TopicHash;
 use crate::types::{MessageId, RawMessage};
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use log::{debug, trace};
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
@@ -218,7 +218,7 @@ mod tests {
     use super::*;
     use crate::types::RawMessage;
     use crate::{IdentTopic as Topic, TopicHash};
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
 
     fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawMessage) {
         let default_id = |message: &RawMessage| {

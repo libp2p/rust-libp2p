@@ -23,8 +23,8 @@ use crate::{META_QUERY_SERVICE_FQDN, SERVICE_NAME_FQDN};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
-    PeerId,
 };
+use libp2p_identity::PeerId;
 use std::time::Instant;
 use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
 use trust_dns_proto::{
