@@ -106,6 +106,8 @@ pub mod derive_prelude {
 
 #[allow(deprecated)]
 pub use crate::connection::ConnectionLimit;
+#[allow(deprecated)]
+pub use behaviour::NetworkBehaviourAction;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
     ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
