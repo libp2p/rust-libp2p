@@ -2434,7 +2434,6 @@ dependencies = [
  "ed25519-dalek",
  "libsecp256k1",
  "log",
- "multiaddr",
  "multihash",
  "p256 0.12.0",
  "prost",
