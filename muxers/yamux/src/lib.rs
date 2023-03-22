@@ -340,12 +340,3 @@ where
 #[derive(Debug, Error)]
 #[error(transparent)]
 pub struct YamuxError(#[from] ConnectionError);
-
-impl From<YamuxError> for io::Error {
-    fn from(err: YamuxError) -> Self {
-        match err.0 {
-            ConnectionError::Io(e) => e,
-            e => io::Error::new(io::ErrorKind::Other, e),
-        }
-    }
-}
