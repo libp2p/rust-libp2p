@@ -541,27 +541,33 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                        log::debug!("Dial upgrade error: Protocol negotiation timeout.");
-                    }
-                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
-                        void::unreachable(e)
-                    }
-                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                        NegotiationError::Failed,
-                    )) => {
-                        // The protocol is not supported
-                        self.protocol_unsupported = true;
-                        log::debug!(
-                            "The remote peer does not support gossipsub on this connection"
-                        );
-                    }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
+                ..
+            }) => {
+                log::debug!("Dial upgrade error: Protocol negotiation timeout.");
+            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                ..
+            }) => void::unreachable(e),
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error:
+                    ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)),
+                ..
+            }) => {
+                // The protocol is not supported
+                self.protocol_unsupported = true;
+                log::debug!("The remote peer does not support gossipsub on this connection");
+            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                error:
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                         NegotiationError::ProtocolError(e),
-                    )) => log::debug!("Protocol negotiation failed: {e}"),
-                }
+                    )),
+                ..
+            }) => {
+                log::debug!("Protocol negotiation failed: {e}")
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
