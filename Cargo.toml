@@ -8,6 +8,7 @@ members = [
     "examples/identify",
     "examples/ipfs-kad",
     "examples/ipfs-private",
+    "examples/metrics",
     "examples/ping-example",
     "examples/rendezvous",
     "identity",
