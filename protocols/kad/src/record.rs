@@ -161,13 +161,14 @@ impl ProviderRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SHA_256_MH;
     use quickcheck::*;
     use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary(g: &mut Gen) -> Key {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            Key::from(Multihash::wrap(0x12, &hash).unwrap())
+            Key::from(Multihash::wrap(SHA_256_MH, &hash).unwrap())
         }
     }
 
