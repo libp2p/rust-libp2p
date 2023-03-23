@@ -439,6 +439,7 @@ impl ConnectionHandler for Handler {
                         }
                         Poll::Ready(Err(e)) => {
                             log::debug!("Outbound substream error while sending output: {e}");
+                            self.outbound_substream = None;
                             break;
                         }
                         Poll::Pending => {
@@ -462,6 +463,7 @@ impl ConnectionHandler for Handler {
                         }
                         Poll::Ready(Err(e)) => {
                             log::debug!("Outbound substream error while flushing output: {e}");
+                            self.outbound_substream = None;
                             break;
                         }
                         Poll::Pending => {
@@ -484,6 +486,7 @@ impl ConnectionHandler for Handler {
                         }
                         Poll::Ready(Err(e)) => {
                             log::debug!("Outbound substream error while closing: {e}");
+                            self.outbound_substream = None;
                             break;
                         }
                         Poll::Pending => {
