@@ -2,7 +2,10 @@
 
 - Signed messages now use sequential integers in the sequence number field.
   See [PR 3551].
+- Modify the flood publishing behaviour to publish to extra peers on the next
+  heartbeat. See [PR 3665].
 
+[PR 3665]: https://github.com/libp2p/rust-libp2p/pull/3665
 [PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
 
 # 0.44.1
