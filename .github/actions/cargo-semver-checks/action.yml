@@ -20,7 +20,7 @@ runs:
     - shell: bash
       run: |
         rustc --version | tee .rustc-version
-        cargo semver-checks | tee .semver-checks-version
+        cargo semver-checks --version | tee .semver-checks-version
 
     - uses: actions/cache@v3
       with:
