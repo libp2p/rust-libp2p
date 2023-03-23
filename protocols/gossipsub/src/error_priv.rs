@@ -95,6 +95,7 @@ pub enum HandlerError {
     #[deprecated(note = "This error will no longer be emitted")]
     #[error("The maximum number of outbound substreams created has been exceeded.")]
     MaxOutboundSubstreams,
+    #[deprecated(note = "This error will no longer be emitted")]
     #[error("The message exceeds the maximum transmission size.")]
     MaxTransmissionSize,
     #[deprecated(note = "This error will no longer be emitted")]

@@ -335,21 +335,12 @@ impl ConnectionHandler for Handler {
                             return Poll::Ready(ConnectionHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
-                            match error {
-                                HandlerError::MaxTransmissionSize => {
-                                    log::warn!("Message exceeded the maximum transmission size");
-                                    self.inbound_substream =
-                                        Some(InboundSubstreamState::WaitingInput(substream));
-                                }
-                                _ => {
-                                    log::warn!("Inbound stream error: {}", error);
-                                    // More serious errors, close this side of the stream. If the
-                                    // peer is still around, they will re-establish their
-                                    // connection
-                                    self.inbound_substream =
-                                        Some(InboundSubstreamState::Closing(substream));
-                                }
-                            }
+                            log::warn!("Inbound stream error: {}", error);
+                            // Close this side of the stream. If the
+                            // peer is still around, they will re-establish their
+                            // connection
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
@@ -422,11 +413,6 @@ impl ConnectionHandler for Handler {
                                 Ok(()) => {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
-                                }
-                                Err(HandlerError::MaxTransmissionSize) => {
-                                    log::error!("Message exceeded the maximum transmission size and was not sent.");
-                                    self.outbound_substream =
-                                        Some(OutboundSubstreamState::WaitingOutput(substream));
                                 }
                                 Err(e) => {
                                     log::debug!(
