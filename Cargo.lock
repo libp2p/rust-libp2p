@@ -2363,7 +2363,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.44.1"
+version = "0.44.2"
 dependencies = [
  "async-std",
  "asynchronous-codec",
