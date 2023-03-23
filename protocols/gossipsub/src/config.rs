@@ -56,6 +56,19 @@ pub enum Version {
     V1_1,
 }
 
+//// Selector for types of flood publishing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FloodPublish {
+    /// Flood publishing is disabled.
+    Disabled,
+    /// Flood publishing is enabled. Messages are sent immediately to all peers in the mesh and
+    /// flood messages are queued to be published in the next heartbeat up to a maximum number of
+    /// peers. If 0 is set, this publish to all known peers in the next heartbeat.
+    Heartbeat(usize),
+    /// Flood publishing is enabled and messages are immediately published to all peers on the topic.
+    Rapid,
+}
+
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
 pub struct Config {
@@ -86,7 +99,7 @@ pub struct Config {
     prune_backoff: Duration,
     unsubscribe_backoff: Duration,
     backoff_slack: u32,
-    flood_publish: bool,
+    flood_publish: FloodPublish,
     graft_flood_threshold: Duration,
     mesh_outbound_min: usize,
     opportunistic_graft_ticks: u64,
@@ -310,11 +323,12 @@ impl Config {
         self.backoff_slack
     }
 
-    /// Whether to do flood publishing or not. If enabled newly created messages will always be
+    /// Whether to enable flood publishing and the method for flood publishing. If enabled newly created messages will always be
     /// sent to all peers that are subscribed to the topic and have a good enough score.
-    /// The default is true.
-    pub fn flood_publish(&self) -> bool {
-        self.flood_publish
+    /// The default is FloodPublish::Heartbeat(0), which will flood publish to all known peers in the
+    /// next heartbeat.
+    pub fn flood_publish(&self) -> &FloodPublish {
+        &self.flood_publish
     }
 
     /// If a GRAFT comes before `graft_flood_threshold` has elapsed since the last PRUNE,
@@ -448,7 +462,7 @@ impl Default for ConfigBuilder {
                 prune_backoff: Duration::from_secs(60),
                 unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,
-                flood_publish: true,
+                flood_publish: FloodPublish::Heartbeat(0),
                 graft_flood_threshold: Duration::from_secs(10),
                 mesh_outbound_min: 2,
                 opportunistic_graft_ticks: 60,
@@ -701,7 +715,7 @@ impl ConfigBuilder {
     /// Whether to do flood publishing or not. If enabled newly created messages will always be
     /// sent to all peers that are subscribed to the topic and have a good enough score.
     /// The default is true.
-    pub fn flood_publish(&mut self, flood_publish: bool) -> &mut Self {
+    pub fn flood_publish(&mut self, flood_publish: FloodPublish) -> &mut Self {
         self.config.flood_publish = flood_publish;
         self
     }

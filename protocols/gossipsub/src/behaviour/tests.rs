@@ -631,9 +631,9 @@ fn test_publish_without_flood_publishing() {
     // - Send publish message to all peers
     // - Insert message into gs.mcache and gs.received
 
-    //turn off flood publish to test old behaviour
+    // Turn off flood publish to test old behaviour
     let config = ConfigBuilder::default()
-        .flood_publish(false)
+        .flood_publish(FloodPublish::Disabled)
         .build()
         .unwrap();
 
@@ -715,7 +715,7 @@ fn test_fanout() {
 
     //turn off flood publish to test fanout behaviour
     let config = ConfigBuilder::default()
-        .flood_publish(false)
+        .flood_publish(FloodPublish::Disabled)
         .build()
         .unwrap();
 
@@ -2104,6 +2104,7 @@ fn test_unsubscribe_backoff() {
 
 #[test]
 fn test_flood_publish() {
+    let _ = env_logger::try_init();
     let config: Config = Config::default();
 
     let topic = "test";
@@ -2114,9 +2115,12 @@ fn test_flood_publish() {
         .to_subscribe(true)
         .create_network();
 
-    //publish message
+    // publish message
     let publish_data = vec![0; 42];
     gs.publish(Topic::new(topic), publish_data).unwrap();
+
+    // Wait a heartbeat
+    gs.heartbeat();
 
     // Collect all publish messages
     let publishes = gs
@@ -2148,7 +2152,6 @@ fn test_flood_publish() {
 
     let msg_id = gs.config.message_id(message);
 
-    let config: Config = Config::default();
     assert_eq!(
         publishes.len(),
         config.mesh_n_high() + 10,
@@ -2788,7 +2791,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
 #[test]
 fn test_do_not_publish_to_peer_below_publish_threshold() {
     let config = ConfigBuilder::default()
-        .flood_publish(false)
+        .flood_publish(FloodPublish::Disabled)
         .build()
         .unwrap();
     let peer_score_params = PeerScoreParams::default();
@@ -2851,33 +2854,37 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
 
 #[test]
 fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
-    let config = Config::default();
+    let _ = env_logger::try_init();
+    let config = ConfigBuilder::default()
+        .flood_publish(FloodPublish::Rapid)
+        .build()
+        .unwrap();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
         publish_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
         ..PeerScoreThresholds::default()
     };
-    //build mesh with no peers
+    // Build mesh with no peers
     let (mut gs, _, topics) = inject_nodes1()
         .topics(vec!["test".into()])
         .gs_config(config)
         .scoring(Some((peer_score_params, peer_score_thresholds)))
         .create_network();
 
-    //add two additional peers that will be added to the mesh
+    // add two additional peers that will be added to the mesh
     let p1 = add_peer(&mut gs, &topics, false, false);
     let p2 = add_peer(&mut gs, &topics, false, false);
 
-    //reduce score of p1 below peer_score_thresholds.publish_threshold
-    //note that penalties get squared so two penalties means a score of
+    // reduce score of p1 below peer_score_thresholds.publish_threshold
+    // note that penalties get squared so two penalties means a score of
     // 4 * peer_score_params.behaviour_penalty_weight.
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p1, 2);
 
-    //reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
+    // Reduce score of p2 below 0 but not below peer_score_thresholds.publish_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    //a heartbeat will remove the peers from the mesh
+    // a heartbeat will remove the peers from the mesh
     gs.heartbeat();
 
     // publish on topic
@@ -2901,7 +2908,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
             _ => collected_publish,
         });
 
-    //assert only published to p2
+    // assert only published to p2
     assert_eq!(publishes.len(), 1);
     assert!(publishes[0].0 == p2);
 }
@@ -4793,7 +4800,8 @@ fn test_iwant_penalties() {
 #[test]
 fn test_publish_to_floodsub_peers_without_flood_publish() {
     let config = ConfigBuilder::default()
-        .flood_publish(false)
+        .flood_publish(FloodPublish::Disabled)
+        .support_floodsub()
         .build()
         .unwrap();
     let (mut gs, _, topics) = inject_nodes1()
@@ -4850,7 +4858,8 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
 #[test]
 fn test_do_not_use_floodsub_in_fanout() {
     let config = ConfigBuilder::default()
-        .flood_publish(false)
+        .flood_publish(FloodPublish::Disabled)
+        .support_floodsub()
         .build()
         .unwrap();
     let (mut gs, _, _) = inject_nodes1()
@@ -4863,7 +4872,7 @@ fn test_do_not_use_floodsub_in_fanout() {
     let topic = Topic::new("test");
     let topics = vec![topic.hash()];
 
-    //add two floodsub peer, one explicit, one implicit
+    // Add two floodsub peer, one explicit, one implicit
     let p1 = add_peer_with_addr_and_kind(
         &mut gs,
         &topics,
@@ -4874,7 +4883,7 @@ fn test_do_not_use_floodsub_in_fanout() {
     );
     let p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
-    //publish a message
+    // Publish a message
     let publish_data = vec![0; 42];
     gs.publish(Topic::new("test"), publish_data).unwrap();
 

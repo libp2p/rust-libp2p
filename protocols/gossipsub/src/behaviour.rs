@@ -32,7 +32,7 @@ use std::{
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{seq::SliceRandom, thread_rng, Rng};
 
 use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
 use libp2p_identity::Keypair;
@@ -46,7 +46,7 @@ use libp2p_swarm::{
 use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
-use crate::config::{Config, ValidationMode};
+use crate::config::{Config, FloodPublish, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -301,6 +301,10 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Short term cache for fast message ids mapping them to the real message ids
     fast_message_id_cache: TimeCache<FastMessageId, MessageId>,
 
+    /// When flood publishing, we delay publishing to some peers until the next heartbeat.
+    /// This stores the messages and the peers we are required to publish to.
+    messages_to_flood_publish: Vec<(MessageId, HashSet<PeerId>)>,
+
     /// The filter used to handle message subscriptions.
     subscription_filter: F,
 
@@ -421,7 +425,6 @@ where
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
-            fast_message_id_cache: TimeCache::new(config.duplicate_cache_time()),
             topic_peers: HashMap::new(),
             peer_topics: HashMap::new(),
             explicit_peers: HashSet::new(),
@@ -448,6 +451,8 @@ where
             pending_iwant_msgs: HashSet::new(),
             connected_peers: HashMap::new(),
             published_message_ids: DuplicateCache::new(config.published_message_ids_cache_time()),
+            fast_message_id_cache: TimeCache::new(config.duplicate_cache_time()),
+            messages_to_flood_publish: Vec::with_capacity(16),
             config,
             subscription_filter,
             data_transform,
@@ -604,18 +609,6 @@ where
             topic: raw_message.topic.clone(),
         });
 
-        let event = Rpc {
-            subscriptions: Vec::new(),
-            messages: vec![raw_message.clone()],
-            control_msgs: Vec::new(),
-        }
-        .into_protobuf();
-
-        // check that the size doesn't exceed the max transmission size
-        if event.get_size() > self.config.max_transmit_size() {
-            return Err(PublishError::MessageTooLarge);
-        }
-
         // Check the if the message has been published before
         if self.duplicate_cache.contains(&msg_id) {
             // This message has already been seen. We don't re-publish messages that have already
@@ -631,89 +624,176 @@ where
 
         let topic_hash = raw_message.topic.clone();
 
-        // If we are not flood publishing forward the message to mesh peers.
-        let mesh_peers_sent = !self.config.flood_publish()
-            && self.forward_msg(&msg_id, raw_message.clone(), None, HashSet::new())?;
+        // Forward the message to all mesh peers
+        let non_zero_mesh_peers =
+            self.forward_msg(&msg_id, raw_message.clone(), None, HashSet::new())?;
 
+        if !non_zero_mesh_peers {
+            warn!(
+                "Insufficient mesh peers for publishing on mesh. Msg-id: {}",
+                msg_id
+            );
+        }
+
+        // Build a list of auxiliary peers we may need to send to.
+        // The recipient peers are peers we need to send to immediately and are in addition to the
+        // mesh peers we have already sent to. We may optionally need to later send to some
+        // optional peers for flood publishing.
         let mut recipient_peers = HashSet::new();
+        let mut flood_publish_peers = HashSet::new();
+
+        // If there are peers we know about in this topic
         if let Some(set) = self.topic_peers.get(&topic_hash) {
-            if self.config.flood_publish() {
-                // Forward to all peers above score and all explicit peers
-                recipient_peers.extend(
-                    set.iter()
-                        .filter(|p| {
-                            self.explicit_peers.contains(*p)
-                                || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
-                        })
-                        .cloned(),
-                );
-            } else {
-                // Explicit peers
-                for peer in &self.explicit_peers {
-                    if set.contains(peer) {
-                        recipient_peers.insert(*peer);
-                    }
+            // If we are flood publishing to all peers in a rapid manner, we just add all peers
+            // (including explicit peers) that are above the publish threshold.
+            match self.config.flood_publish() {
+                FloodPublish::Rapid => {
+                    recipient_peers.extend(
+                        set.iter()
+                            .filter(|p| {
+                                self.explicit_peers.contains(*p)
+                                    || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
+                            })
+                            .cloned(),
+                    );
                 }
+                FloodPublish::Heartbeat(_) | FloodPublish::Disabled => {
+                    // We need to build the list of recipient peers according to the spec and optionally
+                    // add in peers to flood publish to after.
 
-                // Floodsub peers
-                for (peer, connections) in &self.connected_peers {
-                    if connections.kind == PeerKind::Floodsub
-                        && !self
-                            .score_below_threshold(peer, |ts| ts.publish_threshold)
-                            .0
-                    {
-                        recipient_peers.insert(*peer);
-                    }
-                }
-
-                // Gossipsub peers
-                if self.mesh.get(&topic_hash).is_none() {
-                    debug!("Topic: {:?} not in the mesh", topic_hash);
-                    // If we have fanout peers add them to the map.
-                    if self.fanout.contains_key(&topic_hash) {
-                        for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
-                            recipient_peers.insert(*peer);
-                        }
-                    } else {
-                        // We have no fanout peers, select mesh_n of them and add them to the fanout
-                        let mesh_n = self.config.mesh_n();
-                        let new_peers = get_random_peers(
-                            &self.topic_peers,
-                            &self.connected_peers,
-                            &topic_hash,
-                            mesh_n,
+                    // Send to any floodsub peers, if flood sub is supported.
+                    if self.config.support_floodsub() {
+                        for (peer, connections) in &self.connected_peers {
+                            if connections.kind == PeerKind::Floodsub
+                                && !self
+                                    .score_below_threshold(peer, |ts| ts.publish_threshold)
+                                    .0
+                                && set.contains(peer)
                             {
-                                |p| {
-                                    !self.explicit_peers.contains(p)
-                                        && !self
-                                            .score_below_threshold(p, |pst| pst.publish_threshold)
-                                            .0
-                                }
-                            },
-                        );
-                        // Add the new peers to the fanout and recipient peers
-                        self.fanout.insert(topic_hash.clone(), new_peers.clone());
-                        for peer in new_peers {
-                            debug!("Peer added to fanout: {:?}", peer);
-                            recipient_peers.insert(peer);
+                                recipient_peers.insert(*peer);
+                            }
                         }
                     }
-                    // We are publishing to fanout peers - update the time we published
-                    self.fanout_last_pub
-                        .insert(topic_hash.clone(), Instant::now());
+
+                    // Send to any non-mesh gossipsub peers (i.e fanout peers)
+                    if self.mesh.get(&topic_hash).is_none() {
+                        debug!("Topic: {:?} not in the mesh", topic_hash);
+                        // If we have fanout peers add them to the map.
+                        if self.fanout.contains_key(&topic_hash) {
+                            for peer in self.fanout.get(&topic_hash).expect("Topic must exist") {
+                                recipient_peers.insert(*peer);
+                            }
+                        } else {
+                            // We have no fanout peers, select mesh_n of them and add them to the fanout
+                            let mesh_n = self.config.mesh_n();
+                            let new_peers = get_random_peers(
+                                &self.topic_peers,
+                                &self.connected_peers,
+                                &topic_hash,
+                                mesh_n,
+                                {
+                                    |p| {
+                                        !self.explicit_peers.contains(p)
+                                            && !self
+                                                .score_below_threshold(p, |pst| {
+                                                    pst.publish_threshold
+                                                })
+                                                .0
+                                    }
+                                },
+                            );
+                            // Add the new peers to the fanout and recipient peers
+                            self.fanout.insert(topic_hash.clone(), new_peers.clone());
+                            for peer in new_peers {
+                                debug!("Peer added to fanout: {:?}", peer);
+                                recipient_peers.insert(peer);
+                            }
+                        }
+                        // We are publishing to fanout peers - update the time we published
+                        self.fanout_last_pub
+                            .insert(topic_hash.clone(), Instant::now());
+                    }
+
+                    // May need to queue messages to flood publish too.
+                    if let FloodPublish::Heartbeat(max_peers_to_send_to) =
+                        self.config.flood_publish()
+                    {
+                        // We collect up to max_peers_to_send additional peers from our known peers
+                        // list
+                        let mut peer_list = set
+                            .iter()
+                            .filter(|p| {
+                                // Do not include peers we are already sending too
+                                !self.mesh.get(&topic_hash).map(|peers| peers.contains(*p)).unwrap_or(false) &&
+                                    // Do not include peers we have already added to the recipient peers
+                                !recipient_peers.contains(*p) &&
+                                    // We have already included explicit peers, so just make sure
+                                    // these peers are above threshold 
+                                        !self.score_below_threshold(p, |ts| ts.publish_threshold).0
+                            })
+                            .collect::<Vec<_>>();
+
+                        // If we flood publish to everyone, add them all to the list.
+                        if *max_peers_to_send_to == 0 || *max_peers_to_send_to >= peer_list.len() {
+                            flood_publish_peers.extend(peer_list);
+                        } else {
+                            // We have to randomly sample peers from the list.
+                            // The amount we are sampling must be less than the eligible
+                            // peers
+                            let mut sampled = 0;
+                            let mut rng = rand::thread_rng();
+                            while sampled < *max_peers_to_send_to {
+                                let index = rng.gen_range(0..peer_list.len());
+                                flood_publish_peers.insert(peer_list.swap_remove(index).clone());
+                                sampled += 1;
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        if recipient_peers.is_empty() && !mesh_peers_sent {
+        // If there are no peers to send to, report an error.
+        if !non_zero_mesh_peers && recipient_peers.is_empty() && flood_publish_peers.is_empty() {
             return Err(PublishError::InsufficientPeers);
         }
 
-        // If the message isn't a duplicate and we have sent it to some peers add it to the
-        // duplicate cache and memcache.
-        self.duplicate_cache.insert(msg_id.clone());
+        // There are additional peers to send to. Some are immediate, others are queued for the
+        // next heartbeat.
+
+        let recipient_peers_non_empty = !recipient_peers.is_empty();
+
+        // Publish to the immediate peers
+        // NOTE: A message always exists as it is constructed above.
+        self.publish_message(&msg_id, recipient_peers, raw_message.clone())?;
+
+        if non_zero_mesh_peers || recipient_peers_non_empty {
+            // We have sent this message to at least one peer.
+            debug!("Published message: {:?}", &msg_id);
+
+            // If the message isn't a duplicate and we have sent it to some peers add it to the
+            // duplicate cache and memcache.
+            self.duplicate_cache.insert(msg_id.clone());
+        }
+
+        // We intend to send this to at least one peer so we add it to the cache.
         self.mcache.put(&msg_id, raw_message);
 
+        // Queue the message for flood publishing peers (if there are any)
+        if !flood_publish_peers.is_empty() {
+            self.messages_to_flood_publish
+                .push((msg_id.clone(), flood_publish_peers));
+        }
+        Ok(msg_id)
+    }
+
+    /// Helper function to publish a message to a set of peers.
+    fn publish_message(
+        &mut self,
+        msg_id: &MessageId,
+        recipient_peers: HashSet<PeerId>,
+        raw_message: RawMessage,
+    ) -> Result<(), PublishError> {
         // If the message is anonymous or has a random author add it to the published message ids
         // cache.
         if let PublishConfig::RandomAuthor | PublishConfig::Anonymous = self.publish_config {
@@ -722,24 +802,52 @@ where
             }
         }
 
-        // Send to peers we know are subscribed to the topic.
+        // Send to the recipient list
+        let topic_hash = raw_message.topic.clone();
+        let event = Rpc {
+            subscriptions: Vec::new(),
+            messages: vec![raw_message],
+            control_msgs: Vec::new(),
+        }
+        .into_protobuf();
         let msg_bytes = event.get_size();
-        for peer_id in recipient_peers.iter() {
-            trace!("Sending message to peer: {:?}", peer_id);
-            self.send_message(*peer_id, event.clone())?;
-
-            if let Some(m) = self.metrics.as_mut() {
-                m.msg_sent(&topic_hash, msg_bytes);
+        let mut sent_to_a_peer = false;
+        for peer_id in recipient_peers.into_iter() {
+            // NOTE: There is a delay between calculating which peers to send to and actually sending
+            // the message. This creates a race condition in which peers can unsubscribe or
+            // disconnect. We need to check the peers are still connected before sending the
+            // message.
+            if self
+                .peer_topics
+                .get(&peer_id)
+                .map(|t| t.contains(&topic_hash))
+                .unwrap_or(false)
+            {
+                trace!("Sending message to peer: {:?}", peer_id);
+                self.send_message(peer_id, event.clone())?;
+                sent_to_a_peer = true;
+                if let Some(m) = self.metrics.as_mut() {
+                    m.msg_sent(&topic_hash, msg_bytes);
+                }
             }
         }
-
-        debug!("Published message: {:?}", &msg_id);
 
         if let Some(metrics) = self.metrics.as_mut() {
             metrics.register_published_message(&topic_hash);
         }
 
-        Ok(msg_id)
+        // There is a case where we have no mesh peers, but attempt to send to flood publish peers,
+        // which disconnect before we are able to send to them. In this case we don't want to
+        // prevent future publishing, so emit adding the message id to the duplicate cache.
+        //
+        // If we did manage to send to a peer, we add the message to the duplicate cache.
+        // This can double up, but duplicates don't exist in this cache, so there shouldn't be an
+        // issue here.
+        if sent_to_a_peer {
+            self.duplicate_cache.insert(msg_id.clone());
+        }
+
+        Ok(())
     }
 
     /// This function should be called when [`Config::validate_messages()`] is `true` after
@@ -2483,6 +2591,22 @@ where
         // piggyback pooled control messages
         self.flush_control_pool();
 
+        // Before shifting the memcache, attempt to publish any messages that are required for
+        // flood publishing.
+        while !self.messages_to_flood_publish.is_empty() {
+            let (msg_id, peer_list) = self
+                .messages_to_flood_publish
+                .pop()
+                .expect("Vector is not empty");
+
+            // Get the actual message from the memcache and send it to the peer list.
+            if let Some(raw_message) = self.mcache.get(&msg_id) {
+                // We ignore publish errors here as flood publishing is an optional feature.
+                let _ = self.publish_message(&msg_id, peer_list, raw_message.clone());
+            }
+        }
+        self.messages_to_flood_publish.shrink_to(16);
+
         // shift the memcache
         self.mcache.shift();
 
@@ -2726,21 +2850,30 @@ where
             }
         }
 
+        // NOTE: This provides the check for publishing messages. It is located here to avoid
+        // double protobuf encoding. When forwarding messages, this cannot occur as an oversized
+        // message will not be docoded to forward.
+        let topic_hash = message.topic.clone();
+        let event = Rpc {
+            subscriptions: Vec::new(),
+            messages: vec![message],
+            control_msgs: Vec::new(),
+        }
+        .into_protobuf();
+
+        // check that the size doesn't exceed the max transmission size
+        if event.get_size() > self.config.max_transmit_size() {
+            return Err(PublishError::MessageTooLarge);
+        }
+
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = Rpc {
-                subscriptions: Vec::new(),
-                messages: vec![message.clone()],
-                control_msgs: Vec::new(),
-            }
-            .into_protobuf();
-
             let msg_bytes = event.get_size();
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
                 if let Some(m) = self.metrics.as_mut() {
-                    m.msg_sent(&message.topic, msg_bytes);
+                    m.msg_sent(&topic_hash, msg_bytes);
                 }
             }
             debug!("Completed forwarding message");
