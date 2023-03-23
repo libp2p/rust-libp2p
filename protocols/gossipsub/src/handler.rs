@@ -21,7 +21,7 @@
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
-use crate::{HandlerError, ValidationError};
+use crate::ValidationError;
 use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
@@ -238,7 +238,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = HandlerIn;
     type OutEvent = HandlerEvent;
-    type Error = HandlerError;
+    type Error = crate::error_priv::HandlerError; // TODO: Replace this with `Void`.
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = proto::RPC;

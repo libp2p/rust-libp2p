@@ -89,19 +89,14 @@ impl From<SigningError> for PublishError {
 /// Errors that can occur in the protocols handler.
 #[derive(Debug, Error)]
 pub enum HandlerError {
-    #[deprecated(note = "This error will no longer be emitted")]
     #[error("The maximum number of inbound substreams created has been exceeded.")]
     MaxInboundSubstreams,
-    #[deprecated(note = "This error will no longer be emitted")]
     #[error("The maximum number of outbound substreams created has been exceeded.")]
     MaxOutboundSubstreams,
-    #[deprecated(note = "This error will no longer be emitted")]
     #[error("The message exceeds the maximum transmission size.")]
     MaxTransmissionSize,
-    #[deprecated(note = "This error will no longer be emitted")]
     #[error("Protocol negotiation timeout.")]
     NegotiationTimeout,
-    #[deprecated(note = "This error will no longer be emitted")]
     #[error("Protocol negotiation failed.")]
     NegotiationProtocolError(ProtocolError),
     #[error("Failed to encode or decode")]
@@ -138,12 +133,6 @@ impl std::fmt::Display for ValidationError {
 }
 
 impl std::error::Error for ValidationError {}
-
-impl From<std::io::Error> for HandlerError {
-    fn from(error: std::io::Error) -> HandlerError {
-        HandlerError::Codec(quick_protobuf_codec::Error::from(error))
-    }
-}
 
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {

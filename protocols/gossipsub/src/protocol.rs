@@ -24,8 +24,8 @@ use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
+use crate::ValidationError;
 use crate::{rpc_proto::proto, Config};
-use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -273,18 +273,18 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = proto::RPC;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
-        Ok(self.codec.encode(item, dst)?)
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        self.codec.encode(item, dst)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, HandlerError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let rpc = match self.codec.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
