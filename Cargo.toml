@@ -2,6 +2,7 @@
 members = [
     "core",
     "examples/chat-example",
+    "examples/autonat",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
