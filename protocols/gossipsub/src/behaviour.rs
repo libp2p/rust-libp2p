@@ -651,7 +651,11 @@ where
                     recipient_peers.extend(
                         set.iter()
                             .filter(|p| {
-                                self.explicit_peers.contains(*p)
+                                self.mesh
+                                    .get(&topic_hash)
+                                    .map(|peers| !peers.contains(*p))
+                                    .unwrap_or(true)
+                                    && self.explicit_peers.contains(*p)
                                     || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
                             })
                             .cloned(),
@@ -724,12 +728,12 @@ where
                             .iter()
                             .filter(|p| {
                                 // Do not include peers we are already sending too
-                                !self.mesh.get(&topic_hash).map(|peers| peers.contains(*p)).unwrap_or(false) &&
+                                self.mesh.get(&topic_hash).map(|peers| !peers.contains(*p)).unwrap_or(true) &&
                                     // Do not include peers we have already added to the recipient peers
                                 !recipient_peers.contains(*p) &&
                                     // We have already included explicit peers, so just make sure
                                     // these peers are above threshold 
-                                        !self.score_below_threshold(p, |ts| ts.publish_threshold).0
+                                !self.score_below_threshold(p, |ts| ts.publish_threshold).0
                             })
                             .collect::<Vec<_>>();
 
