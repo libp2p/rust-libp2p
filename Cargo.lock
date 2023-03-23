@@ -2715,20 +2715,16 @@ version = "0.15.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "clap 4.1.11",
  "either",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
  "libp2p-core",
- "libp2p-identify",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-swarm",
- "libp2p-tcp",
  "libp2p-yamux",
  "log",
  "quick-protobuf",
@@ -4053,6 +4049,18 @@ name = "regex-syntax"
 version = "0.6.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
+
+[[package]]
+name = "relay-server-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap 4.1.11",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+]
 
 [[package]]
 name = "rendezvous-example"
