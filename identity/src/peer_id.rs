@@ -25,6 +25,11 @@ use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
 use thiserror::Error;
 
+/// Local type-alias for multihash.
+///
+/// Must be big enough to accommodate for `MAX_INLINE_KEY_LENGTH`.
+/// 64 satisfies that and can hold 512 bit hashes which is what the ecosystem typically uses.
+/// Given that this appears in our type-signature, using a "common" number here makes us more compatible.
 type Multihash = MultihashGeneric<64>;
 
 #[cfg(feature = "serde")]
