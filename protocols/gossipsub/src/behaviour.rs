@@ -748,7 +748,7 @@ where
                             let mut rng = rand::thread_rng();
                             while sampled < *max_peers_to_send_to {
                                 let index = rng.gen_range(0..peer_list.len());
-                                flood_publish_peers.insert(peer_list.swap_remove(index).clone());
+                                flood_publish_peers.insert(*peer_list.swap_remove(index));
                                 sampled += 1;
                             }
                         }
