@@ -1,0 +1,45 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://libp2p.io/benchmark.schema.json",
+    "title": "Benchmark Results",
+    "description": "Results from a benchmark run",
+    "type": "object",
+    "properties": {
+        "benchmarks": {
+            "description": "A list of benchmark results",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "description": "The name of this benchmark",
+                        "type": "string"
+                    },
+                    "unit": {
+                        "description": "The unit for the result",
+                        "enum": [
+                            "bits/s",
+                            "s"
+                        ]
+                    },
+                    "result": {
+                        "description": "String encoded result. Parse as float64",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name",
+                    "unit",
+                    "result",
+                    "implementation",
+                    "stack",
+                    "version"
+                ]
+            }
+        }
+    },
+    "required": [
+        "benchmarks",
+        "productName"
+    ]
+}

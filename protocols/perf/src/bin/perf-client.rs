@@ -30,6 +30,12 @@ use libp2p_identity::PeerId;
 use libp2p_perf::client::{RunParams, RunStats, RunTimers};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use log::info;
+use serde::{Deserialize, Serialize};
+
+schemafy::schemafy!(
+    root: BenchmarkResults
+        "src/benchmark-data-schema.json"
+);
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf client")]
@@ -51,14 +57,27 @@ async fn main() -> Result<()> {
         Box::new(ConnectionsPerSecond {}),
     ];
 
+    let mut results = vec![];
+
     for benchmark in benchmarks {
         info!(
             "{}",
             format!("Start benchmark: {}", benchmark.name()).underline(),
         );
 
-        benchmark.run(opts.server_address.clone()).await?;
+        let result = benchmark.run(opts.server_address.clone()).await?;
+        if let Some(result) = result {
+            results.push(result);
+        }
     }
+
+    println!(
+        "{}",
+        serde_json::to_string(&BenchmarkResults {
+            benchmarks: results,
+        })
+        .unwrap()
+    );
 
     Ok(())
 }
@@ -67,7 +86,10 @@ async fn main() -> Result<()> {
 trait Benchmark {
     fn name(&self) -> &'static str;
 
-    async fn run(&self, server_address: Multiaddr) -> Result<()>;
+    async fn run(
+        &self,
+        server_address: Multiaddr,
+    ) -> Result<Option<BenchmarkResultsItemBenchmarks>>;
 }
 
 struct Latency {}
@@ -78,7 +100,10 @@ impl Benchmark for Latency {
         "round-trip-time latency"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<()> {
+    async fn run(
+        &self,
+        server_address: Multiaddr,
+    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -129,7 +154,7 @@ impl Benchmark for Latency {
         info!("Finished: {num} pings",);
         info!("- {:.4} s median", percentile(&latencies, 0.50),);
         info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -146,7 +171,10 @@ impl Benchmark for Throughput {
         "single connection single channel throughput"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<()> {
+    async fn run(
+        &self,
+        server_address: Multiaddr,
+    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -191,7 +219,11 @@ impl Benchmark for Throughput {
         info!("- {sent_bandwidth_mebibit_second:.2} MiBit/s up");
         info!("- {receive_bandwidth_mebibit_second:.2} MiBit/s down\n");
 
-        Ok(())
+        Ok(Some(BenchmarkResultsItemBenchmarks {
+            name: "Single Connection throughput – Upload".to_string(),
+            unit: serde_json::Value::String("bits/s".to_string()),
+            result: (stats.params.to_send as f64 / sent_time).to_string(),
+        }))
     }
 }
 
@@ -203,7 +235,10 @@ impl Benchmark for RequestsPerSecond {
         "single connection parallel requests per second"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<()> {
+    async fn run(
+        &self,
+        server_address: Multiaddr,
+    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -257,7 +292,7 @@ impl Benchmark for RequestsPerSecond {
         );
         info!("- {requests_per_second:.2} req/s\n");
 
-        Ok(())
+        Ok(None)
     }
 }
 
@@ -269,7 +304,10 @@ impl Benchmark for ConnectionsPerSecond {
         "sequential connections with single request per second"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<()> {
+    async fn run(
+        &self,
+        server_address: Multiaddr,
+    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
         let num = 100;
         let to_send = 1;
         let to_receive = 1;
@@ -321,7 +359,12 @@ impl Benchmark for ConnectionsPerSecond {
         info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
         info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
-        Ok(())
+        Ok(Some(BenchmarkResultsItemBenchmarks {
+            name: "Single Connection 1 byte round trip latency 100 runs 95th percentile"
+                .to_string(),
+            unit: serde_json::Value::String("s".to_string()),
+            result: connection_establishment_plus_request_95th.to_string(),
+        }))
     }
 }
 
