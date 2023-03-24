@@ -188,6 +188,10 @@ impl Handler {
         match output {
             future::Either::Left(remote_info) => {
                 self.events
+                    .push(ConnectionHandlerEvent::ReportRemoteProtocols {
+                        protocols: remote_info.protocols.clone(),
+                    });
+                self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
@@ -307,6 +311,10 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(info) = res {
+                self.events
+                    .push(ConnectionHandlerEvent::ReportRemoteProtocols {
+                        protocols: info.protocols.clone(),
+                    });
                 return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
             }
         }
