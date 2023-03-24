@@ -9,9 +9,15 @@
 - Deprecate `Swarm::ban_peer_id` in favor of the new `libp2p::allow_block_list` module.
   See [PR 3590].
 
+- Rename `NetworkBehaviourAction` to `ToSwarm`.
+  A deprecated type-alias is provided to ease the transition.
+  The new name is meant to better indicate the message-passing relationship between `Swarm` and `NetworkBehaviour`.
+  See [PR XXXX].
+
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3652]: https://github.com/libp2p/rust-libp2p/pull/3652
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.42.0
 

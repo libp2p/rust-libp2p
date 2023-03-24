@@ -31,8 +31,8 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -252,7 +252,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -307,7 +307,7 @@ where
             let event = Event::Discovered(DiscoveredAddrsIter {
                 inner: discovered.into_iter(),
             });
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
@@ -326,7 +326,7 @@ where
             let event = Event::Expired(ExpiredAddrsIter {
                 inner: expired.into_iter(),
             });
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = P::Timer::at(closest_expiration);
