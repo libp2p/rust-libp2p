@@ -31,6 +31,7 @@ use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ProtocolsChange,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -92,10 +93,12 @@ pub struct KademliaHandler<TUserData> {
 enum ProtocolStatus {
     /// It is as yet unknown whether the remote supports the
     /// configured protocol name.
-    Unconfirmed,
+    Unknown,
     /// The configured protocol name has been confirmed by the remote
     /// but has not yet been reported to the `Kademlia` behaviour.
     Confirmed,
+    /// The configured protocol name(s) are not or no longer supported by the remote.
+    NotSupported,
     /// The configured protocol has been confirmed by the remote
     /// and the confirmation reported to the `Kademlia` behaviour.
     Reported,
@@ -226,13 +229,11 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerEvent<TUserData> {
     /// The configured protocol name has been confirmed by the peer through
-    /// a successfully negotiated substream.
-    ///
-    /// This event is only emitted once by a handler upon the first
-    /// successfully negotiated inbound or outbound substream and
-    /// indicates that the connected peer participates in the Kademlia
-    /// overlay network identified by the configured protocol name.
+    /// a successfully negotiated substream or by learning the supported protocols of the remote.
     ProtocolConfirmed { endpoint: ConnectedPoint },
+    /// The configured protocol name(s) are not or no longer supported by the peer on the provided
+    /// connection and it should be removed from the routing table.
+    ProtocolNotSupported { endpoint: ConnectedPoint },
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -501,7 +502,7 @@ where
             num_requested_outbound_streams: 0,
             requested_streams: Default::default(),
             keep_alive,
-            protocol_status: ProtocolStatus::Unconfirmed,
+            protocol_status: ProtocolStatus::Unknown,
         }
     }
 
@@ -520,7 +521,7 @@ where
                 protocol, msg, user_data,
             ));
         self.num_requested_outbound_streams -= 1;
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -542,7 +543,7 @@ where
             future::Either::Right(p) => void::unreachable(p),
         };
 
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -789,7 +790,25 @@ where
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_) => {}
-            ConnectionEvent::RemoteProtocolsChange(_) => {}
+            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange { protocols }) => {
+                // TODO: We should cache this / it will get simpler with #2831.
+                let kademlia_protocols = self
+                    .config
+                    .protocol_config
+                    .protocol_names()
+                    .iter()
+                    .filter_map(|b| String::from_utf8(b.to_vec()).ok())
+                    .collect::<Vec<_>>();
+
+                let remote_supports_our_kademlia_protocols =
+                    kademlia_protocols.iter().all(|p| protocols.contains(p));
+
+                if remote_supports_our_kademlia_protocols {
+                    self.protocol_status = ProtocolStatus::Confirmed;
+                } else {
+                    self.protocol_status = ProtocolStatus::NotSupported;
+                }
+            }
         }
     }
 }

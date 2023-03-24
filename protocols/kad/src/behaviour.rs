@@ -2074,6 +2074,14 @@ where
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
+            KademliaHandlerEvent::ProtocolNotSupported { endpoint } => {
+                let address = match endpoint {
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
+                    ConnectedPoint::Listener { .. } => None,
+                };
+                self.connection_updated(source, address, NodeStatus::Disconnected);
+            }
+
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
