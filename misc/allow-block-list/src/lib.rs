@@ -65,7 +65,7 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
@@ -261,9 +261,9 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(peer) = self.close_connections.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::CloseConnection {
+            return Poll::Ready(ToSwarm::CloseConnection {
                 peer_id: peer,
                 connection: CloseConnection::All,
             });

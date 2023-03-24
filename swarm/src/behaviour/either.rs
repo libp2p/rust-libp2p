@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{self, NetworkBehaviour, PollParameters, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
@@ -156,7 +156,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
