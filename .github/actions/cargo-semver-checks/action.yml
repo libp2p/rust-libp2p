@@ -17,10 +17,15 @@ runs:
         MAX_STABLE_VERSION=$(curl https://crates.io/api/v1/crates/${{ inputs.crate }} --silent | jq '.crate.max_stable_version')
         echo "version=${MAX_STABLE_VERSION}" >> $GITHUB_OUTPUT
 
+    - shell: bash
+      run: |
+        rustc --version | tee .rustc-version
+        cargo semver-checks --version | tee .semver-checks-version
+
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: semver-checks-cache-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
+        key: semver-checks-cache-${{ hashFiles('.rustc-version') }}-${{ hashFiles('.semver-checks-version') }}-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
 
     - run: cargo semver-checks check-release --package ${{ inputs.crate }} --verbose
       shell: bash
