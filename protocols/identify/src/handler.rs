@@ -32,6 +32,7 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ProtocolsChange,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -83,6 +84,8 @@ pub struct Handler {
 
     /// Address observed by or for the remote.
     observed_addr: Multiaddr,
+
+    local_supported_protocols: Vec<String>,
 }
 
 /// An event from `Behaviour` with the information requested by the `Handler`.
@@ -90,9 +93,6 @@ pub struct Handler {
 pub struct InEvent {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
-
-    /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<String>,
 
     /// The protocol w.r.t. the information requested.
     pub protocol: Protocol,
@@ -138,6 +138,7 @@ impl Handler {
             protocol_version,
             agent_version,
             observed_addr,
+            local_supported_protocols: vec![],
         }
     }
 
@@ -238,7 +239,6 @@ impl ConnectionHandler for Handler {
         &mut self,
         InEvent {
             listen_addrs,
-            supported_protocols,
             protocol,
         }: Self::InEvent,
     ) {
@@ -247,7 +247,7 @@ impl ConnectionHandler for Handler {
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs,
-            protocols: supported_protocols,
+            protocols: self.local_supported_protocols.clone(),
             observed_addr: self.observed_addr.clone(),
         };
 
@@ -344,9 +344,10 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::LocalProtocolsChange(ProtocolsChange { protocols }) => {
+                self.local_supported_protocols = protocols.to_vec();
+            }
             ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }

@@ -323,7 +323,7 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -344,7 +344,6 @@ impl NetworkBehaviour for Behaviour {
                         .chain(self.external_addresses.iter())
                         .cloned()
                         .collect(),
-                    supported_protocols: supported_protocols(params),
                     protocol: Protocol::Push,
                 },
             }),
@@ -361,7 +360,6 @@ impl NetworkBehaviour for Behaviour {
                         .chain(self.external_addresses.iter())
                         .cloned()
                         .collect(),
-                    supported_protocols: supported_protocols(params),
                     protocol: Protocol::Identify(connection_id),
                 },
             }),
@@ -486,15 +484,6 @@ pub enum Event {
         /// The error that occurred.
         error: ConnectionHandlerUpgrErr<UpgradeError>,
     },
-}
-
-fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
-    // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
-    // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
-    params
-        .supported_protocols()
-        .map(|p| String::from_utf8_lossy(&p).to_string())
-        .collect()
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as
