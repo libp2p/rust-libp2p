@@ -49,11 +49,12 @@ use async_std::io;
 use futures::{future::Either, prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity, mdns, noise, quic,
+    gossipsub, identity, mdns, noise,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
+use libp2p_quic as quic;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
