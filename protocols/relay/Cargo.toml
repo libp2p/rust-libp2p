@@ -29,14 +29,10 @@ thiserror = "1.0"
 void = "1"
 
 [dev-dependencies]
-clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10.0"
-libp2p-identify = { path = "../../protocols/identify" }
-libp2p-noise = { path = "../../transports/noise" }
 libp2p-ping = { path = "../../protocols/ping" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-swarm = { path = "../../swarm", features = ["macros"] }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
