@@ -26,6 +26,31 @@ async fn connection_to_node_in_client_mode_does_not_update_routing_table() {
     }
 }
 
+#[async_std::test]
+async fn two_servers_add_each_other_to_routing_table() {
+    let mut server1 = Swarm::new_ephemeral(MyBehaviour::server);
+    let mut server2 = Swarm::new_ephemeral(MyBehaviour::server);
+
+    server1.listen().await;
+    server2.listen().await;
+
+    server1.connect(&mut server2).await;
+
+    let server1_peer_id = *server1.local_peer_id();
+    let server2_peer_id = *server2.local_peer_id();
+
+    match libp2p_swarm_test::drive(&mut server1, &mut server2).await {
+        (
+            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_), MyBehaviourEvent::Kad(KademliaEvent::RoutingUpdated { peer: peer1, .. })],
+            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_), MyBehaviourEvent::Kad(KademliaEvent::UnroutablePeer { peer: peer2, .. })], // Unroutable because server2 did not dial.
+        ) => {
+            assert_eq!(peer1, server2_peer_id);
+            assert_eq!(peer2, server1_peer_id);
+        }
+        other => panic!("Unexpected events: {other:?}"),
+    }
+}
+
 #[derive(libp2p_swarm::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct MyBehaviour {
