@@ -31,8 +31,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
 use libp2p_swarm::{
-    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviourAction,
-    PollParameters,
+    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm,
 };
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
@@ -143,17 +142,13 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 
                 let mut actions = VecDeque::with_capacity(3);
 
-                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
-                    event,
-                )));
+                actions.push_back(ToSwarm::GenerateEvent(Event::OutboundProbe(event)));
 
                 if let Some(old) = self.handle_reported_status(response.result.clone().into()) {
-                    actions.push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::StatusChanged {
-                            old,
-                            new: self.nat_status.clone(),
-                        },
-                    ));
+                    actions.push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                        old,
+                        new: self.nat_status.clone(),
+                    }));
                 }
 
                 if let Ok(address) = response.result {
@@ -165,7 +160,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         .find_map(|r| (r.addr == address).then_some(r.score))
                         .unwrap_or(AddressScore::Finite(0));
                     if let AddressScore::Finite(finite_score) = score {
-                        actions.push_back(NetworkBehaviourAction::ReportObservedAddr {
+                        actions.push_back(ToSwarm::ReportObservedAddr {
                             address,
                             score: AddressScore::Finite(finite_score + 1),
                         });
@@ -191,7 +186,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 
                 self.schedule_probe.reset(Duration::ZERO);
 
-                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                VecDeque::from([ToSwarm::GenerateEvent(Event::OutboundProbe(
                     OutboundProbeEvent::Error {
                         probe_id,
                         peer: Some(peer),

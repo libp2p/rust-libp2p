@@ -412,7 +412,7 @@ fn test_subscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref message),
                 ..
             } => {
@@ -480,7 +480,7 @@ fn test_unsubscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref message),
                 ..
             } => {
@@ -668,7 +668,7 @@ fn test_publish_without_flood_publishing() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref message),
                 ..
             } => {
@@ -758,7 +758,7 @@ fn test_fanout() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref message),
                 ..
             } => {
@@ -811,7 +811,7 @@ fn test_inject_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref m),
                 ..
             } => !m.subscriptions.is_empty(),
@@ -821,7 +821,7 @@ fn test_inject_connected() {
 
     // check that there are two subscriptions sent to each peer
     for sevent in send_events.clone() {
-        if let NetworkBehaviourAction::NotifyHandler {
+        if let ToSwarm::NotifyHandler {
             event: HandlerIn::Message(ref m),
             ..
         } = sevent
@@ -1054,7 +1054,7 @@ fn test_handle_iwant_msg_cached() {
         .events
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
+            ToSwarm::NotifyHandler { event, .. } => {
                 if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
@@ -1112,7 +1112,7 @@ fn test_handle_iwant_msg_cached_shifted() {
 
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::NotifyHandler {
                 event: HandlerIn::Message(ref m),
                 ..
             } => {
@@ -1353,7 +1353,7 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
         + gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler {
+                ToSwarm::NotifyHandler {
                     peer_id,
                     event: HandlerIn::Message(ref m),
                     ..
@@ -1394,7 +1394,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
+            ToSwarm::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1435,7 +1435,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
+                ToSwarm::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1450,7 +1450,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
+                ToSwarm::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1574,7 +1574,7 @@ fn do_forward_messages_to_explicit_peers() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::NotifyHandler {
+                ToSwarm::NotifyHandler {
                     peer_id,
                     event: HandlerIn::Message(ref m),
                     ..
@@ -1830,7 +1830,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
+            ToSwarm::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();
@@ -2122,7 +2122,7 @@ fn test_flood_publish() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
+            ToSwarm::NotifyHandler { event, .. } => {
                 if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
@@ -2488,7 +2488,7 @@ fn test_ignore_px_from_negative_scored_peer() {
     assert_eq!(
         gs.events
             .iter()
-            .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
+            .filter(|e| matches!(e, ToSwarm::Dial { .. }))
             .count(),
         0
     );
@@ -2683,7 +2683,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         .events
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+            ToSwarm::NotifyHandler { event, peer_id, .. } => {
                 if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
@@ -2831,7 +2831,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+            ToSwarm::NotifyHandler { event, peer_id, .. } => {
                 if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
@@ -2888,7 +2888,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
+            ToSwarm::NotifyHandler { event, peer_id, .. } => {
                 if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
@@ -3012,7 +3012,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     assert_eq!(gs.events.len(), 1);
     assert!(matches!(
         gs.events[0],
-        NetworkBehaviourAction::GenerateEvent(Event::Subscribed { .. })
+        ToSwarm::GenerateEvent(Event::Subscribed { .. })
     ));
 
     let control_action = ControlAction::IHave {
@@ -3078,7 +3078,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
     assert_eq!(
         gs.events
             .iter()
-            .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
+            .filter(|e| matches!(e, ToSwarm::Dial { .. }))
             .count(),
         0
     );
@@ -3100,7 +3100,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
     assert!(
         gs.events
             .iter()
-            .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
+            .filter(|e| matches!(e, ToSwarm::Dial { .. }))
             .count()
             > 0
     );
@@ -4413,7 +4413,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
         gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler {
+                ToSwarm::NotifyHandler {
                     event: HandlerIn::Message(ref m),
                     ..
                 } => {
@@ -4819,7 +4819,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+            ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
                     if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
@@ -4876,7 +4876,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+            ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
                     if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
@@ -5190,7 +5190,7 @@ fn test_subscribe_and_graft_with_negative_score() {
     let forward_messages_to_p1 = |gs1: &mut Behaviour<_, _>, gs2: &mut Behaviour<_, _>| {
         //collect messages to p1
         let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
-            NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
+            ToSwarm::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == p1 {
                     if let HandlerIn::Message(m) = event {
                         Some(m)

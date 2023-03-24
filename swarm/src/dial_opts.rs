@@ -30,7 +30,7 @@ use std::num::NonZeroU8;
 /// Options to configure a dial to a known or unknown peer.
 ///
 /// Used in [`Swarm::dial`](crate::Swarm::dial) and
-/// [`NetworkBehaviourAction::Dial`](crate::behaviour::NetworkBehaviourAction::Dial).
+/// [`ToSwarm::Dial`](crate::behaviour::ToSwarm::Dial).
 ///
 /// To construct use either of:
 ///

@@ -31,8 +31,8 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -41,7 +41,7 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>>,
+    events: VecDeque<ToSwarm<Event, InEvent<(), inbound::InEvent, Void>>>,
     registrations: Registrations,
 }
 
@@ -150,7 +150,7 @@ impl NetworkBehaviour for Behaviour {
             handler::InboundOutEvent::InboundError { error, .. } => {
                 log::warn!("Connection with peer {} failed: {}", peer_id, error);
 
-                vec![NetworkBehaviourAction::CloseConnection {
+                vec![ToSwarm::CloseConnection {
                     peer_id,
                     connection: CloseConnection::One(connection),
                 }]
@@ -165,11 +165,11 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                Event::RegistrationExpired(registration),
-            ));
+            return Poll::Ready(ToSwarm::GenerateEvent(Event::RegistrationExpired(
+                registration,
+            )));
         }
 
         if let Some(event) = self.events.pop_front() {
@@ -203,7 +203,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
+) -> Vec<ToSwarm<Event, THandlerInEvent<Behaviour>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)
@@ -212,7 +212,7 @@ fn handle_inbound_event(
             let error = ErrorCode::NotAuthorized;
 
             vec![
-                NetworkBehaviourAction::NotifyHandler {
+                ToSwarm::NotifyHandler {
                     peer_id,
                     handler: NotifyHandler::One(connection),
                     event: handler::InboundInEvent::NotifyInboundSubstream {
@@ -220,7 +220,7 @@ fn handle_inbound_event(
                         message: inbound::InEvent::DeclineRegisterRequest(error),
                     },
                 },
-                NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
+                ToSwarm::GenerateEvent(Event::PeerNotRegistered {
                     peer: peer_id,
                     namespace: registration.namespace,
                     error,
@@ -233,7 +233,7 @@ fn handle_inbound_event(
             match registrations.add(registration) {
                 Ok(registration) => {
                     vec![
-                        NetworkBehaviourAction::NotifyHandler {
+                        ToSwarm::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::One(connection),
                             event: handler::InboundInEvent::NotifyInboundSubstream {
@@ -243,7 +243,7 @@ fn handle_inbound_event(
                                 },
                             },
                         },
-                        NetworkBehaviourAction::GenerateEvent(Event::PeerRegistered {
+                        ToSwarm::GenerateEvent(Event::PeerRegistered {
                             peer: peer_id,
                             registration,
                         }),
@@ -253,7 +253,7 @@ fn handle_inbound_event(
                     let error = ErrorCode::InvalidTtl;
 
                     vec![
-                        NetworkBehaviourAction::NotifyHandler {
+                        ToSwarm::NotifyHandler {
                             peer_id,
                             handler: NotifyHandler::One(connection),
                             event: handler::InboundInEvent::NotifyInboundSubstream {
@@ -261,7 +261,7 @@ fn handle_inbound_event(
                                 message: inbound::InEvent::DeclineRegisterRequest(error),
                             },
                         },
-                        NetworkBehaviourAction::GenerateEvent(Event::PeerNotRegistered {
+                        ToSwarm::GenerateEvent(Event::PeerNotRegistered {
                             peer: peer_id,
                             namespace,
                             error,
@@ -279,7 +279,7 @@ fn handle_inbound_event(
                 let discovered = registrations.cloned().collect::<Vec<_>>();
 
                 vec![
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection),
                         event: handler::InboundInEvent::NotifyInboundSubstream {
@@ -290,7 +290,7 @@ fn handle_inbound_event(
                             },
                         },
                     },
-                    NetworkBehaviourAction::GenerateEvent(Event::DiscoverServed {
+                    ToSwarm::GenerateEvent(Event::DiscoverServed {
                         enquirer: peer_id,
                         registrations: discovered,
                     }),
@@ -300,7 +300,7 @@ fn handle_inbound_event(
                 let error = ErrorCode::InvalidCookie;
 
                 vec![
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection),
                         event: handler::InboundInEvent::NotifyInboundSubstream {
@@ -308,7 +308,7 @@ fn handle_inbound_event(
                             message: inbound::InEvent::DeclineDiscoverRequest(error),
                         },
                     },
-                    NetworkBehaviourAction::GenerateEvent(Event::DiscoverNotServed {
+                    ToSwarm::GenerateEvent(Event::DiscoverNotServed {
                         enquirer: peer_id,
                         error,
                     }),
@@ -318,12 +318,10 @@ fn handle_inbound_event(
         inbound::OutEvent::UnregisterRequested(namespace) => {
             registrations.remove(namespace.clone(), peer_id);
 
-            vec![NetworkBehaviourAction::GenerateEvent(
-                Event::PeerUnregistered {
-                    peer: peer_id,
-                    namespace,
-                },
-            )]
+            vec![ToSwarm::GenerateEvent(Event::PeerUnregistered {
+                peer: peer_id,
+                namespace,
+            })]
         }
     }
 }
