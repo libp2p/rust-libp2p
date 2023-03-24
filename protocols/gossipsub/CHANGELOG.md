@@ -3,11 +3,7 @@
 - Signed messages now use sequential integers in the sequence number field.
   See [PR 3551].
 
-- Gracefully disable handler upon upgrade errors instead of closing the entire connection.
-  See [PR 3625].
-
 [PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
-[PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3625
 
 # 0.44.1
 
