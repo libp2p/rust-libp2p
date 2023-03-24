@@ -1107,7 +1107,7 @@ where
                                 error: &error,
                                 connection_id,
                             }));
-                        log::warn!("Incoming connection rejected: {:?}", connection_limit);
+                        log::debug!("Incoming connection rejected: {:?}", connection_limit);
                     }
                 };
             }
