@@ -27,7 +27,7 @@ use futures::{
     prelude::*,
 };
 use futures_timer::Delay;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::{
     pin::Pin,
     task::{Context, Poll},
