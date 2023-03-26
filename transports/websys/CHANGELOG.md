@@ -1,3 +1,3 @@
-# 0.1.6 - unreleased
+# 0.2.0 - unreleased
 
 - Add Websys Websocket transport.
