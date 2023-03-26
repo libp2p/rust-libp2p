@@ -46,34 +46,50 @@
 //! event and remove the expired peer from the list of known peers.
 
 use async_std::io;
-use futures::{prelude::*, select};
+use futures::{future::Either, prelude::*, select};
 use libp2p::{
-    gossipsub, identity, mdns,
+    core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
+    gossipsub, identity, mdns, noise,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId, Transport,
 };
+use libp2p_quic as quic;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
+// We create a custom network behaviour that combines Gossipsub and Mdns.
+#[derive(NetworkBehaviour)]
+struct MyBehaviour {
+    gossipsub: gossipsub::Behaviour,
+    mdns: mdns::async_io::Behaviour,
+}
+
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
+    let id_keys = identity::Keypair::generate_ed25519();
+    let local_peer_id = PeerId::from(id_keys.public());
     println!("Local peer id: {local_peer_id}");
 
     // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = libp2p::development_transport(local_key.clone()).await?;
-
-    // We create a custom network behaviour that combines Gossipsub and Mdns.
-    #[derive(NetworkBehaviour)]
-    struct MyBehaviour {
-        gossipsub: gossipsub::Behaviour,
-        mdns: mdns::async_io::Behaviour,
-    }
+    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
+        .upgrade(upgrade::Version::V1)
+        .authenticate(
+            noise::NoiseAuthenticated::xx(&id_keys).expect("signing libp2p-noise static keypair"),
+        )
+        .multiplex(yamux::YamuxConfig::default())
+        .timeout(std::time::Duration::from_secs(20))
+        .boxed();
+    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));
+    let transport = OrTransport::new(quic_transport, tcp_transport)
+        .map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed();
 
     // To content-address message, we can take the hash of message and use it as an ID.
     let message_id_fn = |message: &gossipsub::Message| {
@@ -92,14 +108,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // build a gossipsub network behaviour
     let mut gossipsub = gossipsub::Behaviour::new(
-        gossipsub::MessageAuthenticity::Signed(local_key),
+        gossipsub::MessageAuthenticity::Signed(id_keys),
         gossipsub_config,
     )
     .expect("Correct configuration");
-
     // Create a Gossipsub topic
     let topic = gossipsub::IdentTopic::new("test-net");
-
     // subscribes to our topic
     gossipsub.subscribe(&topic)?;
 
@@ -114,6 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
 
     // Listen on all interfaces and whatever port the OS assigns
+    swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
@@ -149,6 +164,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         "Got message: '{}' with id: {id} from peer: {peer_id}",
                         String::from_utf8_lossy(&message.data),
                     ),
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    println!("Local node is listening on {address}");
+                }
                 _ => {}
             }
         }

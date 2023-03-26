@@ -223,8 +223,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             };
                         }
                     }
-
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
                         record(OutgoingConnectionError::ConnectionLimit)
                     }
@@ -249,6 +250,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     }
                 };
             }
+            #[allow(deprecated)]
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
                 self.connected_to_banned_peer
                     .get_or_create(&AddressLabels {
@@ -371,6 +373,7 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
     fn from(error: &libp2p_swarm::ListenError) -> Self {
         match error {
             libp2p_swarm::ListenError::WrongPeerId { .. } => IncomingConnectionError::WrongPeerId,
+            #[allow(deprecated)]
             libp2p_swarm::ListenError::ConnectionLimit(_) => {
                 IncomingConnectionError::ConnectionLimit
             }
