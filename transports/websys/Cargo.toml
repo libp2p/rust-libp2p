@@ -1,11 +1,12 @@
 [package]
 name = "libp2p-websys-transport"
+edition = "2021"
+rust-version = "1.60.0"
+description = "libp2p transports for WASM browser runtime."
 version = "0.1.6"
 authors = ["Vince Vasta <vince.vasta@gmail.com>"]
-description = "libp2p transports for WASM browser runtime."
-repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
-edition = "2021"
+repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
