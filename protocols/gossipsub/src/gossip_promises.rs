@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
-use libp2p_core::PeerId;
+use crate::ValidationError;
+use libp2p_identity::PeerId;
 use log::debug;
 use std::collections::HashMap;
 use wasm_timer::Instant;

@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
-use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
+use crate::{ConnectedPoint, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -90,27 +92,32 @@ pub enum PendingConnectionError<TTransErr> {
 
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
+    #[deprecated(
+        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
+        since = "0.42.1"
+    )]
+    #[allow(deprecated)]
     ConnectionLimit(ConnectionLimit),
 
     /// Pending connection attempt has been aborted.
     Aborted,
 
     /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is the local one.
+    /// match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
 
-    /// An I/O error occurred on the connection.
-    // TODO: Eventually this should also be a custom error?
-    IO(io::Error),
+    /// The connection was dropped because it resolved to our own [`PeerId`].
+    LocalPeerId { endpoint: ConnectedPoint },
 }
 
 impl<T> PendingConnectionError<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
         match self {
             PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(l) => {
                 PendingConnectionError::ConnectionLimit(l)
             }
@@ -118,7 +125,9 @@ impl<T> PendingConnectionError<T> {
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 PendingConnectionError::WrongPeerId { obtained, endpoint }
             }
-            PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
+            PendingConnectionError::LocalPeerId { endpoint } => {
+                PendingConnectionError::LocalPeerId { endpoint }
+            }
         }
     }
 }
@@ -129,7 +138,6 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {err}"),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
                 write!(
@@ -137,6 +145,7 @@ where
                     "Pending connection: Transport error on connection: {err}"
                 )
             }
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {l}.")
             }
@@ -145,6 +154,9 @@ where
                     f,
                     "Pending connection: Unexpected peer ID {obtained} at {endpoint:?}."
                 )
+            }
+            PendingConnectionError::LocalPeerId { endpoint } => {
+                write!(f, "Pending connection: Local peer ID at {endpoint:?}.")
             }
         }
     }
@@ -156,10 +168,11 @@ where
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(_) => None,
             PendingConnectionError::WrongPeerId { .. } => None,
+            PendingConnectionError::LocalPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(..) => None,
         }
     }

@@ -19,9 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
+use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
+    THandlerInEvent, THandlerOutEvent,
+};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -45,7 +49,12 @@ fn one_field() {
         ping: ping::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -64,7 +73,12 @@ fn two_fields() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -87,7 +101,12 @@ fn three_fields() {
         kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -215,7 +234,12 @@ fn nested_derives_with_import() {
         foo: Foo,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -255,7 +279,12 @@ fn custom_event_emit_event_through_poll() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     async fn bar() {
         require_net_behaviour::<Foo>();
 
@@ -305,6 +334,44 @@ fn with_either() {
     #[allow(dead_code)]
     fn foo() {
         require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
+fn with_generics() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A, B> {
+        a: A,
+        b: B,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<
+            Foo<
+                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_ping::Behaviour,
+            >,
+        >();
+    }
+}
+
+#[test]
+fn with_generics_mixed() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A> {
+        a: A,
+        ping: libp2p_ping::Behaviour,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        );
     }
 }
 
@@ -367,12 +434,30 @@ fn generated_out_event_derive_debug() {
 }
 
 #[test]
+fn multiple_behaviour_attributes() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "FooEvent")]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo {
+        ping: ping::Behaviour,
+    }
+
+    require_net_behaviour::<Foo>();
+
+    struct FooEvent;
+
+    impl From<ping::Event> for FooEvent {
+        fn from(_: ping::Event) -> Self {
+            unimplemented!()
+        }
+    }
+}
+
+#[test]
 fn custom_out_event_no_type_parameters() {
-    use libp2p_core::connection::ConnectionId;
-    use libp2p_core::PeerId;
-    use libp2p_swarm::{
-        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
-    };
+    use libp2p_identity::PeerId;
+    use libp2p_swarm::{ConnectionId, PollParameters, ToSwarm};
     use std::task::Context;
     use std::task::Poll;
 
@@ -384,15 +469,31 @@ fn custom_out_event_no_type_parameters() {
         type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
-        fn new_handler(&mut self) -> Self::ConnectionHandler {
-            dummy::ConnectionHandler
+        fn handle_established_inbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: Endpoint,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
         }
 
         fn on_connection_handler_event(
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
-            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+            message: THandlerOutEvent<Self>,
         ) {
             void::unreachable(message);
         }
@@ -401,7 +502,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _ctx: &mut Context,
             _: &mut impl PollParameters,
-        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
             Poll::Pending
         }
 

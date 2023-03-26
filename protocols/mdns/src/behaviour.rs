@@ -27,11 +27,12 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
-use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -174,23 +175,51 @@ where
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        dummy::ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_nodes
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self
+            .discovered_nodes
             .iter()
-            .filter(|(peer, _, _)| peer == peer_id)
+            .filter(|(peer, _, _)| peer == &peer_id)
             .map(|(_, addr, _)| addr.clone())
-            .collect()
+            .collect())
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
     }
 
     fn on_connection_handler_event(
         &mut self,
         _: PeerId,
-        _: libp2p_core::connection::ConnectionId,
-        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        _: ConnectionId,
+        ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)
     }
@@ -199,22 +228,14 @@ where
         self.listen_addresses.on_swarm_event(&event);
 
         match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                remaining_established,
-                ..
-            }) => {
-                if remaining_established == 0 {
-                    self.expire_node(&peer_id);
-                }
-            }
             FromSwarm::NewListener(_) => {
                 log::trace!("waking interface state because listening address changed");
                 for iface in self.iface_states.values_mut() {
                     iface.fire_timer();
                 }
             }
-            FromSwarm::ConnectionEstablished(_)
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
@@ -231,7 +252,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
@@ -286,7 +307,7 @@ where
             let event = Event::Discovered(DiscoveredAddrsIter {
                 inner: discovered.into_iter(),
             });
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
@@ -305,7 +326,7 @@ where
             let event = Event::Expired(ExpiredAddrsIter {
                 inner: expired.into_iter(),
             });
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = P::Timer::at(closest_expiration);
@@ -318,7 +339,7 @@ where
 }
 
 /// Event that can be produced by the `Mdns` behaviour.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(DiscoveredAddrsIter),
@@ -331,6 +352,7 @@ pub enum Event {
 }
 
 /// Iterator that produces the list of addresses that have been discovered.
+#[derive(Clone)]
 pub struct DiscoveredAddrsIter {
     inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }
@@ -358,6 +380,7 @@ impl fmt::Debug for DiscoveredAddrsIter {
 }
 
 /// Iterator that produces the list of addresses that have expired.
+#[derive(Clone)]
 pub struct ExpiredAddrsIter {
     inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
 }

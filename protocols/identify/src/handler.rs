@@ -21,75 +21,26 @@
 use crate::protocol::{
     self, Identify, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError,
 };
+use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
-use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
+use libp2p_core::upgrade::SelectUpgrade;
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::VecDeque;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
-
-pub struct Proto {
-    initial_delay: Duration,
-    interval: Duration,
-    public_key: PublicKey,
-    protocol_version: String,
-    agent_version: String,
-}
-
-impl Proto {
-    pub fn new(
-        initial_delay: Duration,
-        interval: Duration,
-        public_key: PublicKey,
-        protocol_version: String,
-        agent_version: String,
-    ) -> Self {
-        Proto {
-            initial_delay,
-            interval,
-            public_key,
-            protocol_version,
-            agent_version,
-        }
-    }
-}
-
-impl IntoConnectionHandler for Proto {
-    type Handler = Handler;
-
-    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        let observed_addr = match endpoint {
-            ConnectedPoint::Dialer { address, .. } => address,
-            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
-        };
-
-        Handler::new(
-            self.initial_delay,
-            self.interval,
-            *remote_peer_id,
-            self.public_key,
-            self.protocol_version,
-            self.agent_version,
-            observed_addr.clone(),
-        )
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(Identify, Push::inbound())
-    }
-}
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -101,8 +52,7 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<EitherUpgrade<Identify, Push<OutboundPush>>, (), Event, io::Error>;
-            4],
+        [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
     >,
 
     /// Streams awaiting `BehaviourInfo` to then send identify requests.
@@ -201,7 +151,7 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(substream) => {
+            future::Either::Left(substream) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identify));
                 if !self.reply_streams.is_empty() {
@@ -213,7 +163,7 @@ impl Handler {
                 }
                 self.reply_streams.push_back(substream);
             }
-            EitherOutput::Second(fut) => {
+            future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
                         "New inbound identify push stream from {} while still \
@@ -235,14 +185,14 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(remote_info) => {
+            future::Either::Left(remote_info) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
                 self.keep_alive = KeepAlive::No;
             }
-            EitherOutput::Second(()) => self
+            future::Either::Right(()) => self
                 .events
                 .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
         }
@@ -259,8 +209,8 @@ impl Handler {
 
         let err = err.map_upgrade_err(|e| match e {
             UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
-            UpgradeError::Apply(EitherError::B(ioe)) => UpgradeError::Apply(ioe),
+            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
+            UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
         });
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
@@ -276,7 +226,7 @@ impl ConnectionHandler for Handler {
     type OutEvent = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
-    type OutboundProtocol = EitherUpgrade<Identify, Push<OutboundPush>>;
+    type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -305,10 +255,7 @@ impl ConnectionHandler for Handler {
             Protocol::Push => {
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            EitherUpgrade::B(Push::outbound(info)),
-                            (),
-                        ),
+                        protocol: SubstreamProtocol::new(Either::Right(Push::outbound(info)), ()),
                     });
             }
             Protocol::Identify(_) => {
@@ -346,7 +293,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready(()) => {
                 self.trigger_next_identify.reset(self.interval);
                 let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(EitherUpgrade::A(Identify), ()),
+                    protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
                 };
                 return Poll::Ready(ev);
             }

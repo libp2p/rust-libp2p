@@ -33,19 +33,19 @@ use if_watch::IfEvent;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    PeerId, Transport,
+    Transport,
 };
+use libp2p_identity::PeerId;
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
-use std::task::Waker;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
 };
 
 /// Implementation of the [`Transport`] trait for QUIC.
@@ -71,7 +71,8 @@ pub struct GenTransport<P: Provider> {
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
-    dialer_waker: Option<Waker>,
+    /// Waker to poll the transport again when a new dialer or listener is added.
+    waker: Option<Waker>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -85,7 +86,7 @@ impl<P: Provider> GenTransport<P> {
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
-            dialer_waker: None,
+            waker: None,
             support_draft_29,
         }
     }
@@ -109,6 +110,10 @@ impl<P: Provider> Transport for GenTransport<P> {
             version,
         )?;
         self.listeners.push(listener);
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
 
         // Remove dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
@@ -165,6 +170,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                 let dialer = match self.dialer.entry(socket_family) {
                     Entry::Occupied(occupied) => occupied.into_mut(),
                     Entry::Vacant(vacant) => {
+                        if let Some(waker) = self.waker.take() {
+                            waker.wake();
+                        }
                         vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
                     }
                 };
@@ -180,12 +188,6 @@ impl<P: Provider> Transport for GenTransport<P> {
                 &mut listeners[index].dialer_state
             }
         };
-
-        // Wakeup the task polling [`Transport::poll`] to drive the new dial.
-        if let Some(waker) = self.dialer_waker.take() {
-            waker.wake();
-        }
-
         Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
     }
 
@@ -210,6 +212,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 errored.push(*key);
             }
         }
+
         for key in errored {
             // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
@@ -220,8 +223,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             return Poll::Ready(ev);
         }
 
-        self.dialer_waker = Some(cx.waker().clone());
-
+        self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -266,11 +268,12 @@ impl Drop for Dialer {
     }
 }
 
-/// Pending dials to be sent to the endpoint once the [`endpoint::Channel`]
-/// has capacity.
+/// Pending dials to be sent to the endpoint was the [`endpoint::Channel`]
+/// has capacity
 #[derive(Default, Debug)]
 struct DialerState {
     pending_dials: VecDeque<ToEndpoint>,
+    waker: Option<Waker>,
 }
 
 impl DialerState {
@@ -289,6 +292,10 @@ impl DialerState {
         };
 
         self.pending_dials.push_back(message);
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
 
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
@@ -314,6 +321,7 @@ impl DialerState {
                 Err(endpoint::Disconnected {}) => return Poll::Ready(Error::EndpointDriverCrashed),
             }
         }
+        self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -345,6 +353,9 @@ struct Listener<P: Provider> {
 
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
+
+    /// The stream must be awaken after it has been closed to deliver the last event.
+    close_listener_waker: Option<Waker>,
 }
 
 impl<P: Provider> Listener<P> {
@@ -382,6 +393,7 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             dialer_state: DialerState::default(),
+            close_listener_waker: None,
         })
     }
 
@@ -396,6 +408,11 @@ impl<P: Provider> Listener<P> {
             reason,
         });
         self.is_closed = true;
+
+        // Wake the stream to deliver the last event.
+        if let Some(waker) = self.close_listener_waker.take() {
+            waker.wake();
+        }
     }
 
     /// Poll for a next If Event.
@@ -464,16 +481,12 @@ impl<P: Provider> Stream for Listener<P> {
             if self.is_closed {
                 return Poll::Ready(None);
             }
-            match self.poll_if_addr(cx) {
-                Poll::Ready(event) => return Poll::Ready(Some(event)),
-                Poll::Pending => {}
+            if let Poll::Ready(event) = self.poll_if_addr(cx) {
+                return Poll::Ready(Some(event));
             }
-            match self.poll_dialer(cx) {
-                Poll::Ready(error) => {
-                    self.close(Err(error));
-                    continue;
-                }
-                Poll::Pending => {}
+            if let Poll::Ready(error) = self.poll_dialer(cx) {
+                self.close(Err(error));
+                continue;
             }
             match self.new_connections_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(connection)) => {
@@ -494,6 +507,9 @@ impl<P: Provider> Stream for Listener<P> {
                 }
                 Poll::Pending => {}
             };
+
+            self.close_listener_waker = Some(cx.waker().clone());
+
             return Poll::Pending;
         }
     }
@@ -746,7 +762,7 @@ mod test {
     #[cfg(feature = "async-std")]
     #[async_std::test]
     async fn test_close_listener() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::async_std::Transport::new(config);
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
@@ -815,7 +831,7 @@ mod test {
     #[cfg(feature = "tokio")]
     #[tokio::test]
     async fn test_dialer_drop() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::tokio::Transport::new(config);
 

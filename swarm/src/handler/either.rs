@@ -18,16 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
+use crate::ConnectionHandlerUpgrErr;
 use either::Either;
-use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
-use libp2p_core::{ConnectedPoint, PeerId};
+use futures::future;
+use libp2p_core::{ConnectedPoint, UpgradeError};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 
 /// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
@@ -39,6 +41,7 @@ pub enum IntoEitherHandler<L, R> {
 
 /// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
 /// implementations.
+#[allow(deprecated)]
 impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
 where
     L: IntoConnectionHandler,
@@ -58,10 +61,10 @@ where
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         match self {
             IntoEitherHandler::Left(into_handler) => {
-                EitherUpgrade::A(SendWrapper(into_handler.inbound_protocol()))
+                Either::Left(SendWrapper(into_handler.inbound_protocol()))
             }
             IntoEitherHandler::Right(into_handler) => {
-                EitherUpgrade::B(SendWrapper(into_handler.inbound_protocol()))
+                Either::Right(SendWrapper(into_handler.inbound_protocol()))
             }
         }
     }
@@ -91,21 +94,21 @@ impl<L, R> IntoEitherHandler<L, R> {
 }
 
 impl<LIP, RIP, LIOI, RIOI>
-    FullyNegotiatedInbound<EitherUpgrade<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
+    FullyNegotiatedInbound<Either<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
 where
     RIP: InboundUpgradeSend,
     LIP: InboundUpgradeSend,
 {
-    fn transpose(
+    pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedInbound<LIP, LIOI>, FullyNegotiatedInbound<RIP, RIOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedInbound { protocol, info }),
             FullyNegotiatedInbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedInbound { protocol, info }),
             _ => unreachable!(),
@@ -113,100 +116,8 @@ where
     }
 }
 
-impl<LOP, ROP, LOOI, ROOI>
-    FullyNegotiatedOutbound<EitherUpgrade<SendWrapper<LOP>, SendWrapper<ROP>>, Either<LOOI, ROOI>>
-where
-    LOP: OutboundUpgradeSend,
-    ROP: OutboundUpgradeSend,
-{
-    fn transpose(
-        self,
-    ) -> Either<FullyNegotiatedOutbound<LOP, LOOI>, FullyNegotiatedOutbound<ROP, ROOI>> {
-        match self {
-            FullyNegotiatedOutbound {
-                protocol: EitherOutput::First(protocol),
-                info: Either::Left(info),
-            } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
-            FullyNegotiatedOutbound {
-                protocol: EitherOutput::Second(protocol),
-                info: Either::Right(info),
-            } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<LOP, ROP, LOOI, ROOI>
-    DialUpgradeError<Either<LOOI, ROOI>, EitherUpgrade<SendWrapper<LOP>, SendWrapper<ROP>>>
-where
-    LOP: OutboundUpgradeSend,
-    ROP: OutboundUpgradeSend,
-{
-    fn transpose(self) -> Either<DialUpgradeError<LOOI, LOP>, DialUpgradeError<ROOI, ROP>> {
-        match self {
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info,
-            }),
-            _ => unreachable!(),
-        }
-    }
-}
-
 impl<LIP, RIP, LIOI, RIOI>
-    ListenUpgradeError<Either<LIOI, RIOI>, EitherUpgrade<SendWrapper<LIP>, SendWrapper<RIP>>>
+    ListenUpgradeError<Either<LIOI, RIOI>, Either<SendWrapper<LIP>, SendWrapper<RIP>>>
 where
     RIP: InboundUpgradeSend,
     LIP: InboundUpgradeSend,
@@ -214,14 +125,14 @@ where
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
                 info: Either::Left(info),
             } => Either::Left(ListenUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
                 info: Either::Right(info),
             } => Either::Right(ListenUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
@@ -284,10 +195,9 @@ where
     type InEvent = Either<L::InEvent, R::InEvent>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
     type Error = Either<L::Error, R::Error>;
-    type InboundProtocol =
-        EitherUpgrade<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
+    type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
-        EitherUpgrade<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
+        Either<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
     type InboundOpenInfo = Either<L::InboundOpenInfo, R::InboundOpenInfo>;
     type OutboundOpenInfo = Either<L::OutboundOpenInfo, R::OutboundOpenInfo>;
 
@@ -295,11 +205,11 @@ where
         match self {
             Either::Left(a) => a
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_upgrade(|u| Either::Left(SendWrapper(u)))
                 .map_info(Either::Left),
             Either::Right(b) => b
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
+                .map_upgrade(|u| Either::Right(SendWrapper(u)))
                 .map_info(Either::Right),
         }
     }
@@ -334,12 +244,12 @@ where
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
                 .map_close(Either::Left)
-                .map_protocol(|p| EitherUpgrade::A(SendWrapper(p)))
+                .map_protocol(|p| Either::Left(SendWrapper(p)))
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
                 .map_close(Either::Right)
-                .map_protocol(|p| EitherUpgrade::B(SendWrapper(p)))
+                .map_protocol(|p| Either::Right(SendWrapper(p)))
                 .map_outbound_open_info(Either::Right),
         };
 

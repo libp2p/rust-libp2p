@@ -65,12 +65,16 @@ pub use protocol::x25519::X25519;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+use std::fmt;
+use std::fmt::Formatter;
 
 use crate::handshake::State;
 use crate::io::handshake;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use std::pin::Pin;
 use zeroize::Zeroize;
 
@@ -268,7 +272,7 @@ pub enum NoiseError {
     #[error(transparent)]
     Noise(#[from] snow::Error),
     #[error("Invalid public key")]
-    InvalidKey(#[from] identity::error::DecodingError),
+    InvalidKey(#[from] libp2p_identity::DecodingError),
     #[error("Only keys of length 32 bytes are supported")]
     InvalidLength,
     #[error("Remote authenticated with an unexpected public key")]
@@ -280,16 +284,27 @@ pub enum NoiseError {
     #[error(transparent)]
     InvalidPayload(DecodeError),
     #[error(transparent)]
-    SigningError(#[from] identity::error::SigningError),
+    SigningError(#[from] libp2p_identity::SigningError),
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(String);
 
-impl From<prost::DecodeError> for NoiseError {
-    fn from(e: prost::DecodeError) -> Self {
-        NoiseError::InvalidPayload(DecodeError(e))
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<quick_protobuf::Error> for DecodeError {
+    fn from(e: quick_protobuf::Error) -> Self {
+        Self(e.to_string())
+    }
+}
+
+impl From<quick_protobuf::Error> for NoiseError {
+    fn from(e: quick_protobuf::Error) -> Self {
+        NoiseError::InvalidPayload(e.into())
     }
 }
 

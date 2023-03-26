@@ -47,9 +47,11 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
     collections::VecDeque,
@@ -119,11 +121,32 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Handler::new(self.config.clone())
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(self.config.clone()))
     }
 
-    fn on_connection_handler_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(self.config.clone()))
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        result: THandlerOutEvent<Self>,
+    ) {
         self.events.push_front(Event { peer, result })
     }
 
@@ -131,7 +154,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             let Event { result, peer } = &e;
 
@@ -141,7 +164,7 @@ impl NetworkBehaviour for Behaviour {
                 _ => {}
             }
 
-            Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
+            Poll::Ready(ToSwarm::GenerateEvent(e))
         } else {
             Poll::Pending
         }

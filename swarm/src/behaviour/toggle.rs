@@ -19,19 +19,21 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::FromSwarm;
+use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use either::Either;
-use libp2p_core::{
-    either::{EitherError, EitherOutput},
-    upgrade::{DeniedUpgrade, EitherUpgrade},
-    ConnectedPoint, Multiaddr, PeerId,
+use crate::{
+    ConnectionDenied, NetworkBehaviour, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
+use either::Either;
+use futures::future;
+use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -68,25 +70,98 @@ impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    type ConnectionHandler = ToggleIntoConnectionHandler<TBehaviour::ConnectionHandler>;
+    type ConnectionHandler = ToggleConnectionHandler<THandler<TBehaviour>>;
     type OutEvent = TBehaviour::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ToggleIntoConnectionHandler {
-            inner: self.inner.as_mut().map(|i| i.new_handler()),
-        }
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(()),
+            Some(inner) => inner,
+        };
+
+        inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
+
+        Ok(())
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.inner
-            .as_mut()
-            .map(|b| b.addresses_of_peer(peer_id))
-            .unwrap_or_else(Vec::new)
+    fn handle_established_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
+        };
+
+        let handler = inner.handle_established_inbound_connection(
+            connection_id,
+            peer,
+            local_addr,
+            remote_addr,
+        )?;
+
+        Ok(ToggleConnectionHandler {
+            inner: Some(handler),
+        })
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(vec![]),
+            Some(inner) => inner,
+        };
+
+        let addresses = inner.handle_pending_outbound_connection(
+            connection_id,
+            maybe_peer,
+            addresses,
+            effective_role,
+        )?;
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
+        };
+
+        let handler = inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+        )?;
+
+        Ok(ToggleConnectionHandler {
+            inner: Some(handler),
+        })
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
+            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
                 behaviour.on_swarm_event(event);
             }
         }
@@ -95,8 +170,8 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
             behaviour.on_connection_handler_event(peer_id, connection_id, event)
@@ -107,45 +182,11 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params).map(|action| {
-                action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
-            })
+            inner.poll(cx, params)
         } else {
             Poll::Pending
-        }
-    }
-}
-
-/// Implementation of `IntoConnectionHandler` that can be in the disabled state.
-pub struct ToggleIntoConnectionHandler<TInner> {
-    inner: Option<TInner>,
-}
-
-impl<TInner> IntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
-where
-    TInner: IntoConnectionHandler,
-{
-    type Handler = ToggleConnectionHandler<TInner::Handler>;
-
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler {
-        ToggleConnectionHandler {
-            inner: self
-                .inner
-                .map(|h| h.into_handler(remote_peer_id, connected_point)),
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
-        } else {
-            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
         }
     }
 }
@@ -170,8 +211,8 @@ where
         >,
     ) {
         let out = match out {
-            EitherOutput::First(out) => out,
-            EitherOutput::Second(v) => void::unreachable(v),
+            future::Either::Left(out) => out,
+            future::Either::Right(v) => void::unreachable(v),
         };
 
         if let Either::Left(info) = info {
@@ -215,8 +256,8 @@ where
             ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    EitherError::A(e) => e,
-                    EitherError::B(v) => void::unreachable(v),
+                    Either::Left(e) => e,
+                    Either::Right(v) => void::unreachable(v),
                 }))
             }
         };
@@ -235,8 +276,7 @@ where
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
-    type InboundProtocol =
-        EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
+    type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
     type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
@@ -245,13 +285,10 @@ where
         if let Some(inner) = self.inner.as_ref() {
             inner
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_upgrade(|u| Either::Left(SendWrapper(u)))
                 .map_info(Either::Left)
         } else {
-            SubstreamProtocol::new(
-                EitherUpgrade::B(SendWrapper(DeniedUpgrade)),
-                Either::Right(()),
-            )
+            SubstreamProtocol::new(Either::Right(SendWrapper(DeniedUpgrade)), Either::Right(()))
         }
     }
 

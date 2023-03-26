@@ -1,4 +1,10 @@
-# 0.42.0 [unreleased]
+# 0.42.1
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
+
+# 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -7,7 +13,10 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Don't close the stream when reading the identify info in `protocol::recv`. See [PR 3344].
+
 [PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
+[PR 3344]: https://github.com/libp2p/rust-libp2p/pull/3344
 
 # 0.41.1
 

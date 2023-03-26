@@ -11,12 +11,12 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.1"
-js-sys = "0.3.50"
+futures = "0.3.27"
+js-sys = "0.3.61"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"
-wasm-bindgen-futures = "0.4.4"
+wasm-bindgen-futures = "0.4.34"
 
 [features]
 websocket = []

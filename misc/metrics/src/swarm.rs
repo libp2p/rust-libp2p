@@ -214,43 +214,43 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             match error {
                                 libp2p_core::transport::TransportError::MultiaddrNotSupported(
                                     _,
-                                ) => record(
-                                    OutgoingConnectionErrorError::TransportMultiaddrNotSupported,
-                                ),
+                                ) => {
+                                    record(OutgoingConnectionError::TransportMultiaddrNotSupported)
+                                }
                                 libp2p_core::transport::TransportError::Other(_) => {
-                                    record(OutgoingConnectionErrorError::TransportOther)
+                                    record(OutgoingConnectionError::TransportOther)
                                 }
                             };
                         }
                     }
-
-                    libp2p_swarm::DialError::Banned => record(OutgoingConnectionErrorError::Banned),
+                    #[allow(deprecated)]
+                    libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
-                        record(OutgoingConnectionErrorError::ConnectionLimit)
+                        record(OutgoingConnectionError::ConnectionLimit)
                     }
-                    libp2p_swarm::DialError::LocalPeerId => {
-                        record(OutgoingConnectionErrorError::LocalPeerId)
+                    libp2p_swarm::DialError::LocalPeerId { .. } => {
+                        record(OutgoingConnectionError::LocalPeerId)
                     }
                     libp2p_swarm::DialError::NoAddresses => {
-                        record(OutgoingConnectionErrorError::NoAddresses)
+                        record(OutgoingConnectionError::NoAddresses)
                     }
                     libp2p_swarm::DialError::DialPeerConditionFalse(_) => {
-                        record(OutgoingConnectionErrorError::DialPeerConditionFalse)
+                        record(OutgoingConnectionError::DialPeerConditionFalse)
                     }
-                    libp2p_swarm::DialError::Aborted => {
-                        record(OutgoingConnectionErrorError::Aborted)
-                    }
+                    libp2p_swarm::DialError::Aborted => record(OutgoingConnectionError::Aborted),
                     libp2p_swarm::DialError::InvalidPeerId { .. } => {
-                        record(OutgoingConnectionErrorError::InvalidPeerId)
+                        record(OutgoingConnectionError::InvalidPeerId)
                     }
                     libp2p_swarm::DialError::WrongPeerId { .. } => {
-                        record(OutgoingConnectionErrorError::WrongPeerId)
+                        record(OutgoingConnectionError::WrongPeerId)
                     }
-                    libp2p_swarm::DialError::ConnectionIo(_) => {
-                        record(OutgoingConnectionErrorError::ConnectionIo)
+                    libp2p_swarm::DialError::Denied { .. } => {
+                        record(OutgoingConnectionError::Denied)
                     }
                 };
             }
+            #[allow(deprecated)]
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
                 self.connected_to_banned_peer
                     .get_or_create(&AddressLabels {
@@ -328,7 +328,7 @@ impl From<&libp2p_core::ConnectedPoint> for Role {
 #[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct OutgoingConnectionErrorLabels {
     peer: PeerStatus,
-    error: OutgoingConnectionErrorError,
+    error: OutgoingConnectionError,
 }
 
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Copy, Debug)]
@@ -338,7 +338,7 @@ enum PeerStatus {
 }
 
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
-enum OutgoingConnectionErrorError {
+enum OutgoingConnectionError {
     Banned,
     ConnectionLimit,
     LocalPeerId,
@@ -347,46 +347,45 @@ enum OutgoingConnectionErrorError {
     Aborted,
     InvalidPeerId,
     WrongPeerId,
-    ConnectionIo,
     TransportMultiaddrNotSupported,
     TransportOther,
+    Denied,
 }
 
 #[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct IncomingConnectionErrorLabels {
-    error: PendingInboundConnectionError,
+    error: IncomingConnectionError,
     protocols: String,
 }
 
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
-enum PendingInboundConnectionError {
+enum IncomingConnectionError {
     WrongPeerId,
+    LocalPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
-    Io,
     ConnectionLimit,
+    Denied,
 }
 
-impl From<&libp2p_swarm::PendingInboundConnectionError> for PendingInboundConnectionError {
-    fn from(error: &libp2p_swarm::PendingInboundConnectionError) -> Self {
+impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
+    fn from(error: &libp2p_swarm::ListenError) -> Self {
         match error {
-            libp2p_swarm::PendingInboundConnectionError::WrongPeerId { .. } => {
-                PendingInboundConnectionError::WrongPeerId
+            libp2p_swarm::ListenError::WrongPeerId { .. } => IncomingConnectionError::WrongPeerId,
+            #[allow(deprecated)]
+            libp2p_swarm::ListenError::ConnectionLimit(_) => {
+                IncomingConnectionError::ConnectionLimit
             }
-            libp2p_swarm::PendingInboundConnectionError::ConnectionLimit(_) => {
-                PendingInboundConnectionError::ConnectionLimit
-            }
-            libp2p_swarm::PendingInboundConnectionError::Transport(
+            libp2p_swarm::ListenError::LocalPeerId { .. } => IncomingConnectionError::LocalPeerId,
+            libp2p_swarm::ListenError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
-            ) => PendingInboundConnectionError::TransportErrorMultiaddrNotSupported,
-            libp2p_swarm::PendingInboundConnectionError::Transport(
+            ) => IncomingConnectionError::TransportErrorMultiaddrNotSupported,
+            libp2p_swarm::ListenError::Transport(
                 libp2p_core::transport::TransportError::Other(_),
-            ) => PendingInboundConnectionError::TransportErrorOther,
-            libp2p_swarm::PendingInboundConnectionError::Aborted => {
-                PendingInboundConnectionError::Aborted
-            }
-            libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
+            ) => IncomingConnectionError::TransportErrorOther,
+            libp2p_swarm::ListenError::Aborted => IncomingConnectionError::Aborted,
+            libp2p_swarm::ListenError::Denied { .. } => IncomingConnectionError::Denied,
         }
     }
 }

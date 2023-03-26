@@ -26,7 +26,8 @@ libp2p-kad = { version = "0.43.0", path = "../../protocols/kad", optional = true
 libp2p-ping = { version = "0.42.0", path = "../../protocols/ping", optional = true }
 libp2p-relay =  { version = "0.15.0", path = "../../protocols/relay", optional = true }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-prometheus-client = "0.19.0"
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
+prometheus-client = { git = "https://github.com/prometheus/client_rust.git", branch = "master" }
 once_cell = "1.16.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
@@ -34,7 +35,7 @@ libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", op
 
 [dev-dependencies]
 env_logger = "0.10.0"
-futures = "0.3.1"
+futures = "0.3.27"
 hyper = { version="0.14", features = ["server", "tcp", "http1"] }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-ping = { path = "../../protocols/ping" }

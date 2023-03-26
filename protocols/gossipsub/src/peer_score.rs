@@ -24,7 +24,7 @@
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
@@ -32,7 +32,7 @@ use std::time::Duration;
 use wasm_timer::Instant;
 
 mod params;
-use crate::error::ValidationError;
+use crate::ValidationError;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
@@ -563,7 +563,7 @@ impl PeerScore {
         }
     }
 
-    pub fn validate_message(&mut self, _from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
+    pub fn validate_message(&mut self, from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
         // adds an empty record with the message id
         self.deliveries
             .entry(msg_id.clone())
@@ -572,12 +572,12 @@ impl PeerScore {
         if let Some(callback) = self.message_delivery_time_callback {
             if self
                 .peer_stats
-                .get(_from)
+                .get(from)
                 .and_then(|s| s.topics.get(topic_hash))
                 .map(|ts| ts.in_mesh())
                 .unwrap_or(false)
             {
-                callback(_from, topic_hash, 0.0);
+                callback(from, topic_hash, 0.0);
             }
         }
     }

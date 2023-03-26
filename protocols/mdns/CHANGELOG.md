@@ -1,4 +1,9 @@
-# 0.43.0 [unreleased]
+# 0.43.1 [unreleased]
+
+- Derive `Clone` for `mdns::Event`. See [PR 3606].
+
+[PR 3606]: https://github.com/libp2p/rust-libp2p/pull/3606
+# 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -6,7 +11,12 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Don't expire mDNS records when the last connection was closed.
+  mDNS records will only be expired when the TTL is reached and the DNS record is no longer valid.
+  See [PR 3367].
+
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3367]: https://github.com/libp2p/rust-libp2p/pull/3367
 
 # 0.42.0
 

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol_stack;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
 use prometheus_client::collector::Collector;
 use prometheus_client::encoding::EncodeLabelSet;

@@ -33,17 +33,13 @@ jobs:
       matrix:
         rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          override: true
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: msrv-cache
 
@@ -56,25 +52,13 @@ jobs:
   make_stable_rust_cache:
     runs-on: ubuntu-latest
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          toolchain: stable
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: stable-cache
 
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
-
-      - name: Render docs
-        run: cargo doc --all-features --workspace
-
-      - name: Install tools
-        run: cargo install cargo-semver-checks --locked

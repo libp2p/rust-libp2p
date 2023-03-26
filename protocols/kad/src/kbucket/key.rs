@@ -19,7 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::record;
-use libp2p_core::{multihash::Multihash, PeerId};
+use libp2p_core::multihash::Multihash;
+use libp2p_identity::PeerId;
 use sha2::digest::generic_array::{typenum::U32, GenericArray};
 use sha2::{Digest, Sha256};
 use std::borrow::Borrow;

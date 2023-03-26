@@ -6,11 +6,11 @@ use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use futures_timer::Delay;
-use libp2p_core::either::EitherOutput;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
 use libp2p_core::transport::{ListenerId, TransportError};
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, PeerId, Transport};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, Transport};
+use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_quic as quic;
 use libp2p_tcp as tcp;
@@ -102,7 +102,7 @@ async fn ipv4_dial_ipv6() {
 /// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
 #[cfg(feature = "async-std")]
 #[async_std::test]
-async fn wrapped_with_dns() {
+async fn wrapped_with_delay() {
     let _ = env_logger::try_init();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
@@ -175,7 +175,7 @@ async fn wrapped_with_dns() {
         (id, DialDelay(Arc::new(Mutex::new(transport))).boxed())
     };
 
-    // Spawn a
+    // Spawn A
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let listener = async_std::task::spawn(async move {
         let (upgrade, _) = a_transport
@@ -188,7 +188,7 @@ async fn wrapped_with_dns() {
         peer_id
     });
 
-    // Spawn b
+    // Spawn B
     //
     // Note that the dial is spawned on a different task than the transport allowing the transport
     // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
@@ -208,7 +208,7 @@ async fn wrapped_with_dns() {
 #[async_std::test]
 #[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
 
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
@@ -245,8 +245,8 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 
     let transport = OrTransport::new(quic_transport, tcp_transport)
         .map(|either_output, _| match either_output {
-            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
         })
         .boxed();
 
@@ -493,8 +493,8 @@ macro_rules! swap_protocol {
     };
 }
 
-fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
-    libp2p_core::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
 }
 
 fn create_default_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {

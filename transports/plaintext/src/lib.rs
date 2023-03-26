@@ -28,7 +28,10 @@ use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::future::{self, Ready};
 use futures::prelude::*;
-use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, PublicKey, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use log::debug;
 use std::{
     io, iter,
@@ -39,9 +42,9 @@ use void::Void;
 
 mod error;
 mod handshake;
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod structs_proto {
-    include!(concat!(env!("OUT_DIR"), "/structs.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::structs::Exchange;
 }
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.

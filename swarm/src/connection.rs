@@ -42,12 +42,46 @@ use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
-use libp2p_core::PeerId;
+use libp2p_core::Endpoint;
 use libp2p_core::{upgrade, UpgradeError};
+use libp2p_identity::PeerId;
 use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+
+static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// A "dummy" [`ConnectionId`].
+    ///
+    /// Really, you should not use this, not even for testing but it is here if you need it.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Don't use this, it will be removed at a later stage again."
+    )]
+    pub const DUMMY: ConnectionId = ConnectionId(0);
+
+    /// Creates an _unchecked_ [`ConnectionId`].
+    ///
+    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
+    /// This constructor does not, hence the _unchecked_.
+    ///
+    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    pub fn new_unchecked(id: usize) -> Self {
+        Self(id)
+    }
+
+    /// Returns the next available [`ConnectionId`].
+    pub(crate) fn next() -> Self {
+        Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
+    }
+}
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -353,7 +387,8 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
-#[derive(Debug, Clone)]
+#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
+#[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
     pub limit: u32,
@@ -361,6 +396,7 @@ pub struct ConnectionLimit {
     pub current: u32,
 }
 
+#[allow(deprecated)]
 impl fmt::Display for ConnectionLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -372,6 +408,7 @@ impl fmt::Display for ConnectionLimit {
 }
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
+#[allow(deprecated)]
 impl std::error::Error for ConnectionLimit {}
 
 struct SubstreamUpgrade<UserData, Upgrade> {
@@ -821,6 +858,42 @@ mod tests {
             }
 
             Poll::Pending
+        }
+    }
+}
+
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
         }
     }
 }

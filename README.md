@@ -56,7 +56,7 @@ The main components of this repository are structured as follows:
 
   * `misc/`: Utility libraries.
 
-  * `examples/`: Worked examples of built-in application protocols (see `protocols/`)
+  * `libp2p/examples/`: Worked examples of built-in application protocols (see `protocols/`)
     with common `Transport` configurations.
 
 ## Community Guidelines
@@ -101,3 +101,4 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
+- [Ursa](https://github.com/fleek-network/ursa) - Decentralized Content Delivery & Edge Compute.

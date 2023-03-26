@@ -1,12 +1,16 @@
-use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, PollParameters, ToSwarm};
+use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
-use libp2p_core::connection::ConnectionId;
+use crate::{
+    ConnectionDenied, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
+};
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::PeerId;
-use libp2p_core::UpgradeError;
+use libp2p_core::Endpoint;
+use libp2p_core::{Multiaddr, UpgradeError};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -17,11 +21,32 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type OutEvent = Void;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(ConnectionHandler)
     }
 
-    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(ConnectionHandler)
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
         void::unreachable(event)
     }
 
@@ -29,7 +54,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 

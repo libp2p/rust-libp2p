@@ -21,16 +21,19 @@
 //! A [`ConnectionHandler`] implementation that combines multiple other [`ConnectionHandler`]s
 //! indexed by some key.
 
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::ConnectedPoint;
+use libp2p_identity::PeerId;
 use rand::Rng;
 use std::{
     cmp,
@@ -388,10 +391,12 @@ impl<K, H> IntoIterator for MultiHandler<K, H> {
 
 /// A [`IntoConnectionHandler`] for multiple other `IntoConnectionHandler`s.
 #[derive(Clone)]
+#[deprecated(note = "Use `MultiHandler` directly.")]
 pub struct IntoMultiHandler<K, H> {
     handlers: HashMap<K, H>,
 }
 
+#[allow(deprecated)]
 impl<K, H> fmt::Debug for IntoMultiHandler<K, H>
 where
     K: fmt::Debug + Eq + Hash,
@@ -404,6 +409,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<K, H> IntoMultiHandler<K, H>
 where
     K: Hash + Eq,
@@ -424,6 +430,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<K, H> IntoConnectionHandler for IntoMultiHandler<K, H>
 where
     K: Debug + Clone + Eq + Hash + Send + 'static,

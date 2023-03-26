@@ -49,7 +49,8 @@ mod select;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
@@ -457,7 +458,7 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
 
 impl<TUpgrErr> fmt::Display for ConnectionHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: fmt::Display,
+    TUpgrErr: error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -467,7 +468,10 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
+            ConnectionHandlerUpgrErr::Upgrade(err) => {
+                write!(f, "Upgrade: ")?;
+                crate::print_error_chain(f, err)
+            }
         }
     }
 }
@@ -480,12 +484,15 @@ where
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
             ConnectionHandlerUpgrErr::Timer => None,
-            ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
+            ConnectionHandlerUpgrErr::Upgrade(_) => None,
         }
     }
 }
 
 /// Prototype for a [`ConnectionHandler`].
+#[deprecated(
+    note = "Implement `ConnectionHandler` directly and use `NetworkBehaviour::{handle_pending_inbound_connection,handle_pending_outbound_connection}` to handle pending connections."
+)]
 pub trait IntoConnectionHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ConnectionHandler;
@@ -512,6 +519,7 @@ pub trait IntoConnectionHandler: Send + 'static {
     }
 }
 
+#[allow(deprecated)]
 impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler,

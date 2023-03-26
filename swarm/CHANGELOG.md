@@ -1,25 +1,135 @@
-# 0.42.0 [unreleased]
+# 0.42.1 - unreleased
+
+- Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
+  See [PR 3386].
+
+- Introduce `ConnectionId::new_unchecked` to allow for more sophisticated, manual tests of `NetworkBehaviour`.
+  See [PR 3652].
+
+- Deprecate `Swarm::ban_peer_id` in favor of the new `libp2p::allow_block_list` module.
+  See [PR 3590].
+
+- Rename `NetworkBehaviourAction` to `ToSwarm`.
+  A deprecated type-alias is provided to ease the transition.
+  The new name is meant to better indicate the message-passing relationship between `Swarm` and `NetworkBehaviour`.
+  See [PR XXXX].
+
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
+[PR 3652]: https://github.com/libp2p/rust-libp2p/pull/3652
+[PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
+# 0.42.0
+
+- Allow `NetworkBehaviour`s to manage connections.
+  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+
+  - `NetworkBehaviour::handle_pending_inbound_connection`
+  - `NetworkBehaviour::handle_pending_outbound_connection`
+  - `NetworkBehaviour::handle_established_inbound_connection`
+  - `NetworkBehaviour::handle_established_outbound_connection`
+
+  Please note that due to [limitations](https://github.com/rust-lang/rust/issues/98990) in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Nevertheless, they will be removed in the future.
+
+  All four are fallible and returning an error from any of them will abort the given connection.
+  This allows you to create dedicated `NetworkBehaviour`s that only concern themselves with managing connections.
+  For example:
+  - checking the `PeerId` of a newly established connection against an allow/block list
+  - only allowing X connection upgrades at any one time
+  - denying incoming or outgoing connections from a certain IP range
+  - only allowing N connections to or from the same peer
+
+  See [PR 3254].
+
+- Remove `handler` field from `NetworkBehaviourAction::Dial`.
+  Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
+  `ConnectionId`s are `Copy` and will be used throughout the entire lifetime of the connection to report events.
+  This allows you to send events to a very specific connection, much like you previously could directly set state in the handler.
+
+  Removing the `handler` field also reduces the type parameters of `NetworkBehaviourAction` from three to two.
+  The third one used to be defaulted to the `InEvent` of the `ConnectionHandler`.
+  You now have to manually specify that where you previously had to specify the `ConnectionHandler`.
+  This very likely will trigger **convoluted compile errors** about traits not being implemented.
+
+  Within `NetworkBehaviourAction::poll`, the easiest way to migrate is to do this (in the example of `libp2p-floodsub`):
+  ```diff
+  --- a/protocols/floodsub/src/layer.rs
+  +++ b/protocols/floodsub/src/layer.rs
+  @@ -472,7 +465,7 @@ impl NetworkBehaviour for Floodsub {
+       &mut self,
+       _: &mut Context<'_>,
+       _: &mut impl PollParameters,
+  -    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+  +    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+  ```
+
+  In other words:
+
+  |Search|Replace|
+    |---|---|
+  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
+
+  If you reference `NetworkBehaviourAction` somewhere else as well,
+  you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
+
+  See [PR 3328].
 
 - Update to `libp2p-core` `v0.39.0`.
 
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
+
 - Deprecate functions on `PollParameters` in preparation for `PollParameters` to be removed entirely eventually. See [PR 3153].
 
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
 - Remove deprecated `inject_*` methods from `NetworkBehaviour` and `ConnectionHandler`.
-  see [PR 3264].
+  Make the implementation of `on_swarm_event` and `on_connection_handler_event`
+  both mandatory. See [PR 3264] and [PR 3364].
 
 - Update to `libp2p-swarm-derive` `v0.32.0`.
 
-- Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
-  These two types are always used with `std::io::Error`. See [PR 3272].
+- Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` .
+  The configured value now applies _per_ connection.
+  The default values remains 7.
+  If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
+  See [PR 3188].
 
+- Remove `DialError::ConnectionIo` variant.
+  This was never constructed.
+  See [PR 3374].
+
+- Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
+  See [PR 3375].
+
+- Remove `PendingConnectionError`, `PendingInboundConnectionError` and `PendingOutboundConnectionError` from the public API.
+  They are no longer referenced anywhere with the addition of `ListenError`.
+  See [PR 3497].
+
+- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+
+- Deprecate methods `Swarm::with_executor`, `Swarm::with_*_executor`, `Swarm::without_executor`.
+  Introduce similar methods in `SwarmBuilder`. See [PR 3588].
+
+- Gracefully disable oneshot handler on dial upgrade errors. See [PR 3577].
+
+[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
+[PR 3328]: https://github.com/libp2p/rust-libp2p/pull/3328
+[PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
+[PR 3377]: https://github.com/libp2p/rust-libp2p/pull/3377
+[PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
+[PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
+[PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
+[PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
+[PR 3588]: https://github.com/libp2p/rust-libp2p/pull/3588
+[PR 3577]: https://github.com/libp2p/rust-libp2p/pull/3577
 
 # 0.41.1
 

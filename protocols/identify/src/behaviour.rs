@@ -18,17 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, InEvent, Proto};
+use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{
-    connection::ConnectionId, multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey,
-};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
+    ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
+    THandlerInEvent, ToSwarm,
 };
+use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::{
@@ -43,7 +44,7 @@ use std::{
 /// about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
-/// are reported via [`NetworkBehaviourAction::ReportObservedAddr`] with a
+/// are reported via [`ToSwarm::ReportObservedAddr`] with a
 /// [score](AddressScore) of `1`.
 pub struct Behaviour {
     config: Config,
@@ -54,7 +55,7 @@ pub struct Behaviour {
     /// with current information about the local peer.
     requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
+    events: VecDeque<ToSwarm<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 
@@ -199,10 +200,8 @@ impl Behaviour {
             if !self.requests.contains(&request) {
                 self.requests.push(request);
 
-                let handler = self.new_handler();
-                self.events.push_back(NetworkBehaviourAction::Dial {
+                self.events.push_back(ToSwarm::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    handler,
                 });
             }
         }
@@ -237,24 +236,50 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Proto;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        peer: PeerId,
+        _: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
             self.config.initial_delay,
             self.config.interval,
+            peer,
             self.config.local_public_key.clone(),
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
-        )
+            remote_addr.clone(),
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+        ))
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             handler::Event::Identified(mut info) => {
@@ -268,27 +293,19 @@ impl NetworkBehaviour for Behaviour {
 
                 let observed = info.observed_addr.clone();
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Received {
-                        peer_id,
-                        info,
-                    }));
-                self.events
-                    .push_back(NetworkBehaviourAction::ReportObservedAddr {
-                        address: observed,
-                        score: AddressScore::Finite(1),
-                    });
+                    .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
+                self.events.push_back(ToSwarm::ReportObservedAddr {
+                    address: observed,
+                    score: AddressScore::Finite(1),
+                });
             }
             handler::Event::Identification(peer) => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Sent {
-                        peer_id: peer,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id: peer }));
             }
             handler::Event::IdentificationPushed => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Pushed {
-                        peer_id,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
             }
             handler::Event::Identify => {
                 self.requests.push(Request {
@@ -298,10 +315,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::IdentificationError(error) => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Error {
-                        peer_id,
-                        error,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
             }
         }
     }
@@ -310,7 +324,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -320,7 +334,7 @@ impl NetworkBehaviour for Behaviour {
             Some(Request {
                 peer_id,
                 protocol: Protocol::Push,
-            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+            }) => Poll::Ready(ToSwarm::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::Any,
                 event: InEvent {
@@ -337,7 +351,7 @@ impl NetworkBehaviour for Behaviour {
             Some(Request {
                 peer_id,
                 protocol: Protocol::Identify(connection_id),
-            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+            }) => Poll::Ready(ToSwarm::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::One(connection_id),
                 event: InEvent {
@@ -355,8 +369,19 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers.get(peer)
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self.discovered_peers.get(&peer))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -525,10 +550,12 @@ mod tests {
     use super::*;
     use futures::pin_mut;
     use futures::prelude::*;
-    use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
+    use libp2p_core::{muxing::StreamMuxerBox, transport, upgrade, Transport};
+    use libp2p_identity as identity;
+    use libp2p_identity::PeerId;
     use libp2p_mplex::MplexConfig;
     use libp2p_noise as noise;
-    use libp2p_swarm::{Swarm, SwarmEvent};
+    use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
     use libp2p_tcp as tcp;
     use std::time::Duration;
 
@@ -556,7 +583,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -565,7 +594,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -633,7 +664,9 @@ mod tests {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -642,7 +675,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -714,7 +749,7 @@ mod tests {
                     .with_initial_delay(Duration::from_secs(10)),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let mut swarm2 = {
@@ -723,7 +758,7 @@ mod tests {
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let swarm1_peer_id = *swarm1.local_peer_id();
