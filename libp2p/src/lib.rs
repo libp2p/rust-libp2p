@@ -134,6 +134,9 @@ pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
+#[cfg(feature = "websys")]
+#[doc(inline)]
+pub use libp2p_websys_transport as websys;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
 #[cfg(not(target_arch = "wasm32"))]
