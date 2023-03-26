@@ -24,7 +24,9 @@ web-sys = { version = "0.3.61", default-features = false }
 websocket = ["web-sys/BinaryType", "web-sys/CloseEvent", "web-sys/MessageEvent", "web-sys/WebSocket"]
 
 [dev-dependencies]
-libp2p = { path = "../../libp2p", features = ["mplex", "noise", "websys-websocket"] }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-identity = { path = "../../identity" }
+libp2p-noise = { path = "../noise" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
