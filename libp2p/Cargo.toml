@@ -46,6 +46,7 @@ full = [
     "wasm-bindgen",
     "wasm-ext",
     "wasm-ext-websocket",
+    "websys",
     "websys-websocket",
     "webrtc",
     "websocket",
