@@ -2973,6 +2973,7 @@ version = "0.1.6"
 dependencies = [
  "futures",
  "js-sys",
+ "libp2p",
  "libp2p-core",
  "parking_lot 0.12.1",
  "send_wrapper 0.6.0",

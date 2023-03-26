@@ -44,11 +44,12 @@ use std::{
 To create an authenticated transport instance with Noise protocol and Mplex:
 
 ```no_run
-let local_key = identity::Keypair::generate_ed25519();
+# use libp2p::{self, core::{Transport, upgrade::Version}};
+let local_key = libp2p::identity::Keypair::generate_ed25519();
 let transport = libp2p::websys::websocket::Transport::default()
     .upgrade(Version::V1)
-    .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
-    .multiplex(mplex::MplexConfig::default())
+    .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
+    .multiplex(libp2p::mplex::MplexConfig::default())
     .boxed();
 ```
 */
