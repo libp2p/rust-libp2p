@@ -304,15 +304,8 @@ where
             }
         }
         if !discovered.is_empty() {
-<<<<<<< HEAD
             let event = Event::Discovered(discovered);
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-=======
-            let event = Event::Discovered(DiscoveredAddrsIter {
-                inner: discovered.into_iter(),
-            });
             return Poll::Ready(ToSwarm::GenerateEvent(event));
->>>>>>> upstream/master
         }
         // Emit expired event.
         let now = Instant::now();
@@ -328,15 +321,8 @@ where
             true
         });
         if !expired.is_empty() {
-<<<<<<< HEAD
             let event = Event::Expired(expired);
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-=======
-            let event = Event::Expired(ExpiredAddrsIter {
-                inner: expired.into_iter(),
-            });
             return Poll::Ready(ToSwarm::GenerateEvent(event));
->>>>>>> upstream/master
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = P::Timer::at(closest_expiration);
