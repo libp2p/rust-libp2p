@@ -52,7 +52,7 @@ impl Keypair {
         &self.secret
     }
 
-    pub fn try_from_bytes(bytes:impl AsMut<[u8]>) -> Result<Keypair,DecodingError>{
+    pub fn try_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         let secret_key = SecretKey::try_from_bytes(bytes)?;
         Ok(secret_key.into())
     }
@@ -146,7 +146,7 @@ impl SecretKey {
     /// ECDSA signature.
     pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::parse_slice(msg)
-            .map_err(|_| SigningError::new("failed to parse secp256k1 digest",None))?;
+            .map_err(|_| SigningError::new("failed to parse secp256k1 digest", None))?;
         Ok(libsecp256k1::sign(&m, &self.0)
             .0
             .serialize_der()

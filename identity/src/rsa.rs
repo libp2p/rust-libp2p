@@ -59,7 +59,7 @@ impl Keypair {
             .sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature)
         {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA",Some(Box::new(e)))),
+            Err(e) => Err(SigningError::new("RSA", Some(Box::new(e)))),
         }
     }
 
@@ -97,8 +97,7 @@ impl Keypair {
                 std::io::ErrorKind::InvalidInput,
                 format!(
                     "Cannot parse key from pkcs8 encoding or der encoding: {}\n{}",
-                    from_pkcs8_error.to_string(),
-                    from_der_error.to_string()
+                    from_pkcs8_error, from_der_error
                 ),
             ),
         ))
@@ -109,7 +108,7 @@ impl Keypair {
     }
 }
 
-impl Drop for Keypair{
+impl Drop for Keypair {
     fn drop(&mut self) {
         self.raw_key.zeroize()
     }

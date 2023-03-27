@@ -61,7 +61,7 @@ impl Keypair {
         &self.secret
     }
 
-    pub fn try_from_bytes(pk:impl AsRef<[u8]>) -> Result<Keypair,DecodingError>{
+    pub fn try_from_bytes(pk: impl AsRef<[u8]>) -> Result<Keypair, DecodingError> {
         let secret_key = SecretKey::try_from_bytes(pk)?;
         Ok(secret_key.into())
     }
@@ -265,9 +265,9 @@ mod tests {
     }
 
     #[test]
-    fn serialize_deserialize(){
+    fn serialize_deserialize() {
         let pair = Keypair::generate();
         let bytes_secret = pair.secret().to_bytes();
-        assert_eq!(Keypair::try_from_bytes(bytes_secret).unwrap(),pair)
+        assert_eq!(Keypair::try_from_bytes(bytes_secret).unwrap(), pair)
     }
 }
