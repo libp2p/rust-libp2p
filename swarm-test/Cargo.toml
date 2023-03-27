@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.57"
+async-trait = "0.1.67"
 libp2p-core = { version = "0.39.1", path = "../core" }
 libp2p-identity = { version = "0.1.1", path = "../identity" }
 libp2p-plaintext = { version = "0.39.1", path = "../transports/plaintext" }
