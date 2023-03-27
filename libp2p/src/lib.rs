@@ -190,7 +190,7 @@ pub use libp2p_identity::PeerId;
     ),
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
 ))]
 #[cfg_attr(
     all(
@@ -224,7 +224,7 @@ pub async fn development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
-            libp2p_mplex::MplexConfig::default(),
+            yamux::YamuxConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
@@ -279,7 +279,7 @@ pub fn tokio_development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
-            libp2p_mplex::MplexConfig::default(),
+            yamux::YamuxConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
