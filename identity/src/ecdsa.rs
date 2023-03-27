@@ -61,6 +61,8 @@ impl Keypair {
         &self.secret
     }
 
+    /// Try to parse an secret key byte array into a ECDSA `SecretKey`
+    /// and promote it into a `Keypair`.
     pub fn try_from_bytes(pk: impl AsRef<[u8]>) -> Result<Keypair, DecodingError> {
         let secret_key = SecretKey::try_from_bytes(pk)?;
         Ok(secret_key.into())
@@ -107,12 +109,12 @@ impl SecretKey {
         signature.as_bytes().to_owned()
     }
 
-    /// Encode a secret key into a byte buffer.
+    /// Convert a secret key into a byte buffer.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.0.to_bytes().to_vec()
     }
 
-    /// Decode a secret key from a byte buffer.
+    /// Try to parse a secret key from a byte buffer.
     pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<Self, DecodingError> {
         SigningKey::from_bytes(buf.as_ref())
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))

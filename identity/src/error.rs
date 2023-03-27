@@ -31,6 +31,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
+    /// The given feature is supported but not enabled at compile time.
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
@@ -44,6 +45,7 @@ impl DecodingError {
         feature = "ed25519",
         feature = "rsa"
     ))]
+    /// Error occurred when parsing one type into another.
     pub(crate) fn failed_to_parse<E, S>(what: &'static str, source: S) -> Self
     where
         E: Error + Send + Sync + 'static,

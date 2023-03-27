@@ -52,6 +52,8 @@ impl Keypair {
         &self.secret
     }
 
+    /// Try to parse a secret key byte arrray into a secp256k1 `SecretKey` 
+    /// and promote it into a `Keypair`.
     pub fn try_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         let secret_key = SecretKey::try_from_bytes(bytes)?;
         Ok(secret_key.into())
@@ -97,7 +99,7 @@ impl SecretKey {
         SecretKey(libsecp256k1::SecretKey::random(&mut rand::thread_rng()))
     }
 
-    /// Create a secret key from a byte slice, zeroing the slice on success.
+    /// Try to parse a secret key from a byte slice, zeroing the slice on success.
     /// If the bytes do not constitute a valid Secp256k1 secret key, an
     /// error is returned.
     ///
@@ -110,7 +112,7 @@ impl SecretKey {
         Ok(SecretKey(secret))
     }
 
-    /// Decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
+    /// Try to decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
     /// structure as defined in [RFC5915], zeroing the input slice on success.
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915

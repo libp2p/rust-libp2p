@@ -128,6 +128,10 @@ impl Keypair {
             .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
     }
 
+    /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
+    /// produced by [`Keypair::encode`], zeroing the input on success.
+    ///
+    /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[cfg(feature = "ed25519")]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]

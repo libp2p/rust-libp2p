@@ -45,7 +45,7 @@ impl Keypair {
         self.0.to_bytes()
     }
 
-    /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
+    /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
     /// produced by [`Keypair::encode`], zeroing the input on success.
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
@@ -166,7 +166,7 @@ impl PublicKey {
         self.0.to_bytes()
     }
 
-    /// Decode a public key from a byte array as produced by `encode`.
+    /// Try to decode a public key from a byte array as produced by `encode`.
     pub fn try_decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
@@ -210,7 +210,7 @@ impl SecretKey {
         )
     }
 
-    /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.
+    /// Try to create an Ed25519 secret key from a byte slice, zeroing the input on success.
     /// If the bytes do not constitute a valid Ed25519 secret key, an error is
     /// returned.
     pub fn try_from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {

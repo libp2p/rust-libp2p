@@ -66,7 +66,8 @@ impl Keypair {
     /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     /// Decoding from DER-encoded private key bytes is also supported.
-    ///
+    /// Note that a copy of the undecoded byte array will be stored for encoding.
+    /// 
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn try_decode(bytes: &mut [u8]) -> Result<Self, DecodingError> {
         let from_pkcs8_error = match RsaKeyPair::from_pkcs8(bytes) {
@@ -103,6 +104,7 @@ impl Keypair {
         ))
     }
 
+    /// Get the byte array used to parse the keypair from.
     pub fn to_raw_bytes(&self) -> Vec<u8> {
         self.raw_key.clone()
     }
