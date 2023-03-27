@@ -34,7 +34,7 @@ use p256::{
 use void::Void;
 
 /// An ECDSA keypair.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Keypair {
     secret: SecretKey,
     public: PublicKey,
@@ -59,6 +59,11 @@ impl Keypair {
     /// Get the secret key of this keypair.
     pub fn secret(&self) -> &SecretKey {
         &self.secret
+    }
+
+    pub fn try_from_bytes(pk:impl AsRef<[u8]>) -> Result<Keypair,DecodingError>{
+        let secret_key = SecretKey::try_from_bytes(pk)?;
+        Ok(secret_key.into())
     }
 }
 
@@ -86,7 +91,7 @@ impl From<Keypair> for SecretKey {
 }
 
 /// An ECDSA secret key.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SecretKey(SigningKey);
 
 impl SecretKey {
@@ -108,8 +113,8 @@ impl SecretKey {
     }
 
     /// Decode a secret key from a byte buffer.
-    pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
-        SigningKey::from_bytes(buf)
+    pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<Self, DecodingError> {
+        SigningKey::from_bytes(buf.as_ref())
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
     }
@@ -136,7 +141,7 @@ impl PublicKey {
     }
 
     /// Decode a public key from a byte buffer without compression.
-    pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
 
@@ -157,11 +162,11 @@ impl PublicKey {
     }
 
     /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
-    pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
             DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
         })?;
-        Self::from_bytes(buf)
+        Self::try_from_bytes(buf)
     }
 
     // ecPublicKey (ANSI X9.62 public key type) OID: 1.2.840.10045.2.1
@@ -257,5 +262,12 @@ mod tests {
 
         let invalid_msg = "h3ll0 w0rld".as_bytes();
         assert!(!pk.verify(invalid_msg, &sig));
+    }
+
+    #[test]
+    fn serialize_deserialize(){
+        let pair = Keypair::generate();
+        let bytes_secret = pair.secret().to_bytes();
+        assert_eq!(Keypair::try_from_bytes(bytes_secret).unwrap(),pair)
     }
 }

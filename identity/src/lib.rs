@@ -119,3 +119,5 @@ pub use error::{DecodingError, SigningError};
 pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
+
+pub type KeyType = proto::KeyType;

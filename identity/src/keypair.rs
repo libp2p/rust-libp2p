@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::{DecodingError, SigningError};
-use crate::proto;
+use crate::{proto, KeyType};
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
 
@@ -59,28 +59,28 @@ pub enum Keypair {
     #[cfg(feature = "ed25519")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `Keypair::into_ed25519` instead."
+        note = "This enum will be made opaque in the future, use `Keypair::try_into::<ed25519::Keypair>()` instead."
     )]
     Ed25519(ed25519::Keypair),
     /// An RSA keypair.
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `Keypair::into_rsa` instead."
+        note = "This enum will be made opaque in the future, use `Keypair::try_into::<rsa::Keypair>()` instead."
     )]
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `Keypair::into_secp256k1` instead."
+        note = "This enum will be made opaque in the future, use `Keypair::try_into::<secp256k1::Keypair>()` instead."
     )]
     Secp256k1(secp256k1::Keypair),
     /// An ECDSA keypair.
     #[cfg(feature = "ecdsa")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `Keypair::into_ecdsa` instead."
+        note = "This enum will be made opaque in the future, use `Keypair::try_into::<ecdsa::Keypair>()` instead."
     )]
     Ecdsa(ecdsa::Keypair),
 }
@@ -107,42 +107,6 @@ impl Keypair {
         Keypair::Ecdsa(ecdsa::Keypair::generate())
     }
 
-    #[cfg(feature = "ed25519")]
-    pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ed25519(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "secp256k1")]
-    pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Secp256k1(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub fn into_rsa(self) -> Option<rsa::Keypair> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Rsa(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "ecdsa")]
-    pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ecdsa(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
     /// Decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
@@ -150,7 +114,7 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
-        rsa::Keypair::from_pkcs8(pkcs8_der).map(Keypair::Rsa)
+        rsa::Keypair::try_decode(pkcs8_der).map(Keypair::Rsa)
     }
 
     /// Decode a keypair from a DER-encoded Secp256k1 secret key in an ECPrivateKey
@@ -160,7 +124,7 @@ impl Keypair {
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
-        secp256k1::SecretKey::from_der(der)
+        secp256k1::SecretKey::try_decode_der(der)
             .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
     }
 
@@ -168,7 +132,7 @@ impl Keypair {
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         Ok(Keypair::Ed25519(ed25519::Keypair::from(
-            ed25519::SecretKey::from_bytes(bytes)?,
+            ed25519::SecretKey::try_from_bytes(bytes)?,
         )))
     }
 
@@ -213,22 +177,37 @@ impl Keypair {
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
-        #[cfg(not(feature = "ed25519"))]
-        return Err(DecodingError::missing_feature("ed25519"));
-
         #[allow(deprecated)]
         let pk: proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
-            Self::Ed25519(data) => proto::PrivateKey {
-                Type: proto::KeyType::Ed25519,
-                Data: data.encode().to_vec(),
-            },
-            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
-            #[cfg(feature = "secp256k1")]
-            Self::Secp256k1(_) => return Err(DecodingError::encoding_unsupported("secp256k1")),
-            #[cfg(feature = "ecdsa")]
-            Self::Ecdsa(_) => return Err(DecodingError::encoding_unsupported("ECDSA")),
+            Self::Ed25519(data) => {
+                #[cfg(not(feature = "ed25519"))]
+                return Err(DecodingError::encoding_unsupported("ed25519"));
+                proto::PrivateKey {
+                    Type: KeyType::Ed25519,
+                    Data: data.encode().to_vec(),
+                }
+            }
+            Self::Rsa(_) => {
+                return Err(DecodingError::encoding_unsupported("RSA"));
+            }
+            Self::Secp256k1(data) => {
+                #[cfg(not(feature = "secp256k1"))]
+                return Err(DecodingError::encoding_unsupported("secp256k1"));
+                proto::PrivateKey{
+                    Type: KeyType::Secp256k1,
+                    Data: data.secret().encode().into()
+                }
+            }
+            
+            Self::Ecdsa(data) => {
+                #[cfg(not(feature = "ecdsa"))]
+                return Err(DecodingError::encoding_unsupported("ECDSA"));
+                proto::PrivateKey{
+                    Type: KeyType::ECDSA,
+                    Data: data.secret().to_bytes()
+                }
+            }
         };
 
         let mut buf = Vec::with_capacity(pk.get_size());
@@ -248,27 +227,31 @@ impl Keypair {
             .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
             .map(zeroize::Zeroizing::new)?;
 
+        #[allow(deprecated,unreachable_code)]
         match private_key.Type {
-            #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 =>
-            {
-                #[allow(deprecated)]
-                ed25519::Keypair::decode(&mut private_key.Data).map(Keypair::Ed25519)
+            proto::KeyType::Ed25519 => {
+                #[cfg(feature = "ed25519")]
+                return ed25519::Keypair::try_decode(&mut private_key.Data).map(Keypair::Ed25519);
+                Err(DecodingError::missing_feature("ed25519"))
             }
-            #[cfg(not(feature = "ed25519"))]
-            proto::KeyType::Ed25519 => Err(DecodingError::missing_feature("ed25519")),
-            proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
-            proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
-            proto::KeyType::ECDSA => Err(DecodingError::decoding_unsupported("ECDSA")),
+            proto::KeyType::RSA => {
+                #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+                return rsa::Keypair::try_decode(&mut private_key.Data).map(Keypair::Rsa);
+                Err(DecodingError::missing_feature("rsa"))
+            }
+            proto::KeyType::Secp256k1 => {
+                #[cfg(feature = "secp256k1")]
+                return secp256k1::Keypair::try_from_bytes(&mut private_key.Data)
+                    .map(Keypair::Secp256k1);
+                Err(DecodingError::missing_feature("secp256k1"))
+            }
+            proto::KeyType::ECDSA => {
+                #[cfg(feature = "ecdsa")]
+                return ecdsa::Keypair::try_from_bytes(&private_key.Data)
+                    .map(Keypair::Ecdsa);
+                Err(DecodingError::missing_feature("ECDSA"))
+            }
         }
-    }
-}
-
-#[cfg(feature = "ecdsa")]
-impl From<ecdsa::Keypair> for Keypair {
-    fn from(kp: ecdsa::Keypair) -> Self {
-        #[allow(deprecated)]
-        Keypair::Ecdsa(kp)
     }
 }
 
@@ -277,6 +260,14 @@ impl From<ed25519::Keypair> for Keypair {
     fn from(kp: ed25519::Keypair) -> Self {
         #[allow(deprecated)]
         Keypair::Ed25519(kp)
+    }
+}
+
+#[cfg(feature = "ecdsa")]
+impl From<ecdsa::Keypair> for Keypair {
+    fn from(kp: ecdsa::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Ecdsa(kp)
     }
 }
 
@@ -293,6 +284,58 @@ impl From<rsa::Keypair> for Keypair {
     fn from(kp: rsa::Keypair) -> Self {
         #[allow(deprecated)]
         Keypair::Rsa(kp)
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl TryInto<ed25519::Keypair> for Keypair {
+    type Error = ();
+
+    fn try_into(self) -> Result<ed25519::Keypair, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            Keypair::Ed25519(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "ecdsa")]
+impl TryInto<ecdsa::Keypair> for Keypair {
+    type Error = ();
+
+    fn try_into(self) -> Result<ecdsa::Keypair, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            Keypair::Ecdsa(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "secp256k1")]
+impl TryInto<secp256k1::Keypair> for Keypair {
+    type Error = ();
+
+    fn try_into(self) -> Result<secp256k1::Keypair, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            Keypair::Secp256k1(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+impl TryInto<rsa::Keypair> for Keypair {
+    type Error = ();
+
+    fn try_into(self) -> Result<rsa::Keypair, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            Keypair::Rsa(inner) => Ok(inner),
+            _ => Err(()),
+        }
     }
 }
 
@@ -351,42 +394,6 @@ impl PublicKey {
         }
     }
 
-    #[cfg(feature = "ed25519")]
-    pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
-        #[allow(deprecated)]
-        match self {
-            PublicKey::Ed25519(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "secp256k1")]
-    pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
-        #[allow(deprecated)]
-        match self {
-            PublicKey::Secp256k1(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub fn into_rsa(self) -> Option<rsa::PublicKey> {
-        #[allow(deprecated)]
-        match self {
-            PublicKey::Rsa(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "ecdsa")]
-    pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
-        #[allow(deprecated)]
-        match self {
-            PublicKey::Ecdsa(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
@@ -428,41 +435,84 @@ impl TryFrom<proto::PublicKey> for PublicKey {
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
         #[allow(deprecated)]
+        #[allow(unreachable_code)]
         match pubkey.Type {
-            #[cfg(feature = "ed25519")]
             proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(&pubkey.Data).map(PublicKey::Ed25519)
-            }
-            #[cfg(not(feature = "ed25519"))]
-            proto::KeyType::Ed25519 => {
+                #[cfg(feature = "ed25519")]
+                return ed25519::PublicKey::try_decode(&pubkey.Data).map(PublicKey::Ed25519);
                 log::debug!("support for ed25519 was disabled at compile-time");
                 Err(DecodingError::missing_feature("ed25519"))
             }
-            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            proto::KeyType::RSA => rsa::PublicKey::decode_x509(&pubkey.Data).map(PublicKey::Rsa),
-            #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
             proto::KeyType::RSA => {
+                #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+                return rsa::PublicKey::try_decode_x509(&pubkey.Data).map(PublicKey::Rsa);
                 log::debug!("support for RSA was disabled at compile-time");
                 Err(DecodingError::missing_feature("rsa"))
             }
-            #[cfg(feature = "secp256k1")]
             proto::KeyType::Secp256k1 => {
-                secp256k1::PublicKey::decode(&pubkey.Data).map(PublicKey::Secp256k1)
-            }
-            #[cfg(not(feature = "secp256k1"))]
-            proto::KeyType::Secp256k1 => {
+                #[cfg(feature = "secp256k1")]
+                return secp256k1::PublicKey::try_decode(&pubkey.Data).map(PublicKey::Secp256k1);
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err(DecodingError::missing_feature("secp256k1"))
             }
-            #[cfg(feature = "ecdsa")]
             proto::KeyType::ECDSA => {
-                ecdsa::PublicKey::decode_der(&pubkey.Data).map(PublicKey::Ecdsa)
-            }
-            #[cfg(not(feature = "ecdsa"))]
-            proto::KeyType::ECDSA => {
+                #[cfg(feature = "ecdsa")]
+                return ecdsa::PublicKey::try_decode_der(&pubkey.Data).map(PublicKey::Ecdsa);
                 log::debug!("support for ECDSA was disabled at compile-time");
                 Err(DecodingError::missing_feature("ecdsa"))
             }
+        }
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl TryInto<ed25519::PublicKey> for PublicKey {
+    type Error = ();
+
+    fn try_into(self) -> Result<ed25519::PublicKey, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            PublicKey::Ed25519(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "ecdsa")]
+impl TryInto<ecdsa::PublicKey> for PublicKey {
+    type Error = ();
+
+    fn try_into(self) -> Result<ecdsa::PublicKey, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            PublicKey::Ecdsa(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(feature = "secp256k1")]
+impl TryInto<secp256k1::PublicKey> for PublicKey {
+    type Error = ();
+
+    fn try_into(self) -> Result<secp256k1::PublicKey, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            PublicKey::Secp256k1(inner) => Ok(inner),
+            _ => Err(()),
+        }
+    }
+}
+
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+impl TryInto<rsa::PublicKey> for PublicKey {
+    type Error = ();
+
+    fn try_into(self) -> Result<rsa::PublicKey, Self::Error> {
+        match self {
+            #[allow(deprecated)]
+            PublicKey::Rsa(inner) => Ok(inner),
+            _ => Err(()),
         }
     }
 }

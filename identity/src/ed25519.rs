@@ -49,7 +49,7 @@ impl Keypair {
     /// produced by [`Keypair::encode`], zeroing the input on success.
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
-    pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
             .map(|k| {
                 kp.zeroize();
@@ -70,7 +70,7 @@ impl Keypair {
 
     /// Get the secret key of this keypair.
     pub fn secret(&self) -> SecretKey {
-        SecretKey::from_bytes(&mut self.0.secret.to_bytes())
+        SecretKey::try_from_bytes(&mut self.0.secret.to_bytes())
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
     }
 }
@@ -86,7 +86,7 @@ impl fmt::Debug for Keypair {
 impl Clone for Keypair {
     fn clone(&self) -> Keypair {
         let mut sk_bytes = self.0.secret.to_bytes();
-        let secret = SecretKey::from_bytes(&mut sk_bytes)
+        let secret = SecretKey::try_from_bytes(&mut sk_bytes)
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
             .0;
         let public = ed25519::PublicKey::from_bytes(&self.0.public.to_bytes())
@@ -167,7 +167,7 @@ impl PublicKey {
     }
 
     /// Decode a public key from a byte array as produced by `encode`.
-    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
             .map(PublicKey)
@@ -187,7 +187,7 @@ impl AsRef<[u8]> for SecretKey {
 impl Clone for SecretKey {
     fn clone(&self) -> SecretKey {
         let mut sk_bytes = self.0.to_bytes();
-        Self::from_bytes(&mut sk_bytes).expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
+        Self::try_from_bytes(&mut sk_bytes).expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
     }
 }
 
@@ -212,7 +212,7 @@ impl SecretKey {
     /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.
     /// If the bytes do not constitute a valid Ed25519 secret key, an error is
     /// returned.
-    pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+    pub fn try_from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk_bytes.as_mut();
         let secret = ed25519::SecretKey::from_bytes(&*sk_bytes)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 secret key", e))?;
@@ -235,7 +235,7 @@ mod tests {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
             let mut kp1_enc = kp1.encode();
-            let kp2 = Keypair::decode(&mut kp1_enc).unwrap();
+            let kp2 = Keypair::try_decode(&mut kp1_enc).unwrap();
             eq_keypairs(&kp1, &kp2) && kp1_enc.iter().all(|b| *b == 0)
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);
@@ -246,7 +246,7 @@ mod tests {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
             let mut sk = kp1.0.secret.to_bytes();
-            let kp2 = Keypair::from(SecretKey::from_bytes(&mut sk).unwrap());
+            let kp2 = Keypair::from(SecretKey::try_from_bytes(&mut sk).unwrap());
             eq_keypairs(&kp1, &kp2) && sk == [0u8; 32]
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);

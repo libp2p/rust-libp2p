@@ -51,6 +51,11 @@ impl Keypair {
     pub fn secret(&self) -> &SecretKey {
         &self.secret
     }
+
+    pub fn try_from_bytes(bytes:impl AsMut<[u8]>) -> Result<Keypair,DecodingError>{
+        let secret_key = SecretKey::try_from_bytes(bytes)?;
+        Ok(secret_key.into())
+    }
 }
 
 impl fmt::Debug for Keypair {
@@ -97,7 +102,7 @@ impl SecretKey {
     /// error is returned.
     ///
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
-    pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+    pub fn try_from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
         let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
             .map_err(|e| DecodingError::failed_to_parse("parse secp256k1 secret key", e))?;
@@ -109,7 +114,7 @@ impl SecretKey {
     /// structure as defined in [RFC5915], zeroing the input slice on success.
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
-    pub fn from_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+    pub fn try_decode_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         // TODO: Stricter parsing.
         let der_obj = der.as_mut();
 
@@ -118,7 +123,7 @@ impl SecretKey {
             .and_then(Vec::load)
             .map_err(|e| DecodingError::failed_to_parse("secp256k1 SecretKey bytes", e))?;
 
-        let sk = SecretKey::from_bytes(&mut sk_bytes)?;
+        let sk = SecretKey::try_from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         der_obj.zeroize();
         Ok(sk)
@@ -133,7 +138,7 @@ impl SecretKey {
     }
 
     /// Returns the raw bytes of the secret key.
-    pub fn to_bytes(&self) -> [u8; 32] {
+    pub fn encode(&self) -> [u8; 32] {
         self.0.serialize()
     }
 
@@ -141,7 +146,7 @@ impl SecretKey {
     /// ECDSA signature.
     pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         let m = Message::parse_slice(msg)
-            .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
+            .map_err(|_| SigningError::new("failed to parse secp256k1 digest",None))?;
         Ok(libsecp256k1::sign(&m, &self.0)
             .0
             .serialize_der()
@@ -214,7 +219,7 @@ impl PublicKey {
 
     /// Decode a public key from a byte slice in the the format produced
     /// by `encode`.
-    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))
             .map_err(|e| DecodingError::failed_to_parse("secp256k1 public key", e))
             .map(PublicKey)
@@ -230,7 +235,7 @@ mod tests {
         let sk1 = SecretKey::generate();
         let mut sk_bytes = [0; 32];
         sk_bytes.copy_from_slice(&sk1.0.serialize()[..]);
-        let sk2 = SecretKey::from_bytes(&mut sk_bytes).unwrap();
+        let sk2 = SecretKey::try_from_bytes(&mut sk_bytes).unwrap();
         assert_eq!(sk1.0.serialize(), sk2.0.serialize());
         assert_eq!(sk_bytes, [0; 32]);
     }

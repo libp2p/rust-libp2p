@@ -31,41 +31,87 @@ use zeroize::Zeroize;
 
 /// An RSA keypair.
 #[derive(Clone)]
-pub struct Keypair(Arc<RsaKeyPair>);
+pub struct Keypair {
+    inner: Arc<RsaKeyPair>,
+    raw_key: Option<Vec<u8>>,
+}
 
 impl std::fmt::Debug for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Keypair")
-            .field("public", self.0.public_key())
+            .field("public", self.inner.public_key())
             .finish()
     }
 }
 
 impl Keypair {
-    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
-    /// format (i.e. unencrypted) as defined in [RFC5208].
-    ///
-    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let kp = RsaKeyPair::from_pkcs8(der)
-            .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
-        der.zeroize();
-        Ok(Keypair(Arc::new(kp)))
-    }
-
     /// Get the public key from the keypair.
     pub fn public(&self) -> PublicKey {
-        PublicKey(self.0.public_key().as_ref().to_vec())
+        PublicKey(self.inner.public_key().as_ref().to_vec())
     }
 
     /// Sign a message with this keypair.
     pub fn sign(&self, data: &[u8]) -> Result<Vec<u8>, SigningError> {
-        let mut signature = vec![0; self.0.public_modulus_len()];
+        let mut signature = vec![0; self.inner.public_modulus_len()];
         let rng = SystemRandom::new();
-        match self.0.sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature) {
+        match self
+            .inner
+            .sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature)
+        {
             Ok(()) => Ok(signature),
-            Err(e) => Err(SigningError::new("RSA").source(e)),
+            Err(e) => Err(SigningError::new("RSA",Some(Box::new(e)))),
         }
+    }
+
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
+    /// format (i.e. unencrypted) as defined in [RFC5208].
+    /// Decoding from DER-encoded private key bytes is also supported.
+    ///
+    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
+    pub fn try_decode(bytes: &mut [u8]) -> Result<Self, DecodingError> {
+        let from_pkcs8_error = match RsaKeyPair::from_pkcs8(bytes) {
+            Ok(kp) => {
+                let kp = Self {
+                    inner: Arc::new(kp),
+                    raw_key: Some(bytes.to_vec()),
+                };
+                bytes.zeroize();
+                return Ok(kp);
+            }
+            Err(e) => e,
+        };
+        let from_der_error = match RsaKeyPair::from_der(bytes) {
+            Ok(kp) => {
+                let kp = Self {
+                    inner: Arc::new(kp),
+                    raw_key: Some(bytes.to_vec()),
+                };
+                bytes.zeroize();
+                return Ok(kp);
+            }
+            Err(e) => e,
+        };
+        Err(DecodingError::failed_to_parse(
+            "Ed25519 keypair",
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Cannot parse key from pkcs8 encoding or der encoding: {}\n{}",
+                    from_pkcs8_error.to_string(),
+                    from_der_error.to_string()
+                ),
+            ),
+        ))
+    }
+
+    pub fn into_raw(&self) -> Option<Vec<u8>> {
+        self.raw_key.clone()
+    }
+}
+
+impl Drop for Keypair{
+    fn drop(&mut self) {
+        self.raw_key.zeroize()
     }
 }
 
@@ -109,7 +155,7 @@ impl PublicKey {
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
-    pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::decode(pk)
             .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
             .map(|spki| spki.subjectPublicKey.0)
@@ -317,22 +363,22 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary(g: &mut Gen) -> SomeKeypair {
             let mut key = g.choose(&[KEY1, KEY2, KEY3]).unwrap().to_vec();
-            SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
+            SomeKeypair(Keypair::try_decode(&mut key).unwrap())
         }
     }
 
     #[test]
     fn rsa_from_pkcs8() {
-        assert!(Keypair::from_pkcs8(&mut KEY1.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY2.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY3.to_vec()).is_ok());
+        assert!(Keypair::try_decode(&mut KEY1.to_vec()).is_ok());
+        assert!(Keypair::try_decode(&mut KEY2.to_vec()).is_ok());
+        assert!(Keypair::try_decode(&mut KEY3.to_vec()).is_ok());
     }
 
     #[test]
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::decode_x509(&pk.encode_x509())
+            PublicKey::try_decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
