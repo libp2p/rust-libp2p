@@ -33,10 +33,6 @@
 //!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![deprecated(
-    since = "0.39.0",
-    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websys-transport`."
-)]
 
 use futures::{future::Ready, prelude::*, ready, stream::SelectAll};
 use libp2p_core::{
