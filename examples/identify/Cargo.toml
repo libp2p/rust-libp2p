@@ -9,4 +9,18 @@ license = "MIT"
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = "0.3.27"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "mplex", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
+libp2p = { path = "../../libp2p", features = [
+    "async-std",
+    "dns",
+    "dcutr",
+    "identify",
+    "macros",
+    "noise",
+    "ping",
+    "relay",
+    "rendezvous",
+    "tcp",
+    "tokio",
+    "yamux"
+] }
+libp2p-mplex = { path = "../../muxers/mplex" }

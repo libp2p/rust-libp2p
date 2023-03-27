@@ -3,6 +3,9 @@
 - Introduce `libp2p::connection_limits` module.
   See [PR 3386].
 
+- Deprecate the `mplex` feature.
+The recommended baseline stream multiplexer is `yamux`.
+
 - Deprecate the `quic` and `webrtc` feature.
   These two crates are only in alpha state.
   To properly communicate this to users, we want them to add the dependency directly which makes the `alpha` version visible.

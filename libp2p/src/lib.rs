@@ -83,8 +83,10 @@ pub use libp2p_mdns as mdns;
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
-#[doc(inline)]
-pub use libp2p_mplex as mplex;
+#[deprecated(note = "`mplex` is not recommended anymore. Please use `yamux` instead.")]
+pub mod mplex {
+    pub use libp2p_mplex::*;
+}
 #[cfg(feature = "noise")]
 #[doc(inline)]
 pub use libp2p_noise as noise;
@@ -188,7 +190,6 @@ pub use libp2p_identity::PeerId;
     ),
     feature = "websocket",
     feature = "noise",
-    feature = "mplex",
     feature = "yamux"
 ))]
 #[cfg_attr(
@@ -223,7 +224,7 @@ pub async fn development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
-            mplex::MplexConfig::default(),
+            libp2p_mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
@@ -248,7 +249,6 @@ pub async fn development_transport(
     ),
     feature = "websocket",
     feature = "noise",
-    feature = "mplex",
     feature = "yamux"
 ))]
 #[cfg_attr(
@@ -279,7 +279,7 @@ pub fn tokio_development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
-            mplex::MplexConfig::default(),
+            libp2p_mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
