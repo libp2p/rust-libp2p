@@ -182,13 +182,15 @@ impl Keypair {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => {
                 #[cfg(not(feature = "ed25519"))]
-                return Err(DecodingError::encoding_unsupported("ed25519"));
+                return Err(DecodingError::missing_feature("ed25519"));
                 proto::PrivateKey {
                     Type: KeyType::Ed25519,
                     Data: data.encode().to_vec(),
                 }
             }
             Self::Rsa(data) => {
+                #[cfg(not(feature = "rsa"))]
+                return Err(DecodingError::missing_feature("rsa"));
                 proto::PrivateKey{
                     Type: KeyType::RSA,
                     Data: data.to_raw_bytes()
@@ -196,7 +198,7 @@ impl Keypair {
             }
             Self::Secp256k1(data) => {
                 #[cfg(not(feature = "secp256k1"))]
-                return Err(DecodingError::encoding_unsupported("secp256k1"));
+                return Err(DecodingError::missing_feature("secp256k1"));
                 proto::PrivateKey{
                     Type: KeyType::Secp256k1,
                     Data: data.secret().encode().into()
@@ -205,7 +207,7 @@ impl Keypair {
             
             Self::Ecdsa(data) => {
                 #[cfg(not(feature = "ecdsa"))]
-                return Err(DecodingError::encoding_unsupported("ECDSA"));
+                return Err(DecodingError::missing_feature("ECDSA"));
                 proto::PrivateKey{
                     Type: KeyType::ECDSA,
                     Data: data.secret().to_bytes()
