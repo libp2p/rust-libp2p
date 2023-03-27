@@ -33,7 +33,7 @@ use zeroize::Zeroize;
 #[derive(Clone)]
 pub struct Keypair {
     inner: Arc<RsaKeyPair>,
-    raw_key: Option<Vec<u8>>,
+    raw_key: Vec<u8>,
 }
 
 impl std::fmt::Debug for Keypair {
@@ -73,7 +73,7 @@ impl Keypair {
             Ok(kp) => {
                 let kp = Self {
                     inner: Arc::new(kp),
-                    raw_key: Some(bytes.to_vec()),
+                    raw_key: bytes.to_vec(),
                 };
                 bytes.zeroize();
                 return Ok(kp);
@@ -84,7 +84,7 @@ impl Keypair {
             Ok(kp) => {
                 let kp = Self {
                     inner: Arc::new(kp),
-                    raw_key: Some(bytes.to_vec()),
+                    raw_key: bytes.to_vec(),
                 };
                 bytes.zeroize();
                 return Ok(kp);
@@ -104,7 +104,7 @@ impl Keypair {
         ))
     }
 
-    pub fn into_raw(&self) -> Option<Vec<u8>> {
+    pub fn to_raw_bytes(&self) -> Vec<u8> {
         self.raw_key.clone()
     }
 }

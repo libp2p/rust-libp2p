@@ -73,22 +73,6 @@ impl DecodingError {
             source: Some(Box::new(source)),
         }
     }
-
-    #[allow(unused)]
-    pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
-        Self {
-            msg: format!("decoding {key_type} key from Protobuf is unsupported"),
-            source: None,
-        }
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
-        Self {
-            msg: format!("encoding {key_type} key to Protobuf is unsupported"),
-            source: None,
-        }
-    }
 }
 
 impl fmt::Display for DecodingError {

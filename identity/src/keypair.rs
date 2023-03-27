@@ -188,8 +188,11 @@ impl Keypair {
                     Data: data.encode().to_vec(),
                 }
             }
-            Self::Rsa(_) => {
-                return Err(DecodingError::encoding_unsupported("RSA"));
+            Self::Rsa(data) => {
+                proto::PrivateKey{
+                    Type: KeyType::RSA,
+                    Data: data.to_raw_bytes()
+                }
             }
             Self::Secp256k1(data) => {
                 #[cfg(not(feature = "secp256k1"))]
