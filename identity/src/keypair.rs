@@ -172,7 +172,7 @@ impl Keypair {
     /// Encode a private key as protobuf structure.
     #[cfg_attr(
         not(feature = "ed25519"),
-        allow(unreachable_code, unused_variables, unused_mut)
+        allow(unused_variables, unused_mut)
     )]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
@@ -181,33 +181,27 @@ impl Keypair {
         let pk: proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => {
-                #[cfg(not(feature = "ed25519"))]
-                return Err(DecodingError::missing_feature("ed25519"));
                 proto::PrivateKey {
                     Type: KeyType::Ed25519,
                     Data: data.encode().to_vec(),
                 }
             }
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(data) => {
-                #[cfg(not(feature = "rsa"))]
-                return Err(DecodingError::missing_feature("rsa"));
                 proto::PrivateKey{
                     Type: KeyType::RSA,
                     Data: data.to_raw_bytes()
                 }
             }
+            #[cfg(feature = "secp256k1")]
             Self::Secp256k1(data) => {
-                #[cfg(not(feature = "secp256k1"))]
-                return Err(DecodingError::missing_feature("secp256k1"));
                 proto::PrivateKey{
                     Type: KeyType::Secp256k1,
                     Data: data.secret().encode().into()
                 }
             }
-            
+            #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => {
-                #[cfg(not(feature = "ecdsa"))]
-                return Err(DecodingError::missing_feature("ECDSA"));
                 proto::PrivateKey{
                     Type: KeyType::ECDSA,
                     Data: data.secret().to_bytes()
