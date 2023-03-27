@@ -83,7 +83,6 @@ pub use libp2p_mdns as mdns;
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
-// pub use libp2p_mplex as mplex;
 #[deprecated(
     note = "`mplex` is not recommended anymore. Please use `yamux` instead or depend on `libp2p-mplex` directly if you need it for legacy use cases."
 )]
