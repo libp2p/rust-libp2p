@@ -5,6 +5,7 @@
 
 - Deprecate the `mplex` feature.
 The recommended baseline stream multiplexer is `yamux`.
+See [PR 3689].
 
 - Deprecate the `quic` and `webrtc` feature.
   These two crates are only in alpha state.
@@ -14,6 +15,7 @@ The recommended baseline stream multiplexer is `yamux`.
 - Introduce `libp2p::allow_block_list` module and deprecate `libp2p::Swarm::ban_peer_id`.
   See [PR 3590].
 
+[PR 3689]: https://github.com/libp2p/rust-libp2p/pull/3689
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3580]: https://github.com/libp2p/rust-libp2p/pull/3580
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590

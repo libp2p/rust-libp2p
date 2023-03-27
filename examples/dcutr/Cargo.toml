@@ -10,19 +10,5 @@ clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.27"
 futures-timer = "3.0"
-libp2p = { path = "../../libp2p", features = [
-    "async-std",
-    "dns",
-    "dcutr",
-    "identify",
-    "macros",
-    "noise",
-    "ping",
-    "relay",
-    "rendezvous",
-    "tcp",
-    "tokio",
-    "yamux"
-] }
-libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"

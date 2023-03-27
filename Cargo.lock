@@ -660,7 +660,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "libp2p-quic",
 ]
 
@@ -1143,7 +1142,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "libp2p-mplex",
  "log",
 ]
 
@@ -1257,7 +1255,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "multiaddr",
 ]
 
@@ -1440,7 +1437,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "multiaddr",
 ]
 
@@ -1902,7 +1898,6 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
- "libp2p-mplex",
 ]
 
 [[package]]
@@ -2055,7 +2050,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
 ]
 
 [[package]]
@@ -2068,7 +2062,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "multiaddr",
 ]
 
@@ -3608,7 +3601,6 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "multiaddr",
 ]
 
@@ -4081,7 +4073,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-mplex",
  "log",
  "tokio",
 ]
