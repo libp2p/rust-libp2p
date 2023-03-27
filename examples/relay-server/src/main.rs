@@ -103,7 +103,7 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
     bytes[0] = secret_key_seed;
 
-    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
+    identity::Keypair::try_from_bytes_ed25519(bytes).expect("only errors on wrong length")
 }
 
 #[derive(Debug, Parser)]

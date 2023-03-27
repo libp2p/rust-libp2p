@@ -112,7 +112,7 @@ impl Keypair {
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_from_pkcs8_rsa(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         rsa::Keypair::try_decode(pkcs8_der).map(Keypair::Rsa)
     }
@@ -122,7 +122,7 @@ impl Keypair {
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
-    pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_from_der_secp256k1(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         secp256k1::SecretKey::try_decode_der(der)
             .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
@@ -133,7 +133,7 @@ impl Keypair {
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[cfg(feature = "ed25519")]
-    pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
+    pub fn try_from_bytes_ed25519(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         Ok(Keypair::Ed25519(ed25519::Keypair::from(
             ed25519::SecretKey::try_from_bytes(bytes)?,
@@ -175,7 +175,7 @@ impl Keypair {
 
     /// Encode a private key as protobuf structure.
     #[cfg_attr(not(feature = "ed25519"), allow(unused_variables, unused_mut))]
-    pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
+    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
         #[allow(deprecated)]
@@ -211,7 +211,7 @@ impl Keypair {
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[cfg_attr(not(feature = "ed25519"), allow(unused_mut))]
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -387,7 +387,7 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
         let public_key = proto::PublicKey::from(self);
@@ -398,12 +398,12 @@ impl PublicKey {
             .write_message(&mut writer)
             .expect("Encoding to succeed");
 
-        buf
+        Ok(buf)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -521,9 +521,9 @@ mod tests {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();
 
-        let encoded = expected_keypair.to_protobuf_encoding().unwrap();
+        let encoded = expected_keypair.try_to_protobuf_encoding().unwrap();
 
-        let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
+        let keypair = Keypair::try_from_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
@@ -538,7 +538,7 @@ mod tests {
 
         let encoded = BASE64_STANDARD.decode(base_64_encoded).unwrap();
 
-        let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
+        let keypair = Keypair::try_from_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);

@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::From { config } => {
             let config = Zeroizing::new(config::Config::from_file(config.as_ref())?);
 
-            let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
+            let keypair = identity::Keypair::try_from_protobuf_encoding(&Zeroizing::new(
                 BASE64_STANDARD.decode(config.identity.priv_key.as_bytes())?,
             ))?;
 
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!(
             "PeerId: {:?} Keypair: {:?}",
             local_peer_id,
-            local_keypair.to_protobuf_encoding()
+            local_keypair.try_to_protobuf_encoding().unwrap()
         );
     }
 
