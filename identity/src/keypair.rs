@@ -175,7 +175,7 @@ impl Keypair {
 
     /// Encode a private key as protobuf structure.
     #[cfg_attr(not(feature = "ed25519"), allow(unused_variables, unused_mut))]
-    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
+    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         #[allow(deprecated)]
@@ -206,7 +206,7 @@ impl Keypair {
         let mut writer = Writer::new(&mut buf);
         pk.write_message(&mut writer).expect("Encoding to succeed");
 
-        Ok(buf)
+        buf
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
@@ -387,7 +387,7 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
+    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         let public_key = proto::PublicKey::from(self);
@@ -398,7 +398,7 @@ impl PublicKey {
             .write_message(&mut writer)
             .expect("Encoding to succeed");
 
-        Ok(buf)
+        buf
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
@@ -521,7 +521,7 @@ mod tests {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();
 
-        let encoded = expected_keypair.try_to_protobuf_encoding().unwrap();
+        let encoded = expected_keypair.to_protobuf_encoding();
 
         let keypair = Keypair::try_from_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();

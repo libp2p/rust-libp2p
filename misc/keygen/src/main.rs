@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!(
             "PeerId: {:?} Keypair: {:?}",
             local_peer_id,
-            local_keypair.try_to_protobuf_encoding().unwrap()
+            local_keypair.to_protobuf_encoding()
         );
     }
 

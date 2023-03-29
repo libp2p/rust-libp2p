@@ -7,7 +7,7 @@ fn calling_keypair_api() {
 
 #[allow(dead_code)]
 fn using_keypair(kp: Keypair) {
-    let _ = kp.try_to_protobuf_encoding();
+    let _ = kp.to_protobuf_encoding();
     let _ = kp.sign(&[]);
     let _ = kp.public();
 }
