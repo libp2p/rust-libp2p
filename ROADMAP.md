@@ -8,18 +8,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Generic connection management
-
-| Category             | Status      | Target Completion | Tracking                                          | Dependencies | Dependents |
-|----------------------|-------------|-------------------|---------------------------------------------------|--------------|------------|
-| Developer Ergonomics | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
-
-Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
-cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
-management generic allows users to build advanced and efficient abstractions on top of rust-libp2p
-
-First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
-
 ## Cross Behaviour communication
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
@@ -138,3 +126,13 @@ stack. Though that should only happen after improved Wasm support, see below.
 Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
 usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
 work before that.
+
+### Generic connection management
+
+| Category             | Status      | Target Completion | Tracking                                          | Dependencies | Dependents |
+|----------------------|-------------|-------------------|---------------------------------------------------|--------------|------------|
+| Developer Ergonomics | done | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
+
+Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
+cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
+management generic allows users to build advanced and efficient abstractions on top of rust-libp2p.
