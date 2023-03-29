@@ -1,4 +1,4 @@
-# 0.43.1 [unreleased]
+# 0.43.1
 
 - Derive `Clone` for `mdns::Event`. See [PR 3606].
 
