@@ -169,53 +169,5 @@ pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `Behaviour` instead of `Gossipsub` for Network Behaviour, i.e. `libp2p::gossipsub::Behaviour"
-)]
-pub type Gossipsub = Behaviour;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Event"
-)]
-pub type GossipsubEvent = Event;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
-)]
-pub type GossipsubConfig = Config;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Message"
-)]
-pub type GossipsubMessage = Message;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Rpc"
-)]
-pub type GossipsubRpc = Rpc;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` infix, i.e. `libp2p::gossipsub::RawMessage"
-)]
-pub type RawGossipsubMessage = RawMessage;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::ConfigBuilder"
-)]
-pub type GossipsubConfigBuilder = ConfigBuilder;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
-)]
-pub type GossipsubVersion = Version;
-
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
