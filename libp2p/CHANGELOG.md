@@ -1,4 +1,4 @@
-# 0.52.2 - unreleased
+# 0.52.2
 
 - Introduce `libp2p::connection_limits` module.
   See [PR 3386].
@@ -12,12 +12,12 @@
   See [PR 3590].
 
 - Introduce `libp2p::perf` module.
-  See [PR XXX].
+  See [PR 3693].
 
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3580]: https://github.com/libp2p/rust-libp2p/pull/3580
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
-[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+[PR 3693]: https://github.com/libp2p/rust-libp2p/pull/3693
 
 # 0.51.1
 
