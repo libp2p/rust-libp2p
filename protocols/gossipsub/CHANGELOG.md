@@ -1,4 +1,4 @@
-# 0.44.2 - unreleased
+# 0.44.2
 
 - Signed messages now use sequential integers in the sequence number field.
   See [PR 3551].
