@@ -1,3 +1,7 @@
+# 0.43.0 - unreleased 
+
+- Remove deprecated `Identify` prefixed Items.
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.
