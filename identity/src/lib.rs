@@ -120,4 +120,13 @@ pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
 
-pub type KeyType = proto::KeyType;
+pub enum KeyType{
+    #[cfg(feature = "ed25519")]
+    Ed25519,
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    RSA,
+    #[cfg(feature = "secp256k1")]
+    Secp256k1,
+    #[cfg(feature = "ecdsa")]
+    Ecdsa
+}

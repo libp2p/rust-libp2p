@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::{DecodingError, SigningError};
-use crate::{proto, KeyType};
+use crate::proto;
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
 
@@ -182,22 +182,22 @@ impl Keypair {
         let pk: proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => proto::PrivateKey {
-                Type: KeyType::Ed25519,
+                Type: proto::KeyType::Ed25519,
                 Data: data.encode().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(data) => proto::PrivateKey {
-                Type: KeyType::RSA,
+                Type: proto::KeyType::RSA,
                 Data: data.to_raw_bytes(),
             },
             #[cfg(feature = "secp256k1")]
             Self::Secp256k1(data) => proto::PrivateKey {
-                Type: KeyType::Secp256k1,
+                Type: proto::KeyType::Secp256k1,
                 Data: data.secret().encode().into(),
             },
             #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => proto::PrivateKey {
-                Type: KeyType::ECDSA,
+                Type: proto::KeyType::ECDSA,
                 Data: data.secret().to_bytes(),
             },
         };
