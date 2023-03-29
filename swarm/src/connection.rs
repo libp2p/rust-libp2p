@@ -42,8 +42,9 @@ use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
+use libp2p_core::Endpoint;
 use libp2p_core::{upgrade, UpgradeError};
-use libp2p_core::{Endpoint, PeerId};
+use libp2p_identity::PeerId;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
@@ -65,6 +66,16 @@ impl ConnectionId {
         note = "Don't use this, it will be removed at a later stage again."
     )]
     pub const DUMMY: ConnectionId = ConnectionId(0);
+
+    /// Creates an _unchecked_ [`ConnectionId`].
+    ///
+    /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.
+    /// This constructor does not, hence the _unchecked_.
+    ///
+    /// It is primarily meant for allowing manual tests of [`NetworkBehaviour`](crate::NetworkBehaviour)s.
+    pub fn new_unchecked(id: usize) -> Self {
+        Self(id)
+    }
 
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
@@ -376,6 +387,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
+#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
 #[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
@@ -384,6 +396,7 @@ pub struct ConnectionLimit {
     pub current: u32,
 }
 
+#[allow(deprecated)]
 impl fmt::Display for ConnectionLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -395,6 +408,7 @@ impl fmt::Display for ConnectionLimit {
 }
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
+#[allow(deprecated)]
 impl std::error::Error for ConnectionLimit {}
 
 struct SubstreamUpgrade<UserData, Upgrade> {

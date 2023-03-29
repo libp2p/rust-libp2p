@@ -91,7 +91,7 @@ pub struct Config {
 
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
+    pub fn new(keypair: &libp2p_identity::Keypair) -> Self {
         let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
         let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
         Self {
@@ -471,7 +471,7 @@ impl<P: Provider> Driver<P> {
                 if is_drained_event {
                     self.alive_connections.remove(&connection_id);
                     if self.is_decoupled && self.alive_connections.is_empty() {
-                        log::info!(
+                        log::debug!(
                             "Driver is decoupled and no active connections remain. Shutting down."
                         );
                         return ControlFlow::Break(());

@@ -24,18 +24,19 @@ mod handler;
 pub mod rate_limiter;
 
 use crate::behaviour::handler::Handler;
-use crate::message_proto;
 use crate::multiaddr_ext::MultiaddrExt;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -241,7 +242,7 @@ impl Behaviour {
             .filter(|c| matches!(c.status, CircuitStatus::Accepted))
         {
             self.queued_actions.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                ToSwarm::GenerateEvent(Event::CircuitClosed {
                     src_peer_id: circuit.src_peer_id,
                     dst_peer_id: circuit.dst_peer_id,
                     error: Some(std::io::ErrorKind::ConnectionAborted.into()),
@@ -376,12 +377,12 @@ impl NetworkBehaviour for Behaviour {
                         .all(|limiter| {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
                         }) {
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                     .into()
@@ -410,7 +411,7 @@ impl NetworkBehaviour for Behaviour {
                     .insert(connection);
 
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqAccepted {
+                    ToSwarm::GenerateEvent(Event::ReservationReqAccepted {
                         src_peer_id: event_source,
                         renewed,
                     })
@@ -419,7 +420,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqAcceptFailed {
+                    ToSwarm::GenerateEvent(Event::ReservationReqAcceptFailed {
                         src_peer_id: event_source,
                         error,
                     })
@@ -428,7 +429,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::ReservationReqDenied {} => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqDenied {
+                    ToSwarm::GenerateEvent(Event::ReservationReqDenied {
                         src_peer_id: event_source,
                     })
                     .into(),
@@ -436,7 +437,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::ReservationReqDenyFailed { error } => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::ReservationReqDenyFailed {
+                    ToSwarm::GenerateEvent(Event::ReservationReqDenyFailed {
                         src_peer_id: event_source,
                         error,
                     })
@@ -461,7 +462,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::ReservationTimedOut {
+                    ToSwarm::GenerateEvent(Event::ReservationTimedOut {
                         src_peer_id: event_source,
                     })
                     .into(),
@@ -490,13 +491,13 @@ impl NetworkBehaviour for Behaviour {
                             limiter.try_next(event_source, endpoint.get_remote_address(), now)
                         }) {
                     // Deny circuit exceeding limits.
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                 } else if let Some(dst_conn) = self
@@ -513,7 +514,7 @@ impl NetworkBehaviour for Behaviour {
                         dst_connection_id: *dst_conn,
                     });
 
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(*dst_conn),
                         peer_id: event_source,
                         event: Either::Left(handler::In::NegotiateOutboundConnect {
@@ -526,13 +527,13 @@ impl NetworkBehaviour for Behaviour {
                     }
                 } else {
                     // Deny circuit request if no reservation present.
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::NoReservation,
+                            status: proto::Status::NO_RESERVATION,
                         }),
                     }
                 };
@@ -540,7 +541,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::CircuitReqReceiveFailed { error } => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqReceiveFailed {
+                    ToSwarm::GenerateEvent(Event::CircuitReqReceiveFailed {
                         src_peer_id: event_source,
                         error,
                     })
@@ -556,7 +557,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqDenied {
+                    ToSwarm::GenerateEvent(Event::CircuitReqDenied {
                         src_peer_id: event_source,
                         dst_peer_id,
                     })
@@ -573,7 +574,7 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqDenyFailed {
+                    ToSwarm::GenerateEvent(Event::CircuitReqDenyFailed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
@@ -591,7 +592,7 @@ impl NetworkBehaviour for Behaviour {
                 dst_pending_data,
             } => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
                         event: Either::Left(handler::In::AcceptAndDriveCircuit {
@@ -615,7 +616,7 @@ impl NetworkBehaviour for Behaviour {
                 error,
             } => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::NotifyHandler {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(src_connection_id),
                         peer_id: src_peer_id,
                         event: Either::Left(handler::In::DenyCircuitReq {
@@ -627,7 +628,7 @@ impl NetworkBehaviour for Behaviour {
                     .into(),
                 );
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
+                    ToSwarm::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
                         src_peer_id,
                         dst_peer_id: event_source,
                         error,
@@ -641,7 +642,7 @@ impl NetworkBehaviour for Behaviour {
             } => {
                 self.circuits.accepted(circuit_id);
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqAccepted {
+                    ToSwarm::GenerateEvent(Event::CircuitReqAccepted {
                         src_peer_id: event_source,
                         dst_peer_id,
                     })
@@ -655,7 +656,7 @@ impl NetworkBehaviour for Behaviour {
             } => {
                 self.circuits.remove(circuit_id);
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqAcceptFailed {
+                    ToSwarm::GenerateEvent(Event::CircuitReqAcceptFailed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
@@ -671,7 +672,7 @@ impl NetworkBehaviour for Behaviour {
                 self.circuits.remove(circuit_id);
 
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                    ToSwarm::GenerateEvent(Event::CircuitClosed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
@@ -686,7 +687,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
@@ -785,11 +786,11 @@ impl Add<u64> for CircuitId {
     }
 }
 
-/// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
+/// A [`ToSwarm`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, Either<handler::In, Void>>),
+    Done(ToSwarm<Event, Either<handler::In, Void>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -797,8 +798,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, Either<handler::In, Void>>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, Either<handler::In, Void>>) -> Self {
+impl From<ToSwarm<Event, Either<handler::In, Void>>> for Action {
+    fn from(action: ToSwarm<Event, Either<handler::In, Void>>) -> Self {
         Self::Done(action)
     }
 }
@@ -808,14 +809,14 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, Either<handler::In, Void>> {
+    ) -> ToSwarm<Event, Either<handler::In, Void>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {
                 inbound_reservation_req,
                 handler,
                 peer_id,
-            } => NetworkBehaviourAction::NotifyHandler {
+            } => ToSwarm::NotifyHandler {
                 handler,
                 peer_id,
                 event: Either::Left(handler::In::AcceptReservationReq {
