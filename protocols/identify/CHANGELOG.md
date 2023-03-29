@@ -1,6 +1,6 @@
 # 0.43.0 - unreleased 
 
-- Remove deprecated `Identify` prefixed Items.
+- Remove deprecated `Identify` prefixed Items. See [PR 3698].
 
 # 0.42.1
 
