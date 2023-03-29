@@ -1,3 +1,9 @@
+# 0.25.0 - unreleased
+
+- Remove deprecated `RequestResponse` prefixed items. See [PR 3702].
+
+[PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
+
 # 0.24.0
 
 - Update to `libp2p-core` `v0.39.0`.

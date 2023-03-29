@@ -48,12 +48,6 @@ use std::{
     time::Duration,
 };
 
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Handler`"
-)]
-pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
-
 /// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
 pub struct Handler<TCodec>
 where
@@ -192,12 +186,6 @@ where
         }
     }
 }
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type RequestResponseHandlerEvent<TCodec> = Event<TCodec>;
 
 /// The events emitted by the [`Handler`].
 pub enum Event<TCodec>

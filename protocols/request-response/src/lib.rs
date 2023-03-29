@@ -63,9 +63,6 @@ pub mod handler;
 
 pub use codec::{Codec, ProtocolName};
 
-#[allow(deprecated)]
-pub use codec::RequestResponseCodec;
-
 pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
@@ -86,37 +83,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use libp2p::request_response::Behaviour instead."
-)]
-pub type RequestResponse<TCodec> = Behaviour<TCodec>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Config`"
-)]
-pub type RequestResponseConfig = Config;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
-)]
-pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
-)]
-pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
-    Message<TRequest, TResponse, TChannelResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]
