@@ -52,7 +52,7 @@ impl Keypair {
         &self.secret
     }
 
-    /// Try to parse a secret key byte arrray into a secp256k1 `SecretKey` 
+    /// Try to parse a secret key byte arrray into a secp256k1 `SecretKey`
     /// and promote it into a `Keypair`.
     pub fn try_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         let secret_key = SecretKey::try_from_bytes(bytes)?;
@@ -97,6 +97,23 @@ impl SecretKey {
     /// Generate a new random Secp256k1 secret key.
     pub fn generate() -> SecretKey {
         SecretKey(libsecp256k1::SecretKey::random(&mut rand::thread_rng()))
+    }
+
+    /// Create a secret key from a byte slice, zeroing the slice on success.
+    /// If the bytes do not constitute a valid Secp256k1 secret key, an
+    /// error is returned.
+    ///
+    /// Note that the expected binary format is the same as `libsecp256k1`'s.
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `SecretKey::try_from_bytes` instead."
+    )]
+    pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+        let sk_bytes = sk.as_mut();
+        let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
+            .map_err(|e| DecodingError::failed_to_parse("parse secp256k1 secret key", e))?;
+        sk_bytes.zeroize();
+        Ok(SecretKey(secret))
     }
 
     /// Try to parse a secret key from a byte slice, zeroing the slice on success.
@@ -220,6 +237,18 @@ impl PublicKey {
     }
 
     /// Decode a public key from a byte slice in the the format produced
+    /// by `encode`.
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `PublicKey::try_decode` instead."
+    )]
+    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
+        libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))
+            .map_err(|e| DecodingError::failed_to_parse("secp256k1 public key", e))
+            .map(PublicKey)
+    }
+
+    /// Try to decode a public key from a byte slice in the the format produced
     /// by `encode`.
     pub fn try_decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))

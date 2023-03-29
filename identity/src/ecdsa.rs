@@ -114,8 +114,19 @@ impl SecretKey {
         self.0.to_bytes().to_vec()
     }
 
+    /// Decode a secret key from a byte buffer.
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `SecretKey::try_from_bytes` instead"
+    )]
+    pub fn from_bytes(buf: &[u8]) -> Result<SecretKey, DecodingError> {
+        SigningKey::from_bytes(buf)
+            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
+            .map(SecretKey)
+    }
+
     /// Try to parse a secret key from a byte buffer.
-    pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<Self, DecodingError> {
+    pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<SecretKey, DecodingError> {
         SigningKey::from_bytes(buf.as_ref())
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
@@ -143,7 +154,21 @@ impl PublicKey {
     }
 
     /// Decode a public key from a byte buffer without compression.
-    pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `PublicKey::try_from_bytes` instead."
+    )]
+    pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
+        let enc_pt = EncodedPoint::from_bytes(k)
+            .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
+
+        VerifyingKey::from_encoded_point(&enc_pt)
+            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 public key", err))
+            .map(PublicKey)
+    }
+
+    /// Decode a public key from a byte buffer without compression.
+    pub fn try_from_bytes(k: impl AsRef<[u8]>) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
 
@@ -164,8 +189,20 @@ impl PublicKey {
     }
 
     /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
-    pub fn try_decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `PublicKey::try_decode_der` instead."
+    )]
+    pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
+            DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
+        })?;
+        Self::try_from_bytes(buf)
+    }
+
+    /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
+    pub fn try_decode_der(k: impl AsRef<[u8]>) -> Result<PublicKey, DecodingError> {
+        let buf = Self::del_asn1_header(k.as_ref()).ok_or_else(|| {
             DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
         })?;
         Self::try_from_bytes(buf)

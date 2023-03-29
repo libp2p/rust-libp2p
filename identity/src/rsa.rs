@@ -45,6 +45,25 @@ impl std::fmt::Debug for Keypair {
 }
 
 impl Keypair {
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
+    /// format (i.e. unencrypted) as defined in [RFC5208].
+    ///
+    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `Keypair::try_from_pkcs8` instead."
+    )]
+    pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        let kp = RsaKeyPair::from_pkcs8(der)
+            .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
+        let kp = Keypair {
+            inner: Arc::new(kp),
+            raw_key: der.to_vec(),
+        };
+        der.zeroize();
+        Ok(kp)
+    }
+
     /// Get the public key from the keypair.
     pub fn public(&self) -> PublicKey {
         PublicKey(self.inner.public_key().as_ref().to_vec())
@@ -67,7 +86,7 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     /// Decoding from DER-encoded private key bytes is also supported.
     /// Note that a copy of the undecoded byte array will be stored for encoding.
-    /// 
+    ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn try_decode(bytes: &mut [u8]) -> Result<Self, DecodingError> {
         let from_pkcs8_error = match RsaKeyPair::from_pkcs8(bytes) {
@@ -156,8 +175,20 @@ impl PublicKey {
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
-    pub fn try_decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `PublicKey::try_decode_x509` instead."
+    )]
+    pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::decode(pk)
+            .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
+            .map(|spki| spki.subjectPublicKey.0)
+    }
+
+    /// Try to decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
+    /// structure. See also `encode_x509`.
+    pub fn try_decode_x509(pk: impl AsRef<[u8]>) -> Result<PublicKey, DecodingError> {
+        Asn1SubjectPublicKeyInfo::decode(pk.as_ref())
             .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
             .map(|spki| spki.subjectPublicKey.0)
     }

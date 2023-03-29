@@ -387,6 +387,23 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
+    #[deprecated(since = "0.2.0", note = "This method is infallible, use `to_protobuf_encoding` instead.")]
+    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>,DecodingError> {
+        use quick_protobuf::MessageWrite;
+
+        let public_key = proto::PublicKey::from(self);
+
+        let mut buf = Vec::with_capacity(public_key.get_size());
+        let mut writer = Writer::new(&mut buf);
+        public_key
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
+
+        Ok(buf)
+    }
+     
+    /// Encode the public key into a protobuf structure for storage or
+    /// exchange with other nodes.
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
