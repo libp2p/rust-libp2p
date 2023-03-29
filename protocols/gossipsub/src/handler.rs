@@ -201,10 +201,7 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound {
-            protocol,
-            info: message,
-        }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
@@ -225,12 +222,10 @@ impl Handler {
         // If this happens, an outbound message is not sent.
         if self.outbound_substream.is_some() {
             log::warn!("Established an outbound substream with one already available");
-            // Add the message back to the send queue
-            self.send_queue.push(message);
             return;
         }
 
-        self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
+        self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
     }
 }
 
@@ -240,7 +235,7 @@ impl ConnectionHandler for Handler {
     type Error = crate::error_priv::HandlerError; // TODO: Replace this with `Void`.
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = proto::RPC;
+    type OutboundOpenInfo = ();
     type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -307,13 +302,10 @@ impl ConnectionHandler for Handler {
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
-            // Invariant: `self.outbound_substreams_created < MAX_SUBSTREAM_CREATION`.
-            let message = self.send_queue.remove(0);
-            self.send_queue.shrink_to_fit();
             self.outbound_substreams_requested += 1;
             self.outbound_substream_establishing = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: self.listen_protocol.clone().map_info(|()| message),
+                protocol: self.listen_protocol.clone(),
             });
         }
 
@@ -532,12 +524,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
-                info,
+                ..
             }) => {
                 log::debug!("Dial upgrade error: Protocol negotiation timeout.");
-
-                // Re-enqueue message.
-                self.send_queue.insert(0, info);
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
