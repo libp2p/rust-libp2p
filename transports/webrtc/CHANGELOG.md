@@ -1,4 +1,4 @@
-# 0.4.0-alpha.4 - unreleased
+# 0.4.0-alpha.4
 
 - Make `Fingerprint` type public. See [PR 3648].
 
