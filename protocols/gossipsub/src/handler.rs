@@ -97,8 +97,8 @@ pub struct Handler {
     /// requests.
     outbound_substream_establishing: bool,
 
-    /// The number of outbound substreams we have created.
-    outbound_substreams_created: usize,
+    /// The number of outbound substreams we have requested.
+    outbound_substreams_requested: usize,
 
     /// The number of inbound substreams that have been created by the peer.
     inbound_substreams_created: usize,
@@ -161,7 +161,7 @@ impl Handler {
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,
-            outbound_substreams_created: 0,
+            outbound_substreams_requested: 0,
             inbound_substreams_created: 0,
             send_queue: SmallVec::new(),
             peer_kind: None,
@@ -215,8 +215,6 @@ impl Handler {
         if self.protocol_unsupported {
             return;
         }
-
-        self.outbound_substreams_created += 1;
 
         // update the known kind of peer
         if self.peer_kind.is_none() {
@@ -311,6 +309,7 @@ impl ConnectionHandler for Handler {
             // Invariant: `self.outbound_substreams_created < MAX_SUBSTREAM_CREATION`.
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
+            self.outbound_substreams_requested += 1;
             self.outbound_substream_establishing = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: self.listen_protocol.clone().map_info(|()| message),
@@ -516,7 +515,7 @@ impl ConnectionHandler for Handler {
             return;
         }
 
-        if event.is_outbound() && self.outbound_substreams_created == MAX_SUBSTREAM_CREATION {
+        if event.is_outbound() && self.outbound_substreams_requested == MAX_SUBSTREAM_CREATION {
             // Too many outbound substreams have been created, disable the handler.
             self.keep_alive = KeepAlive::No;
             log::info!("The maximum number of outbound substreams created has been exceeded.");
