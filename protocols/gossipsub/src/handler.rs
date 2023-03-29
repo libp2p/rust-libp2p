@@ -227,9 +227,10 @@ impl Handler {
             log::warn!("Established an outbound substream with one already available");
             // Add the message back to the send queue
             self.send_queue.push(message);
-        } else {
-            self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
+            return;
         }
+
+        self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
     }
 }
 
