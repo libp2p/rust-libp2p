@@ -89,6 +89,8 @@ pub use libp2p_mplex as mplex;
 #[doc(inline)]
 pub use libp2p_noise as noise;
 #[cfg(feature = "perf")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "perf")))]
 #[doc(inline)]
 pub use libp2p_perf as perf;
 #[cfg(feature = "ping")]
