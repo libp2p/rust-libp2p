@@ -531,9 +531,12 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
-                ..
+                info,
             }) => {
                 log::debug!("Dial upgrade error: Protocol negotiation timeout.");
+
+                // Re-enqueue message.
+                self.send_queue.insert(0, info);
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
