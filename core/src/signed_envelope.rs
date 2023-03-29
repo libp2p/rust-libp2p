@@ -76,7 +76,7 @@ impl SignedEnvelope {
         use quick_protobuf::MessageWrite;
 
         let envelope = proto::Envelope {
-            public_key: self.key.try_to_protobuf_encoding().unwrap(),
+            public_key: self.key.to_protobuf_encoding(),
             payload_type: self.payload_type,
             payload: self.payload,
             signature: self.signature,

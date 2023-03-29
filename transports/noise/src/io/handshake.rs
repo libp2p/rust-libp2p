@@ -236,7 +236,7 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = proto::NoiseHandshakePayload {
-        identity_key: state.identity.public.try_to_protobuf_encoding().unwrap(),
+        identity_key: state.identity.public.to_protobuf_encoding(),
         ..Default::default()
     };
 

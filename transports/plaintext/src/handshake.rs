@@ -54,7 +54,7 @@ impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.try_to_protobuf_encoding().unwrap()),
+            pubkey: Some(config.local_public_key.to_protobuf_encoding()),
         };
         let mut buf = Vec::with_capacity(exchange.get_size());
         let mut writer = Writer::new(&mut buf);

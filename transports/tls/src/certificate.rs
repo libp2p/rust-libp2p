@@ -215,7 +215,7 @@ fn make_libp2p_extension(
     //    signature OCTET STRING
     // }
     let extension_content = {
-        let serialized_pubkey = identity_keypair.public().try_to_protobuf_encoding().unwrap();
+        let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
         yasna::encode_der(&(serialized_pubkey, signature))
     };
 

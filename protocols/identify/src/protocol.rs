@@ -169,7 +169,7 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.try_to_protobuf_encoding().unwrap();
+    let pubkey_bytes = info.public_key.to_protobuf_encoding();
 
     let message = proto::Identify {
         agentVersion: Some(info.agent_version),
@@ -386,7 +386,7 @@ mod tests {
             publicKey: Some(
                 identity::Keypair::generate_ed25519()
                     .public()
-                    .try_to_protobuf_encoding().unwrap(),
+                    .to_protobuf_encoding(),
             ),
         };
 
