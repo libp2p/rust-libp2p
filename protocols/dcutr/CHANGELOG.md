@@ -1,3 +1,15 @@
+# 0.10.0 - unreleased
+
+ - Remove deprecated items. See [PR 3700].
+   * `libp2p_dcutr::inbound::UpgradeError::InvalidAddrs`
+   * `libp2p_dcutr::outbound::UpgradeError::InvalidAddrs`
+   * `libp2p_dcutr::InboundUpgradeError`
+   * `libp2p_dcutr::OutboundUpgradeError`
+   * `libp2p_dcutr::behaviour::*`
+
+[PR 3700]: https://github.com/libp2p/rust-libp2p/pull/3700
+   * 
+
 # 0.9.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
