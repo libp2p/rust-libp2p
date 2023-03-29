@@ -1,4 +1,4 @@
-# 0.42.1 - unreleased
+# 0.42.1
 
 - Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
   See [PR 3386].
@@ -12,12 +12,12 @@
 - Rename `NetworkBehaviourAction` to `ToSwarm`.
   A deprecated type-alias is provided to ease the transition.
   The new name is meant to better indicate the message-passing relationship between `Swarm` and `NetworkBehaviour`.
-  See [PR XXXX].
+  See [PR 3658].
 
 [PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 [PR 3652]: https://github.com/libp2p/rust-libp2p/pull/3652
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3658]: https://github.com/libp2p/rust-libp2p/pull/3658
 
 # 0.42.0
 
