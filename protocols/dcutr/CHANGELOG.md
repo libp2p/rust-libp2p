@@ -8,7 +8,6 @@
    * `libp2p_dcutr::behaviour::*`
 
 [PR 3700]: https://github.com/libp2p/rust-libp2p/pull/3700
-   * 
 
 # 0.9.1
 
