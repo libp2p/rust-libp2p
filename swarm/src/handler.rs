@@ -229,7 +229,7 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
         matches!(
             self,
             Self::FullyNegotiatedInbound(_)
-                | Self::DialUpgradeError(DialUpgradeError {
+                | Self::ListenUpgradeError(ListenUpgradeError {
                     error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
                     ..
                 })
