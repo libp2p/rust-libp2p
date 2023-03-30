@@ -21,7 +21,9 @@
 //! Errors during identity key operations.
 
 use std::error::Error;
-use std::fmt;
+use std::fmt::{self, Display};
+
+use crate::KeyType;
 
 /// An error during decoding of key material.
 #[derive(Debug)]
@@ -116,5 +118,33 @@ impl fmt::Display for SigningError {
 impl Error for SigningError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.source.as_ref().map(|s| &**s as &dyn Error)
+    }
+}
+
+#[derive(Debug)]
+pub struct ConversionError {
+    actual: KeyType,
+}
+
+impl ConversionError {
+    pub fn new(actual: KeyType) -> ConversionError {
+        ConversionError {
+            actual,
+        }
+    }
+}
+
+impl Display for ConversionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!(
+            "Cannot convert to the given type, the actual key type inside is {}",
+            self.actual
+        ))
+    }
+}
+
+impl Error for ConversionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
     }
 }

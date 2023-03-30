@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{DecodingError, SigningError};
-use crate::proto;
+use crate::error::{ConversionError, DecodingError, SigningError};
+use crate::{proto, KeyType};
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
 
@@ -280,52 +280,60 @@ impl From<rsa::Keypair> for Keypair {
 
 #[cfg(feature = "ed25519")]
 impl TryInto<ed25519::Keypair> for Keypair {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<ed25519::Keypair, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             Keypair::Ed25519(inner) => Ok(inner),
-            _ => Err(()),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
 
 #[cfg(feature = "ecdsa")]
 impl TryInto<ecdsa::Keypair> for Keypair {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<ecdsa::Keypair, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             Keypair::Ecdsa(inner) => Ok(inner),
-            _ => Err(()),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
         }
     }
 }
 
 #[cfg(feature = "secp256k1")]
 impl TryInto<secp256k1::Keypair> for Keypair {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<secp256k1::Keypair, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             Keypair::Secp256k1(inner) => Ok(inner),
-            _ => Err(()),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
 
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 impl TryInto<rsa::Keypair> for Keypair {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<rsa::Keypair, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             Keypair::Rsa(inner) => Ok(inner),
-            _ => Err(()),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
@@ -387,8 +395,11 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    #[deprecated(since = "0.2.0", note = "This method is infallible, use `to_protobuf_encoding` instead.")]
-    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>,DecodingError> {
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method is infallible, use `to_protobuf_encoding` instead."
+    )]
+    pub fn try_to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
         let public_key = proto::PublicKey::from(self);
@@ -401,7 +412,7 @@ impl PublicKey {
 
         Ok(buf)
     }
-     
+
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
@@ -475,52 +486,60 @@ impl TryFrom<proto::PublicKey> for PublicKey {
 
 #[cfg(feature = "ed25519")]
 impl TryInto<ed25519::PublicKey> for PublicKey {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<ed25519::PublicKey, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             PublicKey::Ed25519(inner) => Ok(inner),
-            _ => Err(()),
+            PublicKey::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            PublicKey::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+            PublicKey::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
 
 #[cfg(feature = "ecdsa")]
 impl TryInto<ecdsa::PublicKey> for PublicKey {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<ecdsa::PublicKey, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             PublicKey::Ecdsa(inner) => Ok(inner),
-            _ => Err(()),
+            PublicKey::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            PublicKey::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            PublicKey::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
         }
     }
 }
 
 #[cfg(feature = "secp256k1")]
 impl TryInto<secp256k1::PublicKey> for PublicKey {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<secp256k1::PublicKey, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             PublicKey::Secp256k1(inner) => Ok(inner),
-            _ => Err(()),
+            PublicKey::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            PublicKey::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            PublicKey::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
 
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 impl TryInto<rsa::PublicKey> for PublicKey {
-    type Error = ();
+    type Error = ConversionError;
 
     fn try_into(self) -> Result<rsa::PublicKey, Self::Error> {
+        #[allow(deprecated)]
         match self {
-            #[allow(deprecated)]
             PublicKey::Rsa(inner) => Ok(inner),
-            _ => Err(()),
+            PublicKey::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            PublicKey::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+            PublicKey::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
         }
     }
 }
