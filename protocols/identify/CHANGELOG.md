@@ -2,6 +2,8 @@
 
 - Remove deprecated `Identify` prefixed Items. See [PR 3698].
 
+[PR 3698]: https://github.com/libp2p/rust-libp2p/pull/3698
+
 # 0.42.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
