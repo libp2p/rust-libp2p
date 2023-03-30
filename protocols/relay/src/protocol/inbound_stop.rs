@@ -62,11 +62,16 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            match type_pb {
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
+            match r#type {
                 proto::StopMessageType::CONNECT => {
-                    let src_peer_id =
-                        PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                            .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    let src_peer_id = PeerId::from_bytes(
+                        &peer
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::MissingPeer)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Circuit {
                         substream,
                         src_peer_id,
@@ -106,6 +111,8 @@ pub enum FatalUpgradeError {
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
     MissingPeer,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
 }
@@ -127,7 +134,7 @@ impl Circuit {
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
         let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::STATUS,
+            type_pb: Some(proto::StopMessageType::STATUS),
             peer: None,
             limit: None,
             status: Some(proto::Status::OK),
@@ -151,7 +158,7 @@ impl Circuit {
 
     pub async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
         let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::STATUS,
+            type_pb: Some(proto::StopMessageType::STATUS),
             peer: None,
             limit: None,
             status: Some(status),

@@ -9,12 +9,13 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
+use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result, PackedFixed, PackedFixedIntoIter, PackedFixedRefIter};
 use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Status {
+    UNUSED = 0,
     OK = 100,
     RESERVATION_REFUSED = 200,
     RESOURCE_LIMIT_EXCEEDED = 201,
@@ -27,13 +28,14 @@ pub enum Status {
 
 impl Default for Status {
     fn default() -> Self {
-        Status::OK
+        Status::UNUSED
     }
 }
 
 impl From<i32> for Status {
     fn from(i: i32) -> Self {
         match i {
+            0 => Status::UNUSED,
             100 => Status::OK,
             200 => Status::RESERVATION_REFUSED,
             201 => Status::RESOURCE_LIMIT_EXCEEDED,
@@ -50,6 +52,7 @@ impl From<i32> for Status {
 impl<'a> From<&'a str> for Status {
     fn from(s: &'a str) -> Self {
         match s {
+            "UNUSED" => Status::UNUSED,
             "OK" => Status::OK,
             "RESERVATION_REFUSED" => Status::RESERVATION_REFUSED,
             "RESOURCE_LIMIT_EXCEEDED" => Status::RESOURCE_LIMIT_EXCEEDED,
@@ -64,9 +67,9 @@ impl<'a> From<&'a str> for Status {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct HopMessage {
-    pub type_pb: message_v2::pb::mod_HopMessage::Type,
+    pub type_pb: Option<message_v2::pb::mod_HopMessage::Type>,
     pub peer: Option<message_v2::pb::Peer>,
     pub reservation: Option<message_v2::pb::Reservation>,
     pub limit: Option<message_v2::pb::Limit>,
@@ -78,7 +81,7 @@ impl<'a> MessageRead<'a> for HopMessage {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.type_pb = r.read_enum(bytes)?,
+                Ok(8) => msg.type_pb = Some(r.read_enum(bytes)?),
                 Ok(18) => msg.peer = Some(r.read_message::<message_v2::pb::Peer>(bytes)?),
                 Ok(26) => msg.reservation = Some(r.read_message::<message_v2::pb::Reservation>(bytes)?),
                 Ok(34) => msg.limit = Some(r.read_message::<message_v2::pb::Limit>(bytes)?),
@@ -94,19 +97,19 @@ impl<'a> MessageRead<'a> for HopMessage {
 impl MessageWrite for HopMessage {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint(*(&self.type_pb) as u64)
+        + self.type_pb.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
         + self.peer.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.reservation.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.limit.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
-        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.status.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?;
-        if let Some(ref s) = self.peer { w.write_with_tag(18, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.reservation { w.write_with_tag(26, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.limit { w.write_with_tag(34, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.status { w.write_with_tag(40, |w| w.write_enum(*s as i32))?; }
+        self.type_pb.as_ref().map_or(Ok(()), |&m| w.write_with_tag(8, |w| w.write_enum(*&m as i32)))?;
+        self.peer.as_ref().map_or(Ok(()), |m| w.write_with_tag(18, |w| w.write_message(m)))?;
+        self.reservation.as_ref().map_or(Ok(()), |m| w.write_with_tag(26, |w| w.write_message(m)))?;
+        self.limit.as_ref().map_or(Ok(()), |m| w.write_with_tag(34, |w| w.write_message(m)))?;
+        self.status.as_ref().map_or(Ok(()), |&m| w.write_with_tag(40, |w| w.write_enum(*&m as i32)))?;
         Ok(())
     }
 }
@@ -152,9 +155,9 @@ impl<'a> From<&'a str> for Type {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct StopMessage {
-    pub type_pb: message_v2::pb::mod_StopMessage::Type,
+    pub type_pb: Option<message_v2::pb::mod_StopMessage::Type>,
     pub peer: Option<message_v2::pb::Peer>,
     pub limit: Option<message_v2::pb::Limit>,
     pub status: Option<message_v2::pb::Status>,
@@ -165,7 +168,7 @@ impl<'a> MessageRead<'a> for StopMessage {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.type_pb = r.read_enum(bytes)?,
+                Ok(8) => msg.type_pb = Some(r.read_enum(bytes)?),
                 Ok(18) => msg.peer = Some(r.read_message::<message_v2::pb::Peer>(bytes)?),
                 Ok(26) => msg.limit = Some(r.read_message::<message_v2::pb::Limit>(bytes)?),
                 Ok(32) => msg.status = Some(r.read_enum(bytes)?),
@@ -180,17 +183,17 @@ impl<'a> MessageRead<'a> for StopMessage {
 impl MessageWrite for StopMessage {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint(*(&self.type_pb) as u64)
+        + self.type_pb.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
         + self.peer.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
         + self.limit.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
-        + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.status.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_enum(*&self.type_pb as i32))?;
-        if let Some(ref s) = self.peer { w.write_with_tag(18, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.limit { w.write_with_tag(26, |w| w.write_message(s))?; }
-        if let Some(ref s) = self.status { w.write_with_tag(32, |w| w.write_enum(*s as i32))?; }
+        self.type_pb.as_ref().map_or(Ok(()), |&m| w.write_with_tag(8, |w| w.write_enum(*&m as i32)))?;
+        self.peer.as_ref().map_or(Ok(()), |m| w.write_with_tag(18, |w| w.write_message(m)))?;
+        self.limit.as_ref().map_or(Ok(()), |m| w.write_with_tag(26, |w| w.write_message(m)))?;
+        self.status.as_ref().map_or(Ok(()), |&m| w.write_with_tag(32, |w| w.write_enum(*&m as i32)))?;
         Ok(())
     }
 }
@@ -233,9 +236,9 @@ impl<'a> From<&'a str> for Type {
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Peer {
-    pub id: Vec<u8>,
+    pub id: Option<Vec<u8>>,
     pub addrs: Vec<Vec<u8>>,
 }
 
@@ -244,7 +247,7 @@ impl<'a> MessageRead<'a> for Peer {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.id = r.read_bytes(bytes)?.to_owned(),
+                Ok(10) => msg.id = Some(r.read_bytes(bytes)?.to_owned()),
                 Ok(18) => msg.addrs.push(r.read_bytes(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -257,21 +260,21 @@ impl<'a> MessageRead<'a> for Peer {
 impl MessageWrite for Peer {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_len((&self.id).len())
-        + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
+        + self.id.as_ref().map_or(0, |m| 1 + sizeof_len(m.len()))
+        + self.addrs.iter().map(|s| 1 + sizeof_len(s.len())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(10, |w| w.write_bytes(&**&self.id))?;
-        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
+        self.id.as_ref().map_or(Ok(()), |m| w.write_with_tag(10, |w| w.write_bytes(&m)))?;
+        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(s))?; }
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Reservation {
-    pub expire: u64,
+    pub expire: Option<u64>,
     pub addrs: Vec<Vec<u8>>,
     pub voucher: Option<Vec<u8>>,
 }
@@ -281,7 +284,7 @@ impl<'a> MessageRead<'a> for Reservation {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(8) => msg.expire = r.read_uint64(bytes)?,
+                Ok(8) => msg.expire = Some(r.read_uint64(bytes)?),
                 Ok(18) => msg.addrs.push(r.read_bytes(bytes)?.to_owned()),
                 Ok(26) => msg.voucher = Some(r.read_bytes(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -295,21 +298,21 @@ impl<'a> MessageRead<'a> for Reservation {
 impl MessageWrite for Reservation {
     fn get_size(&self) -> usize {
         0
-        + 1 + sizeof_varint(*(&self.expire) as u64)
-        + self.addrs.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
-        + self.voucher.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
+        + self.expire.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
+        + self.addrs.iter().map(|s| 1 + sizeof_len(s.len())).sum::<usize>()
+        + self.voucher.as_ref().map_or(0, |m| 1 + sizeof_len(m.len()))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        w.write_with_tag(8, |w| w.write_uint64(*&self.expire))?;
-        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
-        if let Some(ref s) = self.voucher { w.write_with_tag(26, |w| w.write_bytes(&**s))?; }
+        self.expire.as_ref().map_or(Ok(()), |&m| w.write_with_tag(8, |w| w.write_uint64(*&m)))?;
+        for s in &self.addrs { w.write_with_tag(18, |w| w.write_bytes(s))?; }
+        self.voucher.as_ref().map_or(Ok(()), |m| w.write_with_tag(26, |w| w.write_bytes(&m)))?;
         Ok(())
     }
 }
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Debug, Default, PartialEq, Clone)]
+#[derive(Default, Debug, PartialEq, Clone)]
 pub struct Limit {
     pub duration: Option<u32>,
     pub data: Option<u64>,
@@ -333,13 +336,13 @@ impl<'a> MessageRead<'a> for Limit {
 impl MessageWrite for Limit {
     fn get_size(&self) -> usize {
         0
-        + self.duration.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
-        + self.data.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
+        + self.duration.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
+        + self.data.as_ref().map_or(0, |&m| 1 + sizeof_varint(*(&m) as u64))
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if let Some(ref s) = self.duration { w.write_with_tag(8, |w| w.write_uint32(*s))?; }
-        if let Some(ref s) = self.data { w.write_with_tag(16, |w| w.write_uint64(*s))?; }
+        self.duration.as_ref().map_or(Ok(()), |&m| w.write_with_tag(8, |w| w.write_uint32(*&m)))?;
+        self.data.as_ref().map_or(Ok(()), |&m| w.write_with_tag(16, |w| w.write_uint64(*&m)))?;
         Ok(())
     }
 }

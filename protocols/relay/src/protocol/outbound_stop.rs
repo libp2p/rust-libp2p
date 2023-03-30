@@ -53,9 +53,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::CONNECT,
+            type_pb: Some(proto::StopMessageType::CONNECT),
             peer: Some(proto::Peer {
-                id: self.relay_peer_id.to_bytes(),
+                id: Some(self.relay_peer_id.to_bytes()),
                 addrs: vec![],
             }),
             limit: Some(proto::Limit {
@@ -87,7 +87,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            match type_pb {
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
+            match r#type {
                 proto::StopMessageType::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
@@ -152,6 +153,8 @@ pub enum FatalUpgradeError {
     StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Unexpected message type 'connect'")]

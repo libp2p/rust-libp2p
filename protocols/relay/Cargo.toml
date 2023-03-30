@@ -21,7 +21,7 @@ libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm", features = ["async-std"] }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4"
-quick-protobuf = "0.8"
+quick-protobuf = { git = "https://github.com/snproj/quick-protobuf", branch = "field-presence" }
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
 rand = "0.8.4"
 static_assertions = "1"

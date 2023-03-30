@@ -69,7 +69,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let req = match type_pb {
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
+            let req = match r#type {
                 proto::HopMessageType::RESERVE => Req::Reserve(ReservationReq {
                     substream,
                     reservation_duration: self.reservation_duration,
@@ -77,8 +78,13 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                     max_circuit_bytes: self.max_circuit_bytes,
                 }),
                 proto::HopMessageType::CONNECT => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    let dst = PeerId::from_bytes(
+                        &peer
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::MissingPeer)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
                 proto::HopMessageType::STATUS => {
@@ -116,6 +122,8 @@ pub enum FatalUpgradeError {
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
     MissingPeer,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
 }
@@ -135,14 +143,16 @@ pub struct ReservationReq {
 impl ReservationReq {
     pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            type_pb: Some(proto::HopMessageType::STATUS),
             peer: None,
             reservation: Some(proto::Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: (SystemTime::now() + self.reservation_duration)
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
+                expire: Some(
+                    (SystemTime::now() + self.reservation_duration)
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                ),
                 voucher: None,
             }),
             limit: Some(proto::Limit {
@@ -162,7 +172,7 @@ impl ReservationReq {
 
     pub async fn deny(self, status: proto::Status) -> Result<(), UpgradeError> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            type_pb: Some(proto::HopMessageType::STATUS),
             peer: None,
             reservation: None,
             limit: None,
@@ -193,7 +203,7 @@ impl CircuitReq {
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            type_pb: Some(proto::HopMessageType::STATUS),
             peer: None,
             reservation: None,
             limit: None,
@@ -218,7 +228,7 @@ impl CircuitReq {
 
     pub async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
         let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
+            type_pb: Some(proto::HopMessageType::STATUS),
             peer: None,
             reservation: None,
             limit: None,

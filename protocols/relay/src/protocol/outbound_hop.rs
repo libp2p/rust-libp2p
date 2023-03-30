@@ -54,16 +54,16 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = match self {
             Upgrade::Reserve => proto::HopMessage {
-                type_pb: proto::HopMessageType::RESERVE,
+                type_pb: Some(proto::HopMessageType::RESERVE),
                 peer: None,
                 reservation: None,
                 limit: None,
                 status: None,
             },
             Upgrade::Connect { dst_peer_id } => proto::HopMessage {
-                type_pb: proto::HopMessageType::CONNECT,
+                type_pb: Some(proto::HopMessageType::CONNECT),
                 peer: Some(proto::Peer {
-                    id: dst_peer_id.to_bytes(),
+                    id: Some(dst_peer_id.to_bytes()),
                     addrs: vec![],
                 }),
                 reservation: None,
@@ -90,7 +90,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            match type_pb {
+            let r#type = type_pb.ok_or(FatalUpgradeError::MissingTypeField)?;
+            match r#type {
                 proto::HopMessageType::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
@@ -133,6 +134,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
                     let renewal_timeout = reservation
                         .expire
+                        .ok_or(FatalUpgradeError::MissingReservationExpireField)?
                         .checked_sub(
                             SystemTime::now()
                                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -244,6 +246,10 @@ pub enum FatalUpgradeError {
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
+    #[error("Expected 'expire' field to be set.")]
+    MissingReservationExpireField,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Expected at least one address in reservation.")]
     NoAddressesInReservation,
     #[error("Invalid expiration timestamp in reservation.")]
