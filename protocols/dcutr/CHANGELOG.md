@@ -1,10 +1,10 @@
-# 0.9.1
+## 0.9.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 
 [PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
-# 0.9.0
+## 0.9.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -22,14 +22,14 @@
 [issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
 
-# 0.8.1
+## 0.8.1
 
 - Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound` and
   `OutboundUpgrade::upgrade_outbound`. See [PR 3300].
 
 [PR 3300]: https://github.com/libp2p/rust-libp2p/pull/3300
 
-# 0.8.0
+## 0.8.0
 
 - Update to `prost-codec` `v0.3.0`.
 
@@ -49,7 +49,7 @@
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
-# 0.7.0
+## 0.7.0
 
 - Update to `libp2p-core` `v0.37.0`.
 
@@ -59,19 +59,19 @@
 
 [PR 2991]: https://github.com/libp2p/rust-libp2p/pull/2991/
 
-# 0.6.0
+## 0.6.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
 
 - Update to `libp2p-core` `v0.36.0`.
 
-# 0.5.1
+## 0.5.1
 
 - Make default features of `libp2p-core` optional. See [PR 2836].
 
 [PR 2836]: https://github.com/libp2p/rust-libp2p/pull/2836/
 
-# 0.5.0
+## 0.5.0
 
 - Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
   Thus you will need protoc installed locally. See [PR 2788].
@@ -85,23 +85,23 @@
 [PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 [PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
-# 0.4.0
+## 0.4.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
 - Update to `libp2p-swarm` `v0.37.0`.
 
-# 0.3.1
+## 0.3.1
 
 - Upgrade at most one inbound connect request.
 
-# 0.3.0
+## 0.3.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
-# 0.2.0
+## 0.2.0
 
 - Expose `InboundUpgradeError` and `OutboundUpgradeError`. See [PR, 2586].
 
@@ -109,6 +109,6 @@
 
 [PR 2586]: https://github.com/libp2p/rust-libp2p/pull/2586
 
-# 0.1.0 [2022-02-22]
+## 0.1.0 [2022-02-22]
 
 - Initial release.
