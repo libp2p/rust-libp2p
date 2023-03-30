@@ -143,7 +143,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - run: cargo package -Z minimal-versions
+      - run: cargo package --all-features -Z direct-minimal-versions
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
