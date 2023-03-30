@@ -51,7 +51,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_from_pkcs8` instead."
+        note = "This method name is inaccurate, use `Keypair::try_decode_pkcs8` instead."
     )]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(der)
@@ -82,45 +82,40 @@ impl Keypair {
         }
     }
 
-    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
+    /// Try to decode an RSA keypair from a DER-encoded private key.
+    /// Note that a copy of the undecoded byte array will be stored for encoding.
+    pub fn try_decode_der(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
+        match RsaKeyPair::from_der(bytes) {
+            Ok(kp) => {
+                let kp = Self {
+                    inner: Arc::new(kp),
+                    raw_key: bytes.to_vec(),
+                };
+                bytes.zeroize();
+                Ok(kp)
+            }
+            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
+        }
+    }
+
+    /// Try to decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     /// Decoding from DER-encoded private key bytes is also supported.
     /// Note that a copy of the undecoded byte array will be stored for encoding.
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    pub fn try_decode(bytes: &mut [u8]) -> Result<Self, DecodingError> {
-        let from_pkcs8_error = match RsaKeyPair::from_pkcs8(bytes) {
+    pub fn try_decode_pkcs8(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
+        match RsaKeyPair::from_pkcs8(bytes) {
             Ok(kp) => {
                 let kp = Self {
                     inner: Arc::new(kp),
                     raw_key: bytes.to_vec(),
                 };
                 bytes.zeroize();
-                return Ok(kp);
+                Ok(kp)
             }
-            Err(e) => e,
-        };
-        let from_der_error = match RsaKeyPair::from_der(bytes) {
-            Ok(kp) => {
-                let kp = Self {
-                    inner: Arc::new(kp),
-                    raw_key: bytes.to_vec(),
-                };
-                bytes.zeroize();
-                return Ok(kp);
-            }
-            Err(e) => e,
-        };
-        Err(DecodingError::failed_to_parse(
-            "Ed25519 keypair",
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!(
-                    "Cannot parse key from pkcs8 encoding or der encoding: {}\n{}",
-                    from_pkcs8_error, from_der_error
-                ),
-            ),
-        ))
+            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
+        }
     }
 
     /// Get the byte array used to parse the keypair from.
@@ -395,15 +390,15 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary(g: &mut Gen) -> SomeKeypair {
             let mut key = g.choose(&[KEY1, KEY2, KEY3]).unwrap().to_vec();
-            SomeKeypair(Keypair::try_decode(&mut key).unwrap())
+            SomeKeypair(Keypair::try_decode_pkcs8(&mut key).unwrap())
         }
     }
 
     #[test]
     fn rsa_from_pkcs8() {
-        assert!(Keypair::try_decode(&mut KEY1.to_vec()).is_ok());
-        assert!(Keypair::try_decode(&mut KEY2.to_vec()).is_ok());
-        assert!(Keypair::try_decode(&mut KEY3.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY1.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY2.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY3.to_vec()).is_ok());
     }
 
     #[test]

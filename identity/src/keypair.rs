@@ -114,7 +114,7 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_from_pkcs8_rsa(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
-        rsa::Keypair::try_decode(pkcs8_der).map(Keypair::Rsa)
+        rsa::Keypair::try_decode_pkcs8(pkcs8_der).map(Keypair::Rsa)
     }
 
     /// Decode a keypair from a DER-encoded Secp256k1 secret key in an ECPrivateKey
@@ -228,7 +228,7 @@ impl Keypair {
             }
             proto::KeyType::RSA => {
                 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-                return rsa::Keypair::try_decode(&mut private_key.Data).map(Keypair::Rsa);
+                return rsa::Keypair::try_decode_pkcs8(&mut private_key.Data).map(Keypair::Rsa);
                 Err(DecodingError::missing_feature("rsa"))
             }
             proto::KeyType::Secp256k1 => {
