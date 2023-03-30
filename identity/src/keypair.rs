@@ -199,7 +199,7 @@ impl Keypair {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Rsa(pair) => PublicKey::Rsa(pair.public()),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
+            Secp256k1(pair) => PublicKey::Secp256k1(*pair.public()),
             #[cfg(feature = "ecdsa")]
             Ecdsa(pair) => PublicKey::Ecdsa(pair.public().clone()),
         }
