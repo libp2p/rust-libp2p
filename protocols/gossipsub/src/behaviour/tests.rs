@@ -1865,8 +1865,8 @@ fn test_connect_to_px_peers_with_peer_record_on_handle_prune() {
 
     let mut px_peer_ids = Vec::new();
     let mut px = Vec::new();
-    // propose more px peers than config.prune_peers()
-    for i in 0..config.prune_peers() + 5 {
+    // propose more px peers than config.mesh_n_high()
+    for i in 0..config.mesh_n_high() + 5 {
         let key = Keypair::generate_ed25519();
         let address: Multiaddr = format!("/ip4/1.2.3.4/tcp/{i}").try_into().unwrap();
         let peer_record = PeerRecord::new(&key, vec![address]).unwrap();
@@ -1893,7 +1893,7 @@ fn test_connect_to_px_peers_with_peer_record_on_handle_prune() {
         .iter()
         .filter_map(|e| match e {
             // TODO: How to extract addresses from DialOpts to assert them in the test?
-            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
+            ToSwarm::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();
@@ -3100,7 +3100,11 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
 
 #[test]
 fn test_ignore_px_from_peers_below_accept_px_threshold() {
-    let config = ConfigBuilder::default().prune_peers(16).build().unwrap();
+    let config = ConfigBuilder::default()
+        .prune_peers(16)
+        .do_px()
+        .build()
+        .unwrap();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         accept_px_threshold: peer_score_params.app_specific_weight,

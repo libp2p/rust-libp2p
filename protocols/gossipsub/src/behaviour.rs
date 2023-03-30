@@ -1590,8 +1590,8 @@ where
             self.remove_peer_from_mesh(peer_id, &topic_hash, backoff, true, Churn::Prune);
 
             if self.mesh.contains_key(&topic_hash) {
-                //connect to px peers
-                if !px.is_empty() {
+                // connect to px peers
+                if self.config.do_px() && !px.is_empty() {
                     // we ignore PX from peers with insufficient score
                     if below_threshold {
                         debug!(
@@ -1603,7 +1603,8 @@ where
                     }
 
                     // mesh count already discounted prune's sender
-                    let max_px_to_connect = self.config.mesh_n_low()
+                    // eagerly connect only if there's capacity in the mesh
+                    let max_px_to_connect = self.config.mesh_n_high()
                         - self.mesh.get(&topic_hash).map(|x| x.len()).unwrap_or(0);
                     if max_px_to_connect > 0 {
                         self.px_connect(px, max_px_to_connect);
@@ -1614,12 +1615,11 @@ where
         debug!("Completed PRUNE handling for peer: {}", peer_id.to_string());
     }
 
-    fn px_connect(&mut self, mut px: Vec<PeerInfo>, n: usize) {
-        if px.len() > n {
-            // only use at most prune_peers many random peers
+    fn px_connect(&mut self, mut px: Vec<PeerInfo>, max_px_to_connect: usize) {
+        if px.len() > max_px_to_connect {
             let mut rng = thread_rng();
-            px.partial_shuffle(&mut rng, n);
-            px = px.into_iter().take(n).collect();
+            px.partial_shuffle(&mut rng, max_px_to_connect);
+            px = px.into_iter().take(max_px_to_connect).collect();
         }
 
         for p in px {
