@@ -21,12 +21,12 @@ unsigned-varint = "0.7"
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.10"
-libp2p-core = { path = "../../core" }
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
-libp2p-swarm = { path = "../../swarm", features = ["async-std"] }
-libp2p-identity = { path = "../../identity", features = ["ed25519"] }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-core = { workspace = true }
+libp2p-mplex = { workspace = true }
+libp2p-plaintext = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["async-std"] }
+libp2p-identity = { workspace = true, features = ["ed25519"] }
+quickcheck = { workspace = true }
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
 

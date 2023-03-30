@@ -12,13 +12,13 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.27"
-libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-core = { workspace = true }
 flate2 = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p-tcp = { path = "../tcp", features = ["async-io"] }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+quickcheck = { package = "quickcheck-ext", workspace = true }
 rand = "0.8"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 

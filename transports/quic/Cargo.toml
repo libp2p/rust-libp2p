@@ -14,9 +14,9 @@ bytes = "1.4.0"
 futures = "0.3.27"
 futures-timer = "3.0.2"
 if-watch = "3.0.0"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-tls = { version = "0.1.0", path = "../tls" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-tls = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4"
 parking_lot = "0.12.0"
 quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
@@ -39,10 +39,10 @@ rustc-args = ["--cfg", "docsrs"]
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 env_logger = "0.10.0"
-libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
-libp2p-noise = { path = "../noise" }
-libp2p-tcp = { path = "../tcp", features = ["async-io"] }
-libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-muxer-test-harness = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
 quickcheck = "1"
 tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
 
