@@ -2945,6 +2945,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen 0.9.3",
  "serde",
+ "sha2 0.10.6",
  "stun",
  "thiserror",
  "tinytemplate",
@@ -3214,13 +3215,11 @@ checksum = "835d6ff01d610179fbce3de1694d007e500bf33a7f29689838941d6bf783ae40"
 dependencies = [
  "arbitrary",
  "core2",
- "digest 0.10.6",
  "multihash-derive",
  "quickcheck",
  "rand 0.8.5",
  "serde",
  "serde-big-array",
- "sha2 0.10.6",
  "unsigned-varint",
 ]
 
