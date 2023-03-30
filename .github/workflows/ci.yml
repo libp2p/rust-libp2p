@@ -133,6 +133,18 @@ jobs:
 
       - run: cargo check --package libp2p --features="${{ matrix.features }}"
 
+  minimal_versions:
+    name: Check if we compile with minimal versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+
+      - run: cargo package -Z minimal-versions
+
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest

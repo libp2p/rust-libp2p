@@ -40,7 +40,7 @@ tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
 pem = ["webrtc?/pem"]
 
 [dev-dependencies]
-anyhow = "1.0"
+anyhow = "1.0.70"
 env_logger = "0.10"
 hex-literal = "0.3"
 libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
