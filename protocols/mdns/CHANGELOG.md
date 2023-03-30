@@ -1,7 +1,11 @@
+# 0.44.0 - unreleased
+
+- Remove deprecated `Mdns` prefixed items. See [PR 3699].
+
+[PR 3699]: https://github.com/libp2p/rust-libp2p/pull/3699
 # 0.43.1
 
 - Derive `Clone` for `mdns::Event`. See [PR 3606].
-- Remove deprecated `Mdns` prefixed items. See [PR 3699].
 
 [PR 3606]: https://github.com/libp2p/rust-libp2p/pull/3606
 # 0.43.0
