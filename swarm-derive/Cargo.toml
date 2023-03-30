@@ -14,8 +14,8 @@ categories = ["network-programming", "asynchronous"]
 proc-macro = true
 
 [dependencies]
-heck = "0.4"
-quote = "1.0"
+heck = "0.4.1"
+quote = "1.0.26"
 syn = { version = "2.0.11", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

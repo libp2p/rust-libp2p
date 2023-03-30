@@ -11,12 +11,12 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "1"
-futures = "0.3"
-log = "0.4"
-pin-project = "1.0.0"
-smallvec = "1.6.1"
-unsigned-varint = "0.7"
+bytes = "1.4.0"
+futures = "0.3.27"
+log = "0.4.17"
+pin-project = "1.0.12"
+smallvec = "1.10.0"
+unsigned-varint = "0.7.1"
 
 [dev-dependencies]
 async-std = "1.6.2"

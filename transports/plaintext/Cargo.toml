@@ -11,14 +11,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
-bytes = "1"
+asynchronous-codec = "0.6.1"
+bytes = "1.4.0"
 futures = "0.3.27"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-identity = { version = "0.1.0", path = "../../identity", features = ["peerid"] }
 log = "0.4.8"
 quick-protobuf = "0.8.1"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+unsigned-varint = { version = "0.7.1", features = ["asynchronous_codec"] }
 void = "1.0.2"
 
 [dev-dependencies]

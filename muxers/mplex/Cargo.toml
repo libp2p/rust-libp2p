@@ -11,23 +11,22 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-bytes = "1"
+bytes = "1.4.0"
 futures = "0.3.27"
-asynchronous-codec = "0.6"
+asynchronous-codec = "0.6.1"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
-log = "0.4"
-nohash-hasher = "0.2"
-parking_lot = "0.12"
-rand = "0.8"
-smallvec = "1.6.1"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+log = "0.4.17"
+nohash-hasher = "0.2.0"
+parking_lot = "0.12.1"
+rand = "0.8.5"
+smallvec = "1.10.0"
+unsigned-varint = { version = "0.7.1", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
-criterion = "0.4"
-env_logger = "0.10"
-futures = "0.3"
+criterion = "0.4.0"
+env_logger = "0.10.0"
 libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }

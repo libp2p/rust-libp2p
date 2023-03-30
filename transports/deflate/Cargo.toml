@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures = "0.3.27"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-flate2 = "1.0"
+flate2 = "1.0.25"
 
 [dev-dependencies]
 async-std = "1.6.2"

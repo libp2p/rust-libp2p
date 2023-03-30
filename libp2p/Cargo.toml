@@ -137,7 +137,7 @@ libp2p-gossipsub = { version = "0.44.0", path = "../protocols/gossipsub", option
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-async-trait = "0.1"
+async-trait = "0.1.67"
 either = "1.8.0"
 env_logger = "0.10.0"
 clap = { version = "4.1.6", features = ["derive"] }

@@ -11,29 +11,29 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-trait = "0.1"
+async-trait = "0.1.67"
 asynchronous-codec = "0.6.1"
-bytes = "1"
-futures = "0.3"
-futures-timer = "3"
-hex = "0.4"
-if-watch = "3.0"
+bytes = "1.4.0"
+futures = "0.3.27"
+futures-timer = "3.0.2"
+hex = "0.4.3"
+if-watch = "3.0.1"
 libp2p-core = { version = "0.39.0", path = "../../core"  }
 libp2p-noise = { version = "0.42.0", path = "../../transports/noise" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
-log = "0.4"
+log = "0.4.17"
 sha2 = "0.10.6"
 multihash = { version = "0.17.0", default-features = false }
 quick-protobuf = "0.8.1"
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
-rand = "0.8"
+rand = "0.8.5"
 rcgen = "0.9.3"
-serde = { version = "1.0", features = ["derive"] }
-stun = "0.4"
-thiserror = "1"
-tinytemplate = "1.2"
-tokio = { version = "1.19", features = ["net"], optional = true}
-tokio-util = { version = "0.7", features = ["compat"], optional = true }
+serde = { version = "1.0.159", features = ["derive"] }
+stun = "0.4.4"
+thiserror = "1.0.40"
+tinytemplate = "1.2.1"
+tokio = { version = "1.19.2", features = ["net"], optional = true}
+tokio-util = { version = "0.7.7", features = ["compat"], optional = true }
 webrtc = { version = "0.6.0", optional = true }
 
 [features]
@@ -42,13 +42,13 @@ pem = ["webrtc?/pem"]
 
 [dev-dependencies]
 anyhow = "1.0.70"
-env_logger = "0.10"
-hex-literal = "0.3"
+env_logger = "0.10.0"
+hex-literal = "0.3.4"
 libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
 libp2p-ping = { path = "../../protocols/ping" }
-tokio = { version = "1.19", features = ["full"] }
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1"
+tokio = { version = "1.19.2", features = ["full"] }
+unsigned-varint = { version = "0.7.1", features = ["asynchronous_codec"] }
+void = "1.0.2"
 quickcheck = "1.0.3"
 
 [[test]]
