@@ -15,7 +15,7 @@ libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 rcgen = "0.10.0"
 ring = "0.16.20"
-thiserror = "1.0.39"
+thiserror = "1.0.40"
 webpki = "0.22.0"
 x509-parser = "0.15.0"
 yasna = "0.5.0"

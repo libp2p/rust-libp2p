@@ -89,9 +89,11 @@ impl Clone for Keypair {
         let secret = SecretKey::from_bytes(&mut sk_bytes)
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
             .0;
-        let public = ed25519::PublicKey::from_bytes(&self.0.public.to_bytes())
-            .expect("ed25519::PublicKey::from_bytes(to_bytes(k)) != k");
-        Keypair(ed25519::Keypair { secret, public })
+
+        Keypair(ed25519::Keypair {
+            secret,
+            public: self.0.public,
+        })
     }
 }
 

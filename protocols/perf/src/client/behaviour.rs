@@ -29,8 +29,8 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionHandlerUpgrErr,
-    ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandlerInEvent, THandlerOutEvent,
+    ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use void::Void;
 
@@ -47,7 +47,7 @@ pub struct Event {
 #[derive(Default)]
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+    queued_events: VecDeque<ToSwarm<Event, THandlerInEvent<Self>>>,
     /// Set of connected peers.
     connected: HashSet<PeerId>,
 }
@@ -64,12 +64,11 @@ impl Behaviour {
 
         let id = RunId::next();
 
-        self.queued_events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: server,
-                handler: NotifyHandler::Any,
-                event: crate::client::handler::Command { id, params },
-            });
+        self.queued_events.push_back(ToSwarm::NotifyHandler {
+            peer_id: server,
+            handler: NotifyHandler::Any,
+            event: crate::client::handler::Command { id, params },
+        });
 
         Ok(id)
     }
@@ -141,14 +140,14 @@ impl NetworkBehaviour for Behaviour {
         super::handler::Event { id, result }: THandlerOutEvent<Self>,
     ) {
         self.queued_events
-            .push_back(NetworkBehaviourAction::GenerateEvent(Event { id, result }));
+            .push_back(ToSwarm::GenerateEvent(Event { id, result }));
     }
 
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
