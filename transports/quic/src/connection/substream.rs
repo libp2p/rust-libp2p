@@ -32,7 +32,6 @@ pub struct Substream {
     send: quinn::SendStream,
     /// A receive part of the stream
     recv: quinn::RecvStream,
-    closed: bool, // TODO check whether this is necessary
 }
 
 impl Substream {
@@ -40,7 +39,6 @@ impl Substream {
         Self {
             send,
             recv,
-            closed: false,
         }
     }
 }
@@ -66,14 +64,6 @@ impl AsyncWrite for Substream {
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         let this = self.get_mut();
-        if this.closed {
-            // For some reason poll_close needs to be 'fuse'able
-            return Poll::Ready(Ok(()));
-        }
-        let close_result = AsyncWrite::poll_close(Pin::new(&mut this.send), cx);
-        if close_result.is_ready() {
-            this.closed = true;
-        }
-        close_result
+        AsyncWrite::poll_close(Pin::new(&mut this.send), cx)
     }
 }
