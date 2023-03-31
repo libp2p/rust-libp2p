@@ -2757,12 +2757,12 @@ where
                 ref keypair,
                 author,
                 inline_key,
-                mut last_seq_no,
+                last_seq_no,
             } => {
                 // Increment the last sequence number
-                last_seq_no = last_seq_no.wrapping_add(1);
+                *last_seq_no = (*last_seq_no).wrapping_add(1);
 
-                let sequence_number = last_seq_no;
+                let sequence_number = *last_seq_no;
 
                 let signature = {
                     let message = proto::Message {
