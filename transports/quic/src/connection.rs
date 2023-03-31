@@ -41,7 +41,7 @@ pub struct Connection {
     incoming: Option<
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
     >,
-    /// Future for opening a new outgoing a new bidirectional stream.
+    /// Future for opening a new outgoing bidirectional stream.
     outgoing: Option<
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
     >,
