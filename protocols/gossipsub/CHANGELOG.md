@@ -1,5 +1,6 @@
 ## 0.44.3 - unreleased
-- Mutablely borrow last sequential number. See [PR 3716]
+
+- Fix erroneously duplicate message IDs. See [PR 3716].
 
 [PR 3716]: https://github.com/libp2p/rust-libp2p/pull/3716
 
