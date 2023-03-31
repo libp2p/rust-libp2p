@@ -38,11 +38,13 @@ pub struct Connection {
     /// Underlying connection.
     connection: quinn::Connection,
     /// Future for accepting a new incoming bidirectional stream.
-    incoming:
+    incoming: Option<
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+    >,
     /// Future for opening a new outgoing a new bidirectional stream.
-    outgoing:
+    outgoing: Option<
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+    >,
 }
 
 impl Connection {
@@ -51,14 +53,10 @@ impl Connection {
     /// This function assumes that the [`quinn::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     fn new(connection: quinn::Connection) -> Self {
-        let connection_c = connection.clone();
-        let incoming = async move { connection_c.accept_bi().await }.boxed();
-        let connection_c = connection.clone();
-        let outgoing = async move { connection_c.open_bi().await }.boxed();
         Self {
             connection,
-            incoming,
-            outgoing,
+            incoming: None,
+            outgoing: None,
         }
     }
 }
@@ -73,10 +71,13 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let (send, recv) =
-            futures::ready!(this.incoming.poll_unpin(cx)).map_err(ConnectionError)?;
-        let connection = this.connection.clone();
-        this.incoming = async move { connection.accept_bi().await }.boxed();
+        let incoming = this.incoming.get_or_insert_with(|| {
+            let connection = this.connection.clone();
+            async move { connection.accept_bi().await }.boxed()
+        });
+
+        let (send, recv) = futures::ready!(incoming.poll_unpin(cx)).map_err(ConnectionError)?;
+        this.incoming.take();
         let substream = Substream::new(send, recv);
         Poll::Ready(Ok(substream))
     }
@@ -87,10 +88,13 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let (send, recv) =
-            futures::ready!(this.outgoing.poll_unpin(cx)).map_err(ConnectionError)?;
-        let connection = this.connection.clone();
-        this.outgoing = async move { connection.open_bi().await }.boxed();
+        let outgoing = this.outgoing.get_or_insert_with(|| {
+            let connection = this.connection.clone();
+            async move { connection.open_bi().await }.boxed()
+        });
+
+        let (send, recv) = futures::ready!(outgoing.poll_unpin(cx)).map_err(ConnectionError)?;
+        this.outgoing.take();
         let substream = Substream::new(send, recv);
         Poll::Ready(Ok(substream))
     }
