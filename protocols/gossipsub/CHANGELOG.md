@@ -1,3 +1,8 @@
+## 0.44.3 - unreleased
+- Mutablely borrow last sequential number. See [PR 3716]
+
+[PR 3716]: https://github.com/libp2p/rust-libp2p/pull/3716
+
 ## 0.44.2
 
 - Signed messages now use sequential integers in the sequence number field.
