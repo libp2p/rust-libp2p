@@ -52,6 +52,6 @@ members = [
     "transports/wasm-ext",
     "transports/webrtc",
     "transports/websocket",
-    "transports/websys",
+    "transports/websys-websocket",
 ]
 resolver = "2"

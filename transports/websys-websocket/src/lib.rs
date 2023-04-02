@@ -37,26 +37,26 @@ use std::{
     task::{Context, Waker},
 };
 
-/** A Websocket transport that can be used in a Wasm client.
-
-## Example
-
-To create an authenticated transport instance with Noise protocol and Mplex:
-
-```no_run
-# use libp2p_core::{upgrade::Version, Transport};
-# use libp2p_identity::Keypair;
-# use libp2p_mplex::MplexConfig;
-# use libp2p_noise::NoiseAuthenticated;
-# use libp2p_websys_transport::websocket;
-let local_key = Keypair::generate_ed25519();
-let transport = websocket::Transport::default()
-    .upgrade(Version::V1)
-    .authenticate(NoiseAuthenticated::xx(&local_key).unwrap())
-    .multiplex(MplexConfig::default())
-    .boxed();
-```
-*/
+/// A Websocket transport that can be used in a Wasm client.
+///
+/// ## Example
+///
+/// To create an authenticated transport instance with Noise protocol and Mplex:
+///
+/// ```no_run
+/// # use libp2p_core::{upgrade::Version, Transport};
+/// # use libp2p_identity::Keypair;
+/// # use libp2p_mplex::MplexConfig;
+/// # use libp2p_noise::NoiseAuthenticated;
+/// # use libp2p_websys_transport::websocket;
+/// let local_key = Keypair::generate_ed25519();
+/// let transport = websocket::Transport::default()
+///     .upgrade(Version::V1)
+///     .authenticate(NoiseAuthenticated::xx(&local_key).unwrap())
+///     .multiplex(MplexConfig::default())
+///     .boxed();
+/// ```
+///
 #[derive(Default)]
 pub struct Transport;
 

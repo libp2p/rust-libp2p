@@ -1,8 +1,8 @@
 [package]
-name = "libp2p-websys-transport"
+name = "libp2p-websys-websocket"
 edition = "2021"
 rust-version = "1.60.0"
-description = "libp2p transports for WASM browser runtime."
+description = "libp2p websocket transports for WASM browser runtime."
 version = "0.2.0"
 authors = ["Vince Vasta <vince.vasta@gmail.com>"]
 license = "MIT"
@@ -18,10 +18,15 @@ parking_lot = "0.12.1"
 send_wrapper = "0.6.0"
 thiserror = "1.0.38"
 wasm-bindgen = "0.2.84"
-web-sys = { version = "0.3.61", default-features = false }
 
-[features]
-websocket = ["web-sys/BinaryType", "web-sys/CloseEvent", "web-sys/MessageEvent", "web-sys/WebSocket"]
+[dependencies.web-sys]
+version = "0.3.61"
+features = [
+  "BinaryType",
+  "CloseEvent",
+  "MessageEvent",
+  "WebSocket",
+]
 
 [dev-dependencies]
 libp2p-mplex = { path = "../../muxers/mplex" }

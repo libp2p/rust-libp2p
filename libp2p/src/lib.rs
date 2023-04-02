@@ -140,9 +140,9 @@ pub mod wasm_ext {
     #[doc(inline)]
     pub use libp2p_wasm_ext::*;
 }
-#[cfg(feature = "websys")]
+#[cfg(feature = "websys-websocket")]
 #[doc(inline)]
-pub use libp2p_websys_transport as websys;
+pub use libp2p_websys_websocket as websys_websocket;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
 #[cfg(not(target_arch = "wasm32"))]
