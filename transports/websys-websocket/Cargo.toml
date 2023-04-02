@@ -29,7 +29,7 @@ features = [
 ]
 
 [dev-dependencies]
-libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-identity = { path = "../../identity" }
 libp2p-noise = { path = "../noise" }
 

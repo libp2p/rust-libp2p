@@ -46,14 +46,13 @@ use std::{
 /// ```no_run
 /// # use libp2p_core::{upgrade::Version, Transport};
 /// # use libp2p_identity::Keypair;
-/// # use libp2p_mplex::MplexConfig;
+/// # use libp2p_yamux::YamuxConfig;
 /// # use libp2p_noise::NoiseAuthenticated;
-/// # use libp2p_websys_transport::websocket;
 /// let local_key = Keypair::generate_ed25519();
-/// let transport = websocket::Transport::default()
+/// let transport = libp2p_websys_websocket::Transport::default()
 ///     .upgrade(Version::V1)
 ///     .authenticate(NoiseAuthenticated::xx(&local_key).unwrap())
-///     .multiplex(MplexConfig::default())
+///     .multiplex(YamuxConfig::default())
 ///     .boxed();
 /// ```
 ///
