@@ -74,10 +74,10 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let ws_url = if let Some(url) = websocket_url(addr) {
+        let ws_url = if let Some(url) = websocket_url(&addr) {
             url
         } else {
-            return Err(TransportError::Other(Error::NotSupported));
+            return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
         Ok(async move {
@@ -111,7 +111,7 @@ impl libp2p_core::Transport for Transport {
 }
 
 // Try to convert Multiaddr to a Websocket url.
-fn websocket_url(addr: Multiaddr) -> Option<String> {
+fn websocket_url(addr: &Multiaddr) -> Option<String> {
     let mut protocols = addr.iter();
     let host_port = match (protocols.next(), protocols.next()) {
         (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
@@ -135,7 +135,6 @@ fn websocket_url(addr: Multiaddr) -> Option<String> {
         _ => return None,
     };
 
-    // TODO: handle PeerId
     Some(format!("{scheme}://{host_port}{wspath}"))
 }
 
