@@ -44,8 +44,8 @@ pem = ["webrtc?/pem"]
 anyhow = "1.0"
 env_logger = "0.10"
 hex-literal = "0.3"
-libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
-libp2p-ping = { path = "../../protocols/ping" }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
+libp2p-ping = { workspace = true }
 tokio = { version = "1.19", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"

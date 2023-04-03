@@ -41,7 +41,7 @@ ed25519 = [ "ed25519-dalek", "prost", "rand", "zeroize" ]
 peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror", "sha2" ]
 
 [dev-dependencies]
-quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+quickcheck = { workspace = true }
 base64 = "0.21.0"
 serde_json = "1.0"
 rmp-serde = "1.0"

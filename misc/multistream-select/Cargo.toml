@@ -28,7 +28,7 @@ libp2p-swarm = { workspace = true, features = ["async-std"] }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 quickcheck = { workspace = true }
 rand = "0.8"
-rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
