@@ -173,7 +173,7 @@ impl SequenceNumber {
         let unix_timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("time to be linear")
-            .as_millis();
+            .as_nanos();
 
         Self(unix_timestamp as u64)
     }
