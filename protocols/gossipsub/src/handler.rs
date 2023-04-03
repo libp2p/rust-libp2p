@@ -504,14 +504,14 @@ impl ConnectionHandler for Handler {
         if event.is_inbound() && self.inbound_substreams_created == MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, disable the handler.
             self.keep_alive = KeepAlive::No;
-            log::info!("The maximum number of inbound substreams created has been exceeded.");
+            log::warn!("The maximum number of inbound substreams created has been exceeded.");
             return;
         }
 
         if event.is_outbound() && self.outbound_substreams_requested == MAX_SUBSTREAM_CREATION {
             // Too many outbound substreams have been created, disable the handler.
             self.keep_alive = KeepAlive::No;
-            log::info!("The maximum number of outbound substreams created has been exceeded.");
+            log::warn!("The maximum number of outbound substreams created has been exceeded.");
             return;
         }
 
