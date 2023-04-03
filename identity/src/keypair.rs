@@ -110,6 +110,7 @@ impl Keypair {
     #[cfg(feature = "ed25519")]
     pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Ed25519(inner) => Some(inner),
             _ => None,
@@ -119,6 +120,7 @@ impl Keypair {
     #[cfg(feature = "secp256k1")]
     pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Secp256k1(inner) => Some(inner),
             _ => None,
@@ -128,6 +130,7 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Rsa(inner) => Some(inner),
             _ => None,
@@ -137,6 +140,7 @@ impl Keypair {
     #[cfg(feature = "ecdsa")]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Ecdsa(inner) => Some(inner),
             _ => None,
@@ -354,6 +358,7 @@ impl PublicKey {
     #[cfg(feature = "ed25519")]
     pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Ed25519(inner) => Some(inner),
             _ => None,
@@ -363,6 +368,7 @@ impl PublicKey {
     #[cfg(feature = "secp256k1")]
     pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Secp256k1(inner) => Some(inner),
             _ => None,
@@ -372,6 +378,7 @@ impl PublicKey {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Rsa(inner) => Some(inner),
             _ => None,
@@ -381,6 +388,7 @@ impl PublicKey {
     #[cfg(feature = "ecdsa")]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Ecdsa(inner) => Some(inner),
             _ => None,
