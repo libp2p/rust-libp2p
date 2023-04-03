@@ -1,4 +1,4 @@
-## 0.52.3
+## 0.52.3 - unreleased
 
 - Deprecate the `mplex` feature.
 The recommended baseline stream multiplexer is `yamux`.
