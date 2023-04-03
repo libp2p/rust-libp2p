@@ -164,7 +164,8 @@ enum PublishConfig {
 
 /// A strictly linearly increasing sequence number.
 ///
-/// We start from the current time as unix timestamp.
+/// We start from the current time as unix timestamp in milliseconds.
+#[derive(Debug)]
 struct SequenceNumber(u64);
 
 impl SequenceNumber {
@@ -172,9 +173,9 @@ impl SequenceNumber {
         let unix_timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("time to be linear")
-            .as_secs();
+            .as_millis();
 
-        Self(unix_timestamp)
+        Self(unix_timestamp as u64)
     }
 
     fn next(&mut self) -> u64 {
