@@ -1,11 +1,15 @@
-## 0.52.2
-
-- Introduce `libp2p::connection_limits` module.
-  See [PR 3386].
+## 0.52.3
 
 - Deprecate the `mplex` feature.
 The recommended baseline stream multiplexer is `yamux`.
 See [PR 3689].
+
+[PR 3689]: https://github.com/libp2p/rust-libp2p/pull/3689
+
+## 0.52.2
+
+- Introduce `libp2p::connection_limits` module.
+  See [PR 3386].
 
 - Deprecate the `quic` and `webrtc` feature.
   These two crates are only in alpha state.
