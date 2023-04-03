@@ -444,8 +444,8 @@ impl<I: Iterator<Item = Key<PeerId>>> Iterator for ResultIter<I> {
 mod tests {
     use super::*;
 
-    use crate::K_VALUE;
-    use libp2p_core::multihash::{Code, Multihash};
+    use crate::{K_VALUE, SHA_256_MH};
+    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use std::collections::HashSet;
     use std::iter;
@@ -531,8 +531,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
             let peer_id =
-                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
-                    .unwrap();
+                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &hash).unwrap()).unwrap();
             ArbitraryPeerId(peer_id)
         }
     }

@@ -1,10 +1,10 @@
-# 0.43.1
+## 0.43.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 
 [PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
-# 0.43.0
+## 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -19,13 +19,13 @@
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 [PR 3287]: https://github.com/libp2p/rust-libp2p/pull/3287
 
-# 0.42.1
+## 0.42.1
 
 - Skip unparsable multiaddr in `Peer::addrs`. See [PR 3280].
 
 [PR 3280]: https://github.com/libp2p/rust-libp2p/pull/3280
 
-# 0.42.0
+## 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.
 
@@ -56,7 +56,7 @@
 [PR 3152]: https://github.com/libp2p/rust-libp2p/pull/3152
 [PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
 
-# 0.41.0
+## 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.
   Use `set_protocol_names()` instead. See [PR 2866].
@@ -70,7 +70,7 @@
 [PR 2866]: https://github.com/libp2p/rust-libp2p/pull/2866
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 
-# 0.40.0
+## 0.40.0
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
   and `KademliaProtocolConfig` accordingly. See [Issue 2837]. See [PR 2846].
@@ -82,7 +82,7 @@
 [Issue 2837]: https://github.com/libp2p/rust-libp2p/issues/2837
 [PR 2846]: https://github.com/libp2p/rust-libp2p/pull/2846
 
-# 0.39.0
+## 0.39.0
 
 - Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
   Thus you will need protoc installed locally. See [PR 2788].
@@ -93,19 +93,19 @@
 
 [PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
-# 0.38.0
+## 0.38.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
 - Update to `libp2p-swarm` `v0.37.0`.
 
-# 0.37.1
+## 0.37.1
 
 - Limit # of inbound streams to 32. [See PR 2699].
 
 [PR 2699]: https://github.com/libp2p/rust-libp2p/pull/2699
 
-# 0.37.0
+## 0.37.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
@@ -115,11 +115,11 @@
 
 [PR 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
 
-# 0.36.0
+## 0.36.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
-# 0.35.0 [2022-02-22]
+## 0.35.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
@@ -132,7 +132,7 @@
 [PR 2477]: https://github.com/libp2p/rust-libp2p/pull/2477
 [PR 2445]: https://github.com/libp2p/rust-libp2p/pull/2445
 
-# 0.34.0 [2022-01-27]
+## 0.34.0 [2022-01-27]
 
 - Update dependencies.
 
@@ -149,7 +149,7 @@
 [PR 2408]: https://github.com/libp2p/rust-libp2p/pull/2408
 [PR 2436]: https://github.com/libp2p/rust-libp2p/pull/2436
 
-# 0.33.0 [2021-11-16]
+## 0.33.0 [2021-11-16]
 
 - Use `instant` and `futures-timer` instead of `wasm-timer` (see [PR 2245]).
 
@@ -165,7 +165,7 @@
 [PR 2297]: https://github.com/libp2p/rust-libp2p/pull/2297
 [PR 2309]: https://github.com/libp2p/rust-libp2p/pull/2309
 
-# 0.32.0 [2021-11-01]
+## 0.32.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
@@ -180,7 +180,7 @@
 [PR 2163]: https://github.com/libp2p/rust-libp2p/pull/2163
 [PR 2221]: https://github.com/libp2p/rust-libp2p/pull/2163
 
-# 0.31.0 [2021-07-12]
+## 0.31.0 [2021-07-12]
 
 - Update dependencies.
 
@@ -201,11 +201,11 @@
 [PR 2120]: https://github.com/libp2p/rust-libp2p/pull/2120
 [PR 2125]: https://github.com/libp2p/rust-libp2p/pull/2125
 
-# 0.30.0 [2021-04-13]
+## 0.30.0 [2021-04-13]
 
 - Update `libp2p-swarm`.
 
-# 0.29.0 [2021-03-17]
+## 0.29.0 [2021-03-17]
 
 - Add `KademliaCaching` and `KademliaConfig::set_caching` to configure
   whether Kademlia should track, in lookups, the closest nodes to a key
@@ -224,31 +224,31 @@
 
 - Update dependencies.
 
-# 0.28.1 [2021-02-15]
+## 0.28.1 [2021-02-15]
 
 - Update dependencies.
 
-# 0.28.0 [2021-01-12]
+## 0.28.0 [2021-01-12]
 
 - Update dependencies.
 
-# 0.27.1 [2021-01-11]
+## 0.27.1 [2021-01-11]
 
 - Add From impls for `kbucket::Key`.
   [PR 1909](https://github.com/libp2p/rust-libp2p/pull/1909).
 
-# 0.27.0 [2020-12-17]
+## 0.27.0 [2020-12-17]
 
 - Update `libp2p-core` and `libp2p-swarm`.
 
-# 0.26.0 [2020-11-25]
+## 0.26.0 [2020-11-25]
 
 - Update `libp2p-core` and `libp2p-swarm`.
 
 - Have two `ProviderRecord`s be equal iff their `key` and `provider` fields are
   equal. [PR 1850](https://github.com/libp2p/rust-libp2p/pull/1850/).
 
-# 0.25.0 [2020-11-09]
+## 0.25.0 [2020-11-09]
 
 - Upon newly established connections, delay routing table
   updates until after the configured protocol name has
@@ -261,13 +261,13 @@
 
 - Update dependencies.
 
-# 0.24.0 [2020-10-16]
+## 0.24.0 [2020-10-16]
 
 - Update `libp2p-core` and `libp2p-swarm`.
 
 - Update `sha2` dependency.
 
-# 0.23.0 [2020-09-09]
+## 0.23.0 [2020-09-09]
 
 - Increase default max packet size from 4KiB to 16KiB.
   See [issue 1622](https://github.com/libp2p/rust-libp2p/issues/1622).
@@ -276,12 +276,12 @@
 
 - Update `libp2p-swarm` and `libp2p-core`.
 
-# 0.22.1 [2020-08-19]
+## 0.22.1 [2020-08-19]
 
 - Explicitly convert from u8 to usize in `BucketIndex::range` to prevent type
   inference issues ([PR 1716](https://github.com/libp2p/rust-libp2p/pull/1716)).
 
-# 0.22.0 [2020-08-18]
+## 0.22.0 [2020-08-18]
 
 - Store addresses in provider records.
   See [PR 1708](https://github.com/libp2p/rust-libp2p/pull/1708).
@@ -295,7 +295,7 @@
 - Add `NetworkBehaviour::inject_address_change` implementation
   ([PR 1649](https://github.com/libp2p/rust-libp2p/pull/1649)).
 
-# 0.21.0 [2020-07-01]
+## 0.21.0 [2020-07-01]
 
 - Remove `KademliaEvent::Discovered`
   ([PR 1632](https://github.com/libp2p/rust-libp2p/pull/1632))
@@ -310,11 +310,11 @@
   required to be acted upon in order to retain existing behaviour).
   For more details, see the PR description.
 
-# 0.20.1 [2020-06-23]
+## 0.20.1 [2020-06-23]
 
 - Maintenance release ([PR 1623](https://github.com/libp2p/rust-libp2p/pull/1623)).
 
-# 0.20.0 [2020-06-22]
+## 0.20.0 [2020-06-22]
 
 - Optionally require iterative queries to use disjoint paths based
   on S/Kademlia for increased resiliency in the presence of potentially

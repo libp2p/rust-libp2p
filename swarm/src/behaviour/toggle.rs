@@ -27,8 +27,8 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use crate::{
-    ConnectionDenied, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, NetworkBehaviour, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use either::Either;
 use futures::future;
@@ -182,7 +182,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params)
         } else {

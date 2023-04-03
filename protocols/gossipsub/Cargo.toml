@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = "1.62.0"
 description = "Gossipsub protocol for libp2p"
-version = "0.44.1"
+version = "0.44.2"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,7 +17,7 @@ libp2p-identity = { version = "0.2.0", path = "../../identity" }
 bytes = "1.4"
 byteorder = "1.3.4"
 fnv = "1.0.7"
-futures = "0.3.27"
+futures = "0.3.28"
 rand = "0.8"
 asynchronous-codec = "0.6"
 unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
@@ -28,7 +28,7 @@ smallvec = "1.6.1"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
 hex_fmt = "0.3.0"
-regex = "1.5.5"
+regex = "1.7.3"
 serde = { version = "1", optional = true, features = ["derive"] }
 thiserror = "1.0"
 wasm-timer = "0.2.5"

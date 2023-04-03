@@ -25,13 +25,7 @@ quick-protobuf = "0.8"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10"
-libp2p-identify = { path = "../identify" }
-libp2p-noise = { path = "../../transports/noise" }
-libp2p-swarm = { path = "../../swarm", features = ["async-std", "macros"] }
-libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
-libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
@@ -40,11 +34,3 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
-
-[[example]]
-name = "client"
-path = "examples/autonat_client.rs"
-
-[[example]]
-name = "server"
-path = "examples/autonat_server.rs"
