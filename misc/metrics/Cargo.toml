@@ -34,7 +34,7 @@ libp2p-gossipsub =  { workspace = true, optional = true }
 
 [dev-dependencies]
 env_logger = "0.10.0"
-futures = "0.3.27"
+futures = "0.3.28"
 hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }

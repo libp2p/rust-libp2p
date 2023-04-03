@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-io  = { version = "1.13.0", optional = true }
 data-encoding = "2.3.2"
-futures = "0.3.27"
+futures = "0.3.28"
 if-watch = "3.0.0"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
