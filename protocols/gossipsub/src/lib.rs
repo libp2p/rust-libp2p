@@ -159,7 +159,7 @@ mod types;
 mod rpc_proto;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
-pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
+pub use self::config::{Config, ConfigBuilder, FloodPublish, ValidationMode, Version};
 pub use self::error_priv::{HandlerError, PublishError, SubscriptionError, ValidationError};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
