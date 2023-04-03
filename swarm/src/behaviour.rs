@@ -141,7 +141,7 @@ pub trait NetworkBehaviour: 'static {
     /// sent from the handler to the behaviour are invoked with
     /// [`NetworkBehaviour::on_connection_handler_event`],
     /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
-    /// return [`NetworkBehaviourAction::NotifyHandler`].
+    /// return [`ToSwarm::NotifyHandler`].
     ///
     /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     /// connection closing.
@@ -276,7 +276,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>>;
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -318,12 +318,14 @@ pub trait PollParameters {
     fn local_peer_id(&self) -> &PeerId;
 }
 
-/// An action that a [`NetworkBehaviour`] can trigger in the [`Swarm`]
-/// in whose context it is executing.
+#[deprecated(note = "Use `ToSwarm` instead.")]
+pub type NetworkBehaviourAction<TOutEvent, TInEvent> = ToSwarm<TOutEvent, TInEvent>;
+
+/// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
 ///
 /// [`Swarm`]: super::Swarm
 #[derive(Debug)]
-pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
+pub enum ToSwarm<TOutEvent, TInEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
@@ -381,7 +383,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// with the given peer.
     ///
     /// Note: Closing a connection via
-    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// [`ToSwarm::CloseConnection`] does not inform the
     /// corresponding [`ConnectionHandler`](crate::ConnectionHandler).
     /// Closing a connection via a [`ConnectionHandler`](crate::ConnectionHandler) can be done
     /// either in a collaborative manner across [`ConnectionHandler`](crate::ConnectionHandler)s
@@ -395,31 +397,31 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     },
 }
 
-impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
+impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
     /// Map the handler event.
     pub fn map_in<TInEventNew>(
         self,
         f: impl FnOnce(TInEventOld) -> TInEventNew,
-    ) -> NetworkBehaviourAction<TOutEvent, TInEventNew> {
+    ) -> ToSwarm<TOutEvent, TInEventNew> {
         match self {
-            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
+            ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
                 event,
-            } => NetworkBehaviourAction::NotifyHandler {
+            } => ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
                 event: f(event),
             },
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            ToSwarm::ReportObservedAddr { address, score } => {
+                ToSwarm::ReportObservedAddr { address, score }
             }
-            NetworkBehaviourAction::CloseConnection {
+            ToSwarm::CloseConnection {
                 peer_id,
                 connection,
-            } => NetworkBehaviourAction::CloseConnection {
+            } => ToSwarm::CloseConnection {
                 peer_id,
                 connection,
             },
@@ -427,31 +429,28 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     }
 }
 
-impl<TOutEvent, THandlerIn> NetworkBehaviourAction<TOutEvent, THandlerIn> {
+impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
     /// Map the event the swarm will return.
-    pub fn map_out<E>(
-        self,
-        f: impl FnOnce(TOutEvent) -> E,
-    ) -> NetworkBehaviourAction<E, THandlerIn> {
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> ToSwarm<E, THandlerIn> {
         match self {
-            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
-            NetworkBehaviourAction::NotifyHandler {
+            ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
+            ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
                 event,
-            } => NetworkBehaviourAction::NotifyHandler {
+            } => ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
                 event,
             },
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
+            ToSwarm::ReportObservedAddr { address, score } => {
+                ToSwarm::ReportObservedAddr { address, score }
             }
-            NetworkBehaviourAction::CloseConnection {
+            ToSwarm::CloseConnection {
                 peer_id,
                 connection,
-            } => NetworkBehaviourAction::CloseConnection {
+            } => ToSwarm::CloseConnection {
                 peer_id,
                 connection,
             },

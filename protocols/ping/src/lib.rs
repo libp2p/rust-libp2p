@@ -50,8 +50,8 @@ pub use handler::{Config, Failure, Success};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
     collections::VecDeque,
@@ -154,7 +154,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             let Event { result, peer } = &e;
 
@@ -164,7 +164,7 @@ impl NetworkBehaviour for Behaviour {
                 _ => {}
             }
 
-            Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
+            Poll::Ready(ToSwarm::GenerateEvent(e))
         } else {
             Poll::Pending
         }
