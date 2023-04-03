@@ -40,8 +40,8 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
-    DialFailure, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    DialFailure, NegotiatedSubstream, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -104,7 +104,7 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<Event, Either<handler::In, Void>>>,
+    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
@@ -219,12 +219,11 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::One(connection_id),
-                            event: Either::Left(event),
-                        })
+                    self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::One(connection_id),
+                        event: Either::Left(event),
+                    })
                 }
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
@@ -296,15 +295,14 @@ impl NetworkBehaviour for Behaviour {
             }
         };
 
-        self.queued_actions
-            .push_back(NetworkBehaviourAction::GenerateEvent(event))
+        self.queued_actions.push_back(ToSwarm::GenerateEvent(event))
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
         }
@@ -320,7 +318,7 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::Reserve { to_listener }),
@@ -334,7 +332,7 @@ impl NetworkBehaviour for Behaviour {
 
                         self.pending_handler_commands
                             .insert(relayed_connection_id, handler::In::Reserve { to_listener });
-                        NetworkBehaviourAction::Dial { opts }
+                        ToSwarm::Dial { opts }
                     }
                 }
             }
@@ -350,7 +348,7 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
@@ -373,7 +371,7 @@ impl NetworkBehaviour for Behaviour {
                             },
                         );
 
-                        NetworkBehaviourAction::Dial { opts }
+                        ToSwarm::Dial { opts }
                     }
                 }
             }
