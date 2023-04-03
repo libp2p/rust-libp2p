@@ -232,6 +232,7 @@ pub async fn development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
@@ -288,6 +289,7 @@ pub fn tokio_development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
