@@ -149,7 +149,6 @@ pub enum Event {
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
