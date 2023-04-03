@@ -64,6 +64,7 @@ use crate::types::{
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
+use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -154,12 +155,36 @@ enum PublishConfig {
         keypair: Keypair,
         author: PeerId,
         inline_key: Option<Vec<u8>>,
-        last_seq_no: u64, // This starts from a random number and increases then overflows (if
-                          // required)
+        last_seq_no: SequenceNumber,
     },
     Author(PeerId),
     RandomAuthor,
     Anonymous,
+}
+
+/// A strictly linearly increasing sequence number.
+///
+/// We start from the current time as unix timestamp.
+struct SequenceNumber(u64);
+
+impl SequenceNumber {
+    fn new() -> Self {
+        let unix_timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time to be linear")
+            .as_secs();
+
+        Self(unix_timestamp)
+    }
+
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .checked_add(1)
+            .expect("to not exhaust u64 space for sequence numbers");
+
+        self.0
+    }
 }
 
 impl PublishConfig {
@@ -191,7 +216,7 @@ impl From<MessageAuthenticity> for PublishConfig {
                     keypair,
                     author: public_key.to_peer_id(),
                     inline_key: key,
-                    last_seq_no: rand::random(),
+                    last_seq_no: SequenceNumber::new(),
                 }
             }
             MessageAuthenticity::Author(peer_id) => PublishConfig::Author(peer_id),
@@ -2758,10 +2783,7 @@ where
                 inline_key,
                 last_seq_no,
             } => {
-                // Increment the last sequence number
-                *last_seq_no = (*last_seq_no).wrapping_add(1);
-
-                let sequence_number = *last_seq_no;
+                let sequence_number = last_seq_no.next();
 
                 let signature = {
                     let message = proto::Message {
