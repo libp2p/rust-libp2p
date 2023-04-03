@@ -1,8 +1,8 @@
-# 0.43.0 - unreleased
+## 0.43.0 - unreleased
 
-- Remove deprecated APIs. See [PR XXXX].
+- Remove deprecated APIs. See [PR 3511].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3511]: https://github.com/libp2p/rust-libp2p/pull/3511
 
 ## 0.42.1
 
