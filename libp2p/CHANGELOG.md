@@ -1,4 +1,4 @@
-## 0.52.2
+## 0.51.2
 
 - Introduce `libp2p::connection_limits` module.
   See [PR 3386].
