@@ -184,26 +184,30 @@ impl Connection {
         }));
 
         let open_callback = Closure::<dyn FnMut()>::new({
-            let shared = shared.clone();
+            let weak_shared = Arc::downgrade(&shared);
             move || {
-                let mut locked = shared.lock();
-                locked.opened = true;
-                if let Some(waker) = &locked.waker {
-                    waker.wake_by_ref();
+                if let Some(shared) = weak_shared.upgrade() {
+                    let mut locked = shared.lock();
+                    locked.opened = true;
+                    if let Some(waker) = &locked.waker {
+                        waker.wake_by_ref();
+                    }
                 }
             }
         });
         socket.set_onopen(Some(open_callback.as_ref().unchecked_ref()));
 
         let message_callback = Closure::<dyn FnMut(_)>::new({
-            let shared = shared.clone();
+            let weak_shared = Arc::downgrade(&shared);
             move |e: MessageEvent| {
                 if let Ok(abuf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
-                    let mut locked = shared.lock();
-                    let bytes = js_sys::Uint8Array::new(&abuf).to_vec();
-                    locked.data.extend(bytes.into_iter());
-                    if let Some(waker) = &locked.waker {
-                        waker.wake_by_ref();
+                    if let Some(shared) = weak_shared.upgrade() {
+                        let mut locked = shared.lock();
+                        let bytes = js_sys::Uint8Array::new(&abuf).to_vec();
+                        locked.data.extend(bytes.into_iter());
+                        if let Some(waker) = &locked.waker {
+                            waker.wake_by_ref();
+                        }
                     }
                 } else {
                     panic!("Unexpected data format {:?}", e.data());
@@ -213,23 +217,27 @@ impl Connection {
         socket.set_onmessage(Some(message_callback.as_ref().unchecked_ref()));
 
         let error_callback = Closure::<dyn FnMut(_)>::new({
-            let shared = shared.clone();
+            let weak_shared = Arc::downgrade(&shared);
             move |_| {
                 // The error event for error callback doesn't give any information and
                 // generates error on the browser console we just signal it to the
                 // stream.
-                shared.lock().error = true;
+                if let Some(shared) = weak_shared.upgrade() {
+                    shared.lock().error = true;
+                }
             }
         });
         socket.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
 
         let close_callback = Closure::<dyn FnMut(_)>::new({
-            let shared = shared.clone();
+            let weak_shared = Arc::downgrade(&shared);
             move |_| {
-                let mut locked = shared.lock();
-                locked.closed = true;
-                if let Some(waker) = &locked.waker {
-                    waker.wake_by_ref();
+                if let Some(shared) = weak_shared.upgrade() {
+                    let mut locked = shared.lock();
+                    locked.closed = true;
+                    if let Some(waker) = &locked.waker {
+                        waker.wake_by_ref();
+                    }
                 }
             }
         });
