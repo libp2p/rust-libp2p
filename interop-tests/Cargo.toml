@@ -9,7 +9,7 @@ license = "MIT"
 anyhow = "1"
 either = "1.8.0"
 env_logger = "0.10.0"
-futures = "0.3.27"
+futures = "0.3.28"
 libp2p = { path = "../libp2p", features = ["websocket", "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros"] }
 libp2p-quic = { path = "../transports/quic", features = ["tokio"] }
 libp2p-webrtc = { path = "../transports/webrtc", features = ["tokio"] }

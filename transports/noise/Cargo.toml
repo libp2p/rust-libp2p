@@ -11,7 +11,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 [dependencies]
 bytes = "1"
 curve25519-dalek = "3.0.0"
-futures = "0.3.27"
+futures = "0.3.28"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.0", path = "../../identity", features = ["ed25519"] }
 log = "0.4"
