@@ -15,7 +15,7 @@ anyhow = "1"
 async-std = { version = "1.9.0", features = ["attributes"] }
 clap = { version = "4.1.11", features = ["derive"] }
 env_logger = "0.10.0"
-futures = "0.3.26"
+futures = "0.3.28"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-dns = { version = "0.39.0", path = "../../transports/dns", features = ["async-std"] }

@@ -1,16 +1,16 @@
-# 0.43.0 [unreleased]
+# 0.43.0 - unreleased
 
 - Remove deprecated APIs. See [PR XXXX].
 
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
-# 0.42.1
+## 0.42.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
 
 [PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
-# 0.42.0
+## 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -21,7 +21,7 @@
 [PR 3227]: https://github.com/libp2p/rust-libp2p/pull/3227
 [PR 3265]: https://github.com/libp2p/rust-libp2p/pull/3265
 
-# 0.41.0
+## 0.41.0
 
 - Remove `prost::Error` from public API. See [PR 3058].
 
@@ -35,7 +35,7 @@
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 
-# 0.40.0
+## 0.40.0
 
 - Update to `libp2p-core` `v0.37.0`.
 
@@ -50,11 +50,11 @@
 [PR 2903]: https://github.com/libp2p/rust-libp2p/pull/2903
 [PR 2909]: https://github.com/libp2p/rust-libp2p/pull/2909
 
-# 0.39.0
+## 0.39.0
 
 - Update to `libp2p-core` `v0.36.0`.
 
-# 0.38.0
+## 0.38.0
 
 - Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
   Thus you will need protoc installed locally. See [PR 2788].
@@ -63,15 +63,15 @@
 
 [PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
-# 0.37.0
+## 0.37.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
-# 0.36.0
+## 0.36.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
-# 0.35.0 [2022-02-22]
+## 0.35.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
@@ -79,7 +79,7 @@
 
 [PR 2472]: https://github.com/libp2p/rust-libp2p/pull/2472
 
-# 0.34.0 [2022-01-27]
+## 0.34.0 [2022-01-27]
 
 - Update dependencies.
 
@@ -87,48 +87,48 @@
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
-# 0.33.0 [2021-11-01]
+## 0.33.0 [2021-11-01]
 
 - Make default features of `libp2p-core` optional.
   [PR 2181](https://github.com/libp2p/rust-libp2p/pull/2181)
 
 - Update dependencies.
 
-# 0.32.0 [2021-07-12]
+## 0.32.0 [2021-07-12]
 
 - Update dependencies.
 
-# 0.31.0 [2021-05-17]
+## 0.31.0 [2021-05-17]
 
 - Update to `snow` `v0.8.0` ([PR-2068]).
 
 [PR-2068]: https://github.com/libp2p/rust-libp2p/pull/2068
 
-# 0.30.0 [2021-03-17]
+## 0.30.0 [2021-03-17]
 
 - Update `libp2p-core`.
 
-# 0.29.0 [2021-01-12]
+## 0.29.0 [2021-01-12]
 
 - Update dependencies.
 
-# 0.28.0 [2020-12-17]
+## 0.28.0 [2020-12-17]
 
 - Update `libp2p-core`.
 
-# 0.27.0 [2020-11-25]
+## 0.27.0 [2020-11-25]
 
 - Update `libp2p-core`.
 
-# 0.26.0 [2020-11-09]
+## 0.26.0 [2020-11-09]
 
 - Update dependencies.
 
-# 0.25.0 [2020-10-16]
+## 0.25.0 [2020-10-16]
 
 - Update dependencies.
 
-# 0.24.0 [2020-09-09]
+## 0.24.0 [2020-09-09]
 
 - Bump `libp2p-core` dependency.
 
@@ -136,11 +136,11 @@
 To continue supporting inbound legacy handshake payloads,
 `recv_legacy_handshake` must be configured on the `LegacyConfig`.
 
-# 0.23.0 [2020-08-18]
+## 0.23.0 [2020-08-18]
 
 - Bump `libp2p-core` dependency.
 
-# 0.22.0 [2020-08-03]
+## 0.22.0 [2020-08-03]
 
 **NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
 on an existing deployment, this version must not be skipped
@@ -158,7 +158,7 @@ delaying the handshake upgrade or keeping compatibility with a network
 whose peers are slow to upgrade, without having to freeze the
 version of `libp2p-noise` altogether in these projects.
 
-# 0.21.0 [2020-07-17]
+## 0.21.0 [2020-07-17]
 
 **NOTE**: For a smooth upgrade path from `0.20` to `> 0.21`
 on an existing deployment, this version must not be skipped!
@@ -169,13 +169,13 @@ See [issue 1631](https://github.com/libp2p/rust-libp2p/issues/1631).
 
 - Update the `snow` dependency to the latest patch version.
 
-# 0.20.0 [2020-07-01]
+## 0.20.0 [2020-07-01]
 
 - Updated dependencies.
 - Conditional compilation fixes for the `wasm32-wasi` target
   ([PR 1633](https://github.com/libp2p/rust-libp2p/pull/1633)).
 
-# 0.19.1 [2020-06-22]
+## 0.19.1 [2020-06-22]
 
 - Re-add noise upgrades for IK and IX
   ([PR 1580](https://github.com/libp2p/rust-libp2p/pull/1580)).
