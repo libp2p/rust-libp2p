@@ -109,46 +109,22 @@ impl Keypair {
 
     #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::Keypair, OtherVariantError> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
-            Keypair::Ed25519(inner) => Ok(inner),
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
-        }
+        self.try_into()
     }
 
     #[cfg(feature = "secp256k1")]
     pub fn try_into_secp256k1(self) -> Result<secp256k1::Keypair, OtherVariantError> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
-            Keypair::Secp256k1(inner) => Ok(inner),
-        }
+        self.try_into()
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::Keypair, OtherVariantError> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
-            Keypair::Rsa(inner) => Ok(inner),
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
-        }
+        self.try_into()
     }
 
     #[cfg(feature = "ecdsa")]
     pub fn try_into_ecdsa(self) -> Result<ecdsa::Keypair, OtherVariantError> {
-        #[allow(deprecated)]
-        match self {
-            Keypair::Ecdsa(inner) => Ok(inner),
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
-        }
+        self.try_into()
     }
 
     /// Decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
@@ -458,6 +434,26 @@ impl PublicKey {
             #[cfg(feature = "ecdsa")]
             Ecdsa(pk) => pk.verify(msg, sig),
         }
+    }
+
+    #[cfg(feature = "ed25519")]
+    pub fn try_into_ed25519(self) -> Result<ed25519::PublicKey, OtherVariantError> {
+        self.try_into()
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub fn try_into_secp256k1(self) -> Result<secp256k1::PublicKey, OtherVariantError> {
+        self.try_into()
+    }
+
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    pub fn try_into_rsa(self) -> Result<rsa::PublicKey, OtherVariantError> {
+        self.try_into()
+    }
+
+    #[cfg(feature = "ecdsa")]
+    pub fn try_into_ecdsa(self) -> Result<ecdsa::PublicKey, OtherVariantError> {
+        self.try_into()
     }
 
     /// Encode the public key into a protobuf structure for storage or
