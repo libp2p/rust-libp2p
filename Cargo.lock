@@ -2081,6 +2081,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "libp2p-mplex",
  "libp2p-quic",
  "libp2p-webrtc",
  "log",
@@ -2228,7 +2229,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.51.2"
+version = "0.51.3"
 dependencies = [
  "async-std",
  "async-trait",
