@@ -1,4 +1,4 @@
-# 0.52.2
+## 0.52.2
 
 - Introduce `libp2p::connection_limits` module.
   See [PR 3386].
@@ -19,7 +19,7 @@
 [PR 3590]: https://github.com/libp2p/rust-libp2p/pull/3590
 [PR 3693]: https://github.com/libp2p/rust-libp2p/pull/3693
 
-# 0.51.1
+## 0.51.1
 
 - Depend on `libp2p-tls` `v0.1.0`.
 
@@ -30,7 +30,7 @@
 
 [PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
 
-# 0.51.0
+## 0.51.0
 
 - Enable `NetworkBehaviour`s to manage connections.
   This deprecates `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer`.
@@ -86,7 +86,7 @@
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
-# 0.50.0
+## 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
 implementation](transports/quic/CHANGELOG.md#070-alpha). The [necessary TLS logic is extracted into
@@ -136,7 +136,7 @@ definitely not it. See below for the many other changes packed into this release
 [PR 2289]: https://github.com/libp2p/rust-libp2p/pull/2289
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
-# 0.49.0
+## 0.49.0
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
@@ -181,7 +181,7 @@ definitely not it. See below for the many other changes packed into this release
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
 
-# 0.48.0
+## 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
 
@@ -207,7 +207,7 @@ definitely not it. See below for the many other changes packed into this release
 
 - Update to [`libp2p-request-response` `v0.21.0`](protocols/request-response/CHANGELOG.md#0210).
 
-# 0.47.0
+## 0.47.0
 
 - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).
 
@@ -233,11 +233,11 @@ definitely not it. See below for the many other changes packed into this release
 
 - Update to [`libp2p-swarm` `v0.38.0`](swarm/CHANGELOG.md#0380).
 
-# 0.46.1
+## 0.46.1
 
 - Update to `libp2p-derive` [`v0.28.0`](swarm-derive/CHANGELOG.md#0280).
 
-# 0.46.0
+## 0.46.0
 
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
 - Added weak dependencies for features. See [PR 2646].
@@ -263,7 +263,7 @@ definitely not it. See below for the many other changes packed into this release
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
 
-# 0.45.1
+## 0.45.1
 
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.3.1`](protocols/dcutr/CHANGELOG.md).
@@ -272,7 +272,7 @@ definitely not it. See below for the many other changes packed into this release
     - Update to [`libp2p-relay` `v0.9.1`](protocols/relay/CHANGELOG.md).
     - Update to [`libp2p-swarm` `v0.36.1`](swarm/CHANGELOG.md).
 
-# 0.45.0
+## 0.45.0
 - Update individual crates.
     - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).
     - Update to [`libp2p-noise` `v0.36.0`](transports/noise/CHANGELOG.md).
