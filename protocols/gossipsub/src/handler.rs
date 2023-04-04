@@ -327,7 +327,7 @@ impl ConnectionHandler for Handler {
                             return Poll::Ready(ConnectionHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
-                            log::warn!("Inbound stream error: {}", error);
+                            log::debug!("Failed to read from inbound stream: {error}");
                             // Close this side of the stream. If the
                             // peer is still around, they will re-establish their
                             // connection
@@ -336,7 +336,7 @@ impl ConnectionHandler for Handler {
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
-                            log::warn!("Peer closed their outbound stream");
+                            log::debug!("Inbound stream closed by remote");
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -354,7 +354,7 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                log::warn!("Inbound substream error while closing: {e}");
+                                log::debug!("Inbound substream error while closing: {e}");
                             }
                             self.inbound_substream = None;
                             if self.outbound_substream.is_none() {
@@ -407,16 +407,14 @@ impl ConnectionHandler for Handler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(e) => {
-                                    log::debug!(
-                                        "Outbound substream error while sending output: {e}"
-                                    );
+                                    log::debug!("Failed to send message on outbound stream: {e}");
                                     self.outbound_substream = None;
                                     break;
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
-                            log::debug!("Outbound substream error while sending output: {e}");
+                            log::debug!("Failed to send message on outbound stream: {e}");
                             self.outbound_substream = None;
                             break;
                         }
@@ -440,7 +438,7 @@ impl ConnectionHandler for Handler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            log::debug!("Outbound substream error while flushing output: {e}");
+                            log::debug!("Failed to flush outbound stream: {e}");
                             self.outbound_substream = None;
                             break;
                         }
@@ -463,7 +461,7 @@ impl ConnectionHandler for Handler {
                             break;
                         }
                         Poll::Ready(Err(e)) => {
-                            log::debug!("Outbound substream error while closing: {e}");
+                            log::debug!("Failed to close outbound stream: {e}");
                             self.outbound_substream = None;
                             break;
                         }
