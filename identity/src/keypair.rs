@@ -107,6 +107,49 @@ impl Keypair {
         Keypair::Ecdsa(ecdsa::Keypair::generate())
     }
 
+    pub fn into_ed25519(self) -> Result<ed25519::Keypair, ConversionError> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
+            Keypair::Ed25519(inner) => Ok(inner),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+        }
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub fn try_into_secp256k1(self) -> Result<secp256k1::Keypair, ConversionError> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Secp256k1(inner) => Ok(inner),
+        }
+    }
+
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    pub fn try_into_rsa(self) -> Result<rsa::Keypair, ConversionError> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ecdsa(_) => Err(ConversionError::new(KeyType::Ecdsa)),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Rsa(inner) => Ok(inner),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+        }
+    }
+
+    #[cfg(feature = "ecdsa")]
+    pub fn try_into_ecdsa(self) -> Result<ecdsa::Keypair, ConversionError> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ecdsa(inner) => Ok(inner),
+            Keypair::Ed25519(_) => Err(ConversionError::new(KeyType::Ed25519)),
+            Keypair::Rsa(_) => Err(ConversionError::new(KeyType::RSA)),
+            Keypair::Secp256k1(_) => Err(ConversionError::new(KeyType::Secp256k1)),
+        }
+    }
+
     /// Decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
