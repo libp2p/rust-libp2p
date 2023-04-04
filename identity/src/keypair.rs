@@ -474,6 +474,16 @@ impl PublicKey {
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `PublicKey::try_from_protobuf_encoding` instead."
+    )]
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+        Self::try_from_protobuf_encoding(bytes)
+    }
+
+    /// Decode a public key from a protobuf structure, e.g. read from storage
+    /// or received from another node.
     pub fn try_from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         use quick_protobuf::MessageRead;
 
