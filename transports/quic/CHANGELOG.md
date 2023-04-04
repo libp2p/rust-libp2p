@@ -1,8 +1,8 @@
-# 0.7.0-alpha.3
+## 0.7.0-alpha.3
 
 - Depend `libp2p-tls` `v0.1.0`.
 
-# 0.7.0-alpha.2
+## 0.7.0-alpha.2
 
 - Update to `libp2p-tls` `v0.1.0-alpha.2`.
 
@@ -19,6 +19,6 @@
 [PR 3342]: https://github.com/libp2p/rust-libp2p/pull/3342
 [PR 3420]: https://github.com/libp2p/rust-libp2p/pull/3420
 
-# 0.7.0-alpha
+## 0.7.0-alpha
 
 - Initial alpha release.

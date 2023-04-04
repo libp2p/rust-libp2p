@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 either = "1.6.0"
 fnv = "1.0"
-futures = "0.3.27"
+futures = "0.3.28"
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../core" }
@@ -40,7 +40,7 @@ wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.6.0"
 env_logger = "0.10"
-futures = "0.3.27"
+futures = "0.3.28"
 libp2p-identify = { path = "../protocols/identify" }
 libp2p-identity = { version = "0.1.0", path = "../identity", features = ["ed25519"] }
 libp2p-kad = { path = "../protocols/kad" }
