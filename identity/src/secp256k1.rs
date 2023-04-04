@@ -137,7 +137,7 @@ impl SecretKey {
         since = "0.2.0",
         note = "This method name is inaccurate, use `SecretKey::try_decode_der` instead."
     )]
-    pub fn decode_der(der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+    pub fn from_der(der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         Self::try_decode_der(der)
     }
 
