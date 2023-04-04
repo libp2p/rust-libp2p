@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{OtherVariantError, DecodingError, SigningError};
+use crate::error::{DecodingError, OtherVariantError, SigningError};
 use crate::{proto, KeyType};
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
