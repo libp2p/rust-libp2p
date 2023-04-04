@@ -217,23 +217,30 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 {
     /// Whether the event concerns an outbound stream.
     pub fn is_outbound(&self) -> bool {
-        matches!(
-            self,
-            Self::FullyNegotiatedOutbound(_) | Self::DialUpgradeError(_)
-        )
+        match self {
+            ConnectionEvent::DialUpgradeError(_) | ConnectionEvent::FullyNegotiatedOutbound(_) => {
+                true
+            }
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_) => false,
+        }
     }
 
     /// Whether the event concerns an inbound stream.
     pub fn is_inbound(&self) -> bool {
         // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
-        matches!(
-            self,
-            Self::FullyNegotiatedInbound(_)
-                | Self::ListenUpgradeError(ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
-                    ..
-                })
-        )
+        match self {
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
+                ..
+            }) => true,
+            ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::DialUpgradeError(_) => false,
+        }
     }
 }
 
