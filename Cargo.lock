@@ -3241,13 +3241,14 @@ dependencies = [
 
 [[package]]
 name = "multiaddr"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b53e0cc5907a5c216ba6584bf74be8ab47d6d6289f72793b2dddbf15dc3bf8c"
+checksum = "2b36f567c7099511fa8612bbbb52dda2419ce0bdbacf31714e3a5ffdb766d3bd"
 dependencies = [
  "arrayref",
  "byteorder",
  "data-encoding",
+ "log",
  "multibase",
  "multihash",
  "percent-encoding",
