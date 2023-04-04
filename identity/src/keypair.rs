@@ -158,19 +158,9 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_from_pkcs8_rsa` instead."
+        note = "Deprecated, use `rsa::Keypair::try_decode_pkcs8` or `rsa::Keypair::try_decode_der` and promote it into `Keypair` instead."
     )]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        #[allow(deprecated)]
-        rsa::Keypair::try_decode_pkcs8(pkcs8_der).map(Keypair::Rsa)
-    }
-
-    /// Try to decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
-    /// format (i.e. unencrypted) as defined in [RFC5208].
-    ///
-    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    pub fn try_from_pkcs8_rsa(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         rsa::Keypair::try_decode_pkcs8(pkcs8_der).map(Keypair::Rsa)
     }
@@ -182,7 +172,7 @@ impl Keypair {
     #[cfg(feature = "secp256k1")]
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_from_der_secp256k1` instead."
+        note = "Deprecated, use `secp256k1::Keypair::try_from_bytes` and promote it into `Keypair` instead."
     )]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
@@ -190,39 +180,16 @@ impl Keypair {
             .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
     }
 
-    /// Decode a keypair from a DER-encoded Secp256k1 secret key in an ECPrivateKey
-    /// structure as defined in [RFC5915].
-    ///
-    /// [RFC5915]: https://tools.ietf.org/html/rfc5915
-    #[cfg(feature = "secp256k1")]
-    pub fn try_from_der_secp256k1(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        #[allow(deprecated)]
-        secp256k1::SecretKey::try_decode_der(der)
-            .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
-    }
-
-    /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
-    /// produced by [`Keypair::encode`], zeroing the input on success.
+    /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
+    /// produced by `ed25519::Keypair::encode`, zeroing the input on success.
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[cfg(feature = "ed25519")]
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_from_bytes_ed25519` instead."
+        note = "Deprecated, use `ed25519::Keypair::try_decode` and promote it into `Keypair` instead."
     )]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
-        #[allow(deprecated)]
-        Ok(Keypair::Ed25519(ed25519::Keypair::from(
-            ed25519::SecretKey::try_from_bytes(bytes)?,
-        )))
-    }
-
-    /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
-    /// produced by [`Keypair::encode`], zeroing the input on success.
-    ///
-    /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
-    #[cfg(feature = "ed25519")]
-    pub fn try_from_bytes_ed25519(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
         Ok(Keypair::Ed25519(ed25519::Keypair::from(
             ed25519::SecretKey::try_from_bytes(bytes)?,
