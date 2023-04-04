@@ -122,19 +122,20 @@ impl Error for SigningError {
 }
 
 #[derive(Debug)]
-pub struct ConversionError {
+/// Error produced when trying to convert `libp2p_identity::Keypair` to a more concrete keypair failed.
+pub struct OtherVariantError {
     actual: KeyType,
 }
 
-impl ConversionError {
-    pub fn new(actual: KeyType) -> ConversionError {
-        ConversionError {
+impl OtherVariantError {
+    pub fn new(actual: KeyType) -> OtherVariantError {
+        OtherVariantError {
             actual,
         }
     }
 }
 
-impl Display for ConversionError {
+impl Display for OtherVariantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!(
             "Cannot convert to the given type, the actual key type inside is {}",
@@ -143,7 +144,7 @@ impl Display for ConversionError {
     }
 }
 
-impl Error for ConversionError {
+impl Error for OtherVariantError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
     }
