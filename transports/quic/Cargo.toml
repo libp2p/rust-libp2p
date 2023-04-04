@@ -19,7 +19,7 @@ libp2p-tls = { version = "0.1.0", path = "../tls" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4"
 parking_lot = "0.12.0"
-quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
+quinn-proto = { version = "0.9.3", default-features = false, features = ["tls-rustls"] }
 rand = "0.8.5"
 rustls = { version = "0.20.2", default-features = false }
 thiserror = "1.0.40"
