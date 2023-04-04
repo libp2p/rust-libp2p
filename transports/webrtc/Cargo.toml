@@ -43,7 +43,7 @@ pem = ["webrtc?/pem"]
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.10"
-hex-literal = "0.3"
+hex-literal = "0.4"
 libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
 libp2p-ping = { path = "../../protocols/ping" }
 tokio = { version = "1.19", features = ["full"] }
