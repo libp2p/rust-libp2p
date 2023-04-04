@@ -129,6 +129,18 @@ impl SecretKey {
         Ok(SecretKey(secret))
     }
 
+    /// Decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
+    /// structure as defined in [RFC5915], zeroing the input slice on success.
+    ///
+    /// [RFC5915]: https://tools.ietf.org/html/rfc5915
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name is inaccurate, use `SecretKey::try_decode_der` instead."
+    )]
+    pub fn decode_der(der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+        Self::try_decode_der(der)
+    }
+
     /// Try to decode a DER-encoded Secp256k1 secret key in an ECPrivateKey
     /// structure as defined in [RFC5915], zeroing the input slice on success.
     ///
@@ -157,7 +169,7 @@ impl SecretKey {
     }
 
     /// Returns the raw bytes of the secret key.
-    pub fn encode(&self) -> [u8; 32] {
+    pub fn to_bytes(&self) -> [u8; 32] {
         self.0.serialize()
     }
 
