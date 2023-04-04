@@ -405,7 +405,7 @@ mod tests {
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::try_decode_x509(&pk.encode_x509())
+            PublicKey::try_decode_x509(pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
