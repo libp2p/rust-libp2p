@@ -9,5 +9,5 @@ license = "MIT"
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "macros", "mplex", "noise", "ping", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../libp2p", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux"] }
 multiaddr = { version = "0.17.0" }

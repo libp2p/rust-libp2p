@@ -1,8 +1,11 @@
 ## 0.44.3 - unreleased
 
+- Fix erroneously duplicate message IDs. See [PR 3716].
+
 - Gracefully disable handler on stream errors. Deprecate a few variants of `HandlerError`.
   See [PR 3625].
 
+[PR 3716]: https://github.com/libp2p/rust-libp2p/pull/3716
 [PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3325
 
 ## 0.44.2
