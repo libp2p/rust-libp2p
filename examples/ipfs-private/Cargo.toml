@@ -12,4 +12,4 @@ either = "1.8"
 env_logger = "0.10"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["async-std", "gossipsub", "dns", "identify", "kad", "macros", "noise", "ping", "pnet", "tcp", "websocket", "yamux"] }
-multiaddr = { version = "0.17.0" }
+multiaddr = { version = "0.17.1" }
