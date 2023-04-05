@@ -121,8 +121,8 @@ impl Error for SigningError {
     }
 }
 
+/// Error produced when failing to convert `libp2p_identity::Keypair` to a more concrete keypair.
 #[derive(Debug)]
-/// Error produced when trying to convert `libp2p_identity::Keypair` to a more concrete keypair failed.
 pub struct OtherVariantError {
     actual: KeyType,
 }
