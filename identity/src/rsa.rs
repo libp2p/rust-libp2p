@@ -51,7 +51,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_decode_pkcs8` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_pkcs8` instead."
     )]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(der)
@@ -172,7 +172,7 @@ impl PublicKey {
     /// structure. See also `encode_x509`.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_decode_x509` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_x509` instead."
     )]
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::decode(pk)

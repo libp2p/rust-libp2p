@@ -51,7 +51,7 @@ impl Keypair {
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_decode` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode` instead."
     )]
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
@@ -186,7 +186,7 @@ impl PublicKey {
     /// Decode a public key from a byte array as produced by `encode`.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_decode` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
@@ -243,7 +243,7 @@ impl SecretKey {
     /// returned.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `SecretKey::try_from_bytes` instead."
+        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
     pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk_bytes.as_mut();

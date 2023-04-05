@@ -117,7 +117,7 @@ impl SecretKey {
     /// Decode a secret key from a byte buffer.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `SecretKey::try_from_bytes` instead"
+        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead"
     )]
     pub fn from_bytes(buf: &[u8]) -> Result<SecretKey, DecodingError> {
         SigningKey::from_bytes(buf)
@@ -156,7 +156,7 @@ impl PublicKey {
     /// Decode a public key from a byte buffer without compression.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_from_bytes` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
     )]
     pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
@@ -191,7 +191,7 @@ impl PublicKey {
     /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_decode_der` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_der` instead."
     )]
     pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {

@@ -106,7 +106,7 @@ impl SecretKey {
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `SecretKey::try_from_bytes` instead."
+        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
     pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
@@ -135,7 +135,7 @@ impl SecretKey {
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `SecretKey::try_decode_der` instead."
+        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_decode_der` instead."
     )]
     pub fn from_der(der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         Self::try_decode_der(der)
@@ -252,7 +252,7 @@ impl PublicKey {
     /// by `encode`.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_decode` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))

@@ -244,7 +244,7 @@ impl Keypair {
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `Keypair::try_from_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_from_protobuf_encoding` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         Self::try_from_protobuf_encoding(bytes)
@@ -476,7 +476,7 @@ impl PublicKey {
     /// or received from another node.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name is inaccurate, use `PublicKey::try_from_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_protobuf_encoding` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         Self::try_from_protobuf_encoding(bytes)
