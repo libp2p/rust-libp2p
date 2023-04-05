@@ -29,6 +29,7 @@ use crate::handler::{
     KademliaRequestId,
 };
 use crate::jobs::*;
+#[allow(deprecated)]
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
@@ -441,6 +442,7 @@ where
             .provider_publication_interval
             .map(AddProviderJob::new);
 
+        #[allow(deprecated)]
         Kademlia {
             store,
             caching: config.caching,

@@ -82,6 +82,10 @@ use std::time::{Duration, Instant};
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`KBucketsTable` module is an internal type not meant to be used by users."
+)]
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
 pub struct KBucketsTable<TKey, TVal> {
@@ -143,6 +147,7 @@ impl BucketIndex {
     }
 }
 
+#[allow(deprecated)]
 impl<TKey, TVal> KBucketsTable<TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
@@ -315,6 +320,7 @@ struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
     /// sorted according to the distance to the target.
     target: &'a TTarget,
     /// A reference to all buckets of the `KBucketsTable`.
+    #[allow(deprecated)]
     table: &'a mut KBucketsTable<TKey, TVal>,
     /// The iterator over the bucket indices in the order determined by the
     /// distance of the local key to the target.
@@ -420,6 +426,7 @@ impl Iterator for ClosestBucketsIter {
     }
 }
 
+#[allow(deprecated)]
 impl<TTarget, TKey, TVal, TMap, TOut> Iterator for ClosestIter<'_, TTarget, TKey, TVal, TMap, TOut>
 where
     TTarget: AsRef<KeyBytes>,
@@ -460,12 +467,17 @@ where
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`KBucketRef` module is an internal type not meant to be used by users."
+)]
 /// A reference to a bucket in a [`KBucketsTable`].
 pub struct KBucketRef<'a, TKey, TVal> {
     index: BucketIndex,
     bucket: &'a mut KBucket<TKey, TVal>,
 }
 
+#[allow(deprecated)]
 impl<'a, TKey, TVal> KBucketRef<'a, TKey, TVal>
 where
     TKey: Clone + AsRef<KeyBytes>,
@@ -525,6 +537,7 @@ mod tests {
     use libp2p_identity::PeerId;
     use quickcheck::*;
 
+    #[allow(deprecated)]
     type TestTable = KBucketsTable<KeyBytes, ()>;
 
     impl Arbitrary for TestTable {
@@ -559,6 +572,7 @@ mod tests {
     fn buckets_are_non_overlapping_and_exhaustive() {
         let local_key = Key::from(PeerId::random());
         let timeout = Duration::from_secs(0);
+        #[allow(deprecated)]
         let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
 
         let mut prev_max = U256::from(0);
@@ -622,6 +636,7 @@ mod tests {
         let local_key = Key::from(PeerId::random());
         let other_id = Key::from(PeerId::random());
 
+        #[allow(deprecated)]
         let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
         if let Entry::Absent(entry) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
@@ -640,6 +655,8 @@ mod tests {
     #[test]
     fn entry_self() {
         let local_key = Key::from(PeerId::random());
+
+        #[allow(deprecated)]
         let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
         match table.entry(&local_key) {
             Entry::SelfEntry => (),
@@ -650,6 +667,7 @@ mod tests {
     #[test]
     fn closest() {
         let local_key = Key::from(PeerId::random());
+        #[allow(deprecated)]
         let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
         let mut count = 0;
         loop {
@@ -685,6 +703,7 @@ mod tests {
     #[test]
     fn applied_pending() {
         let local_key = Key::from(PeerId::random());
+        #[allow(deprecated)]
         let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
         let expected_applied;
         let full_bucket_index;
