@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::record;
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
@@ -32,6 +34,10 @@ construct_uint! {
     pub(super) struct U256(4);
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Key` struct is an internal struct not meant to be used by users."
+)]
 /// A `Key` in the DHT keyspace with preserved preimage.
 ///
 /// Keys in the DHT keyspace identify both the participating nodes, as well as
@@ -40,13 +46,11 @@ construct_uint! {
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
 #[derive(Clone, Debug)]
-#[allow(deprecated)]
 pub struct Key<T> {
     preimage: T,
     bytes: KeyBytes,
 }
 
-#[allow(deprecated)]
 impl<T> Key<T> {
     /// Constructs a new `Key` by running the given value through a random
     /// oracle.
@@ -89,14 +93,12 @@ impl<T> Key<T> {
     }
 }
 
-#[allow(deprecated)]
 impl<T> From<Key<T>> for KeyBytes {
     fn from(key: Key<T>) -> KeyBytes {
         key.bytes
     }
 }
 
-#[allow(deprecated)]
 impl From<Multihash> for Key<Multihash> {
     fn from(m: Multihash) -> Self {
         let bytes = KeyBytes(Sha256::digest(m.to_bytes()));
@@ -104,7 +106,6 @@ impl From<Multihash> for Key<Multihash> {
     }
 }
 
-#[allow(deprecated)]
 impl From<PeerId> for Key<PeerId> {
     fn from(p: PeerId) -> Self {
         let bytes = KeyBytes(Sha256::digest(p.to_bytes()));
@@ -112,44 +113,42 @@ impl From<PeerId> for Key<PeerId> {
     }
 }
 
-#[allow(deprecated)]
 impl From<Vec<u8>> for Key<Vec<u8>> {
     fn from(b: Vec<u8>) -> Self {
         Key::new(b)
     }
 }
 
-#[allow(deprecated)]
 impl From<record::Key> for Key<record::Key> {
     fn from(k: record::Key) -> Self {
         Key::new(k)
     }
 }
 
-#[allow(deprecated)]
 impl<T> AsRef<KeyBytes> for Key<T> {
     fn as_ref(&self) -> &KeyBytes {
         &self.bytes
     }
 }
 
-#[allow(deprecated)]
 impl<T, U> PartialEq<Key<U>> for Key<T> {
     fn eq(&self, other: &Key<U>) -> bool {
         self.bytes == other.bytes
     }
 }
 
-#[allow(deprecated)]
 impl<T> Eq for Key<T> {}
 
-#[allow(deprecated)]
 impl<T> Hash for Key<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.bytes.0.hash(state);
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`KeyBytes` struct is an internal struct not meant to be used by users."
+)]
 /// The raw bytes of a key in the DHT keyspace.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct KeyBytes(GenericArray<u8, U32>);
@@ -191,6 +190,10 @@ impl AsRef<KeyBytes> for KeyBytes {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Distance` struct is an internal struct not meant to be used by users."
+)]
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(pub(super) U256);
