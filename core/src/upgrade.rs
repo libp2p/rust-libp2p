@@ -84,6 +84,7 @@ pub use self::{
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
+use multistream_select::Protocol;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 
 /// Types serving as protocol names.
@@ -145,8 +146,37 @@ pub trait UpgradeInfo {
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
+pub trait UpgradeProtocols {
+    fn protocols(&self) -> Vec<Protocol>;
+}
+
+impl UpgradeProtocols for U
+where
+    U: UpgradeInfo,
+{
+    fn protocols(&self) -> Vec<Protocol> {
+        self.protocol_info()
+            .into_iter()
+            .filter_map(|p| {
+                let name = p.protocol_name();
+                match Protocol::try_from_owned(name.to_vec()) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        log::warn!(
+                            "ignoring protocol {} during upgrade because it is malformed",
+                            String::from_utf8_lossy(p)
+                        );
+
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+}
+
 /// Possible upgrade on an inbound connection or substream.
-pub trait InboundUpgrade<C>: UpgradeInfo {
+pub trait InboundUpgrade<C>: UpgradeProtocols {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.
@@ -186,7 +216,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
 impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
 
 /// Possible upgrade on an outbound connection or substream.
-pub trait OutboundUpgrade<C>: UpgradeInfo {
+pub trait OutboundUpgrade<C>: UpgradeProtocols {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.

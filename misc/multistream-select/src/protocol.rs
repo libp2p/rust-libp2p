@@ -30,6 +30,7 @@ use crate::Version;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{io::IoSlice, prelude::*, ready};
+use std::borrow::Cow;
 use std::{
     convert::TryFrom,
     error::Error,
@@ -68,10 +69,33 @@ impl From<Version> for HeaderLine {
 
 /// A protocol (name) exchanged during protocol negotiation.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Protocol(Bytes);
+pub struct Protocol(Cow<'static, str>);
 
-impl AsRef<[u8]> for Protocol {
-    fn as_ref(&self) -> &[u8] {
+impl Protocol {
+    /// Construct a new protocol from a static string slice.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the protocol does not start with a forward slash: `/`.
+    pub fn from_static(protocol: &'static str) -> Self {
+        assert_eq!(&protocol[0..1], "/", "Protocols should start with a /");
+
+        Self(Cow::Borrowed(protocol))
+    }
+
+    /// Attempt to construct a protocol from an owned string.
+    ///
+    /// This function will fail if the protocol does not start with a forward slash: `/`.
+    pub fn try_from_owned(protocol: String) -> Result<Self, ProtocolError> {
+        if !protocol.starts_with('/') {
+            return Err(ProtocolError::InvalidProtocol);
+        }
+
+        Ok(Self(Cow::Owned(protocol)))
+    }
+
+    /// View the protocol as a string slice.
+    pub fn as_str(&self) -> &str {
         self.0.as_ref()
     }
 }
@@ -80,10 +104,14 @@ impl TryFrom<Bytes> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-        if !value.as_ref().starts_with(b"/") {
+        let protocol_string =
+            String::from_utf8(value.to_vec()).map_err(|_| ProtocolError::InvalidProtocol)?;
+
+        if !protocol_string.starts_with('/') {
             return Err(ProtocolError::InvalidProtocol);
         }
-        Ok(Protocol(value))
+
+        Ok(Protocol(Cow::Owned(protocol_string)))
     }
 }
 
@@ -97,7 +125,7 @@ impl TryFrom<&[u8]> for Protocol {
 
 impl fmt::Display for Protocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(&self.0))
+        write!(f, "{}", self.0)
     }
 }
 
@@ -133,7 +161,7 @@ impl Message {
             Message::Protocol(p) => {
                 let len = p.0.as_ref().len() + 1; // + 1 for \n
                 dest.reserve(len);
-                dest.put(p.0.as_ref());
+                dest.put(p.0.as_bytes());
                 dest.put_u8(b'\n');
                 Ok(())
             }
@@ -147,7 +175,7 @@ impl Message {
                 let mut encoded = Vec::with_capacity(ps.len());
                 for p in ps {
                     encoded.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
-                    encoded.extend_from_slice(p.0.as_ref());
+                    encoded.extend_from_slice(p.0.as_bytes());
                     encoded.push(b'\n')
                 }
                 encoded.push(b'\n');

@@ -170,8 +170,8 @@ impl<TInner> Negotiated<TInner> {
                     }
 
                     if let Message::Protocol(p) = &msg {
-                        if p.as_ref() == protocol.as_ref() {
-                            log::debug!("Negotiated: Received confirmation for protocol: {}", p);
+                        if p == &protocol {
+                            log::debug!("Negotiated: Received confirmation for protocol: {p}");
                             *this.state = State::Completed {
                                 io: io.into_inner(),
                             };

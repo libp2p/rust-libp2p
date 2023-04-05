@@ -25,7 +25,6 @@ use crate::{Negotiated, NegotiationError, Version};
 
 use futures::prelude::*;
 use std::{
-    convert::TryFrom as _,
     iter, mem,
     pin::Pin,
     task::{Context, Poll},
@@ -51,8 +50,7 @@ pub fn dialer_select_proto<R, I>(
 ) -> DialerSelectFuture<R, I::IntoIter>
 where
     R: AsyncRead + AsyncWrite,
-    I: IntoIterator,
-    I::Item: AsRef<[u8]>,
+    I: IntoIterator<Item = Protocol>,
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectFuture {
@@ -67,18 +65,28 @@ where
 /// A `Future` returned by [`dialer_select_proto`] which negotiates
 /// a protocol iteratively by considering one protocol after the other.
 #[pin_project::pin_project]
-pub struct DialerSelectFuture<R, I: Iterator> {
-    // TODO: It would be nice if eventually N = I::Item = Protocol.
+pub struct DialerSelectFuture<R, I: Iterator<Item = Protocol>> {
     protocols: iter::Peekable<I>,
-    state: State<R, I::Item>,
+    state: State<R>,
     version: Version,
 }
 
-enum State<R, N> {
-    SendHeader { io: MessageIO<R> },
-    SendProtocol { io: MessageIO<R>, protocol: N },
-    FlushProtocol { io: MessageIO<R>, protocol: N },
-    AwaitProtocol { io: MessageIO<R>, protocol: N },
+enum State<R> {
+    SendHeader {
+        io: MessageIO<R>,
+    },
+    SendProtocol {
+        io: MessageIO<R>,
+        protocol: Protocol,
+    },
+    FlushProtocol {
+        io: MessageIO<R>,
+        protocol: Protocol,
+    },
+    AwaitProtocol {
+        io: MessageIO<R>,
+        protocol: Protocol,
+    },
     Done,
 }
 
@@ -87,10 +95,9 @@ where
     // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
-    I: Iterator,
-    I::Item: AsRef<[u8]>,
+    I: Iterator<Item = Protocol>,
 {
-    type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
+    type Output = Result<(Protocol, Negotiated<R>), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -127,11 +134,12 @@ where
                         }
                     }
 
-                    let p = Protocol::try_from(protocol.as_ref())?;
-                    if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
+                    if let Err(err) =
+                        Pin::new(&mut io).start_send(Message::Protocol(protocol.clone()))
+                    {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Proposed protocol: {}", p);
+                    log::debug!("Dialer: Proposed protocol: {}", protocol);
 
                     if this.protocols.peek().is_some() {
                         *this.state = State::FlushProtocol { io, protocol }
@@ -143,9 +151,13 @@ where
                             // the dialer supports for this negotiation. Notably,
                             // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
-                                log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                                log::debug!("Dialer: Expecting proposed protocol: {protocol}");
                                 let hl = HeaderLine::from(Version::V1Lazy);
-                                let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
+                                let io = Negotiated::expecting(
+                                    io.into_reader(),
+                                    protocol.clone(),
+                                    Some(hl),
+                                );
                                 return Poll::Ready(Ok((protocol, io)));
                             }
                         }
@@ -179,16 +191,13 @@ where
                         Message::Header(v) if v == HeaderLine::from(*this.version) => {
                             *this.state = State::AwaitProtocol { io, protocol };
                         }
-                        Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
-                            log::debug!("Dialer: Received confirmation for protocol: {}", p);
+                        Message::Protocol(ref p) if p == &protocol => {
+                            log::debug!("Dialer: Received confirmation for protocol: {p}");
                             let io = Negotiated::completed(io.into_inner());
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
-                            log::debug!(
-                                "Dialer: Received rejection of protocol: {}",
-                                String::from_utf8_lossy(protocol.as_ref())
-                            );
+                            log::debug!("Dialer: Received rejection of protocol: {protocol}",);
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
                         }

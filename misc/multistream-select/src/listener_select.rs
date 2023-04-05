@@ -27,7 +27,6 @@ use crate::{Negotiated, NegotiationError};
 use futures::prelude::*;
 use smallvec::SmallVec;
 use std::{
-    convert::TryFrom as _,
     iter::FromIterator,
     mem,
     pin::Pin,
@@ -41,25 +40,11 @@ use std::{
 /// computation that performs the protocol negotiation with the remote. The
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
-pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R, I::Item>
+pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R>
 where
     R: AsyncRead + AsyncWrite,
-    I: IntoIterator,
-    I::Item: AsRef<[u8]>,
+    I: IntoIterator<Item = Protocol>,
 {
-    let protocols = protocols
-        .into_iter()
-        .filter_map(|n| match Protocol::try_from(n.as_ref()) {
-            Ok(p) => Some((n, p)),
-            Err(e) => {
-                log::warn!(
-                    "Listener: Ignoring invalid protocol: {} due to {}",
-                    String::from_utf8_lossy(n.as_ref()),
-                    e
-                );
-                None
-            }
-        });
     ListenerSelectFuture {
         protocols: SmallVec::from_iter(protocols),
         state: State::RecvHeader {
@@ -72,11 +57,9 @@ where
 /// The `Future` returned by [`listener_select_proto`] that performs a
 /// multistream-select protocol negotiation on an underlying I/O stream.
 #[pin_project::pin_project]
-pub struct ListenerSelectFuture<R, N> {
-    // TODO: It would be nice if eventually N = Protocol, which has a
-    // few more implications on the API.
-    protocols: SmallVec<[(N, Protocol); 8]>,
-    state: State<R, N>,
+pub struct ListenerSelectFuture<R> {
+    protocols: SmallVec<[Protocol; 8]>,
+    state: State<R>,
     /// Whether the last message sent was a protocol rejection (i.e. `na\n`).
     ///
     /// If the listener reads garbage or EOF after such a rejection,
@@ -86,7 +69,7 @@ pub struct ListenerSelectFuture<R, N> {
     last_sent_na: bool,
 }
 
-enum State<R, N> {
+enum State<R> {
     RecvHeader {
         io: MessageIO<R>,
     },
@@ -99,23 +82,22 @@ enum State<R, N> {
     SendMessage {
         io: MessageIO<R>,
         message: Message,
-        protocol: Option<N>,
+        protocol: Option<Protocol>,
     },
     Flush {
         io: MessageIO<R>,
-        protocol: Option<N>,
+        protocol: Option<Protocol>,
     },
     Done,
 }
 
-impl<R, N> Future for ListenerSelectFuture<R, N>
+impl<R> Future for ListenerSelectFuture<R>
 where
     // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
-    N: AsRef<[u8]> + Clone,
 {
-    type Output = Result<(N, Negotiated<R>), NegotiationError>;
+    type Output = Result<(Protocol, Negotiated<R>), NegotiationError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -209,8 +191,7 @@ where
 
                     match msg {
                         Message::ListProtocols => {
-                            let supported =
-                                this.protocols.iter().map(|(_, p)| p).cloned().collect();
+                            let supported = this.protocols.clone().into_iter().collect();
                             let message = Message::Protocols(supported);
                             *this.state = State::SendMessage {
                                 io,
@@ -219,29 +200,20 @@ where
                             }
                         }
                         Message::Protocol(p) => {
-                            let protocol = this.protocols.iter().find_map(|(name, proto)| {
-                                if &p == proto {
-                                    Some(name.clone())
-                                } else {
-                                    None
-                                }
-                            });
+                            let protocol = this.protocols.iter().find(|proto| &&p == proto);
 
                             let message = if protocol.is_some() {
                                 log::debug!("Listener: confirming protocol: {}", p);
                                 Message::Protocol(p.clone())
                             } else {
-                                log::debug!(
-                                    "Listener: rejecting protocol: {}",
-                                    String::from_utf8_lossy(p.as_ref())
-                                );
+                                log::debug!("Listener: rejecting protocol: {p}");
                                 Message::NotAvailable
                             };
 
                             *this.state = State::SendMessage {
                                 io,
                                 message,
-                                protocol,
+                                protocol: protocol.cloned(),
                             };
                         }
                         _ => return Poll::Ready(Err(ProtocolError::InvalidMessage.into())),
@@ -290,10 +262,7 @@ where
                             // Otherwise expect to receive another message.
                             match protocol {
                                 Some(protocol) => {
-                                    log::debug!(
-                                        "Listener: sent confirmed protocol: {}",
-                                        String::from_utf8_lossy(protocol.as_ref())
-                                    );
+                                    log::debug!("Listener: sent confirmed protocol: {protocol}");
                                     let io = Negotiated::completed(io.into_inner());
                                     return Poll::Ready(Ok((protocol, io)));
                                 }
