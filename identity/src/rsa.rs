@@ -75,22 +75,6 @@ impl Keypair {
         }
     }
 
-    /// Try to decode an RSA keypair from a DER-encoded private key.
-    /// Note that a copy of the undecoded byte array will be stored for encoding.
-    pub fn try_decode_der(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
-        match RsaKeyPair::from_der(bytes) {
-            Ok(kp) => {
-                let kp = Self {
-                    inner: Arc::new(kp),
-                    raw_key: bytes.to_vec(),
-                };
-                bytes.zeroize();
-                Ok(kp)
-            }
-            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
-        }
-    }
-
     /// Try to decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     /// Decoding from DER-encoded private key bytes is also supported.
@@ -112,7 +96,7 @@ impl Keypair {
     }
 
     /// Get the byte array used to parse the keypair from.
-    pub fn to_raw_bytes(&self) -> Vec<u8> {
+    pub(crate) fn to_raw_bytes(&self) -> Vec<u8> {
         self.raw_key.clone()
     }
 }
