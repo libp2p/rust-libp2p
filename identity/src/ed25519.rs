@@ -54,12 +54,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode` instead."
     )]
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
-        ed25519::Keypair::from_bytes(kp)
-            .map(|k| {
-                kp.zeroize();
-                Keypair(k)
-            })
-            .map_err(|e| DecodingError::failed_to_parse("Ed25519 keypair", e))
+        Self::try_decode(kp)
     }
 
     /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
@@ -189,9 +184,7 @@ impl PublicKey {
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        ed25519::PublicKey::from_bytes(k)
-            .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
-            .map(PublicKey)
+        Self::try_decode(k)
     }
 
     /// Try to decode a public key from a byte array as produced by `encode`.
@@ -245,12 +238,8 @@ impl SecretKey {
         since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
-    pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        let sk_bytes = sk_bytes.as_mut();
-        let secret = ed25519::SecretKey::from_bytes(&*sk_bytes)
-            .map_err(|e| DecodingError::failed_to_parse("Ed25519 secret key", e))?;
-        sk_bytes.zeroize();
-        Ok(SecretKey(secret))
+    pub fn from_bytes(sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+        Self::try_from_bytes(sk_bytes)
     }
 
     /// Try to create an Ed25519 secret key from a byte slice, zeroing the input on success.

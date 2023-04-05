@@ -108,12 +108,8 @@ impl SecretKey {
         since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
-    pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        let sk_bytes = sk.as_mut();
-        let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
-            .map_err(|e| DecodingError::failed_to_parse("parse secp256k1 secret key", e))?;
-        sk_bytes.zeroize();
-        Ok(SecretKey(secret))
+    pub fn from_bytes(sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+        Self::try_from_bytes(sk)
     }
 
     /// Try to parse a secret key from a byte slice, zeroing the slice on success.
@@ -255,9 +251,7 @@ impl PublicKey {
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))
-            .map_err(|e| DecodingError::failed_to_parse("secp256k1 public key", e))
-            .map(PublicKey)
+        Self::try_decode(k)
     }
 
     /// Try to decode a public key from a byte slice in the the format produced

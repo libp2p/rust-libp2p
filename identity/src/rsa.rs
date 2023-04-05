@@ -54,14 +54,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_pkcs8` instead."
     )]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let kp = RsaKeyPair::from_pkcs8(der)
-            .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
-        let kp = Keypair {
-            inner: Arc::new(kp),
-            raw_key: der.to_vec(),
-        };
-        der.zeroize();
-        Ok(kp)
+        Self::try_decode_pkcs8(der)
     }
 
     /// Get the public key from the keypair.
@@ -175,9 +168,7 @@ impl PublicKey {
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_x509` instead."
     )]
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
-        Asn1SubjectPublicKeyInfo::decode(pk)
-            .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
-            .map(|spki| spki.subjectPublicKey.0)
+        Self::try_decode_x509(pk)
     }
 
     /// Try to decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo

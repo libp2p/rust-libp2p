@@ -120,9 +120,7 @@ impl SecretKey {
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead"
     )]
     pub fn from_bytes(buf: &[u8]) -> Result<SecretKey, DecodingError> {
-        SigningKey::from_bytes(buf)
-            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
-            .map(SecretKey)
+        Self::try_from_bytes(buf)
     }
 
     /// Try to parse a secret key from a byte buffer.
@@ -159,12 +157,7 @@ impl PublicKey {
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
     )]
     pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let enc_pt = EncodedPoint::from_bytes(k)
-            .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
-
-        VerifyingKey::from_encoded_point(&enc_pt)
-            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 public key", err))
-            .map(PublicKey)
+        Self::try_from_bytes(k)
     }
 
     /// Decode a public key from a byte buffer without compression.
