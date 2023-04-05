@@ -330,7 +330,7 @@ impl ConnectionHandler for Handler {
                             log::debug!("Failed to read from inbound stream: {error}");
                             // Close this side of the stream. If the
                             // peer is still around, they will re-establish their
-                            // connection
+                            // outbound stream i.e. our inbound stream.
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
