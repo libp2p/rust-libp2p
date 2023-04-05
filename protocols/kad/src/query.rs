@@ -39,13 +39,20 @@ use std::{num::NonZeroUsize, time::Duration};
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
+#[deprecated(
+    since = "0.44.0",
+    note = "`QueryPool` struct is an internal struct not meant to be used by users."
+)]
 pub struct QueryPool<TInner> {
     next_id: usize,
+    #[allow(deprecated)]
     config: QueryConfig,
+    #[allow(deprecated)]
     queries: FnvHashMap<QueryId, Query<TInner>>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
+#[allow(deprecated)]
 pub enum QueryPoolState<'a, TInner> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
@@ -58,6 +65,7 @@ pub enum QueryPoolState<'a, TInner> {
     Timeout(Query<TInner>),
 }
 
+#[allow(deprecated)]
 impl<TInner> QueryPool<TInner> {
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(config: QueryConfig) -> Self {
@@ -217,10 +225,18 @@ impl<TInner> QueryPool<TInner> {
 }
 
 /// Unique identifier for an active query.
+#[deprecated(
+    since = "0.44.0",
+    note = "`QueryId` struct is an internal struct not meant to be used by users."
+)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
 
 /// The configuration for queries in a `QueryPool`.
+#[deprecated(
+    since = "0.44.0",
+    note = "`QueryConfig` struct is an internal struct not meant to be used by users."
+)]
 #[derive(Debug, Clone)]
 pub struct QueryConfig {
     /// Timeout of a single query.
@@ -244,6 +260,7 @@ pub struct QueryConfig {
     pub disjoint_query_paths: bool,
 }
 
+#[allow(deprecated)]
 impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
@@ -256,12 +273,18 @@ impl Default for QueryConfig {
 }
 
 /// A query in a `QueryPool`.
+#[deprecated(
+    since = "0.44.0",
+    note = "`Query` struct is an internal struct not meant to be used by users."
+)]
 pub struct Query<TInner> {
     /// The unique ID of the query.
+    #[allow(deprecated)]
     id: QueryId,
     /// The peer iterator that drives the query state.
     peer_iter: QueryPeerIter,
     /// Execution statistics of the query.
+    #[allow(deprecated)]
     stats: QueryStats,
     /// The opaque inner query state.
     pub inner: TInner,
@@ -274,6 +297,7 @@ enum QueryPeerIter {
     Fixed(FixedPeersIter),
 }
 
+#[allow(deprecated)]
 impl<TInner> Query<TInner> {
     /// Creates a new query without starting it.
     fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
@@ -407,6 +431,7 @@ impl<TInner> Query<TInner> {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
+    #[allow(deprecated)]
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
@@ -421,6 +446,10 @@ impl<TInner> Query<TInner> {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`QueryResult` struct is an internal struct not meant to be used by users."
+)]
 /// The result of a `Query`.
 pub struct QueryResult<TInner, TPeers> {
     /// The opaque inner query state.
@@ -428,9 +457,14 @@ pub struct QueryResult<TInner, TPeers> {
     /// The successfully contacted peers.
     pub peers: TPeers,
     /// The collected query statistics.
+    #[allow(deprecated)]
     pub stats: QueryStats,
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`QueryStats` struct is an internal struct not meant to be used by users."
+)]
 /// Execution statistics of a query.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryStats {
@@ -441,6 +475,7 @@ pub struct QueryStats {
     end: Option<Instant>,
 }
 
+#[allow(deprecated)]
 impl QueryStats {
     pub fn empty() -> Self {
         QueryStats {
