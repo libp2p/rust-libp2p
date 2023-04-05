@@ -25,9 +25,15 @@
 //! > buckets in a `KBucketsTable` and hence is enforced by the public API
 //! > of the `KBucketsTable` and in particular the public `Entry` API.
 
+#![allow(deprecated)]
+
 use super::*;
 pub use crate::K_VALUE;
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`PendingNode` struct is an internal struct not meant to be used by users."
+)]
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
 pub struct PendingNode<TKey, TVal> {
@@ -80,6 +86,10 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Node` struct is an internal struct not meant to be used by users."
+)]
 /// A `Node` in a bucket, representing a peer participating
 /// in the Kademlia DHT together with an associated value (e.g. contact
 /// information).
@@ -91,11 +101,19 @@ pub struct Node<TKey, TVal> {
     pub value: TVal,
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Position` struct is an internal struct not meant to be used by users."
+)]
 /// The position of a node in a `KBucket`, i.e. a non-negative integer
 /// in the range `[0, K_VALUE)`.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position(usize);
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`KBucket` struct is an internal struct not meant to be used by users."
+)]
 /// A `KBucket` is a list of up to `K_VALUE` keys and associated values,
 /// ordered from least-recently connected to most-recently connected.
 #[derive(Debug, Clone)]
@@ -150,6 +168,10 @@ pub enum InsertResult<TKey> {
     Full,
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`AppliedPending` struct is an internal struct not meant to be used by users."
+)]
 /// The result of applying a pending node to a bucket, possibly
 /// replacing an existing node.
 #[derive(Debug, Clone, PartialEq, Eq)]
