@@ -24,6 +24,10 @@ use fnv::FnvHashMap;
 use libp2p_identity::PeerId;
 use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`FixedPeersIter` struct is an internal struct not meant to be used by users."
+)]
 /// A peer iterator for a fixed set of peers.
 pub struct FixedPeersIter {
     /// Ther permitted parallelism, i.e. number of pending results.
