@@ -35,7 +35,7 @@ use libp2p_swarm::{
 };
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{HashMap, VecDeque, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };

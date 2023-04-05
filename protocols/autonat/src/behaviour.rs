@@ -42,7 +42,7 @@ use libp2p_swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
-    collections::{HashMap, VecDeque, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
