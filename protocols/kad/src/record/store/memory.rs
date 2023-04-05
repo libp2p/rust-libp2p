@@ -216,12 +216,13 @@ impl RecordStore for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::{Code, Multihash};
+    use crate::SHA_256_MH;
+    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use rand::Rng;
 
     fn random_multihash() -> Multihash {
-        Multihash::wrap(Code::Sha2_256.into(), &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
+        Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
 
     fn distance(r: &ProviderRecord) -> kbucket::Distance {

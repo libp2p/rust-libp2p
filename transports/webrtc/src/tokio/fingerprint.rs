@@ -18,12 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::{Code, Hasher, Multihash, MultihashDigest};
+use multihash::MultihashGeneric;
+use sha2::Digest as _;
+use std::fmt;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
-use std::fmt;
-
 const SHA256: &str = "sha-256";
+const MULTIHASH_SHA256_CODE: u64 = 0x12;
+
+type Multihash = MultihashGeneric<64>;
 
 /// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -39,13 +42,7 @@ impl Fingerprint {
 
     /// Creates a fingerprint from a raw certificate.
     pub fn from_certificate(bytes: &[u8]) -> Self {
-        let mut h = multihash::Sha2_256::default();
-        h.update(bytes);
-
-        let mut bytes: [u8; 32] = [0; 32];
-        bytes.copy_from_slice(h.finalize());
-
-        Fingerprint(bytes)
+        Fingerprint(sha2::Sha256::digest(bytes).into())
     }
 
     /// Converts [`RTCDtlsFingerprint`] to [`Fingerprint`].
@@ -60,9 +57,9 @@ impl Fingerprint {
         Some(Self(buf))
     }
 
-    /// Converts [`type@Multihash`] to [`Fingerprint`].
+    /// Converts [`Multihash`](MultihashGeneric) to [`Fingerprint`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
-        if hash.code() != u64::from(Code::Sha2_256) {
+        if hash.code() != MULTIHASH_SHA256_CODE {
             // Only support SHA256 for now.
             return None;
         }
@@ -72,11 +69,9 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
-    /// Converts this fingerprint to [`type@Multihash`].
+    /// Converts this fingerprint to [`Multihash`](MultihashGeneric).
     pub fn to_multihash(self) -> Multihash {
-        Code::Sha2_256
-            .wrap(&self.0)
-            .expect("fingerprint's len to be 32 bytes")
+        Multihash::wrap(MULTIHASH_SHA256_CODE, &self.0).expect("fingerprint's len to be 32 bytes")
     }
 
     /// Formats this fingerprint as uppercase hex, separated by colons (`:`).
