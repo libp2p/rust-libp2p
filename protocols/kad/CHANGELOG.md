@@ -1,3 +1,9 @@
+## 0.43.2
+
+- Export pub enum `RoutingUpdate`. See [PR 3737].
+
+[PR 3737]: https://github.com/libp2p/rust-libp2p/pull/3737
+
 ## 0.43.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
