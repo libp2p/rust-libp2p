@@ -142,8 +142,4 @@ impl Display for OtherVariantError {
     }
 }
 
-impl Error for OtherVariantError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
+impl Error for OtherVariantError {}
