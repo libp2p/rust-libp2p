@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use super::*;
 
 use crate::kbucket::{Distance, Key, KeyBytes};
@@ -29,6 +31,10 @@ use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 
 pub mod disjoint;
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`ClosestPeersIter` struct is an internal struct not meant to be used by users."
+)]
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
 #[derive(Debug, Clone)]
@@ -49,6 +55,10 @@ pub struct ClosestPeersIter {
     num_waiting: usize,
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`ClosestPeersIterConfig` struct is an internal struct not meant to be used by users."
+)]
 /// Configuration for a `ClosestPeersIter`.
 #[derive(Debug, Clone)]
 pub struct ClosestPeersIterConfig {
