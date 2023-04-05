@@ -24,7 +24,7 @@ use std::fmt;
 
 #[deprecated(
     since = "0.44.0",
-    note = "`addresses` module is an internal type not meant to be used by users."
+    note = "`addresses` struct is an internal struct not meant to be used by users."
 )]
 /// A non-empty list of (unique) addresses of a peer in the routing table.
 #[derive(Clone)]

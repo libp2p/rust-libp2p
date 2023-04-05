@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
@@ -54,7 +55,7 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// It also handles requests made by the remote.
 #[deprecated(
     since = "0.44.0",
-    note = "`KademliaHandler` module is an internal type not meant to be used by users."
+    note = "`KademliaHandler` struct is an internal struct not meant to be used by users."
 )]
 pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
@@ -72,6 +73,7 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
+    #[allow(deprecated)]
     requested_streams:
         VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
 
@@ -109,11 +111,12 @@ enum ProtocolStatus {
 /// Configuration of a [`KademliaHandler`].
 #[deprecated(
     since = "0.44.0",
-    note = "`KademliaHandlerConfig` module is an internal type not meant to be used by users."
+    note = "`KademliaHandlerConfig` struct is an internal struct not meant to be used by users."
 )]
 #[derive(Debug, Clone)]
 pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
+    #[allow(deprecated)]
     pub protocol_config: KademliaProtocolConfig,
 
     /// If false, we deny incoming requests.
@@ -234,6 +237,7 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
+#[allow(deprecated)]
 pub enum KademliaHandlerEvent<TUserData> {
     /// The configured protocol name has been confirmed by the peer through
     /// a successfully negotiated substream.
@@ -250,7 +254,6 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
         /// Identifier of the request. Needs to be passed back when answering.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -268,7 +271,6 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The key for which providers are requested.
         key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -303,7 +305,6 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Key for which we should look in the dht
         key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -321,7 +322,6 @@ pub enum KademliaHandlerEvent<TUserData> {
     PutRecord {
         record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -384,6 +384,7 @@ impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 
 /// Event to send to the handler.
 #[derive(Debug)]
+#[allow(deprecated)]
 pub enum KademliaHandlerIn<TUserData> {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
@@ -392,7 +393,6 @@ pub enum KademliaHandlerIn<TUserData> {
     /// can be used as an alternative to letting requests simply time
     /// out on the remote peer, thus potentially avoiding some delay
     /// for the query on the remote.
-    #[allow(deprecated)]
     Reset(KademliaRequestId),
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
@@ -433,7 +433,6 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -463,7 +462,6 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -481,7 +479,6 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 }
@@ -490,7 +487,7 @@ pub enum KademliaHandlerIn<TUserData> {
 /// the remote.
 #[deprecated(
     since = "0.44.0",
-    note = "`KademliaRequestId` module is an internal type not meant to be used by users."
+    note = "`KademliaRequestId` struct is an internal struct not meant to be used by users."
 )]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct KademliaRequestId {
@@ -850,6 +847,7 @@ impl<TUserData> Stream for OutboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
+    #[allow(deprecated)]
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),
@@ -986,6 +984,7 @@ impl<TUserData> Stream for InboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
+    #[allow(deprecated)]
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),

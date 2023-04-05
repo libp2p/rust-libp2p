@@ -84,7 +84,7 @@ const NUM_BUCKETS: usize = 256;
 
 #[deprecated(
     since = "0.44.0",
-    note = "`KBucketsTable` module is an internal type not meant to be used by users."
+    note = "`KBucketsTable` struct is an internal struct not meant to be used by users."
 )]
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
@@ -469,7 +469,7 @@ where
 
 #[deprecated(
     since = "0.44.0",
-    note = "`KBucketRef` module is an internal type not meant to be used by users."
+    note = "`KBucketRef` struct is an internal struct not meant to be used by users."
 )]
 /// A reference to a bucket in a [`KBucketsTable`].
 pub struct KBucketRef<'a, TKey, TVal> {

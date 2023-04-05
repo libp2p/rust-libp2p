@@ -31,6 +31,7 @@ use crate::handler::{
 use crate::jobs::*;
 #[allow(deprecated)]
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
+#[allow(deprecated)]
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
@@ -75,6 +76,7 @@ pub struct Kademlia<TStore> {
     kbucket_inserts: KademliaBucketInserts,
 
     /// Configuration of the wire protocol.
+    #[allow(deprecated)]
     protocol_config: KademliaProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
@@ -174,6 +176,7 @@ pub enum KademliaStoreInserts {
 ///
 /// The configuration is consumed by [`Kademlia::new`].
 #[derive(Debug, Clone)]
+#[allow(deprecated)]
 pub struct KademliaConfig {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
@@ -1001,6 +1004,7 @@ where
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
+    #[allow(deprecated)]
     fn discovered<'a, I>(&'a mut self, query_id: &QueryId, source: &PeerId, peers: I)
     where
         I: Iterator<Item = &'a KadPeer> + Clone,
@@ -1026,6 +1030,7 @@ where
     /// Finds the closest peers to a `target` in the context of a request by
     /// the `source` peer, such that the `source` peer is never included in the
     /// result.
+    #[allow(deprecated)]
     fn find_closest<T: Clone>(
         &mut self,
         target: &kbucket::Key<T>,
@@ -1044,6 +1049,7 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
+    #[allow(deprecated)]
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
@@ -1062,6 +1068,7 @@ where
                     } else {
                         KadConnectionType::NotConnected
                     };
+                    #[allow(deprecated)]
                     if multiaddrs.is_empty() {
                         // The provider is either the local node and we fill in
                         // the local addresses on demand, or it is a legacy
@@ -1740,6 +1747,7 @@ where
     }
 
     /// Processes a provider record received from a peer.
+    #[allow(deprecated)]
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
@@ -2132,6 +2140,7 @@ where
                 });
             }
 
+            #[allow(deprecated)]
             KademliaHandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
@@ -2183,6 +2192,7 @@ where
                 }
             }
 
+            #[allow(deprecated)]
             KademliaHandlerEvent::AddProvider { key, provider } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
@@ -3043,6 +3053,7 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
+    #[allow(deprecated)]
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
