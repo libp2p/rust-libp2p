@@ -23,8 +23,9 @@
 //! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
 //! peer ID will be generated randomly.
 
+#![allow(deprecated)]
+
 use futures::StreamExt;
-#[allow(deprecated)]
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
 use libp2p::{
@@ -57,7 +58,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        #[allow(deprecated)]
         let store = MemoryStore::new(local_peer_id);
         let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
 
