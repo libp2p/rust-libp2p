@@ -28,6 +28,10 @@ use std::{
     ops::{Index, IndexMut, Range},
 };
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`ClosestDisjointPeersIter` struct is an internal struct not meant to be used by users."
+)]
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
 pub struct ClosestDisjointPeersIter {

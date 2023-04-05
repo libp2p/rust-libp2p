@@ -27,6 +27,10 @@ use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`MemoryStore` struct is an internal struct not meant to be used by users."
+)]
 /// In-memory implementation of a `RecordStore`.
 #[allow(deprecated)]
 pub struct MemoryStore {
@@ -44,6 +48,10 @@ pub struct MemoryStore {
     provided: HashSet<ProviderRecord>,
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`MemoryStoreConfig` struct is an internal struct not meant to be used by users."
+)]
 /// Configuration for a `MemoryStore`.
 #[derive(Debug, Clone)]
 pub struct MemoryStoreConfig {
