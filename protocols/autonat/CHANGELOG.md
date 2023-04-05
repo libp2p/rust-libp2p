@@ -1,5 +1,7 @@
 ## 0.10.2 - unreleased
-- Fix duplicate PeerIds. See [PR 3236]
+
+- Store server `PeerId`s in `HashSet` to avoid duplications and lower memory consumption.
+  See [PR 3236].
 
 [PR 3236]: https://github.com/libp2p/rust-libp2p/pull/3736
 
