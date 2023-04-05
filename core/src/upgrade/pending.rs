@@ -21,6 +21,7 @@
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
 use futures::future;
+use multistream_select::Protocol;
 use std::iter;
 use void::Void;
 
@@ -57,7 +58,7 @@ where
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, _: C, _: Protocol) -> Self::Future {
         future::pending()
     }
 }
@@ -70,7 +71,7 @@ where
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, _: C, _: Protocol) -> Self::Future {
         future::pending()
     }
 }

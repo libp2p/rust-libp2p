@@ -62,7 +62,7 @@ where
     type Error = FloodsubError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Protocol) -> Self::Future {
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,
@@ -149,7 +149,7 @@ where
     type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Protocol) -> Self::Future {
         Box::pin(async move {
             let mut framed = Framed::new(
                 socket,

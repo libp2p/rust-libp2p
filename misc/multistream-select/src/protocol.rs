@@ -68,7 +68,7 @@ impl From<Version> for HeaderLine {
 }
 
 /// A protocol (name) exchanged during protocol negotiation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Protocol(Cow<'static, str>);
 
 impl Protocol {

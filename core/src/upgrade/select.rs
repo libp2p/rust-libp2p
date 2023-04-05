@@ -19,12 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::EitherFuture;
+use crate::upgrade::UpgradeProtocols;
 use crate::{
     either::EitherName,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
 use futures::future;
+use multistream_select::Protocol;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
@@ -42,22 +44,16 @@ impl<A, B> SelectUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeInfo for SelectUpgrade<A, B>
+impl<A, B> UpgradeProtocols for SelectUpgrade<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo,
+    A: UpgradeProtocols,
+    B: UpgradeProtocols,
 {
-    type Info = EitherName<A::Info, B::Info>;
-    type InfoIter = InfoIterChain<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter,
-    >;
+    fn protocols(&self) -> Vec<Protocol> {
+        let mut protocols = self.0.protocols();
+        protocols.extend(self.1.protocols());
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        InfoIterChain(
-            self.0.protocol_info().into_iter(),
-            self.1.protocol_info().into_iter(),
-        )
+        protocols
     }
 }
 
@@ -70,11 +66,16 @@ where
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
-        match info {
-            EitherName::A(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
+    fn upgrade_inbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
+        if self.0.protocols().contains(&selected_protocol) {
+            return EitherFuture::First(self.0.upgrade_inbound(sock, selected_protocol));
         }
+
+        if self.1.protocols().contains(&selected_protocol) {
+            return EitherFuture::Second(self.1.upgrade_inbound(sock, selected_protocol));
+        }
+
+        panic!("selected protocol is not supported by either upgrade")
     }
 }
 
@@ -87,11 +88,16 @@ where
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
-        match info {
-            EitherName::A(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
+    fn upgrade_outbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
+        if self.0.protocols().contains(&selected_protocol) {
+            return EitherFuture::First(self.0.upgrade_outbound(sock, selected_protocol));
         }
+
+        if self.1.protocols().contains(&selected_protocol) {
+            return EitherFuture::Second(self.1.upgrade_outbound(sock, selected_protocol));
+        }
+
+        panic!("selected protocol is not supported by either upgrade")
     }
 }
 

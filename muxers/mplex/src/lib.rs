@@ -32,7 +32,7 @@ use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
@@ -53,7 +53,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
         future::ready(Ok(Multiplex {
             io: Arc::new(Mutex::new(io::Multiplexed::new(socket, self))),
         }))
@@ -68,7 +68,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, io::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
         future::ready(Ok(Multiplex {
             io: Arc::new(Mutex::new(io::Multiplexed::new(socket, self))),
         }))

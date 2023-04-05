@@ -75,7 +75,7 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
         async move {
             let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
                 .accept(socket)
@@ -98,7 +98,7 @@ where
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
         async move {
             // Spec: In order to keep this flexibility for future versions, clients that only support the version of the handshake defined in this document MUST NOT send any value in the Server Name Indication.
             // Setting `ServerName` to unspecified will disable the use of the SNI extension.

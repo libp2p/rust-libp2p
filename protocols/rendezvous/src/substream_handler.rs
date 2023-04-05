@@ -150,7 +150,7 @@ impl<C: Send + 'static> InboundUpgrade<C> for PassthroughProtocol {
     type Error = Void;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
         match self.ident {
             Some(_) => future::ready(Ok(socket)).boxed(),
             None => future::pending().boxed(),
@@ -163,7 +163,7 @@ impl<C: Send + 'static> OutboundUpgrade<C> for PassthroughProtocol {
     type Error = Void;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
         match self.ident {
             Some(_) => future::ready(Ok(socket)).boxed(),
             None => future::pending().boxed(),

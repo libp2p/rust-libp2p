@@ -18,28 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::upgrade::UpgradeProtocols;
 use crate::{
     either::{EitherFuture, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
 use futures::future;
+use multistream_select::Protocol;
 
-impl<A, B> UpgradeInfo for Either<A, B>
+// impl<A, B> UpgradeInfo for Either<A, B>
+// where
+//     A: UpgradeInfo,
+//     B: UpgradeInfo,
+// {
+//     type Info = EitherName<A::Info, B::Info>;
+//     type InfoIter = EitherIter<
+//         <A::InfoIter as IntoIterator>::IntoIter,
+//         <B::InfoIter as IntoIterator>::IntoIter,
+//     >;
+//
+//     fn protocol_info(&self) -> Self::InfoIter {
+//         match self {
+//             Either::Left(a) => EitherIter::A(a.protocol_info().into_iter()),
+//             Either::Right(b) => EitherIter::B(b.protocol_info().into_iter()),
+//         }
+//     }
+// }
+
+impl<A, B> UpgradeProtocols for Either<A, B>
 where
-    A: UpgradeInfo,
-    B: UpgradeInfo,
+    A: UpgradeProtocols,
+    B: UpgradeProtocols,
 {
-    type Info = EitherName<A::Info, B::Info>;
-    type InfoIter = EitherIter<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter,
-    >;
-
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Vec<Protocol> {
         match self {
-            Either::Left(a) => EitherIter::A(a.protocol_info().into_iter()),
-            Either::Right(b) => EitherIter::B(b.protocol_info().into_iter()),
+            Either::Left(a) => a.protocols(),
+            Either::Right(b) => b.protocols(),
         }
     }
 }
@@ -53,15 +68,10 @@ where
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
-        match (self, info) {
-            (Either::Left(a), EitherName::A(info)) => {
-                EitherFuture::First(a.upgrade_inbound(sock, info))
-            }
-            (Either::Right(b), EitherName::B(info)) => {
-                EitherFuture::Second(b.upgrade_inbound(sock, info))
-            }
-            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound"),
+    fn upgrade_inbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
+        match self {
+            Either::Left(a) => EitherFuture::First(a.upgrade_inbound(sock, selected_protocol)),
+            Either::Right(b) => EitherFuture::Second(b.upgrade_inbound(sock, selected_protocol)),
         }
     }
 }
@@ -75,15 +85,10 @@ where
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
-        match (self, info) {
-            (Either::Left(a), EitherName::A(info)) => {
-                EitherFuture::First(a.upgrade_outbound(sock, info))
-            }
-            (Either::Right(b), EitherName::B(info)) => {
-                EitherFuture::Second(b.upgrade_outbound(sock, info))
-            }
-            _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),
+    fn upgrade_outbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
+        match self {
+            Either::Left(a) => EitherFuture::First(a.upgrade_outbound(sock, selected_protocol)),
+            Either::Right(b) => EitherFuture::Second(b.upgrade_outbound(sock, selected_protocol)),
         }
     }
 }

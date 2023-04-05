@@ -51,7 +51,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Protocol) -> Self::Future {
         let msg = match self {
             Upgrade::Reserve => proto::HopMessage {
                 type_pb: proto::HopMessageType::RESERVE,

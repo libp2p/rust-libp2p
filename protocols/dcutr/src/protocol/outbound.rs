@@ -53,7 +53,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Protocol) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),

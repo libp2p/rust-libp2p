@@ -46,7 +46,7 @@ mod one_shot;
 mod pending;
 mod select;
 
-pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};

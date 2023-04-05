@@ -127,11 +127,11 @@ pub use handler::{
     IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
     SubstreamProtocol,
 };
+pub use libp2p_core::upgrade::Protocol;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use connection::{
@@ -142,7 +142,6 @@ use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
-    multiaddr::Protocol,
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},

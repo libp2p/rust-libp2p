@@ -84,8 +84,9 @@ pub use self::{
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
-use multistream_select::Protocol;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+pub use multistream_select::{
+    NegotiatedComplete, NegotiationError, Protocol, ProtocolError, Version,
+};
 
 /// Types serving as protocol names.
 ///
@@ -150,7 +151,7 @@ pub trait UpgradeProtocols {
     fn protocols(&self) -> Vec<Protocol>;
 }
 
-impl UpgradeProtocols for U
+impl<U> UpgradeProtocols for U
 where
     U: UpgradeInfo,
 {
@@ -159,12 +160,13 @@ where
             .into_iter()
             .filter_map(|p| {
                 let name = p.protocol_name();
-                match Protocol::try_from_owned(name.to_vec()) {
+
+                match Protocol::try_from(name) {
                     Ok(p) => Some(p),
                     Err(e) => {
                         log::warn!(
-                            "ignoring protocol {} during upgrade because it is malformed",
-                            String::from_utf8_lossy(p)
+                            "ignoring protocol {} during upgrade because it is malformed: {e}",
+                            String::from_utf8_lossy(name)
                         );
 
                         None
@@ -188,7 +190,7 @@ pub trait InboundUpgrade<C>: UpgradeProtocols {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_inbound(self, socket: C, info: Self::Info) -> Self::Future;
+    fn upgrade_inbound(self, socket: C, selected_protocol: Protocol) -> Self::Future;
 }
 
 /// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
@@ -228,7 +230,7 @@ pub trait OutboundUpgrade<C>: UpgradeProtocols {
     /// method is called to start the handshake.
     ///
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
-    fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
+    fn upgrade_outbound(self, socket: C, selected_protocol: Protocol) -> Self::Future;
 }
 
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement

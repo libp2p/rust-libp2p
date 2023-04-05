@@ -40,13 +40,12 @@ use std::{
 /// computation that performs the protocol negotiation with the remote. The
 /// returned `Future` resolves with the name of the negotiated protocol and
 /// a [`Negotiated`] I/O stream.
-pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFuture<R>
+pub fn listener_select_proto<R>(inner: R, protocols: Vec<Protocol>) -> ListenerSelectFuture<R>
 where
     R: AsyncRead + AsyncWrite,
-    I: IntoIterator<Item = Protocol>,
 {
     ListenerSelectFuture {
-        protocols: SmallVec::from_iter(protocols),
+        protocols: SmallVec::from_vec(protocols),
         state: State::RecvHeader {
             io: MessageIO::new(inner),
         },

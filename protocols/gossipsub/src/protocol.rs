@@ -150,7 +150,7 @@ where
     type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, protocol_id: Protocol) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((
@@ -171,7 +171,7 @@ where
     type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, protocol_id: Protocol) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
         Box::pin(future::ok((

@@ -22,7 +22,7 @@ use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
-use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
+use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture, Protocol};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
@@ -55,14 +55,9 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>,
 {
-    let iter = up
-        .protocol_info()
-        .into_iter()
-        .map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future,
+            future: multistream_select::listener_select_proto(conn, up.protocols()),
             upgrade: up,
         },
     }
@@ -74,14 +69,9 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>>,
 {
-    let iter = up
-        .protocol_info()
-        .into_iter()
-        .map(NameWrap as fn(_) -> NameWrap<_>);
-    let future = multistream_select::dialer_select_proto(conn, iter, v);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
-            future,
+            future: multistream_select::dialer_select_proto(conn, up.protocols(), v),
             upgrade: up,
         },
     }
@@ -102,12 +92,12 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: ListenerSelectFuture<C, NameWrap<U::Info>>,
+        future: ListenerSelectFuture<C>,
         upgrade: U,
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
-        name: SmallVec<[u8; 32]>,
+        name: Protocol,
     },
     Undefined,
 }
@@ -133,17 +123,16 @@ where
                     mut future,
                     upgrade,
                 } => {
-                    let (info, io) = match Future::poll(Pin::new(&mut future), cx)? {
+                    let (selected_protocol, io) = match Future::poll(Pin::new(&mut future), cx)? {
                         Poll::Ready(x) => x,
                         Poll::Pending => {
                             self.inner = InboundUpgradeApplyState::Init { future, upgrade };
                             return Poll::Pending;
                         }
                     };
-                    let name = SmallVec::from_slice(info.protocol_name());
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_inbound(io, info.0)),
-                        name,
+                        future: Box::pin(upgrade.upgrade_inbound(io, selected_protocol.clone())),
+                        name: selected_protocol,
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future, name } => {
@@ -153,14 +142,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!("Upgraded inbound stream to {}", DisplayProtocolName(name));
+                            log::trace!("Upgraded inbound stream to {name}");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!(
-                                "Failed to upgrade inbound stream to {}",
-                                DisplayProtocolName(name)
-                            );
+                            debug!("Failed to upgrade inbound stream to {name}");
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -188,12 +174,12 @@ where
     U: OutboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
+        future: DialerSelectFuture<C>,
         upgrade: U,
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
-        name: SmallVec<[u8; 32]>,
+        name: Protocol,
     },
     Undefined,
 }
@@ -219,17 +205,19 @@ where
                     mut future,
                     upgrade,
                 } => {
-                    let (info, connection) = match Future::poll(Pin::new(&mut future), cx)? {
-                        Poll::Ready(x) => x,
-                        Poll::Pending => {
-                            self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
-                            return Poll::Pending;
-                        }
-                    };
-                    let name = SmallVec::from_slice(info.protocol_name());
+                    let (selected_protocol, connection) =
+                        match Future::poll(Pin::new(&mut future), cx)? {
+                            Poll::Ready(x) => x,
+                            Poll::Pending => {
+                                self.inner = OutboundUpgradeApplyState::Init { future, upgrade };
+                                return Poll::Pending;
+                            }
+                        };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_outbound(connection, info.0)),
-                        name,
+                        future: Box::pin(
+                            upgrade.upgrade_outbound(connection, selected_protocol.clone()),
+                        ),
+                        name: selected_protocol,
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future, name } => {
@@ -239,17 +227,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!(
-                                "Upgraded outbound stream to {}",
-                                DisplayProtocolName(name)
-                            );
+                            log::trace!("Upgraded outbound stream to {name}");
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!(
-                                "Failed to upgrade outbound stream to {}",
-                                DisplayProtocolName(name)
-                            );
+                            debug!("Failed to upgrade outbound stream to {name}");
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }

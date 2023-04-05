@@ -188,7 +188,7 @@ where
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, incoming: C, _: Protocol) -> Self::Future {
         use quick_protobuf::{MessageRead, MessageWrite};
 
         let mut codec = UviBytes::default();
@@ -226,7 +226,7 @@ where
     type Future = future::Ready<Result<Self::Output, io::Error>>;
     type Error = io::Error;
 
-    fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, incoming: C, _: Protocol) -> Self::Future {
         use quick_protobuf::{MessageRead, MessageWrite};
 
         let mut codec = UviBytes::default();

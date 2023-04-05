@@ -43,14 +43,13 @@ use std::{
 /// all versions supported by this library. Frictionless multistream-select
 /// protocol upgrades may thus proceed by deployments with updated listeners,
 /// eventually followed by deployments of dialers choosing the newer protocol.
-pub fn dialer_select_proto<R, I>(
+pub fn dialer_select_proto<R>(
     inner: R,
-    protocols: I,
+    protocols: Vec<Protocol>,
     version: Version,
-) -> DialerSelectFuture<R, I::IntoIter>
+) -> DialerSelectFuture<R>
 where
     R: AsyncRead + AsyncWrite,
-    I: IntoIterator<Item = Protocol>,
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectFuture {
@@ -65,8 +64,8 @@ where
 /// A `Future` returned by [`dialer_select_proto`] which negotiates
 /// a protocol iteratively by considering one protocol after the other.
 #[pin_project::pin_project]
-pub struct DialerSelectFuture<R, I: Iterator<Item = Protocol>> {
-    protocols: iter::Peekable<I>,
+pub struct DialerSelectFuture<R> {
+    protocols: iter::Peekable<std::vec::IntoIter<Protocol>>,
     state: State<R>,
     version: Version,
 }
@@ -90,12 +89,11 @@ enum State<R> {
     Done,
 }
 
-impl<R, I> Future for DialerSelectFuture<R, I>
+impl<R> Future for DialerSelectFuture<R>
 where
     // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
-    I: Iterator<Item = Protocol>,
 {
     type Output = Result<(Protocol, Negotiated<R>), NegotiationError>;
 

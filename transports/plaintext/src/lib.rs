@@ -28,6 +28,7 @@ use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::future::{self, Ready};
 use futures::prelude::*;
+use libp2p_core::upgrade::Protocol;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -90,7 +91,7 @@ impl<C> InboundUpgrade<C> for PlainText1Config {
     type Error = Void;
     type Future = Ready<Result<C, Self::Error>>;
 
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, i: C, _: Protocol) -> Self::Future {
         future::ready(Ok(i))
     }
 }
@@ -100,7 +101,7 @@ impl<C> OutboundUpgrade<C> for PlainText1Config {
     type Error = Void;
     type Future = Ready<Result<C, Self::Error>>;
 
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, i: C, _: Protocol) -> Self::Future {
         future::ready(Ok(i))
     }
 }
@@ -129,7 +130,7 @@ where
     type Error = PlainTextError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }
@@ -142,7 +143,7 @@ where
     type Error = PlainTextError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
         Box::pin(self.handshake(socket))
     }
 }

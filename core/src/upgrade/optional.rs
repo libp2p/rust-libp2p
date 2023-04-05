@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeProtocols};
+use multistream_select::Protocol;
 
 /// Upgrade that can be disabled at runtime.
 ///
@@ -39,15 +40,12 @@ impl<T> OptionalUpgrade<T> {
     }
 }
 
-impl<T> UpgradeInfo for OptionalUpgrade<T>
+impl<T> UpgradeProtocols for OptionalUpgrade<T>
 where
-    T: UpgradeInfo,
+    T: UpgradeProtocols,
 {
-    type Info = T::Info;
-    type InfoIter = Iter<<T::InfoIter as IntoIterator>::IntoIter>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        Iter(self.0.as_ref().map(|p| p.protocol_info().into_iter()))
+    fn protocols(&self) -> Vec<Protocol> {
+        self.0.as_ref().map(|u| u.protocols()).unwrap_or_default()
     }
 }
 
@@ -59,7 +57,7 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: Protocol) -> Self::Future {
         if let Some(inner) = self.0 {
             inner.upgrade_inbound(sock, info)
         } else {
@@ -76,7 +74,7 @@ where
     type Error = T::Error;
     type Future = T::Future;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: Protocol) -> Self::Future {
         if let Some(inner) = self.0 {
             inner.upgrade_outbound(sock, info)
         } else {

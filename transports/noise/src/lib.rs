@@ -328,7 +328,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -359,7 +359,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -394,7 +394,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -430,7 +430,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -465,7 +465,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -499,7 +499,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -567,7 +567,7 @@ where
     type Error = NoiseError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, info: Protocol) -> Self::Future {
         Box::pin(
             self.config
                 .upgrade_inbound(socket, info)
@@ -592,7 +592,7 @@ where
     type Error = NoiseError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, info: Protocol) -> Self::Future {
         Box::pin(
             self.config
                 .upgrade_outbound(socket, info)

@@ -337,7 +337,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, io: C, _: Protocol) -> Self::Future {
         let mode = self.mode.unwrap_or(yamux::Mode::Server);
         future::ready(Ok(Yamux::new(io, self.inner, mode)))
     }
@@ -351,7 +351,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, io: C, _: Protocol) -> Self::Future {
         let cfg = self.0;
         let mode = cfg.mode.unwrap_or(yamux::Mode::Server);
         future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
@@ -366,7 +366,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: C, _: Protocol) -> Self::Future {
         let mode = self.mode.unwrap_or(yamux::Mode::Client);
         future::ready(Ok(Yamux::new(io, self.inner, mode)))
     }
@@ -380,7 +380,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: C, _: Protocol) -> Self::Future {
         let cfg = self.0;
         let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
         future::ready(Ok(Yamux::local(io, cfg.inner, mode)))

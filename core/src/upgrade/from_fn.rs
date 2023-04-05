@@ -24,6 +24,7 @@ use crate::{
 };
 
 use futures::prelude::*;
+use multistream_select::Protocol;
 use std::iter;
 
 /// Initializes a new [`FromFnUpgrade`].
@@ -93,7 +94,7 @@ where
     type Error = Err;
     type Future = Fut;
 
-    fn upgrade_inbound(self, sock: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, _: Protocol) -> Self::Future {
         (self.fun)(sock, Endpoint::Listener)
     }
 }
@@ -108,7 +109,7 @@ where
     type Error = Err;
     type Future = Fut;
 
-    fn upgrade_outbound(self, sock: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, _: Protocol) -> Self::Future {
         (self.fun)(sock, Endpoint::Dialer)
     }
 }

@@ -54,7 +54,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, r: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, r: C, _: Protocol) -> Self::Future {
         future::ok(DeflateOutput::new(r, self.compression))
     }
 }
@@ -67,7 +67,7 @@ where
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, w: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, w: C, _: Protocol) -> Self::Future {
         future::ok(DeflateOutput::new(w, self.compression))
     }
 }

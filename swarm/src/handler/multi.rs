@@ -28,10 +28,12 @@ use crate::handler::{
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
+use libp2p_core::upgrade::{
+    NegotiationError, Protocol, ProtocolError, ProtocolName, UpgradeError, UpgradeProtocols,
+};
 use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
 use rand::Rng;
@@ -514,22 +516,16 @@ where
     }
 }
 
-impl<K, H> UpgradeInfoSend for Upgrade<K, H>
+impl<K, H> UpgradeProtocols for Upgrade<K, H>
 where
-    H: UpgradeInfoSend,
+    H: UpgradeProtocols,
     K: Send + 'static,
 {
-    type Info = IndexedProtoName<H::Info>;
-    type InfoIter = std::vec::IntoIter<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Vec<Protocol> {
         self.upgrades
             .iter()
-            .enumerate()
-            .flat_map(|(i, (_, h))| iter::repeat(i).zip(h.protocol_info()))
-            .map(|(i, h)| IndexedProtoName(i, h))
-            .collect::<Vec<_>>()
-            .into_iter()
+            .flat_map(|(_, u)| u.protocols().into_iter())
+            .collect()
     }
 }
 
@@ -542,7 +538,7 @@ where
     type Error = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Protocol) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade
@@ -564,7 +560,7 @@ where
     type Error = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Protocol) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade
@@ -580,18 +576,14 @@ where
 /// Check that no two protocol names are equal.
 fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
 where
-    I: Iterator<Item = T>,
-    T: UpgradeInfoSend,
+    I: Iterator<Item = Protocol>,
 {
     let mut set = HashSet::new();
-    for infos in iter {
-        for i in infos.protocol_info() {
-            let v = Vec::from(i.protocol_name());
-            if set.contains(&v) {
-                return Err(DuplicateProtonameError(v));
-            } else {
-                set.insert(v);
-            }
+    for p in iter {
+        if set.contains(&p) {
+            return Err(DuplicateProtonameError(p));
+        } else {
+            set.insert(p);
         }
     }
     Ok(())
@@ -599,12 +591,12 @@ where
 
 /// It is an error if two handlers share the same protocol name.
 #[derive(Debug, Clone)]
-pub struct DuplicateProtonameError(Vec<u8>);
+pub struct DuplicateProtonameError(Protocol);
 
 impl DuplicateProtonameError {
     /// The protocol name bytes that occured in more than one handler.
     pub fn protocol_name(&self) -> &[u8] {
-        &self.0
+        self.0.as_bytes()
     }
 }
 
