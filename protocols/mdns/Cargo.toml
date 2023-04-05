@@ -16,7 +16,7 @@ data-encoding = "2.3.2"
 futures = "0.3.28"
 if-watch = "3.0.0"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.14"
 rand = "0.8.3"
