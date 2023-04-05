@@ -52,8 +52,13 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// make.
 ///
 /// It also handles requests made by the remote.
+#[deprecated(
+    since = "0.44.0",
+    note = "`KademliaHandler` module is an internal type not meant to be used by users."
+)]
 pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
+    #[allow(deprecated)]
     config: KademliaHandlerConfig,
 
     /// Next unique ID of a connection.
@@ -102,6 +107,10 @@ enum ProtocolStatus {
 }
 
 /// Configuration of a [`KademliaHandler`].
+#[deprecated(
+    since = "0.44.0",
+    note = "`KademliaHandlerConfig` module is an internal type not meant to be used by users."
+)]
 #[derive(Debug, Clone)]
 pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
@@ -169,6 +178,7 @@ enum InboundSubstreamState<TUserData> {
     },
 }
 
+#[allow(deprecated)]
 impl<TUserData> InboundSubstreamState<TUserData> {
     fn try_answer_with(
         &mut self,
@@ -240,6 +250,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
         /// Identifier of the request. Needs to be passed back when answering.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -257,6 +268,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The key for which providers are requested.
         key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -291,6 +303,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Key for which we should look in the dht
         key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -308,6 +321,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     PutRecord {
         record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -378,6 +392,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// can be used as an alternative to letting requests simply time
     /// out on the remote peer, thus potentially avoiding some delay
     /// for the query on the remote.
+    #[allow(deprecated)]
     Reset(KademliaRequestId),
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
@@ -396,6 +411,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -417,6 +433,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -446,6 +463,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -463,12 +481,17 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
+        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 }
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
+#[deprecated(
+    since = "0.44.0",
+    note = "`KademliaRequestId` module is an internal type not meant to be used by users."
+)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct KademliaRequestId {
     /// Unique identifier for an incoming connection.
@@ -479,6 +502,7 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
+#[allow(deprecated)]
 impl<TUserData> KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
@@ -605,6 +629,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
@@ -791,6 +816,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<TUserData> KademliaHandler<TUserData>
 where
     TUserData: 'static + Clone + Send + Unpin + fmt::Debug,
@@ -809,6 +835,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl Default for KademliaHandlerConfig {
     fn default() -> Self {
         KademliaHandlerConfig {
@@ -989,6 +1016,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::FindNode { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
+                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::FindNodeReq {
                                 key,
@@ -1001,6 +1029,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::GetProviders { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
+                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetProvidersReq {
                                 key,
@@ -1023,6 +1052,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
+                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetRecord {
                                 key,
@@ -1035,6 +1065,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::PutValue { record }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
+                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::PutRecord {
                                 record,

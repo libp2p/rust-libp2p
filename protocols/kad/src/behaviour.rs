@@ -21,8 +21,9 @@
 //! Implementation of the `Kademlia` network behaviour.
 
 mod test;
-
+#[allow(deprecated)]
 use crate::addresses::Addresses;
+#[allow(deprecated)]
 use crate::handler::{
     KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
@@ -66,6 +67,7 @@ pub use crate::query::QueryStats;
 /// Kademlia protocol.
 pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
+    #[allow(deprecated)]
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
     /// The k-bucket insertion strategy.
@@ -543,6 +545,7 @@ where
                 RoutingUpdate::Pending
             }
             kbucket::Entry::Absent(entry) => {
+                #[allow(deprecated)]
                 let addresses = Addresses::new(address);
                 let status = if self.connected_peers.contains(peer) {
                     NodeStatus::Connected
@@ -592,6 +595,7 @@ where
     ///
     /// If the given peer or address is not in the routing table,
     /// this is a no-op.
+    #[allow(deprecated)]
     pub fn remove_address(
         &mut self,
         peer: &PeerId,
@@ -621,6 +625,7 @@ where
     ///
     /// Returns `None` if the peer was not in the routing table,
     /// not even pending insertion.
+    #[allow(deprecated)]
     pub fn remove_peer(
         &mut self,
         peer: &PeerId,
@@ -634,6 +639,7 @@ where
     }
 
     /// Returns an iterator over all non-empty buckets in the routing table.
+    #[allow(deprecated)]
     pub fn kbuckets(
         &mut self,
     ) -> impl Iterator<Item = kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>> {
@@ -643,6 +649,7 @@ where
     /// Returns the k-bucket for the distance to the given key.
     ///
     /// Returns `None` if the given key refers to the local key.
+    #[allow(deprecated)]
     pub fn kbucket<K>(
         &mut self,
         key: K,
@@ -1172,6 +1179,7 @@ where
                             KademliaEvent::RoutablePeer { peer, address: a },
                         ));
                     }
+                    #[allow(deprecated)]
                     (Some(a), KademliaBucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
@@ -1601,6 +1609,7 @@ where
     }
 
     /// Processes a record received from a peer.
+    #[allow(deprecated)]
     fn record_received(
         &mut self,
         source: PeerId,
@@ -1963,6 +1972,7 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
+    #[allow(deprecated)]
     type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
@@ -1973,6 +1983,7 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        #[allow(deprecated)]
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
@@ -1994,6 +2005,7 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        #[allow(deprecated)]
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
@@ -2509,6 +2521,7 @@ pub enum KademliaEvent {
 
     /// The routing table has been updated with a new peer and / or
     /// address, thereby possibly evicting another peer.
+    #[allow(deprecated)]
     RoutingUpdated {
         /// The ID of the peer that was added or updated.
         peer: PeerId,
@@ -2886,6 +2899,7 @@ impl AddProviderError {
     }
 }
 
+#[allow(deprecated)]
 impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
     fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Addresses>) -> KadPeer {
         KadPeer {

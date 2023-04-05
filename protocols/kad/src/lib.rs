@@ -56,6 +56,7 @@ mod proto {
     };
 }
 
+#[allow(deprecated)]
 pub use addresses::Addresses;
 pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
