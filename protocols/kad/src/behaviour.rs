@@ -89,10 +89,12 @@ pub struct Kademlia<TStore> {
 
     /// Periodic job for re-publication of provider records for keys
     /// provided by the local node.
+    #[allow(deprecated)]
     add_provider_job: Option<AddProviderJob>,
 
     /// Periodic job for (re-)replication and (re-)publishing of
     /// regular (value-)records.
+    #[allow(deprecated)]
     put_record_job: Option<PutRecordJob>,
 
     /// The TTL of regular (value-)records.
@@ -421,6 +423,7 @@ where
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
         let local_key = kbucket::Key::from(id);
 
+        #[allow(deprecated)]
         let put_record_job = config
             .record_replication_interval
             .or(config.record_publication_interval)
@@ -433,6 +436,7 @@ where
                 )
             });
 
+        #[allow(deprecated)]
         let add_provider_job = config
             .provider_publication_interval
             .map(AddProviderJob::new);
