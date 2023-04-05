@@ -57,7 +57,7 @@ impl PeerId {
     pub fn from_public_key(key: &crate::keypair::PublicKey) -> PeerId {
         use multihash::MultihashDigest as _;
 
-        let key_enc = key.to_protobuf_encoding();
+        let key_enc = key.encode_protobuf_encoding();
 
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             Code::Identity
@@ -132,7 +132,7 @@ impl PeerId {
 
         let alg = Code::try_from(self.multihash.code())
             .expect("Internal multihash is always a valid `Code`");
-        let enc = public_key.to_protobuf_encoding();
+        let enc = public_key.encode_protobuf_encoding();
         Some(alg.digest(&enc) == self.multihash)
     }
 }

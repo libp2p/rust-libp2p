@@ -206,8 +206,13 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[cfg_attr(not(feature = "ed25519"), allow(unused_variables, unused_mut))]
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
+        self.encode_protobuf_encoding()
+    }
+
+    /// Encode a private key as protobuf structure.
+    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         #[allow(deprecated)]
@@ -244,15 +249,15 @@ impl Keypair {
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_from_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf_encoding` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        Self::try_from_protobuf_encoding(bytes)
+        Self::try_decode_protobuf_encoding(bytes)
     }
 
     /// Try to decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[cfg_attr(not(feature = "ed25519"), allow(unused_mut))]
-    pub fn try_from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_decode_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -269,9 +274,7 @@ impl Keypair {
             }
             proto::KeyType::RSA => {
                 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-                return rsa::Keypair::try_decode_pkcs8(&mut private_key.Data)
-                    .or(rsa::Keypair::try_decode_der(&mut private_key.Data))
-                    .map(Keypair::Rsa);
+                return rsa::Keypair::try_decode_pkcs8(&mut private_key.Data).map(Keypair::Rsa);
                 Err(DecodingError::missing_feature("rsa"))
             }
             proto::KeyType::Secp256k1 => {
@@ -458,7 +461,14 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
+        self.encode_protobuf_encoding()
+    }
+
+    /// Encode the public key into a protobuf structure for storage or
+    /// exchange with other nodes.
+    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         let public_key = proto::PublicKey::from(self);
@@ -476,15 +486,15 @@ impl PublicKey {
     /// or received from another node.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf_encoding` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_from_protobuf_encoding(bytes)
+        Self::try_decode_protobuf_encoding(bytes)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    pub fn try_from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -610,9 +620,9 @@ mod tests {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();
 
-        let encoded = expected_keypair.to_protobuf_encoding();
+        let encoded = expected_keypair.encode_protobuf_encoding();
 
-        let keypair = Keypair::try_from_protobuf_encoding(&encoded).unwrap();
+        let keypair = Keypair::try_decode_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
@@ -627,7 +637,7 @@ mod tests {
 
         let encoded = BASE64_STANDARD.decode(base_64_encoded).unwrap();
 
-        let keypair = Keypair::try_from_protobuf_encoding(&encoded).unwrap();
+        let keypair = Keypair::try_decode_protobuf_encoding(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);

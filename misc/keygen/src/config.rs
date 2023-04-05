@@ -18,7 +18,7 @@ impl Config {
     }
 
     pub fn from_key_material(peer_id: PeerId, keypair: &Keypair) -> Result<Self, Box<dyn Error>> {
-        let priv_key = BASE64_STANDARD.encode(keypair.to_protobuf_encoding());
+        let priv_key = BASE64_STANDARD.encode(keypair.encode_protobuf_encoding());
         let peer_id = peer_id.to_base58();
         Ok(Self {
             identity: Identity { peer_id, priv_key },
