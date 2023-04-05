@@ -20,9 +20,8 @@
 
 //! Implementation of the `Kademlia` network behaviour.
 
-#![allow(deprecated)]
-
 mod test;
+
 use crate::addresses::Addresses;
 use crate::handler::{
     KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
@@ -166,10 +165,6 @@ pub enum KademliaStoreInserts {
     FilterBoth,
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`KademliaConfig` struct is an internal struct not meant to be used by users."
-)]
 /// The configuration for the `Kademlia` behaviour.
 ///
 /// The configuration is consumed by [`Kademlia::new`].
@@ -1908,6 +1903,7 @@ where
         };
 
         match error {
+            #[allow(deprecated)]
             DialError::Banned
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
@@ -1935,6 +1931,7 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
+            #[allow(deprecated)]
             DialError::ConnectionLimit(_) => {}
         }
     }
@@ -2472,10 +2469,6 @@ impl Quorum {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`PeerRecord` struct is an internal struct not meant to be used by users."
-)]
 /// A record either received by the given peer or retrieved from the local
 /// record store.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2565,10 +2558,6 @@ pub enum KademliaEvent {
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`ProgressStep` struct is an internal struct not meant to be used by users."
-)]
 /// Information about progress events.
 #[derive(Debug, Clone)]
 pub struct ProgressStep {
@@ -2724,10 +2713,6 @@ impl GetRecordError {
 /// The result of [`Kademlia::put_record`].
 pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`PutRecordOk` struct is an internal struct not meant to be used by users."
-)]
 /// The successful result of [`Kademlia::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
@@ -2775,10 +2760,6 @@ impl PutRecordError {
 /// The result of [`Kademlia::bootstrap`].
 pub type BootstrapResult = Result<BootstrapOk, BootstrapError>;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`BootstrapOk` struct is an internal struct not meant to be used by users."
-)]
 /// The successful result of [`Kademlia::bootstrap`].
 #[derive(Debug, Clone)]
 pub struct BootstrapOk {
@@ -2799,10 +2780,6 @@ pub enum BootstrapError {
 /// The result of [`Kademlia::get_closest_peers`].
 pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`GetClosestPeersOk` struct is an internal struct not meant to be used by users."
-)]
 /// The successful result of [`Kademlia::get_closest_peers`].
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
@@ -2880,10 +2857,6 @@ impl GetProvidersError {
 /// The result of publishing a provider record.
 pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`AddProviderOk` struct is an internal struct not meant to be used by users."
-)]
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
 pub struct AddProviderOk {
@@ -3133,10 +3106,6 @@ pub enum PutRecordPhase {
     },
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryMut` struct is an internal struct not meant to be used by users."
-)]
 /// A mutable reference to a running query.
 pub struct QueryMut<'a> {
     query: &'a mut Query<QueryInner>,
@@ -3167,10 +3136,6 @@ impl<'a> QueryMut<'a> {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryRef` struct is an internal struct not meant to be used by users."
-)]
 /// An immutable reference to a running query.
 pub struct QueryRef<'a> {
     query: &'a Query<QueryInner>,
@@ -3195,10 +3160,6 @@ impl<'a> QueryRef<'a> {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`NoKnownPeers` struct is an internal struct not meant to be used by users."
-)]
 /// An operation failed to due no known peers in the routing table.
 #[derive(Debug, Clone)]
 pub struct NoKnownPeers();

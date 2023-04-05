@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![allow(deprecated)]
-
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
@@ -54,10 +52,6 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// make.
 ///
 /// It also handles requests made by the remote.
-#[deprecated(
-    since = "0.44.0",
-    note = "`KademliaHandler` struct is an internal struct not meant to be used by users."
-)]
 pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
     config: KademliaHandlerConfig,
@@ -108,10 +102,6 @@ enum ProtocolStatus {
 }
 
 /// Configuration of a [`KademliaHandler`].
-#[deprecated(
-    since = "0.44.0",
-    note = "`KademliaHandlerConfig` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, Clone)]
 pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
@@ -479,10 +469,6 @@ pub enum KademliaHandlerIn<TUserData> {
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
-#[deprecated(
-    since = "0.44.0",
-    note = "`KademliaRequestId` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct KademliaRequestId {
     /// Unique identifier for an incoming connection.

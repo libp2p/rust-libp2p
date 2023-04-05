@@ -26,8 +26,6 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
-#![allow(deprecated)]
-
 use crate::proto;
 use crate::record::{self, Record};
 use asynchronous_codec::Framed;
@@ -87,10 +85,6 @@ impl From<KadConnectionType> for proto::ConnectionType {
 }
 
 /// Information about a peer, as known by the sender.
-#[deprecated(
-    since = "0.44.0",
-    note = "`KadPeer` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KadPeer {
     /// Identifier of the peer.
@@ -143,10 +137,6 @@ impl From<KadPeer> for proto::Peer {
 // TODO: if, as suspected, we can confirm with Protocol Labs that each open Kademlia substream does
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
-#[deprecated(
-    since = "0.44.0",
-    note = "`KademliaProtocolConfig` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
     protocol_names: Vec<Cow<'static, [u8]>>,

@@ -21,17 +21,11 @@
 //! The `Entry` API for quering and modifying the entries of a `KBucketsTable`
 //! representing the nodes participating in the Kademlia DHT.
 
-#![allow(deprecated)]
-
 pub use super::bucket::{AppliedPending, InsertResult, Node, NodeStatus, K_VALUE};
 pub use super::key::*;
 
 use super::*;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`EntryRefView` struct is an internal struct not meant to be used by users."
-)]
 /// An immutable by-reference view of a bucket entry.
 pub struct EntryRefView<'a, TPeerId, TVal> {
     /// The node represented by the entry.
@@ -40,10 +34,6 @@ pub struct EntryRefView<'a, TPeerId, TVal> {
     pub status: NodeStatus,
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`NodeRefView` struct is an internal struct not meant to be used by users."
-)]
 /// An immutable by-reference view of a `Node`.
 pub struct NodeRefView<'a, TKey, TVal> {
     pub key: &'a TKey,
@@ -66,10 +56,6 @@ impl<TKey, TVal> EntryRefView<'_, TKey, TVal> {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`EntryView` struct is an internal struct not meant to be used by users."
-)]
 /// A cloned, immutable view of an entry that is either present in a bucket
 /// or pending insertion.
 #[derive(Clone, Debug)]
@@ -177,10 +163,6 @@ where
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`PresentEntry` struct is an internal struct not meant to be used by users."
-)]
 /// An entry present in a bucket.
 #[derive(Debug)]
 pub struct PresentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
@@ -225,10 +207,6 @@ where
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`PendingEntry` struct is an internal struct not meant to be used by users."
-)]
 /// An entry waiting for a slot to be available in a bucket.
 #[derive(Debug)]
 pub struct PendingEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
@@ -274,10 +252,6 @@ where
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`AbsentEntry` struct is an internal struct not meant to be used by users."
-)]
 /// An entry that is not present in any bucket.
 #[derive(Debug)]
 pub struct AbsentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);

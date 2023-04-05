@@ -27,12 +27,7 @@ use std::borrow::Cow;
 use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`MemoryStore` struct is an internal struct not meant to be used by users."
-)]
 /// In-memory implementation of a `RecordStore`.
-#[allow(deprecated)]
 pub struct MemoryStore {
     /// The identity of the peer owning the store.
     local_key: kbucket::Key<PeerId>,
@@ -48,10 +43,6 @@ pub struct MemoryStore {
     provided: HashSet<ProviderRecord>,
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`MemoryStoreConfig` struct is an internal struct not meant to be used by users."
-)]
 /// Configuration for a `MemoryStore`.
 #[derive(Debug, Clone)]
 pub struct MemoryStoreConfig {
@@ -97,7 +88,6 @@ impl MemoryStore {
     }
 
     /// Retains the records satisfying a predicate.
-    #[allow(deprecated)]
     pub fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&Key, &mut Record) -> bool,
@@ -106,7 +96,6 @@ impl MemoryStore {
     }
 }
 
-#[allow(deprecated)]
 impl RecordStore for MemoryStore {
     type RecordsIter<'a> =
         iter::Map<hash_map::Values<'a, Key, Record>, fn(&'a Record) -> Cow<'a, Record>>;

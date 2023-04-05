@@ -18,16 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![allow(deprecated)]
-
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
 use std::fmt;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`addresses` struct is an internal struct not meant to be used by users."
-)]
 /// A non-empty list of (unique) addresses of a peer in the routing table.
 #[derive(Clone)]
 pub struct Addresses {

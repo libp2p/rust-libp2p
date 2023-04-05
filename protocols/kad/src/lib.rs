@@ -37,7 +37,6 @@
 //       be useful later for record store
 #![allow(dead_code)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
-#![allow(deprecated)]
 
 pub mod handler;
 pub mod kbucket;

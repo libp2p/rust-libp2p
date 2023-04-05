@@ -129,21 +129,15 @@ enum PeriodicJobState<T> {
 // PutRecordJob
 
 /// Periodic job for replicating / publishing records.
-#[deprecated(
-    since = "0.44.0",
-    note = "`PutRecordJob` struct is an internal struct not meant to be used by users."
-)]
 pub struct PutRecordJob {
     local_id: PeerId,
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
-    #[allow(deprecated)]
     skipped: HashSet<record::Key>,
     inner: PeriodicJob<vec::IntoIter<Record>>,
 }
 
-#[allow(deprecated)]
 impl PutRecordJob {
     /// Creates a new periodic job for replicating and re-publishing
     /// locally stored records.
@@ -256,15 +250,10 @@ impl PutRecordJob {
 // AddProviderJob
 
 /// Periodic job for replicating provider records.
-#[deprecated(
-    since = "0.44.0",
-    note = "`AddProviderJob` struct is an internal struct not meant to be used by users."
-)]
 pub struct AddProviderJob {
     inner: PeriodicJob<vec::IntoIter<ProviderRecord>>,
 }
 
-#[allow(deprecated)]
 impl AddProviderJob {
     /// Creates a new periodic job for provider announcements.
     pub fn new(interval: Duration) -> Self {
@@ -343,7 +332,6 @@ mod tests {
     use quickcheck::*;
     use rand::Rng;
 
-    #[allow(deprecated)]
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();
         let id = PeerId::random();

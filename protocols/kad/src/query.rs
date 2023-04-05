@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![allow(deprecated)]
-
 mod peers;
 
 use peers::closest::{
@@ -41,10 +39,6 @@ use std::{num::NonZeroUsize, time::Duration};
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryPool` struct is an internal struct not meant to be used by users."
-)]
 pub struct QueryPool<TInner> {
     next_id: usize,
     config: QueryConfig,
@@ -223,18 +217,10 @@ impl<TInner> QueryPool<TInner> {
 }
 
 /// Unique identifier for an active query.
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryId` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
 
 /// The configuration for queries in a `QueryPool`.
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryConfig` struct is an internal struct not meant to be used by users."
-)]
 #[derive(Debug, Clone)]
 pub struct QueryConfig {
     /// Timeout of a single query.
@@ -270,10 +256,6 @@ impl Default for QueryConfig {
 }
 
 /// A query in a `QueryPool`.
-#[deprecated(
-    since = "0.44.0",
-    note = "`Query` struct is an internal struct not meant to be used by users."
-)]
 pub struct Query<TInner> {
     /// The unique ID of the query.
     id: QueryId,
@@ -439,10 +421,6 @@ impl<TInner> Query<TInner> {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryResult` struct is an internal struct not meant to be used by users."
-)]
 /// The result of a `Query`.
 pub struct QueryResult<TInner, TPeers> {
     /// The opaque inner query state.
@@ -453,10 +431,6 @@ pub struct QueryResult<TInner, TPeers> {
     pub stats: QueryStats,
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`QueryStats` struct is an internal struct not meant to be used by users."
-)]
 /// Execution statistics of a query.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct QueryStats {

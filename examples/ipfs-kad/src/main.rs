@@ -23,8 +23,6 @@
 //! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
 //! peer ID will be generated randomly.
 
-#![allow(deprecated)]
-
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};

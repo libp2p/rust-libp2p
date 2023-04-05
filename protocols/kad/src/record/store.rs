@@ -64,7 +64,6 @@ pub enum Error {
 ///      content. Just like a regular record, a provider record is distributed
 ///      to the closest nodes to the key.
 ///
-#[allow(deprecated)]
 pub trait RecordStore {
     type RecordsIter<'a>: Iterator<Item = Cow<'a, Record>>
     where

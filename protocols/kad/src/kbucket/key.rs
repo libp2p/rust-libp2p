@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![allow(deprecated)]
-
 use crate::record;
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
@@ -34,10 +32,6 @@ construct_uint! {
     pub(super) struct U256(4);
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`Key` struct is an internal struct not meant to be used by users."
-)]
 /// A `Key` in the DHT keyspace with preserved preimage.
 ///
 /// Keys in the DHT keyspace identify both the participating nodes, as well as
@@ -145,10 +139,6 @@ impl<T> Hash for Key<T> {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`KeyBytes` struct is an internal struct not meant to be used by users."
-)]
 /// The raw bytes of a key in the DHT keyspace.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct KeyBytes(GenericArray<u8, U32>);
@@ -190,10 +180,6 @@ impl AsRef<KeyBytes> for KeyBytes {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`Distance` struct is an internal struct not meant to be used by users."
-)]
 /// A distance between two keys in the DHT keyspace.
 #[derive(Copy, Clone, PartialEq, Eq, Default, PartialOrd, Ord, Debug)]
 pub struct Distance(pub(super) U256);

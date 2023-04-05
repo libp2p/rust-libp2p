@@ -7,17 +7,12 @@
 #![allow(unknown_lints)]
 #![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
-#![allow(deprecated)]
 
 
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::super::*;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`Record` struct is an internal struct not meant to be used by users."
-)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Record {
@@ -66,10 +61,6 @@ impl MessageWrite for Record {
     }
 }
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`Message` struct is an internal struct not meant to be used by users."
-)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Message {
@@ -126,10 +117,6 @@ pub mod mod_Message {
 
 use super::*;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "`Peer` struct is an internal struct not meant to be used by users."
-)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Peer {
