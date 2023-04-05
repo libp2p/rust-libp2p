@@ -26,6 +26,8 @@
 //! to poll the underlying transport for incoming messages, and the `Sink` component
 //! is used to send messages to remote peers.
 
+#![allow(deprecated)]
+
 use crate::proto;
 use crate::record::{self, Record};
 use asynchronous_codec::Framed;
@@ -100,7 +102,6 @@ pub struct KadPeer {
 }
 
 // Builds a `KadPeer` from a corresponding protobuf message.
-#[allow(deprecated)]
 impl TryFrom<proto::Peer> for KadPeer {
     type Error = io::Error;
 
@@ -127,7 +128,6 @@ impl TryFrom<proto::Peer> for KadPeer {
     }
 }
 
-#[allow(deprecated)]
 impl From<KadPeer> for proto::Peer {
     fn from(peer: KadPeer) -> Self {
         proto::Peer {
@@ -154,7 +154,6 @@ pub struct KademliaProtocolConfig {
     max_packet_size: usize,
 }
 
-#[allow(deprecated)]
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
@@ -173,7 +172,6 @@ impl KademliaProtocolConfig {
     }
 }
 
-#[allow(deprecated)]
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
@@ -183,7 +181,6 @@ impl Default for KademliaProtocolConfig {
     }
 }
 
-#[allow(deprecated)]
 impl UpgradeInfo for KademliaProtocolConfig {
     type Info = Cow<'static, [u8]>;
     type InfoIter = std::vec::IntoIter<Self::Info>;
@@ -193,7 +190,6 @@ impl UpgradeInfo for KademliaProtocolConfig {
     }
 }
 
-#[allow(deprecated)]
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -232,7 +228,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -291,7 +286,6 @@ pub type KadStreamSink<S, A, B> = stream::AndThen<
 
 /// Request that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(deprecated)]
 pub enum KadRequestMsg {
     /// Ping request.
     Ping,
@@ -330,7 +324,6 @@ pub enum KadRequestMsg {
 
 /// Response that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(deprecated)]
 pub enum KadResponseMsg {
     /// Ping response.
     Pong,
@@ -408,7 +401,6 @@ fn req_msg_to_proto(kad_msg: KadRequestMsg) -> proto::Message {
 }
 
 /// Converts a `KadResponseMsg` into the corresponding protobuf message for sending.
-#[allow(deprecated)]
 fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
     match kad_msg {
         KadResponseMsg::Pong => proto::Message {
@@ -475,7 +467,6 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
             // TODO: for now we don't parse the peer properly, so it is possible that we get
             //       parsing errors for peers even when they are valid; we ignore these
             //       errors for now, but ultimately we should just error altogether
-            #[allow(deprecated)]
             let provider = message
                 .providerPeers
                 .into_iter()
@@ -504,7 +495,6 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
                 None
             };
 
-            #[allow(deprecated)]
             let closer_peers = message
                 .closerPeers
                 .into_iter()
@@ -517,7 +507,6 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
             })
         }
 
-        #[allow(deprecated)]
         proto::MessageType::FIND_NODE => {
             let closer_peers = message
                 .closerPeers
@@ -528,7 +517,6 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
             Ok(KadResponseMsg::FindNode { closer_peers })
         }
 
-        #[allow(deprecated)]
         proto::MessageType::GET_PROVIDERS => {
             let closer_peers = message
                 .closerPeers
@@ -536,7 +524,6 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
                 .filter_map(|peer| KadPeer::try_from(peer).ok())
                 .collect();
 
-            #[allow(deprecated)]
             let provider_peers = message
                 .providerPeers
                 .into_iter()

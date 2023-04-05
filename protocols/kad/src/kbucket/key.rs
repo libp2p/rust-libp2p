@@ -40,11 +40,13 @@ construct_uint! {
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
 #[derive(Clone, Debug)]
+#[allow(deprecated)]
 pub struct Key<T> {
     preimage: T,
     bytes: KeyBytes,
 }
 
+#[allow(deprecated)]
 impl<T> Key<T> {
     /// Constructs a new `Key` by running the given value through a random
     /// oracle.
@@ -87,12 +89,14 @@ impl<T> Key<T> {
     }
 }
 
+#[allow(deprecated)]
 impl<T> From<Key<T>> for KeyBytes {
     fn from(key: Key<T>) -> KeyBytes {
         key.bytes
     }
 }
 
+#[allow(deprecated)]
 impl From<Multihash> for Key<Multihash> {
     fn from(m: Multihash) -> Self {
         let bytes = KeyBytes(Sha256::digest(m.to_bytes()));
@@ -100,6 +104,7 @@ impl From<Multihash> for Key<Multihash> {
     }
 }
 
+#[allow(deprecated)]
 impl From<PeerId> for Key<PeerId> {
     fn from(p: PeerId) -> Self {
         let bytes = KeyBytes(Sha256::digest(p.to_bytes()));
@@ -107,32 +112,38 @@ impl From<PeerId> for Key<PeerId> {
     }
 }
 
+#[allow(deprecated)]
 impl From<Vec<u8>> for Key<Vec<u8>> {
     fn from(b: Vec<u8>) -> Self {
         Key::new(b)
     }
 }
 
+#[allow(deprecated)]
 impl From<record::Key> for Key<record::Key> {
     fn from(k: record::Key) -> Self {
         Key::new(k)
     }
 }
 
+#[allow(deprecated)]
 impl<T> AsRef<KeyBytes> for Key<T> {
     fn as_ref(&self) -> &KeyBytes {
         &self.bytes
     }
 }
 
+#[allow(deprecated)]
 impl<T, U> PartialEq<Key<U>> for Key<T> {
     fn eq(&self, other: &Key<U>) -> bool {
         self.bytes == other.bytes
     }
 }
 
+#[allow(deprecated)]
 impl<T> Eq for Key<T> {}
 
+#[allow(deprecated)]
 impl<T> Hash for Key<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.bytes.0.hash(state);

@@ -37,6 +37,7 @@
 //       be useful later for record store
 #![allow(dead_code)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![allow(deprecated)]
 
 pub mod handler;
 pub mod kbucket;
@@ -56,9 +57,7 @@ mod proto {
     };
 }
 
-#[allow(deprecated)]
 pub use addresses::Addresses;
-#[allow(deprecated)]
 pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
@@ -72,7 +71,6 @@ pub use behaviour::{
     KademliaStoreInserts, ProgressStep, Quorum,
 };
 pub use protocol::KadConnectionType;
-#[allow(deprecated)]
 pub use query::QueryId;
 pub use record::{store, ProviderRecord, Record};
 

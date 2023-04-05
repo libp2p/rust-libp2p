@@ -20,6 +20,8 @@
 
 //! Records and record storage abstraction of the libp2p Kademlia DHT.
 
+#![allow(deprecated)]
+
 pub mod store;
 
 use bytes::Bytes;
@@ -31,6 +33,10 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Key` struct is an internal struct not meant to be used by users."
+)]
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -72,6 +78,10 @@ impl From<Multihash> for Key {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`Record` struct is an internal struct not meant to be used by users."
+)]
 /// A record stored in the DHT.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Record {
@@ -105,6 +115,10 @@ impl Record {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "`ProviderRecord` struct is an internal struct not meant to be used by users."
+)]
 /// A record stored in the DHT whose value is the ID of a peer
 /// who can provide the value on-demand.
 ///

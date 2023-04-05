@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 mod peers;
 
 use peers::closest::{
@@ -45,14 +47,11 @@ use std::{num::NonZeroUsize, time::Duration};
 )]
 pub struct QueryPool<TInner> {
     next_id: usize,
-    #[allow(deprecated)]
     config: QueryConfig,
-    #[allow(deprecated)]
     queries: FnvHashMap<QueryId, Query<TInner>>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
-#[allow(deprecated)]
 pub enum QueryPoolState<'a, TInner> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
@@ -65,7 +64,6 @@ pub enum QueryPoolState<'a, TInner> {
     Timeout(Query<TInner>),
 }
 
-#[allow(deprecated)]
 impl<TInner> QueryPool<TInner> {
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(config: QueryConfig) -> Self {
@@ -260,7 +258,6 @@ pub struct QueryConfig {
     pub disjoint_query_paths: bool,
 }
 
-#[allow(deprecated)]
 impl Default for QueryConfig {
     fn default() -> Self {
         QueryConfig {
@@ -279,12 +276,10 @@ impl Default for QueryConfig {
 )]
 pub struct Query<TInner> {
     /// The unique ID of the query.
-    #[allow(deprecated)]
     id: QueryId,
     /// The peer iterator that drives the query state.
     peer_iter: QueryPeerIter,
     /// Execution statistics of the query.
-    #[allow(deprecated)]
     stats: QueryStats,
     /// The opaque inner query state.
     pub inner: TInner,
@@ -297,7 +292,6 @@ enum QueryPeerIter {
     Fixed(FixedPeersIter),
 }
 
-#[allow(deprecated)]
 impl<TInner> Query<TInner> {
     /// Creates a new query without starting it.
     fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
@@ -431,7 +425,6 @@ impl<TInner> Query<TInner> {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
-    #[allow(deprecated)]
     pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
@@ -457,7 +450,6 @@ pub struct QueryResult<TInner, TPeers> {
     /// The successfully contacted peers.
     pub peers: TPeers,
     /// The collected query statistics.
-    #[allow(deprecated)]
     pub stats: QueryStats,
 }
 
@@ -475,7 +467,6 @@ pub struct QueryStats {
     end: Option<Instant>,
 }
 
-#[allow(deprecated)]
 impl QueryStats {
     pub fn empty() -> Self {
         QueryStats {

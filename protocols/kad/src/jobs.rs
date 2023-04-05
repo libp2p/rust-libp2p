@@ -138,6 +138,7 @@ pub struct PutRecordJob {
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
+    #[allow(deprecated)]
     skipped: HashSet<record::Key>,
     inner: PeriodicJob<vec::IntoIter<Record>>,
 }

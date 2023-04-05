@@ -20,20 +20,17 @@
 
 //! Implementation of the `Kademlia` network behaviour.
 
+#![allow(deprecated)]
+
 mod test;
-#[allow(deprecated)]
 use crate::addresses::Addresses;
-#[allow(deprecated)]
 use crate::handler::{
     KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
 };
 use crate::jobs::*;
-#[allow(deprecated)]
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-#[allow(deprecated)]
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
-#[allow(deprecated)]
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record::{
     self,
@@ -64,28 +61,24 @@ use std::vec;
 use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
 
-#[allow(deprecated)]
 pub use crate::query::QueryStats;
 
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
 pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
-    #[allow(deprecated)]
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
     /// The k-bucket insertion strategy.
     kbucket_inserts: KademliaBucketInserts,
 
     /// Configuration of the wire protocol.
-    #[allow(deprecated)]
     protocol_config: KademliaProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
     record_filtering: KademliaStoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
-    #[allow(deprecated)]
     queries: QueryPool<QueryInner>,
 
     /// The currently connected peers.
@@ -95,12 +88,10 @@ pub struct Kademlia<TStore> {
 
     /// Periodic job for re-publication of provider records for keys
     /// provided by the local node.
-    #[allow(deprecated)]
     add_provider_job: Option<AddProviderJob>,
 
     /// Periodic job for (re-)replication and (re-)publishing of
     /// regular (value-)records.
-    #[allow(deprecated)]
     put_record_job: Option<PutRecordJob>,
 
     /// The TTL of regular (value-)records.
@@ -113,7 +104,6 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    #[allow(deprecated)]
     queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     listen_addresses: ListenAddresses,
@@ -180,7 +170,6 @@ pub enum KademliaStoreInserts {
 ///
 /// The configuration is consumed by [`Kademlia::new`].
 #[derive(Debug, Clone)]
-#[allow(deprecated)]
 pub struct KademliaConfig {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
@@ -200,7 +189,6 @@ impl Default for KademliaConfig {
     fn default() -> Self {
         KademliaConfig {
             kbucket_pending_timeout: Duration::from_secs(60),
-            #[allow(deprecated)]
             query_config: QueryConfig::default(),
             protocol_config: Default::default(),
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
@@ -231,7 +219,6 @@ pub enum KademliaCaching {
     Enabled { max_peers: u16 },
 }
 
-#[allow(deprecated)]
 impl KademliaConfig {
     /// Sets custom protocol names.
     ///
@@ -433,7 +420,6 @@ where
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
         let local_key = kbucket::Key::from(id);
 
-        #[allow(deprecated)]
         let put_record_job = config
             .record_replication_interval
             .or(config.record_publication_interval)
@@ -446,12 +432,10 @@ where
                 )
             });
 
-        #[allow(deprecated)]
         let add_provider_job = config
             .provider_publication_interval
             .map(AddProviderJob::new);
 
-        #[allow(deprecated)]
         Kademlia {
             store,
             caching: config.caching,
@@ -496,7 +480,6 @@ where
     }
 
     /// Gets an immutable reference to a running query, if it exists.
-    #[allow(deprecated)]
     pub fn query(&self, id: &QueryId) -> Option<QueryRef<'_>> {
         self.queries.get(id).and_then(|query| {
             if !query.is_finished() {
@@ -508,7 +491,6 @@ where
     }
 
     /// Gets a mutable reference to a running query, if it exists.
-    #[allow(deprecated)]
     pub fn query_mut<'a>(&'a mut self, id: &QueryId) -> Option<QueryMut<'a>> {
         self.queries.get_mut(id).and_then(|query| {
             if !query.is_finished() {
@@ -562,7 +544,6 @@ where
                 RoutingUpdate::Pending
             }
             kbucket::Entry::Absent(entry) => {
-                #[allow(deprecated)]
                 let addresses = Addresses::new(address);
                 let status = if self.connected_peers.contains(peer) {
                     NodeStatus::Connected
@@ -612,7 +593,6 @@ where
     ///
     /// If the given peer or address is not in the routing table,
     /// this is a no-op.
-    #[allow(deprecated)]
     pub fn remove_address(
         &mut self,
         peer: &PeerId,
@@ -642,7 +622,6 @@ where
     ///
     /// Returns `None` if the peer was not in the routing table,
     /// not even pending insertion.
-    #[allow(deprecated)]
     pub fn remove_peer(
         &mut self,
         peer: &PeerId,
@@ -656,7 +635,6 @@ where
     }
 
     /// Returns an iterator over all non-empty buckets in the routing table.
-    #[allow(deprecated)]
     pub fn kbuckets(
         &mut self,
     ) -> impl Iterator<Item = kbucket::KBucketRef<'_, kbucket::Key<PeerId>, Addresses>> {
@@ -666,7 +644,6 @@ where
     /// Returns the k-bucket for the distance to the given key.
     ///
     /// Returns `None` if the given key refers to the local key.
-    #[allow(deprecated)]
     pub fn kbucket<K>(
         &mut self,
         key: K,
@@ -681,7 +658,6 @@ where
     ///
     /// The result of the query is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
-    #[allow(deprecated)]
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -709,7 +685,6 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    #[allow(deprecated)]
     pub fn get_record(&mut self, key: record::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -782,7 +757,6 @@ where
     /// does not update the record's expiration in local storage, thus a given record
     /// with an explicit expiration will always expire at that instant and until then
     /// is subject to regular (re-)replication and (re-)publication.
-    #[allow(deprecated)]
     pub fn put_record(
         &mut self,
         mut record: Record,
@@ -824,7 +798,6 @@ where
     /// > method must be used to ensure the standard Kademlia
     /// > procedure of "caching" (i.e. storing) a found record at the closest
     /// > node to the key that _did not_ return it.
-    #[allow(deprecated)]
     pub fn put_record_to<I>(&mut self, mut record: Record, peers: I, quorum: Quorum) -> QueryId
     where
         I: ExactSizeIterator<Item = PeerId>,
@@ -895,7 +868,6 @@ where
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
     /// > See [`Kademlia::add_address`].
-    #[allow(deprecated)]
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -934,7 +906,6 @@ where
     ///
     /// The results of the (repeated) provider announcements sent by this node are
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
-    #[allow(deprecated)]
     pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -972,7 +943,6 @@ where
     ///
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
-    #[allow(deprecated)]
     pub fn get_providers(&mut self, key: record::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -1019,7 +989,6 @@ where
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
-    #[allow(deprecated)]
     fn discovered<'a, I>(&'a mut self, query_id: &QueryId, source: &PeerId, peers: I)
     where
         I: Iterator<Item = &'a KadPeer> + Clone,
@@ -1045,7 +1014,6 @@ where
     /// Finds the closest peers to a `target` in the context of a request by
     /// the `source` peer, such that the `source` peer is never included in the
     /// result.
-    #[allow(deprecated)]
     fn find_closest<T: Clone>(
         &mut self,
         target: &kbucket::Key<T>,
@@ -1064,7 +1032,6 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
-    #[allow(deprecated)]
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
@@ -1083,7 +1050,6 @@ where
                     } else {
                         KadConnectionType::NotConnected
                     };
-                    #[allow(deprecated)]
                     if multiaddrs.is_empty() {
                         // The provider is either the local node and we fill in
                         // the local addresses on demand, or it is a legacy
@@ -1137,7 +1103,6 @@ where
 
     /// Starts an iterative `PUT_VALUE` query for the given record.
     fn start_put_record(&mut self, record: Record, quorum: Quorum, context: PutRecordContext) {
-        #[allow(deprecated)]
         let quorum = quorum.eval(self.queries.config().replication_factor);
         let target = kbucket::Key::new(record.key.clone());
         let peers = self.kbuckets.closest_keys(&target);
@@ -1208,7 +1173,6 @@ where
                             KademliaEvent::RoutablePeer { peer, address: a },
                         ));
                     }
-                    #[allow(deprecated)]
                     (Some(a), KademliaBucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
@@ -1261,7 +1225,6 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    #[allow(deprecated)]
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
         log::trace!("Query {:?} finished.", query_id);
@@ -1500,7 +1463,6 @@ where
     }
 
     /// Handles a query that timed out.
-    #[allow(deprecated)]
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
         log::trace!("Query {:?} timed out.", query_id);
@@ -1640,7 +1602,6 @@ where
     }
 
     /// Processes a record received from a peer.
-    #[allow(deprecated)]
     fn record_received(
         &mut self,
         source: PeerId,
@@ -1765,7 +1726,6 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    #[allow(deprecated)]
     fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
@@ -1831,7 +1791,6 @@ where
             }
         }
 
-        #[allow(deprecated)]
         for query in self.queries.iter_mut() {
             if let Some(addrs) = query.inner.addresses.get_mut(&peer_id) {
                 addrs.retain(|a| a != address);
@@ -1861,7 +1820,6 @@ where
         if other_established == 0 {
             // Queue events for sending pending RPCs to the connected peer.
             // There can be only one pending RPC for a particular peer and query per definition.
-            #[allow(deprecated)]
             for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
                 q.inner
                     .pending_rpcs
@@ -1927,7 +1885,6 @@ where
         // addresses of a peer in all currently ongoing queries might have a
         // large performance impact. If so, the code below might be worth
         // revisiting.
-        #[allow(deprecated)]
         for query in self.queries.iter_mut() {
             if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
                 for addr in addrs.iter_mut() {
@@ -1947,7 +1904,6 @@ where
         };
 
         match error {
-            #[allow(deprecated)]
             DialError::Banned
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
@@ -1975,7 +1931,6 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
-            #[allow(deprecated)]
             DialError::ConnectionLimit(_) => {}
         }
     }
@@ -2007,7 +1962,6 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    #[allow(deprecated)]
     type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
@@ -2018,7 +1972,6 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        #[allow(deprecated)]
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
@@ -2040,7 +1993,6 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        #[allow(deprecated)]
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
@@ -2080,7 +2032,6 @@ where
             };
 
         // We add to that a temporary list of addresses from the ongoing queries.
-        #[allow(deprecated)]
         for query in self.queries.iter() {
             if let Some(addrs) = query.inner.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
@@ -2162,7 +2113,6 @@ where
                 });
             }
 
-            #[allow(deprecated)]
             KademliaHandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
@@ -2214,7 +2164,6 @@ where
                 }
             }
 
-            #[allow(deprecated)]
             KademliaHandlerEvent::AddProvider { key, provider } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
@@ -2260,7 +2209,6 @@ where
                 });
             }
 
-            #[allow(deprecated)]
             KademliaHandlerEvent::GetRecordRes {
                 record,
                 closer_peers,
@@ -2320,7 +2268,6 @@ where
                 self.record_received(source, connection, request_id, record);
             }
 
-            #[allow(deprecated)]
             KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
                 if let Some(query) = self.queries.get_mut(&user_data) {
                     query.on_success(&source, vec![]);
@@ -2432,7 +2379,6 @@ where
                             return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
                     }
-                    #[allow(deprecated)]
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
                         let event = query.inner.info.to_request(query.id());
                         // TODO: AddProvider requests yield no response, so the query completes
@@ -2540,7 +2486,6 @@ pub struct PeerRecord {
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
-#[allow(deprecated)]
 pub enum KademliaEvent {
     /// An inbound request has been received and handled.
     //
@@ -2563,7 +2508,6 @@ pub enum KademliaEvent {
 
     /// The routing table has been updated with a new peer and / or
     /// address, thereby possibly evicting another peer.
-    #[allow(deprecated)]
     RoutingUpdated {
         /// The ID of the peer that was added or updated.
         peer: PeerId,
@@ -2941,7 +2885,6 @@ impl AddProviderError {
     }
 }
 
-#[allow(deprecated)]
 impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
     fn from(e: kbucket::EntryView<kbucket::Key<PeerId>, Addresses>) -> KadPeer {
         KadPeer {
@@ -2967,7 +2910,6 @@ struct QueryInner {
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    #[allow(deprecated)]
     pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>,
 }
 
@@ -3080,7 +3022,6 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    #[allow(deprecated)]
     fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
@@ -3145,14 +3086,12 @@ pub enum AddProviderPhase {
         /// The external addresses of the provider being advertised.
         external_addresses: Vec<Multiaddr>,
         /// Query statistics from the finished `GetClosestPeers` phase.
-        #[allow(deprecated)]
         get_closest_peers_stats: QueryStats,
     },
 }
 
 /// The phases of a [`QueryInfo::PutRecord`] query.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(deprecated)]
 pub enum PutRecordPhase {
     /// The query is searching for the closest nodes to the record key.
     GetClosestPeers,
@@ -3167,12 +3106,10 @@ pub enum PutRecordPhase {
 }
 
 /// A mutable reference to a running query.
-#[allow(deprecated)]
 pub struct QueryMut<'a> {
     query: &'a mut Query<QueryInner>,
 }
 
-#[allow(deprecated)]
 impl<'a> QueryMut<'a> {
     pub fn id(&self) -> QueryId {
         self.query.id()
@@ -3199,12 +3136,10 @@ impl<'a> QueryMut<'a> {
 }
 
 /// An immutable reference to a running query.
-#[allow(deprecated)]
 pub struct QueryRef<'a> {
     query: &'a Query<QueryInner>,
 }
 
-#[allow(deprecated)]
 impl<'a> QueryRef<'a> {
     pub fn id(&self) -> QueryId {
         self.query.id()

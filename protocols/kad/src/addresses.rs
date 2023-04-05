@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use libp2p_core::Multiaddr;
 use smallvec::SmallVec;
 use std::fmt;
@@ -33,7 +35,6 @@ pub struct Addresses {
 }
 
 #[allow(clippy::len_without_is_empty)]
-#[allow(deprecated)]
 impl Addresses {
     /// Creates a new list of addresses.
     pub fn new(addr: Multiaddr) -> Addresses {
@@ -113,7 +114,6 @@ impl Addresses {
     }
 }
 
-#[allow(deprecated)]
 impl fmt::Debug for Addresses {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.addrs.iter()).finish()

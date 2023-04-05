@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[allow(deprecated)]
+#![allow(deprecated)]
+
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
@@ -59,7 +60,6 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 )]
 pub struct KademliaHandler<TUserData> {
     /// Configuration for the Kademlia protocol.
-    #[allow(deprecated)]
     config: KademliaHandlerConfig,
 
     /// Next unique ID of a connection.
@@ -73,7 +73,6 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    #[allow(deprecated)]
     requested_streams:
         VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
 
@@ -116,7 +115,6 @@ enum ProtocolStatus {
 #[derive(Debug, Clone)]
 pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
-    #[allow(deprecated)]
     pub protocol_config: KademliaProtocolConfig,
 
     /// If false, we deny incoming requests.
@@ -181,7 +179,6 @@ enum InboundSubstreamState<TUserData> {
     },
 }
 
-#[allow(deprecated)]
 impl<TUserData> InboundSubstreamState<TUserData> {
     fn try_answer_with(
         &mut self,
@@ -237,7 +234,6 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
-#[allow(deprecated)]
 pub enum KademliaHandlerEvent<TUserData> {
     /// The configured protocol name has been confirmed by the peer through
     /// a successfully negotiated substream.
@@ -384,7 +380,6 @@ impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
 
 /// Event to send to the handler.
 #[derive(Debug)]
-#[allow(deprecated)]
 pub enum KademliaHandlerIn<TUserData> {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
@@ -411,7 +406,6 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        #[allow(deprecated)]
         request_id: KademliaRequestId,
     },
 
@@ -499,7 +493,6 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-#[allow(deprecated)]
 impl<TUserData> KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
@@ -626,7 +619,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
@@ -813,7 +805,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<TUserData> KademliaHandler<TUserData>
 where
     TUserData: 'static + Clone + Send + Unpin + fmt::Debug,
@@ -832,7 +823,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl Default for KademliaHandlerConfig {
     fn default() -> Self {
         KademliaHandlerConfig {
@@ -847,7 +837,6 @@ impl<TUserData> Stream for OutboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
-    #[allow(deprecated)]
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),
@@ -984,7 +973,6 @@ impl<TUserData> Stream for InboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
-    #[allow(deprecated)]
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),
@@ -1015,7 +1003,6 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::FindNode { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::FindNodeReq {
                                 key,
@@ -1028,7 +1015,6 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::GetProviders { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetProvidersReq {
                                 key,
@@ -1051,7 +1037,6 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetRecord {
                                 key,
@@ -1064,7 +1049,6 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::PutValue { record }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        #[allow(deprecated)]
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::PutRecord {
                                 record,

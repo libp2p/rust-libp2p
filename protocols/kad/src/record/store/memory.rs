@@ -28,6 +28,7 @@ use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
 /// In-memory implementation of a `RecordStore`.
+#[allow(deprecated)]
 pub struct MemoryStore {
     /// The identity of the peer owning the store.
     local_key: kbucket::Key<PeerId>,
@@ -88,6 +89,7 @@ impl MemoryStore {
     }
 
     /// Retains the records satisfying a predicate.
+    #[allow(deprecated)]
     pub fn retain<F>(&mut self, f: F)
     where
         F: FnMut(&Key, &mut Record) -> bool,
@@ -96,6 +98,7 @@ impl MemoryStore {
     }
 }
 
+#[allow(deprecated)]
 impl RecordStore for MemoryStore {
     type RecordsIter<'a> =
         iter::Map<hash_map::Values<'a, Key, Record>, fn(&'a Record) -> Cow<'a, Record>>;
