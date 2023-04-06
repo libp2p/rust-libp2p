@@ -425,7 +425,9 @@ impl ConnectionHandler for Handler {
                     handler.in_mesh = false;
                 }
             },
-            Handler::Disabled(_) => {}
+            Handler::Disabled(_) => {
+                log::debug!("Handler is disabled. Dropping message {:?}", message);
+            }
         }
     }
 
