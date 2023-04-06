@@ -2449,6 +2449,7 @@ dependencies = [
  "base64 0.21.0",
  "byteorder",
  "bytes",
+ "either",
  "env_logger 0.10.0",
  "fnv",
  "futures",
