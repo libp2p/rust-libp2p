@@ -923,7 +923,7 @@ where
                     ));
                 self.supported_protocols = supported_protocols
                     .iter()
-                    .map(|p| p.as_str().as_bytes().to_vec())
+                    .map(|p| p.as_str().as_bytes().to_vec()) // TODO: Don't do this.
                     .collect();
                 return Some(SwarmEvent::ConnectionEstablished {
                     peer_id,
