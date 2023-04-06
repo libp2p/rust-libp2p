@@ -23,6 +23,7 @@ use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
 use crate::ValidationError;
 use asynchronous_codec::Framed;
+use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
@@ -70,11 +71,12 @@ pub enum HandlerIn {
     LeftMesh,
 }
 
-/// The maximum number of substreams we accept or create before disconnecting from the peer.
+/// The maximum number of substreams we accept or create before disabling the handler.
 ///
 /// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
 /// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
-/// connection faulty and disconnect. This also prevents against potential substream creation loops.
+/// connection faulty and disable the handler. This also prevents against potential substream
+/// creation loops.
 const MAX_SUBSTREAM_CREATION: usize = 5;
 
 pub enum Handler {
@@ -515,10 +517,8 @@ impl ConnectionHandler for Handler {
                         protocol,
                         ..
                     }) => match protocol {
-                        futures::future::Either::Left(protocol) => {
-                            handler.on_fully_negotiated_inbound(protocol)
-                        }
-                        futures::future::Either::Right(v) => void::unreachable(v),
+                        Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
+                        Either::Right(v) => void::unreachable(v),
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
