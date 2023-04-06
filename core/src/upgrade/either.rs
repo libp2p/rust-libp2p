@@ -27,25 +27,6 @@ use either::Either;
 use futures::future;
 use multistream_select::Protocol;
 
-// impl<A, B> UpgradeInfo for Either<A, B>
-// where
-//     A: UpgradeInfo,
-//     B: UpgradeInfo,
-// {
-//     type Info = EitherName<A::Info, B::Info>;
-//     type InfoIter = EitherIter<
-//         <A::InfoIter as IntoIterator>::IntoIter,
-//         <B::InfoIter as IntoIterator>::IntoIter,
-//     >;
-//
-//     fn protocol_info(&self) -> Self::InfoIter {
-//         match self {
-//             Either::Left(a) => EitherIter::A(a.protocol_info().into_iter()),
-//             Either::Right(b) => EitherIter::B(b.protocol_info().into_iter()),
-//         }
-//     }
-// }
-
 impl<A, B> UpgradeProtocols for Either<A, B>
 where
     A: UpgradeProtocols,
