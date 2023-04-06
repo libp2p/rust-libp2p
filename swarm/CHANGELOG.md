@@ -1,6 +1,6 @@
 ## 0.42.2 - unreleased
 
-- Add `ConnectionEvent::` `is_outbound` and `is_inbound`. See [PR 3625].
+- Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
 
 [PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3625
 
