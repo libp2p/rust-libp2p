@@ -22,7 +22,7 @@ use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr, ProtocolName,
+    Multiaddr,
 };
 use either::Either;
 use futures::prelude::*;
@@ -121,11 +121,11 @@ pub enum EitherName<A, B> {
     B(B),
 }
 
-impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
-    fn protocol_name(&self) -> &[u8] {
+impl<A: AsRef<str>, B: AsRef<str>> AsRef<str> for EitherName<A, B> {
+    fn as_ref(&self) -> &str {
         match self {
-            EitherName::A(a) => a.protocol_name(),
-            EitherName::B(b) => b.protocol_name(),
+            EitherName::A(a) => a.as_ref(),
+            EitherName::B(b) => b.as_ref(),
         }
     }
 }

@@ -886,7 +886,7 @@ where
                     .listen_protocol()
                     .upgrade()
                     .protocol_info()
-                    .map(|p| p.protocol_name().to_owned())
+                    .map(|p| p.protocol_name().as_bytes().to_vec())
                     .collect();
                 let other_established_connection_ids = self
                     .pool

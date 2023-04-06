@@ -463,9 +463,9 @@ where
 #[derive(Debug, Clone)]
 pub struct IndexedProtoName<H>(usize, H);
 
-impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
-    fn protocol_name(&self) -> &[u8] {
-        self.1.protocol_name()
+impl<H: AsRef<str>> AsRef<str> for IndexedProtoName<H> {
+    fn as_ref(&self) -> &str {
+        self.1.as_ref()
     }
 }
 

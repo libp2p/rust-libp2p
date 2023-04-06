@@ -119,16 +119,16 @@ pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError
 /// }
 /// ```
 ///
-pub trait ProtocolName {
-    /// The protocol name as bytes. Transmitted on the network.
+pub trait ProtocolName: AsRef<str> {
+    /// The protocol name as a string. Transmitted on the network.
     ///
     /// **Note:** Valid protocol names must start with `/` and
     /// not exceed 140 bytes in length.
-    fn protocol_name(&self) -> &[u8];
+    fn protocol_name(&self) -> &str;
 }
 
-impl<T: AsRef<[u8]>> ProtocolName for T {
-    fn protocol_name(&self) -> &[u8] {
+impl<T: AsRef<str>> ProtocolName for T {
+    fn protocol_name(&self) -> &str {
         self.as_ref()
     }
 }
