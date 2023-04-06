@@ -71,13 +71,13 @@ pub enum HandlerIn {
     LeftMesh,
 }
 
-/// The maximum number of substreams we accept or create before disabling the handler.
+/// The maximum number of inbound or outbound substreams attempts we allow.
 ///
 /// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
 /// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
 /// connection faulty and disable the handler. This also prevents against potential substream
 /// creation loops.
-const MAX_SUBSTREAM_CREATION: usize = 5;
+const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
 pub enum Handler {
     Enabled(EnabledHandler),
@@ -103,10 +103,10 @@ pub struct EnabledHandler {
     outbound_substream_establishing: bool,
 
     /// The number of outbound substreams we have requested.
-    outbound_substreams_requested: usize,
+    outbound_substream_attempts: usize,
 
     /// The number of inbound substreams that have been created by the peer.
-    inbound_substreams_created: usize,
+    inbound_substream_attempts: usize,
 
     /// The type of peer this handler is associated to.
     peer_kind: Option<PeerKind>,
@@ -134,9 +134,9 @@ pub enum DisabledHandler {
         /// Keeps track on whether we have sent the peer kind to the behaviour.
         peer_kind_sent: bool,
     },
-    /// The maximum number of inbound or outbound streams have been created and thereby the handler
-    /// has been disabled.
-    MaxStreamCreation,
+    /// The maximum number of inbound or outbound substream attempts have happened and thereby the
+    /// handler has been disabled.
+    MaxSubstreamAttempts,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -169,8 +169,8 @@ impl Handler {
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,
-            outbound_substreams_requested: 0,
-            inbound_substreams_created: 0,
+            outbound_substream_attempts: 0,
+            inbound_substream_attempts: 0,
             send_queue: SmallVec::new(),
             peer_kind: None,
             peer_kind_sent: false,
@@ -186,8 +186,6 @@ impl EnabledHandler {
         &mut self,
         (substream, peer_kind): (Framed<NegotiatedSubstream, GossipsubCodec>, PeerKind),
     ) {
-        self.inbound_substreams_created += 1;
-
         // update the known kind of peer
         if self.peer_kind.is_none() {
             self.peer_kind = Some(peer_kind);
@@ -244,7 +242,6 @@ impl EnabledHandler {
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
-            self.outbound_substreams_requested += 1;
             self.outbound_substream_establishing = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(self.listen_protocol.clone(), ()),
@@ -475,7 +472,7 @@ impl ConnectionHandler for Handler {
 
                 Poll::Pending
             }
-            Handler::Disabled(DisabledHandler::MaxStreamCreation) => Poll::Pending,
+            Handler::Disabled(DisabledHandler::MaxSubstreamAttempts) => Poll::Pending,
         }
     }
 
@@ -490,28 +487,30 @@ impl ConnectionHandler for Handler {
     ) {
         match self {
             Handler::Enabled(handler) => {
+                if event.is_inbound() {
+                    handler.inbound_substream_attempts += 1;
+
+                    if handler.inbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
+                        log::warn!(
+                            "The maximum number of inbound substreams attempts has been exceeded"
+                        );
+                        *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
+                        return;
+                    }
+                }
+
                 if event.is_outbound() {
                     handler.outbound_substream_establishing = false;
-                }
 
-                if event.is_inbound()
-                    && handler.inbound_substreams_created == MAX_SUBSTREAM_CREATION
-                {
-                    log::warn!(
-                        "The maximum number of inbound substreams created has been exceeded"
-                    );
-                    *self = Handler::Disabled(DisabledHandler::MaxStreamCreation);
-                    return;
-                }
+                    handler.outbound_substream_attempts += 1;
 
-                if event.is_outbound()
-                    && handler.outbound_substreams_requested == MAX_SUBSTREAM_CREATION
-                {
-                    log::warn!(
-                        "The maximum number of outbound substreams created has been exceeded"
-                    );
-                    *self = Handler::Disabled(DisabledHandler::MaxStreamCreation);
-                    return;
+                    if handler.outbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
+                        log::warn!(
+                            "The maximum number of outbound substream attempts has been exceeded"
+                        );
+                        *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
+                        return;
+                    }
                 }
 
                 match event {
