@@ -2,9 +2,9 @@
 
 - Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.
   If you depend on it, we suggest you vendor it.
-  See [PR XXXX].
+  See [PR 3747].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
 
 ## 0.39.1
 
