@@ -1,4 +1,4 @@
-## 0.44.0 - unreleased
+## 0.43.2 - unreleased
 
 - Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738]
 
