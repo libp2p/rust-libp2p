@@ -1,3 +1,9 @@
+## 0.15.2 - unreleased
+
+- Export `rate-limiter` module. See [PR 3742].
+
+[PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
+
 ## 0.15.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
