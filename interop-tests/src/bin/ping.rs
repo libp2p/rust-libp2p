@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
             )
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
             .boxed(),
-            format!("/ip4/{ip}/udp/0/webrtc"),
+            format!("/ip4/{ip}/udp/0/webrtc-direct"),
         ),
     };
 

@@ -28,7 +28,7 @@ getrandom = { version = "0.2.3", features = ["js"], optional = true } # Explicit
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 async-std = { version = "1.6.2", optional = true }
-tokio = { version = "1.15", features = ["rt"], optional = true }
+tokio = { version = "1.27", features = ["rt"], optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
