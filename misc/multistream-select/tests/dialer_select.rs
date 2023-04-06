@@ -22,7 +22,9 @@
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
-use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
+use multistream_select::{
+    dialer_select_proto, listener_select_proto, NegotiationError, Protocol, Version,
+};
 
 #[test]
 fn select_proto_basic() {
@@ -32,9 +34,12 @@ fn select_proto_basic() {
 
         let server = async_std::task::spawn(async move {
             let connec = listener.accept().await.unwrap().0;
-            let protos = vec![b"/proto1", b"/proto2"];
+            let protos = vec![
+                Protocol::from_static("/proto1"),
+                Protocol::from_static("/proto2"),
+            ];
             let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
-            assert_eq!(proto, b"/proto2");
+            assert_eq!(proto, Protocol::from_static("/proto2"));
 
             let mut out = vec![0; 32];
             let n = io.read(&mut out).await.unwrap();
@@ -47,11 +52,12 @@ fn select_proto_basic() {
 
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
-                .await
-                .unwrap();
-            assert_eq!(proto, b"/proto2");
+            let protos = vec![
+                Protocol::from_static("/proto3"),
+                Protocol::from_static("/proto2"),
+            ];
+            let (proto, mut io) = dialer_select_proto(connec, protos, version).await.unwrap();
+            assert_eq!(proto, Protocol::from_static("/proto2"));
 
             io.write_all(b"ping").await.unwrap();
             io.flush().await.unwrap();
@@ -103,7 +109,7 @@ fn negotiation_failed() {
 
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let mut io = match dialer_select_proto(connec, dial_protos.into_iter(), version).await {
+            let mut io = match dialer_select_proto(connec, dial_protos, version).await {
                 Err(NegotiationError::Failed) => return,
                 Ok((_, io)) => io,
                 Err(_) => panic!(),
@@ -126,8 +132,8 @@ fn negotiation_failed() {
     #[derive(Clone)]
     struct Test {
         version: Version,
-        listen_protos: Vec<&'static str>,
-        dial_protos: Vec<&'static str>,
+        listen_protos: Vec<Protocol>,
+        dial_protos: Vec<Protocol>,
         dial_payload: Vec<u8>,
     }
 
@@ -136,8 +142,20 @@ fn negotiation_failed() {
     // The choices here cover the main distinction between a single
     // and multiple protocols.
     let protos = vec![
-        (vec!["/proto1"], vec!["/proto2"]),
-        (vec!["/proto1", "/proto2"], vec!["/proto3", "/proto4"]),
+        (
+            vec![Protocol::from_static("/proto1")],
+            vec![Protocol::from_static("/proto2")],
+        ),
+        (
+            vec![
+                Protocol::from_static("/proto1"),
+                Protocol::from_static("/proto2"),
+            ],
+            vec![
+                Protocol::from_static("/proto3"),
+                Protocol::from_static("/proto4"),
+            ],
+        ),
     ];
 
     // The payloads that the dialer sends after "successful" negotiation,

@@ -72,13 +72,13 @@
 //!
 //! ```no_run
 //! use async_std::net::TcpStream;
-//! use multistream_select::{dialer_select_proto, Version};
+//! use multistream_select::{dialer_select_proto, Protocol, Version};
 //! use futures::prelude::*;
 //!
 //! async_std::task::block_on(async move {
 //!     let socket = TcpStream::connect("127.0.0.1:10333").await.unwrap();
 //!
-//!     let protos = vec![b"/echo/1.0.0", b"/echo/2.5.0"];
+//!     let protos = vec![Protocol::from_static("/echo/1.0.0"), Protocol::from_static("/echo/2.5.0")];
 //!     let (protocol, _io) = dialer_select_proto(socket, protos, Version::V1).await.unwrap();
 //!
 //!     println!("Negotiated protocol: {:?}", protocol);

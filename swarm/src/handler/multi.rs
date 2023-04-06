@@ -43,7 +43,7 @@ use std::{
     error,
     fmt::{self, Debug},
     hash::Hash,
-    iter::{self, FromIterator},
+    iter::FromIterator,
     task::{Context, Poll},
     time::Duration,
 };
@@ -84,7 +84,7 @@ where
         uniq_proto_names(
             m.handlers
                 .values()
-                .map(|h| h.listen_protocol().into_upgrade().0),
+                .flat_map(|h| h.listen_protocol().upgrade.protocols()),
         )?;
         Ok(m)
     }
@@ -427,7 +427,11 @@ where
         let m = IntoMultiHandler {
             handlers: HashMap::from_iter(iter),
         };
-        uniq_proto_names(m.handlers.values().map(|h| h.inbound_protocol()))?;
+        uniq_proto_names(
+            m.handlers
+                .values()
+                .flat_map(|h| h.inbound_protocol().protocols()),
+        )?;
         Ok(m)
     }
 }
@@ -538,11 +542,20 @@ where
     type Error = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Protocol) -> Self::Future {
-        let IndexedProtoName(index, info) = info;
+    fn upgrade_inbound(
+        mut self,
+        resource: NegotiatedSubstream,
+        selected_protocol: Protocol,
+    ) -> Self::Future {
+        let index = self
+            .upgrades
+            .iter()
+            .position(|(_, h)| h.protocols().contains(&selected_protocol))
+            .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
+
         upgrade
-            .upgrade_inbound(resource, info)
+            .upgrade_inbound(resource, selected_protocol)
             .map(move |out| match out {
                 Ok(o) => Ok((key, o)),
                 Err(e) => Err((key, e)),
@@ -560,11 +573,20 @@ where
     type Error = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Protocol) -> Self::Future {
-        let IndexedProtoName(index, info) = info;
+    fn upgrade_outbound(
+        mut self,
+        resource: NegotiatedSubstream,
+        selected_protocol: Protocol,
+    ) -> Self::Future {
+        let index = self
+            .upgrades
+            .iter()
+            .position(|(_, h)| h.protocols().contains(&selected_protocol))
+            .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
+
         upgrade
-            .upgrade_outbound(resource, info)
+            .upgrade_outbound(resource, selected_protocol)
             .map(move |out| match out {
                 Ok(o) => Ok((key, o)),
                 Err(e) => Err((key, e)),
@@ -574,7 +596,7 @@ where
 }
 
 /// Check that no two protocol names are equal.
-fn uniq_proto_names<I, T>(iter: I) -> Result<(), DuplicateProtonameError>
+fn uniq_proto_names<I>(iter: I) -> Result<(), DuplicateProtonameError>
 where
     I: Iterator<Item = Protocol>,
 {
@@ -596,17 +618,13 @@ pub struct DuplicateProtonameError(Protocol);
 impl DuplicateProtonameError {
     /// The protocol name bytes that occured in more than one handler.
     pub fn protocol_name(&self) -> &[u8] {
-        self.0.as_bytes()
+        self.0.as_str().as_bytes()
     }
 }
 
 impl fmt::Display for DuplicateProtonameError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Ok(s) = std::str::from_utf8(&self.0) {
-            write!(f, "duplicate protocol name: {s}")
-        } else {
-            write!(f, "duplicate protocol name: {:?}", self.0)
-        }
+        write!(f, "duplicate protocol name: {}", self.0)
     }
 }
 

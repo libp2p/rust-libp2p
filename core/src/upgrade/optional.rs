@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeProtocols};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use multistream_select::Protocol;
 
 /// Upgrade that can be disabled at runtime.

@@ -22,7 +22,7 @@ use crate::either::EitherFuture;
 use crate::upgrade::UpgradeProtocols;
 use crate::{
     either::EitherName,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade},
 };
 use either::Either;
 use futures::future;

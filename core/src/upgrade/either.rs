@@ -20,8 +20,8 @@
 
 use crate::upgrade::UpgradeProtocols;
 use crate::{
-    either::{EitherFuture, EitherName},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    either::EitherFuture,
+    upgrade::{InboundUpgrade, OutboundUpgrade},
 };
 use either::Either;
 use futures::future;
@@ -89,35 +89,6 @@ where
         match self {
             Either::Left(a) => EitherFuture::First(a.upgrade_outbound(sock, selected_protocol)),
             Either::Right(b) => EitherFuture::Second(b.upgrade_outbound(sock, selected_protocol)),
-        }
-    }
-}
-
-/// A type to represent two possible `Iterator` types.
-#[derive(Debug, Clone)]
-pub enum EitherIter<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A, B> Iterator for EitherIter<A, B>
-where
-    A: Iterator,
-    B: Iterator,
-{
-    type Item = EitherName<A::Item, B::Item>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            EitherIter::A(a) => a.next().map(EitherName::A),
-            EitherIter::B(b) => b.next().map(EitherName::B),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            EitherIter::A(a) => a.size_hint(),
-            EitherIter::B(b) => b.size_hint(),
         }
     }
 }

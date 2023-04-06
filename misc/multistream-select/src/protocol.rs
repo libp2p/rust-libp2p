@@ -493,7 +493,8 @@ mod tests {
                 .filter(|&c| c.is_ascii_alphanumeric())
                 .take(n)
                 .collect();
-            Protocol(Bytes::from(format!("/{p}")))
+
+            Protocol::try_from_owned(format!("/{p}")).expect("it starts with /")
         }
     }
 

@@ -140,12 +140,14 @@ use connection::{
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
+use libp2p_core::upgrade::UpgradeProtocols;
 use libp2p_core::{
     connection::ConnectedPoint,
+    multiaddr,
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, Transport,
 };
 use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
@@ -881,12 +883,7 @@ where
                     }
                 };
 
-                let supported_protocols = handler
-                    .listen_protocol()
-                    .upgrade()
-                    .protocol_info()
-                    .map(|p| p.protocol_name().to_owned())
-                    .collect();
+                let supported_protocols = handler.listen_protocol().upgrade().protocols();
                 let other_established_connection_ids = self
                     .pool
                     .iter_established_connections_of_peer(&peer_id)
@@ -924,7 +921,10 @@ where
                             other_established: other_established_connection_ids.len(),
                         },
                     ));
-                self.supported_protocols = supported_protocols;
+                self.supported_protocols = supported_protocols
+                    .iter()
+                    .map(|p| p.as_str().as_bytes().to_vec())
+                    .collect();
                 return Some(SwarmEvent::ConnectionEstablished {
                     peer_id,
                     num_established,
@@ -2014,13 +2014,13 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(Protocol::P2p(hash)) = addr.iter().last() {
+    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
         if &hash != peer.as_ref() {
             return Err(addr);
         }
         Ok(addr)
     } else {
-        Ok(addr.with(Protocol::P2p(peer.into())))
+        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
     }
 }
 

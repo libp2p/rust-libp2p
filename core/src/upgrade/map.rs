@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, UpgradeProtocols};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use futures::prelude::*;
 use multistream_select::Protocol;
 use std::{pin::Pin, task::Context, task::Poll};
