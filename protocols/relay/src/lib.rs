@@ -37,7 +37,7 @@ mod proto {
     pub use self::message_v2::pb::{HopMessage, Limit, Peer, Reservation, Status, StopMessage};
 }
 
-pub use behaviour::{Behaviour, CircuitId, Config, Event, rate_limiter};
+pub use behaviour::{rate_limiter, Behaviour, CircuitId, Config, Event};
 pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 /// Types related to the relay protocol inbound.
