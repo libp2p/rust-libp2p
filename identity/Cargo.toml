@@ -33,11 +33,11 @@ zeroize = { version = "1.6", optional = true }
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
 
 [features]
-secp256k1 = [ "libsecp256k1", "asn1_der", "rand", "sha2", "zeroize", "dep:quick-protobuf" ]
-ecdsa = [ "p256", "rand", "void", "zeroize", "sec1", "dep:quick-protobuf" ]
-rsa = [ "dep:ring", "asn1_der", "rand", "zeroize", "dep:quick-protobuf" ]
-ed25519 = [ "ed25519-dalek", "rand", "zeroize", "dep:quick-protobuf" ]
-peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror", "sha2" ]
+secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:rand", "dep:sha2", "dep:zeroize", "dep:quick-protobuf" ]
+ecdsa = [ "dep:p256", "dep:rand", "dep:void", "dep:zeroize", "dep:sec1", "dep:quick-protobuf" ]
+rsa = [ "dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize", "dep:quick-protobuf" ]
+ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:quick-protobuf" ]
+peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
 
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
