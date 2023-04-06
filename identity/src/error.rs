@@ -81,6 +81,12 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
         Self {
             msg: format!("decoding {key_type} key from Protobuf is unsupported"),
