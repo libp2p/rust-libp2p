@@ -1,3 +1,9 @@
+## 0.44.0 - unreleased
+
+- Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738]
+
+[PR 3738]: https://github.com/libp2p/rust-libp2p/pull/3738
+
 ## 0.43.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
@@ -140,7 +146,7 @@
 
 - Derive `Clone` for `KademliaEvent` (see [PR 2411])
 
-- Derive `Serialize`, `Deserialize` for `store::record_priv::Key` (see [PR 2408])
+- Derive `Serialize`, `Deserialize` for `store::record::Key` (see [PR 2408])
 
 - Add `get_closest_local_peers` to `Kademlia` (see [PR 2436])
 
