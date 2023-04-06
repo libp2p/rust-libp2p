@@ -79,6 +79,20 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
 
+      - uses: taiki-e/cache-cargo-install-action@7dd0cff2732612ac642812bcec4ada5a279239ed # v1
+        with:
+          tool: tomlq
+
+      - name: Enforce version in `workspace.dependencies` matches latest version
+        run: |
+          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .version')
+          SPECIFIED_VERSION=$(tomlq 'workspace.dependencies.${{ matrix.crate }}.version' --file ./Cargo.toml)
+          
+          echo "Package version: $PACKAGE_VERSION";
+          echo "Specified version: $SPECIFIED_VERSION";
+
+          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
   cross:
     name: Compile on ${{ matrix.target }}
     strategy:
