@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.1"
-futures = "0.3.27"
+futures = "0.3.28"
 async-std-resolver = { version = "0.22", optional = true }
 parking_lot = "0.12.0"
 trust-dns-resolver = { version = "0.22", default-features = false, features = ["system-config"] }
