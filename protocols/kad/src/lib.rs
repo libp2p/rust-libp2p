@@ -96,10 +96,10 @@ pub use behaviour::{
     Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
     KademliaStoreInserts, ProgressStep, Quorum,
 };
-pub use kbucket_priv::{EntryView, KBucketRef, Key};
+pub use kbucket_priv::{EntryView, KBucketRef, Key as KBucketKey};
 pub use protocol::KadConnectionType;
 pub use query::QueryId;
-pub use record_priv::{store, Key, ProviderRecord, Record};
+pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
 
 use std::num::NonZeroUsize;
 
