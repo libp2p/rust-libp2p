@@ -27,7 +27,7 @@ libp2p-tcp = { path = "../tcp", features = ["tokio"] }
 libp2p-websocket = { path = "../websocket" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-tokio = { version = "1.21.1", features = ["full"] }
+tokio = { version = "1.27.0", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
