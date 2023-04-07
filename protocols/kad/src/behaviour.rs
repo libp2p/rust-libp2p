@@ -532,7 +532,7 @@ where
                                 .kbuckets
                                 .bucket(&key)
                                 .map(|b| b.range())
-                                .expect("Not kbucket_priv::Entry::SelfEntry."),
+                                .expect("Not kbucket::Entry::SelfEntry."),
                         },
                     ))
                 }
@@ -561,7 +561,7 @@ where
                                     .kbuckets
                                     .bucket(&key)
                                     .map(|b| b.range())
-                                    .expect("Not kbucket_priv::Entry::SelfEntry."),
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             },
                         ));
                         RoutingUpdate::Success
@@ -1142,7 +1142,7 @@ where
                                     .kbuckets
                                     .bucket(&key)
                                     .map(|b| b.range())
-                                    .expect("Not kbucket_priv::Entry::SelfEntry."),
+                                    .expect("Not kbucket::Entry::SelfEntry."),
                             },
                         ))
                     }
@@ -1187,7 +1187,7 @@ where
                                         .kbuckets
                                         .bucket(&key)
                                         .map(|b| b.range())
-                                        .expect("Not kbucket_priv::Entry::SelfEntry."),
+                                        .expect("Not kbucket::Entry::SelfEntry."),
                                 };
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
