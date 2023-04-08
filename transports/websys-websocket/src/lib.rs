@@ -220,7 +220,7 @@ impl Connection {
                         locked.wake();
                     }
                 } else {
-                    panic!("Unexpected data format {:?}", e.data());
+                    debug_assert!(false, "Unexpected data format {:?}", e.data());
                 }
             }
         });
