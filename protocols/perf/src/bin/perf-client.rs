@@ -23,19 +23,21 @@ use async_trait::async_trait;
 use clap::Parser;
 use colored::*;
 use futures::{future::Either, StreamExt};
-use instant::Instant;
+use instant::{Duration, Instant};
 use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, Transport};
 use libp2p_dns::DnsConfig;
 use libp2p_identity::PeerId;
 use libp2p_perf::client::{RunParams, RunStats, RunTimers};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use log::info;
-use serde::{Deserialize, Serialize};
 
-schemafy::schemafy!(
-    root: BenchmarkResults
-        "src/benchmark-data-schema.json"
-);
+mod schema {
+    use serde::{Deserialize, Serialize};
+    schemafy::schemafy!(
+        root: BenchmarkResults
+            "src/benchmark-data-schema.json"
+    );
+}
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf client")]
@@ -73,8 +75,9 @@ async fn main() -> Result<()> {
 
     println!(
         "{}",
-        serde_json::to_string(&BenchmarkResults {
+        serde_json::to_string(&schema::Benchmarks {
             benchmarks: results,
+            schema: None,
         })
         .unwrap()
     );
@@ -86,10 +89,7 @@ async fn main() -> Result<()> {
 trait Benchmark {
     fn name(&self) -> &'static str;
 
-    async fn run(
-        &self,
-        server_address: Multiaddr,
-    ) -> Result<Option<BenchmarkResultsItemBenchmarks>>;
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>>;
 }
 
 struct Latency {}
@@ -100,18 +100,20 @@ impl Benchmark for Latency {
         "round-trip-time latency"
     }
 
-    async fn run(
-        &self,
-        server_address: Multiaddr,
-    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
-        let num = 1_000;
+        let mut rounds = 0;
+        let start = Instant::now();
         let mut latencies = Vec::new();
 
-        for _ in 0..num {
+        loop {
+            if start.elapsed() > Duration::from_secs(30) {
+                break;
+            }
+
             swarm.behaviour_mut().perf(
                 server_peer_id,
                 RunParams {
@@ -147,11 +149,15 @@ impl Benchmark for Latency {
                 };
             };
             latencies.push(latency);
+            rounds += 1;
         }
 
         latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        info!("Finished: {num} pings",);
+        info!(
+            "Finished: {rounds} pings in {:.4}s",
+            start.elapsed().as_secs_f64()
+        );
         info!("- {:.4} s median", percentile(&latencies, 0.50),);
         info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
         Ok(None)
@@ -171,10 +177,7 @@ impl Benchmark for Throughput {
         "single connection single channel throughput"
     }
 
-    async fn run(
-        &self,
-        server_address: Multiaddr,
-    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -219,10 +222,16 @@ impl Benchmark for Throughput {
         info!("- {sent_bandwidth_mebibit_second:.2} MiBit/s up");
         info!("- {receive_bandwidth_mebibit_second:.2} MiBit/s down\n");
 
-        Ok(Some(BenchmarkResultsItemBenchmarks {
+        Ok(Some(schema::Benchmark {
             name: "Single Connection throughput – Upload".to_string(),
-            unit: serde_json::Value::String("bits/s".to_string()),
-            result: (stats.params.to_send as f64 / sent_time).to_string(),
+            unit: "bits/s".to_string(),
+            comparisons: vec![],
+            results: vec![schema::Result {
+                implementation: "rust-libp2p".to_string(),
+                transport_stack: "TODO".to_string(),
+                version: "TODO".to_string(),
+                result: stats.params.to_send as f64 / sent_time,
+            }],
         }))
     }
 }
@@ -235,15 +244,12 @@ impl Benchmark for RequestsPerSecond {
         "single connection parallel requests per second"
     }
 
-    async fn run(
-        &self,
-        server_address: Multiaddr,
-    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
-        let num = 10_000;
+        let num = 1_000;
         let to_send = 1;
         let to_receive = 1;
 
@@ -304,11 +310,8 @@ impl Benchmark for ConnectionsPerSecond {
         "sequential connections with single request per second"
     }
 
-    async fn run(
-        &self,
-        server_address: Multiaddr,
-    ) -> Result<Option<BenchmarkResultsItemBenchmarks>> {
-        let num = 100;
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+        let mut rounds = 0;
         let to_send = 1;
         let to_receive = 1;
         let start = Instant::now();
@@ -316,7 +319,11 @@ impl Benchmark for ConnectionsPerSecond {
         let mut latency_connection_establishment = Vec::new();
         let mut latency_connection_establishment_plus_request = Vec::new();
 
-        for _ in 0..num {
+        loop {
+            if start.elapsed() > Duration::from_secs(30) {
+                break;
+            }
+
             let mut swarm = swarm().await;
 
             let start = Instant::now();
@@ -341,7 +348,8 @@ impl Benchmark for ConnectionsPerSecond {
                 e => panic!("{e:?}"),
             };
 
-            latency_connection_establishment_plus_request.push(start.elapsed().as_secs_f64())
+            latency_connection_establishment_plus_request.push(start.elapsed().as_secs_f64());
+            rounds += 1;
         }
 
         let duration = start.elapsed().as_secs_f64();
@@ -354,16 +362,21 @@ impl Benchmark for ConnectionsPerSecond {
             percentile(&latency_connection_establishment_plus_request, 0.95);
 
         info!(
-            "Finished: established {num} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
+            "Finished: established {rounds} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
         );
         info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
         info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
-        Ok(Some(BenchmarkResultsItemBenchmarks {
-            name: "Single Connection 1 byte round trip latency 100 runs 95th percentile"
-                .to_string(),
-            unit: serde_json::Value::String("s".to_string()),
-            result: connection_establishment_plus_request_95th.to_string(),
+        Ok(Some(schema::Benchmark {
+            name: "Single Connection 1 byte round trip latency 95th percentile".to_string(),
+            unit: "s".to_string(),
+            comparisons: vec![],
+            results: vec![schema::Result {
+                implementation: "rust-libp2p".to_string(),
+                transport_stack: "TODO".to_string(),
+                version: "TODO".to_string(),
+                result: connection_establishment_plus_request_95th,
+            }],
         }))
     }
 }
