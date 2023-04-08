@@ -41,7 +41,7 @@ use std::{
 ///
 /// ## Example
 ///
-/// To create an authenticated transport instance with Noise protocol and Mplex:
+/// To create an authenticated transport instance with Noise protocol and Yamux:
 ///
 /// ```no_run
 /// # use libp2p_core::{upgrade::Version, Transport};
