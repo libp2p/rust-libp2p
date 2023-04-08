@@ -83,7 +83,7 @@ impl libp2p_core::Transport for Transport {
         Ok(async move {
             let socket = match WebSocket::new(&ws_url) {
                 Ok(ws) => ws,
-                Err(err) => return Err(Error::JsError(format!("{err:?}"))),
+                Err(_) => return Err(Error::JsError(format!("Invalid websocket url: {ws_url}"))),
             };
 
             Ok(Connection::new(socket))
@@ -148,7 +148,6 @@ pub enum Error {
 
 /// A Websocket connection created by the [`Transport`].
 pub struct Connection {
-    /// We need to use Mutex as libp2p requires this to be Send.
     shared: Arc<Mutex<Shared>>,
 }
 
