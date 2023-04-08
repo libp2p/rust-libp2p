@@ -157,9 +157,22 @@ struct Shared {
     closed: bool,
     error: bool,
     data: VecDeque<u8>,
-    waker: Option<Waker>,
+    read_waker: Option<Waker>,
+    write_waker: Option<Waker>,
     socket: SendWrapper<WebSocket>,
     closures: Option<SendWrapper<Closures>>,
+}
+
+impl Shared {
+    fn wake(&self) {
+        if let Some(waker) = &self.read_waker {
+            waker.wake_by_ref();
+        }
+
+        if let Some(waker) = &self.write_waker {
+            waker.wake_by_ref();
+        }
+    }
 }
 
 type Closures = (
@@ -178,7 +191,8 @@ impl Connection {
             closed: false,
             error: false,
             data: VecDeque::with_capacity(1 << 16),
-            waker: None,
+            read_waker: None,
+            write_waker: None,
             socket: SendWrapper::new(socket.clone()),
             closures: None,
         }));
@@ -189,9 +203,7 @@ impl Connection {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
                     locked.opened = true;
-                    if let Some(waker) = &locked.waker {
-                        waker.wake_by_ref();
-                    }
+                    locked.wake();
                 }
             }
         });
@@ -205,9 +217,7 @@ impl Connection {
                         let mut locked = shared.lock();
                         let bytes = js_sys::Uint8Array::new(&abuf).to_vec();
                         locked.data.extend(bytes.into_iter());
-                        if let Some(waker) = &locked.waker {
-                            waker.wake_by_ref();
-                        }
+                        locked.wake();
                     }
                 } else {
                     panic!("Unexpected data format {:?}", e.data());
@@ -223,7 +233,9 @@ impl Connection {
                 // generates error on the browser console we just signal it to the
                 // stream.
                 if let Some(shared) = weak_shared.upgrade() {
-                    shared.lock().error = true;
+                    let mut locked = shared.lock();
+                    locked.error = true;
+                    locked.wake();
                 }
             }
         });
@@ -235,9 +247,7 @@ impl Connection {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
                     locked.closed = true;
-                    if let Some(waker) = &locked.waker {
-                        waker.wake_by_ref();
-                    }
+                    locked.wake();
                 }
             }
         });
@@ -264,13 +274,12 @@ impl AsyncRead for Connection {
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
-        shared.waker = Some(cx.waker().clone());
-
         if shared.error {
             Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")))
         } else if shared.closed {
             Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
         } else if shared.data.is_empty() {
+            shared.read_waker = Some(cx.waker().clone());
             Poll::Pending
         } else {
             let n = shared.data.len().min(buf.len());
@@ -289,13 +298,12 @@ impl AsyncWrite for Connection {
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
-        shared.waker = Some(cx.waker().clone());
-
         if shared.error {
             Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")))
         } else if shared.closed {
             Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
         } else if !shared.opened {
+            shared.write_waker = Some(cx.waker().clone());
             Poll::Pending
         } else {
             match shared.socket.send_with_u8_array(buf) {
