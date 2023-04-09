@@ -18,7 +18,7 @@ futures = "0.3.28"
 futures-timer = "3"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm", features = ["async-std"] }
+libp2p-swarm = { version = "0.42.1", path = "../../swarm", features = ["async-std"] }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4"
 quick-protobuf = "0.8"
