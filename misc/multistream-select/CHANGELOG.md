@@ -1,3 +1,9 @@
+## 0.12.2 - unreleased
+
+- `Version::V1Lazy` is set as default. See [PR 3749].
+
+[PR 3749]: https://github.com/libp2p/rust-libp2p/pull/3749
+
 ## 0.12.1
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
