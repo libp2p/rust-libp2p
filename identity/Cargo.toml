@@ -20,8 +20,7 @@ log = "0.4"
 multiaddr = { version = "0.17.1", optional = true }
 multihash = { version = "0.17.0", default-features = false, features = ["std"], optional = true }
 p256 = { version = "0.12", default-features = false, features = ["ecdsa", "std"], optional = true }
-prost = { version = "0.11", optional = true }
-quick-protobuf = "0.8.1"
+quick-protobuf = { version = "0.8.1", optional = true }
 rand = { version = "0.8", optional = true }
 sec1 = { version = "0.3.0", features = ["std"], optional = true } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -34,11 +33,11 @@ zeroize = { version = "1.6", optional = true }
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
 
 [features]
-secp256k1 = [ "libsecp256k1", "asn1_der", "prost", "rand", "sha2", "zeroize" ]
-ecdsa = [ "p256", "prost", "rand", "void", "zeroize", "sec1" ]
-rsa = [ "dep:ring", "asn1_der", "prost", "rand", "zeroize" ]
-ed25519 = [ "ed25519-dalek", "prost", "rand", "zeroize" ]
-peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror", "sha2" ]
+secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:rand", "dep:sha2", "dep:zeroize", "dep:quick-protobuf" ]
+ecdsa = [ "dep:p256", "dep:rand", "dep:void", "dep:zeroize", "dep:sec1", "dep:quick-protobuf" ]
+rsa = [ "dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize", "dep:quick-protobuf" ]
+ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:quick-protobuf" ]
+peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
 
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
