@@ -144,6 +144,6 @@ pub enum Version {
 
 impl Default for Version {
     fn default() -> Self {
-        Version::V1
+        Version::V1Lazy
     }
 }
