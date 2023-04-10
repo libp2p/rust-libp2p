@@ -1,0 +1,16 @@
+[package]
+name = "timed-streams"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+rust-version = "1.64"
+description = "A bounded set of streams where each stream has to finish within a certain timeout."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3.28"
+futures-timer = "3.0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "time"] }

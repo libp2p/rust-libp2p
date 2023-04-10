@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "core",
-    "examples/chat-example",
     "examples/autonat",
+    "examples/chat-example",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
@@ -22,6 +22,7 @@ members = [
     "misc/quick-protobuf-codec",
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
+    "misc/timed-streams",
     "muxers/mplex",
     "muxers/test-harness",
     "muxers/yamux",

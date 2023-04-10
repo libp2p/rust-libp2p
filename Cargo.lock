@@ -4795,6 +4795,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "timed-streams"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "futures-timer",
+ "tokio",
+]
+
+[[package]]
 name = "tinytemplate"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
