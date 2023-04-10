@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use either::Either;
 use multistream_select::Protocol;
 
 /// Upgrade that can be disabled at runtime.
@@ -44,8 +45,13 @@ impl<T> UpgradeProtocols for OptionalUpgrade<T>
 where
     T: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
-        self.0.as_ref().map(|u| u.protocols()).unwrap_or_default()
+    type Iter = Either<T::Iter, std::iter::Empty<Protocol>>;
+
+    fn protocols(&self) -> Self::Iter {
+        match self.0.as_ref() {
+            None => Either::Right(std::iter::empty()),
+            Some(inner) => Either::Left(inner.protocols()),
+        }
     }
 }
 

@@ -55,7 +55,7 @@ where
 {
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future: multistream_select::listener_select_proto(conn, up.protocols()),
+            future: multistream_select::listener_select_proto(conn, up.protocols().collect()),
             upgrade: up,
         },
     }
@@ -69,7 +69,7 @@ where
 {
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
-            future: multistream_select::dialer_select_proto(conn, up.protocols(), v),
+            future: multistream_select::dialer_select_proto(conn, up.protocols().collect(), v),
             upgrade: up,
         },
     }
@@ -84,6 +84,7 @@ where
     inner: InboundUpgradeApplyState<C, U>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,

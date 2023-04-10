@@ -70,6 +70,7 @@ mod select;
 mod transfer;
 
 use futures::future::Future;
+use std::iter::FilterMap;
 
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
@@ -148,32 +149,37 @@ pub trait UpgradeInfo {
 }
 
 pub trait UpgradeProtocols {
-    fn protocols(&self) -> Vec<Protocol>;
+    type Iter: Iterator<Item = Protocol>;
+
+    fn protocols(&self) -> Self::Iter;
 }
 
 impl<U> UpgradeProtocols for U
 where
     U: UpgradeInfo,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = FilterMap<<U::InfoIter as IntoIterator>::IntoIter, fn(U::Info) -> Option<Protocol>>;
+
+    fn protocols(&self) -> Self::Iter {
         self.protocol_info()
             .into_iter()
-            .filter_map(|p| {
-                let name = p.protocol_name();
+            .filter_map(filter_non_utf8_protocols)
+    }
+}
 
-                match Protocol::try_from(name) {
-                    Ok(p) => Some(p),
-                    Err(e) => {
-                        log::warn!(
-                            "ignoring protocol {} during upgrade because it is malformed: {e}",
-                            String::from_utf8_lossy(name)
-                        );
+fn filter_non_utf8_protocols(p: impl ProtocolName) -> Option<Protocol> {
+    let name = p.protocol_name();
 
-                        None
-                    }
-                }
-            })
-            .collect()
+    match Protocol::try_from(name) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            log::warn!(
+                "ignoring protocol {} during upgrade because it is malformed: {e}",
+                String::from_utf8_lossy(name)
+            );
+
+            None
+        }
     }
 }
 

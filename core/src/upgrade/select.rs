@@ -49,11 +49,10 @@ where
     A: UpgradeProtocols,
     B: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
-        let mut protocols = self.0.protocols();
-        protocols.extend(self.1.protocols());
+    type Iter = std::iter::Chain<A::Iter, B::Iter>;
 
-        protocols
+    fn protocols(&self) -> Self::Iter {
+        self.0.protocols().chain(self.1.protocols())
     }
 }
 
@@ -67,11 +66,11 @@ where
     type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
-        if self.0.protocols().contains(&selected_protocol) {
+        if self.0.protocols().any(|p| p == selected_protocol) {
             return EitherFuture::First(self.0.upgrade_inbound(sock, selected_protocol));
         }
 
-        if self.1.protocols().contains(&selected_protocol) {
+        if self.1.protocols().any(|p| p == selected_protocol) {
             return EitherFuture::Second(self.1.upgrade_inbound(sock, selected_protocol));
         }
 
@@ -89,11 +88,11 @@ where
     type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
-        if self.0.protocols().contains(&selected_protocol) {
+        if self.0.protocols().any(|p| p == selected_protocol) {
             return EitherFuture::First(self.0.upgrade_outbound(sock, selected_protocol));
         }
 
-        if self.1.protocols().contains(&selected_protocol) {
+        if self.1.protocols().any(|p| p == selected_protocol) {
             return EitherFuture::Second(self.1.upgrade_outbound(sock, selected_protocol));
         }
 

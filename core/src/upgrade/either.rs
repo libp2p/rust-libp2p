@@ -32,10 +32,12 @@ where
     A: UpgradeProtocols,
     B: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = Either<A::Iter, B::Iter>;
+
+    fn protocols(&self) -> Self::Iter {
         match self {
-            Either::Left(a) => a.protocols(),
-            Either::Right(b) => b.protocols(),
+            Either::Left(a) => Either::Left(a.protocols()),
+            Either::Right(b) => Either::Right(b.protocols()),
         }
     }
 }

@@ -40,7 +40,9 @@ impl<U, F> UpgradeProtocols for MapInboundUpgrade<U, F>
 where
     U: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = U::Iter;
+
+    fn protocols(&self) -> Self::Iter {
         self.upgrade.protocols()
     }
 }
@@ -92,7 +94,9 @@ impl<U, F> UpgradeProtocols for MapOutboundUpgrade<U, F>
 where
     U: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = U::Iter;
+
+    fn protocols(&self) -> Self::Iter {
         self.upgrade.protocols()
     }
 }
@@ -144,7 +148,9 @@ impl<U, F> UpgradeProtocols for MapInboundUpgradeErr<U, F>
 where
     U: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = U::Iter;
+
+    fn protocols(&self) -> Self::Iter {
         self.upgrade.protocols()
     }
 }
@@ -196,7 +202,9 @@ impl<U, F> UpgradeProtocols for MapOutboundUpgradeErr<U, F>
 where
     U: UpgradeProtocols,
 {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = U::Iter;
+
+    fn protocols(&self) -> Self::Iter {
         self.upgrade.protocols()
     }
 }
