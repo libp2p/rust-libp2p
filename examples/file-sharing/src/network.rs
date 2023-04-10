@@ -39,7 +39,9 @@ pub async fn new(
         Some(seed) => {
             let mut bytes = [0u8; 32];
             bytes[0] = seed;
-            identity::ed25519::Keypair::try_decode(&mut bytes).unwrap().into()
+            identity::ed25519::Keypair::try_decode(&mut bytes)
+                .unwrap()
+                .into()
         }
         None => identity::Keypair::generate_ed25519(),
     };

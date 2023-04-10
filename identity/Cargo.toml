@@ -41,11 +41,12 @@ ed25519 = [ "ed25519-dalek", "prost", "rand", "zeroize" ]
 peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror" ]
 
 [dev-dependencies]
-quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 base64 = "0.21.0"
-serde_json = "1.0"
-rmp-serde = "1.0"
 criterion = "0.4"
+hex-literal = "0.4.1"
+quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+rmp-serde = "1.0"
+serde_json = "1.0"
 
 [[bench]]
 name = "peer_id"

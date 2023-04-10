@@ -235,7 +235,8 @@ impl TryFrom<proto::Identify> for Info {
             addrs
         };
 
-        let public_key = PublicKey::try_decode_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
+        let public_key =
+            PublicKey::try_decode_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
 
         let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,
