@@ -225,18 +225,25 @@ impl Connection {
         let message_callback = Closure::<dyn FnMut(_)>::new({
             let weak_shared = Arc::downgrade(&shared);
             move |e: MessageEvent| {
-                if let Ok(abuf) = e.data().dyn_into::<js_sys::ArrayBuffer>() {
-                    if let Some(shared) = weak_shared.upgrade() {
-                        let mut locked = shared.lock();
-                        let bytes = js_sys::Uint8Array::new(&abuf).to_vec();
-
-                        if let State::Open { buffer } = &mut locked.state {
-                            buffer.extend(bytes.into_iter());
-                            locked.wake_read();
-                        }
+                let buf = match e.data().dyn_into::<js_sys::ArrayBuffer>() {
+                    Ok(buf) => buf,
+                    _ => {
+                        debug_assert!(false, "Unexpected data format {:?}", e.data());
+                        return;
                     }
-                } else {
-                    debug_assert!(false, "Unexpected data format {:?}", e.data());
+                };
+
+                let shared = match weak_shared.upgrade() {
+                    Some(shared) => shared,
+                    None => return,
+                };
+
+                let mut locked = shared.lock();
+                let bytes = js_sys::Uint8Array::new(&buf).to_vec();
+
+                if let State::Open { buffer } = &mut locked.state {
+                    buffer.extend(bytes.into_iter());
+                    locked.wake_read();
                 }
             }
         });
