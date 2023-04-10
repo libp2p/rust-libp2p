@@ -30,6 +30,7 @@ use futures::io::{AsyncBufRead, BufReader};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures_timer::Delay;
+use log::info;
 use std::convert::TryInto;
 use std::io;
 use std::pin::Pin;
@@ -68,6 +69,10 @@ where
         let this = &mut *self;
 
         loop {
+            info!(
+                "CopyFuture: bytes_sent = {}, max_circuit_bytes = {}",
+                this.bytes_sent, this.max_circuit_bytes
+            );
             if this.bytes_sent > this.max_circuit_bytes {
                 return Poll::Ready(Err(io::Error::new(
                     io::ErrorKind::Other,
@@ -133,16 +138,27 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<u64>> {
     let buffer = ready!(Pin::new(&mut src).poll_fill_buf(cx))?;
+    println!(
+        "forward_data: buffer.len() = {}, buffer = {:?}",
+        buffer.len(),
+        buffer
+    );
+    log::warn!(
+        "forward_data: buffer.len() = {}, buffer = {:?}",
+        buffer.len(),
+        buffer
+    );
     if buffer.is_empty() {
         ready!(Pin::new(&mut dst).poll_flush(cx))?;
         ready!(Pin::new(&mut dst).poll_close(cx))?;
         return Poll::Ready(Ok(0));
     }
 
-    let i = ready!(Pin::new(dst).poll_write(cx, buffer))?;
+    let i = ready!(Pin::new(&mut dst).poll_write(cx, buffer))?;
     if i == 0 {
         return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
     }
+    ready!(Pin::new(dst).poll_flush(cx))?;
     Pin::new(src).consume(i);
 
     Poll::Ready(Ok(i.try_into().expect("usize to fit into u64.")))
