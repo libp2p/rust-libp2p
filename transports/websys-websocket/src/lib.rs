@@ -155,14 +155,22 @@ pub struct Connection {
 }
 
 struct Shared {
-    opened: bool,
-    closed: bool,
-    error: bool,
-    data: VecDeque<u8>,
+    state: State,
     read_waker: Option<Waker>,
     write_waker: Option<Waker>,
     socket: SendWrapper<WebSocket>,
     closures: Option<SendWrapper<Closures>>,
+}
+
+enum State {
+    Connecting,
+    Open {
+        buffer: VecDeque<u8>,
+    },
+    #[allow(dead_code)]
+    Closing,
+    Closed,
+    Error,
 }
 
 impl Shared {
@@ -189,10 +197,7 @@ impl Connection {
         socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
         let shared = Arc::new(Mutex::new(Shared {
-            opened: false,
-            closed: false,
-            error: false,
-            data: VecDeque::with_capacity(1 << 16),
+            state: State::Connecting,
             read_waker: None,
             write_waker: None,
             socket: SendWrapper::new(socket.clone()),
@@ -204,7 +209,9 @@ impl Connection {
             move || {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
-                    locked.opened = true;
+                    locked.state = State::Open {
+                        buffer: VecDeque::default(),
+                    };
                     locked.wake();
                 }
             }
@@ -218,8 +225,11 @@ impl Connection {
                     if let Some(shared) = weak_shared.upgrade() {
                         let mut locked = shared.lock();
                         let bytes = js_sys::Uint8Array::new(&abuf).to_vec();
-                        locked.data.extend(bytes.into_iter());
-                        locked.wake();
+
+                        if let State::Open { buffer } = &mut locked.state {
+                            buffer.extend(bytes.into_iter());
+                            locked.wake();
+                        }
                     }
                 } else {
                     debug_assert!(false, "Unexpected data format {:?}", e.data());
@@ -236,7 +246,7 @@ impl Connection {
                 // stream.
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
-                    locked.error = true;
+                    locked.state = State::Error;
                     locked.wake();
                 }
             }
@@ -248,7 +258,7 @@ impl Connection {
             move |_| {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
-                    locked.closed = true;
+                    locked.state = State::Closed;
                     locked.wake();
                 }
             }
@@ -277,22 +287,27 @@ impl AsyncRead for Connection {
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
 
-        if shared.error {
-            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
-        }
+        let buffer = match &mut shared.state {
+            State::Connecting => {
+                shared.read_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
+            State::Open { buffer } if buffer.is_empty() => {
+                shared.read_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
+            State::Open { buffer } => buffer,
+            State::Closed | State::Closing => {
+                return Poll::Ready(Ok(0));
+            }
+            State::Error => {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
+            }
+        };
 
-        if shared.closed {
-            return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
-        }
-
-        if shared.data.is_empty() {
-            shared.read_waker = Some(cx.waker().clone());
-            return Poll::Pending;
-        }
-
-        let n = shared.data.len().min(buf.len());
+        let n = buffer.len().min(buf.len());
         for k in buf.iter_mut().take(n) {
-            *k = shared.data.pop_front().unwrap();
+            *k = buffer.pop_front().unwrap();
         }
 
         Poll::Ready(Ok(n))
@@ -306,17 +321,19 @@ impl AsyncWrite for Connection {
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
-        if shared.error {
-            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
-        }
 
-        if shared.closed {
-            return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
-        }
-
-        if !shared.opened {
-            shared.write_waker = Some(cx.waker().clone());
-            return Poll::Pending;
+        match &shared.state {
+            State::Connecting => {
+                shared.write_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
+            State::Closed | State::Closing => {
+                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
+            }
+            State::Error => {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
+            }
+            State::Open { .. } => {}
         }
 
         shared.socket.send_with_u8_array(buf).map_err(|e| {
@@ -343,9 +360,14 @@ impl AsyncWrite for Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
+        const GO_AWAY_STATUS_CODE: u16 = 1001; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
+
         let shared = self.shared.lock();
-        if shared.opened {
-            let _ = shared.socket.close();
+
+        if let State::Connecting | State::Open { .. } = shared.state {
+            let _ = shared
+                .socket
+                .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
         }
     }
 }
