@@ -25,6 +25,7 @@ quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-code
 rand = "0.8"
 thiserror = "1"
 void = "1"
+timed-streams = { version = "0.1", path = "../../misc/timed-streams" }
 
 [dev-dependencies]
 async-trait = "0.1"

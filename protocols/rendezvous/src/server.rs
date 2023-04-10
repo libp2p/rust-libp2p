@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
+use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::inbound;
 use crate::substream_handler::{InEvent, InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
@@ -119,9 +119,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_inbound_only(
-            Duration::from_secs(30),
-        ))
+        Ok(inbound::Handler::new())
     }
 
     fn handle_established_outbound_connection(
@@ -131,9 +129,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_inbound_only(
-            Duration::from_secs(30),
-        ))
+        Ok(inbound::Handler::new())
     }
 
     fn on_connection_handler_event(
@@ -142,21 +138,7 @@ impl NetworkBehaviour for Behaviour {
         connection: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        let new_events = match event {
-            handler::InboundOutEvent::InboundEvent { id, message } => {
-                handle_inbound_event(message, peer_id, connection, id, &mut self.registrations)
-            }
-            handler::InboundOutEvent::OutboundEvent { message, .. } => void::unreachable(message),
-            handler::InboundOutEvent::InboundError { error, .. } => {
-                log::warn!("Connection with peer {} failed: {}", peer_id, error);
-
-                vec![ToSwarm::CloseConnection {
-                    peer_id,
-                    connection: CloseConnection::One(connection),
-                }]
-            }
-            handler::InboundOutEvent::OutboundError { error, .. } => void::unreachable(error),
-        };
+        let new_events = handle_inbound_event(message, peer_id, connection, &mut self.registrations);
 
         self.events.extend(new_events);
     }
@@ -201,15 +183,16 @@ fn handle_inbound_event(
     event: inbound::OutEvent,
     peer_id: PeerId,
     connection: ConnectionId,
-    id: InboundSubstreamId,
     registrations: &mut Registrations,
 ) -> Vec<ToSwarm<Event, THandlerInEvent<Behaviour>>> {
     match event {
         // bad registration
-        inbound::OutEvent::RegistrationRequested(registration)
+        inbound::OutEvent::RegistrationRequested { new_registration: registration, responder }
             if registration.record.peer_id() != peer_id =>
         {
             let error = ErrorCode::NotAuthorized;
+
+            responder.respond(Message::RegisterResponse(todo!()));
 
             vec![
                 ToSwarm::NotifyHandler {
@@ -227,7 +210,7 @@ fn handle_inbound_event(
                 }),
             ]
         }
-        inbound::OutEvent::RegistrationRequested(registration) => {
+        inbound::OutEvent::RegistrationRequested { new_registration: registration } => {
             let namespace = registration.namespace.clone();
 
             match registrations.add(registration) {
@@ -315,7 +298,7 @@ fn handle_inbound_event(
                 ]
             }
         },
-        inbound::OutEvent::UnregisterRequested(namespace) => {
+        inbound::OutEvent::UnregisterRequested { namespace: namespace } => {
             registrations.remove(namespace.clone(), peer_id);
 
             vec![ToSwarm::GenerateEvent(Event::PeerUnregistered {

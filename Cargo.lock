@@ -452,12 +452,12 @@ dependencies = [
 [[package]]
 name = "asynchronous-codec"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06a0daa378f5fd10634e44b0a29b2a87b890657658e072a30d6f26e57ddee182"
+source = "git+https://github.com/thomaseizinger/asynchronous-codec?branch=send-recv-futures#984a0b244179fdd1273eb507f11a0a28b81b8bf7"
 dependencies = [
  "bytes",
  "futures-sink",
  "futures-util",
+ "log",
  "memchr",
  "pin-project-lite 0.2.9",
 ]
@@ -2823,6 +2823,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
+ "timed-streams",
  "tokio",
  "void",
 ]

@@ -18,11 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::task::{Context, Poll};
 use crate::codec;
 use crate::codec::Message;
 use void::Void;
+use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
+use libp2p_swarm::handler::ConnectionEvent;
 
 const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
+const MAX_CONCURRENT_STREAMS: usize = 10;
 
 pub mod inbound;
 pub mod outbound;
@@ -45,5 +49,3 @@ pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo,
 pub type OutboundOutEvent =
     crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
 
-pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
-pub type InboundOutEvent = crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;

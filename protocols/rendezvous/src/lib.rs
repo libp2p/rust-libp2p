@@ -26,7 +26,6 @@ pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registrati
 
 mod codec;
 mod handler;
-mod substream_handler;
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
 ///
