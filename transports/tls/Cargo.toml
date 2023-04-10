@@ -28,7 +28,7 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 
 [dev-dependencies]
 hex = "0.4.3"
-hex-literal = "0.4.0"
+hex-literal = "0.4.1"
 libp2p-core = { path = "../../core" }
 libp2p-identity = { path = "../../identity", features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
 libp2p-swarm = { path = "../../swarm" }
