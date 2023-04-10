@@ -22,7 +22,7 @@ multihash = { version = "0.17.0", default-features = false, features = ["std"], 
 p256 = { version = "0.12", default-features = false, features = ["ecdsa", "std"], optional = true }
 quick-protobuf = { version = "0.8.1", optional = true }
 rand = { version = "0.8", optional = true }
-sec1 = { version = "0.3.0", features = ["std"], optional = true } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
+sec1 = { version = "0.7.2", features = ["std"], optional = true } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.0", optional = true }
 thiserror = { version = "1.0", optional = true }
