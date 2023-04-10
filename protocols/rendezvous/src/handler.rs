@@ -18,34 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
-use crate::codec;
-use crate::codec::Message;
-use void::Void;
-use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
-use libp2p_swarm::handler::ConnectionEvent;
-
 const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
 const MAX_CONCURRENT_STREAMS: usize = 10;
+/// Max amount of time a rendezvous stream is allowed to be open.
+const STREAM_TIMEOUT_SECONDS: u64 = 20;
 
 pub mod inbound;
 pub mod outbound;
-
-/// Errors that can occur while interacting with a substream.
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Reading message {0:?} at this stage is a protocol violation")]
-    BadMessage(Message),
-    #[error("Failed to write message to substream")]
-    WriteMessage(#[source] codec::Error),
-    #[error("Failed to read message from substream")]
-    ReadMessage(#[source] codec::Error),
-    #[error("Substream ended unexpectedly mid-protocol")]
-    UnexpectedEndOfStream,
-}
-
-pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
-pub type OutboundOutEvent =
-    crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
-

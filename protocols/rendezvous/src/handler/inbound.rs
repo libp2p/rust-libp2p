@@ -18,20 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{
-    Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec, Ttl,
-};
-use crate::handler::{Error, MAX_CONCURRENT_STREAMS};
+use crate::codec::{Cookie, Message, Namespace, NewRegistration, RendezvousCodec};
 use crate::handler::PROTOCOL_IDENT;
-use crate::substream_handler::{Next, PassthroughProtocol, SubstreamHandler};
-use asynchronous_codec::{Framed, RecvSend, Responder};
-use futures::{SinkExt, StreamExt};
+use crate::handler::{MAX_CONCURRENT_STREAMS, STREAM_TIMEOUT_SECONDS};
+use asynchronous_codec::{RecvSend, Responder};
+use futures::StreamExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound};
+use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
-use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use timed_streams::TimedStreams;
@@ -46,15 +42,24 @@ pub struct Handler {
 impl Handler {
     pub fn new() -> Self {
         Self {
-            streams: TimedStreams::new(MAX_CONCURRENT_STREAMS, Duration::from_secs(20));
+            streams: TimedStreams::new(
+                MAX_CONCURRENT_STREAMS,
+                Duration::from_secs(STREAM_TIMEOUT_SECONDS),
+            ),
         }
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = OutEvent;
-    type Error = ();
+    type Error = Void;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -65,10 +70,10 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        return if self.streams.len() > 0 {
-            KeepAlive::Yes
-        } else {
+        if self.streams.is_empty() {
             KeepAlive::No
+        } else {
+            KeepAlive::Yes
         }
     }
 
@@ -118,7 +123,7 @@ impl ConnectionHandler for Handler {
                         },
                     ))
                 }
-                Poll::Ready(Some(Ok(Ok((other, _))))) => {
+                Poll::Ready(Some(Ok(Ok((message, _))))) => {
                     log::debug!("Ignoring invalid message on inbound stream: {message:?}");
                     continue;
                 }
@@ -162,7 +167,7 @@ impl ConnectionHandler for Handler {
                     log::debug!("Dropping inbound stream: {e}")
                 }
             }
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNEgotiatedOutbound {
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: (),
             }) => void::unreachable(protocol),
@@ -175,7 +180,7 @@ impl ConnectionHandler for Handler {
 
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum OutEvent {
     RegistrationRequested {
         new_registration: NewRegistration,

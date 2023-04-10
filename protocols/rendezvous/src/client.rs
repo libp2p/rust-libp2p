@@ -21,8 +21,6 @@
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler;
 use crate::handler::outbound;
-use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::{InEvent, SubstreamConnectionHandler};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
@@ -32,16 +30,15 @@ use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
-use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<ToSwarm<Event, InEvent<outbound::OpenInfo, Void, Void>>>,
+    events: VecDeque<ToSwarm<Event, outbound::InEvent>>,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 
@@ -84,9 +81,7 @@ impl Behaviour {
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id: rendezvous_node,
-            event: handler::OutboundInEvent::NewSubstream {
-                open_info: OpenInfo::UnregisterRequest(namespace),
-            },
+            event: handler::outbound::InEvent::UnregisterRequest(namespace),
             handler: NotifyHandler::Any,
         });
     }
@@ -107,12 +102,10 @@ impl Behaviour {
     ) {
         self.events.push_back(ToSwarm::NotifyHandler {
             peer_id: rendezvous_node,
-            event: handler::OutboundInEvent::NewSubstream {
-                open_info: OpenInfo::DiscoverRequest {
-                    namespace: ns,
-                    cookie,
-                    limit,
-                },
+            event: handler::outbound::InEvent::DiscoverRequest {
+                namespace: ns,
+                cookie,
+                limit,
             },
             handler: NotifyHandler::Any,
         });
@@ -161,8 +154,7 @@ pub enum Event {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler =
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
+    type ConnectionHandler = outbound::Handler;
     type OutEvent = Event;
 
     fn handle_established_inbound_connection(
@@ -172,9 +164,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_outbound_only(
-            Duration::from_secs(30),
-        ))
+        Ok(outbound::Handler::new())
     }
 
     fn handle_pending_outbound_connection(
@@ -207,9 +197,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_outbound_only(
-            Duration::from_secs(30),
-        ))
+        Ok(outbound::Handler::new())
     }
 
     fn on_connection_handler_event(
@@ -218,24 +206,12 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        let new_events = match event {
-            handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
-            handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
-                message,
-                peer_id,
-                &mut self.discovered_peers,
-                &mut self.expiring_registrations,
-            ),
-            handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
-            handler::OutboundOutEvent::OutboundError { error, .. } => {
-                log::warn!("Connection with peer {} failed: {}", peer_id, error);
-
-                vec![ToSwarm::CloseConnection {
-                    peer_id,
-                    connection: CloseConnection::One(connection_id),
-                }]
-            }
-        };
+        let new_events = handle_outbound_event(
+            event,
+            peer_id,
+            &mut self.discovered_peers,
+            &mut self.expiring_registrations,
+        );
 
         self.events.extend(new_events);
     }
@@ -264,14 +240,12 @@ impl NetworkBehaviour for Behaviour {
             let action = match PeerRecord::new(&self.keypair, external_addresses) {
                 Ok(peer_record) => ToSwarm::NotifyHandler {
                     peer_id: rendezvous_node,
-                    event: handler::OutboundInEvent::NewSubstream {
-                        open_info: OpenInfo::RegisterRequest(NewRegistration {
-                            namespace,
-                            record: peer_record,
-                            ttl,
-                        }),
-                    },
                     handler: NotifyHandler::Any,
+                    event: handler::outbound::InEvent::RegisterRequest(NewRegistration {
+                        namespace,
+                        record: peer_record,
+                        ttl,
+                    }),
                 },
                 Err(signing_error) => ToSwarm::GenerateEvent(Event::RegisterFailed(
                     RegisterError::FailedToMakeRecord(signing_error),

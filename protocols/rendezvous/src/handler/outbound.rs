@@ -19,36 +19,152 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::{Cookie, Message, NewRegistration, RendezvousCodec};
-use crate::handler::Error;
+use crate::handler::MAX_CONCURRENT_STREAMS;
 use crate::handler::PROTOCOL_IDENT;
-use crate::substream_handler::{FutureSubstream, Next, PassthroughProtocol, SubstreamHandler};
 use crate::{ErrorCode, Namespace, Registration, Ttl};
-use asynchronous_codec::Framed;
-use futures::{SinkExt, TryFutureExt, TryStreamExt};
-use libp2p_swarm::{NegotiatedSubstream, SubstreamProtocol};
-use std::task::Context;
+use asynchronous_codec::SendRecv;
+use futures::StreamExt;
+use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
+use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
+use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+};
+use std::collections::VecDeque;
+use std::task::{Context, Poll};
+use std::time::Duration;
+use timed_streams::TimedStreams;
 use void::Void;
 
-pub struct Stream(FutureSubstream<OutEvent, Error>);
+pub struct Handler {
+    pending_messages: Vec<Message>,
+    inflight_outbound_streams: usize,
 
-impl SubstreamHandler for Stream {
-    type InEvent = Void;
+    streams: TimedStreams<
+        SendRecv<NegotiatedSubstream, RendezvousCodec, asynchronous_codec::CloseStream>,
+    >,
+    pending_events: VecDeque<OutEvent>,
+}
+
+impl Handler {
+    pub fn new() -> Self {
+        Self {
+            pending_messages: Default::default(),
+            inflight_outbound_streams: 0,
+            streams: TimedStreams::new(MAX_CONCURRENT_STREAMS, Duration::from_secs(20)),
+            pending_events: Default::default(),
+        }
+    }
+}
+
+impl Default for Handler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConnectionHandler for Handler {
+    type InEvent = InEvent;
     type OutEvent = OutEvent;
-    type Error = Error;
-    type OpenInfo = OpenInfo;
+    type Error = Void;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundOpenInfo = ();
+    type OutboundOpenInfo = ();
 
-    fn upgrade(
-        open_info: Self::OpenInfo,
-    ) -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo> {
-        SubstreamProtocol::new(PassthroughProtocol::new(PROTOCOL_IDENT), open_info)
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self {
-        let mut stream = Framed::new(substream, RendezvousCodec::default());
-        let sent_message = match info {
-            OpenInfo::RegisterRequest(new_registration) => Message::Register(new_registration),
-            OpenInfo::UnregisterRequest(namespace) => Message::Unregister(namespace),
-            OpenInfo::DiscoverRequest {
+    fn connection_keep_alive(&self) -> KeepAlive {
+        if self.streams.is_empty() {
+            KeepAlive::No
+        } else {
+            KeepAlive::Yes
+        }
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<
+        ConnectionHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
+    > {
+        loop {
+            match self.streams.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(Ok(Message::RegisterResponse(Ok(ttl)))))) => {
+                    self.pending_events.push_back(OutEvent::Registered {
+                        namespace: todo!(),
+                        ttl,
+                    });
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Ok(Message::RegisterResponse(Err(e)))))) => {
+                    self.pending_events
+                        .push_back(OutEvent::RegisterFailed(todo!(), e));
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Ok(Message::DiscoverResponse(Ok((
+                    registrations,
+                    cookie,
+                ))))))) => {
+                    self.pending_events.push_back(OutEvent::Discovered {
+                        registrations,
+                        cookie,
+                    });
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Ok(Message::DiscoverResponse(Err(e)))))) => {
+                    self.pending_events.push_back(OutEvent::DiscoverFailed {
+                        namespace: todo!(),
+                        error: e,
+                    });
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Ok(message)))) => {
+                    log::debug!("Ignoring invalid message on outbound stream: {message:?}");
+                    continue;
+                }
+                Poll::Ready(Some(Ok(Err(e)))) => {
+                    log::debug!("io failure on inbound stream: {e}");
+                    continue;
+                }
+                Poll::Ready(Some(Err(e))) => {
+                    log::debug!("inbound stream timed out: {e}");
+                    continue;
+                }
+                Poll::Ready(None) => {
+                    unreachable!("TimedStreams never completes")
+                }
+                Poll::Pending => break,
+            }
+        }
+
+        if let Some(event) = self.pending_events.pop_front() {
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+        }
+
+        if self.pending_messages.len() > self.inflight_outbound_streams
+            && self.streams.len() + self.inflight_outbound_streams < MAX_CONCURRENT_STREAMS
+        {
+            self.inflight_outbound_streams += 1;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_IDENT), ()),
+            });
+        }
+
+        Poll::Pending
+    }
+
+    fn on_behaviour_event(&mut self, cmd: Self::InEvent) {
+        self.pending_messages.push(match cmd {
+            InEvent::RegisterRequest(new_registration) => Message::Register(new_registration),
+            InEvent::UnregisterRequest(namespace) => Message::Unregister(namespace),
+            InEvent::DiscoverRequest {
                 namespace,
                 cookie,
                 limit,
@@ -57,49 +173,44 @@ impl SubstreamHandler for Stream {
                 cookie,
                 limit,
             },
-        };
-
-        Self(FutureSubstream::new(async move {
-            use Message::*;
-            use OutEvent::*;
-
-            stream
-                .send(sent_message.clone())
-                .map_err(Error::WriteMessage)
-                .await?;
-            let received_message = stream.try_next().map_err(Error::ReadMessage).await?;
-            let received_message = received_message.ok_or(Error::UnexpectedEndOfStream)?;
-
-            let event = match (sent_message, received_message) {
-                (Register(registration), RegisterResponse(Ok(ttl))) => Registered {
-                    namespace: registration.namespace,
-                    ttl,
-                },
-                (Register(registration), RegisterResponse(Err(error))) => {
-                    RegisterFailed(registration.namespace, error)
-                }
-                (Discover { .. }, DiscoverResponse(Ok((registrations, cookie)))) => Discovered {
-                    registrations,
-                    cookie,
-                },
-                (Discover { namespace, .. }, DiscoverResponse(Err(error))) => {
-                    DiscoverFailed { namespace, error }
-                }
-                (.., other) => return Err(Error::BadMessage(other)),
-            };
-
-            stream.close().map_err(Error::WriteMessage).await?;
-
-            Ok(event)
-        }))
+        });
     }
 
-    fn on_event(self, event: Self::InEvent) -> Self {
-        void::unreachable(event)
-    }
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol,
+                info: (),
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol,
+                info: (),
+            }) => {
+                self.inflight_outbound_streams -= 1;
 
-    fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error> {
-        Ok(self.0.advance(cx)?.map_state(Stream))
+                let message = self
+                    .pending_messages
+                    .pop()
+                    .expect("requested an outbound stream without a pending message");
+                self.streams
+                    .try_push(
+                        SendRecv::new(protocol, RendezvousCodec::default(), message)
+                            .close_after_send(),
+                    )
+                    .expect("we never request more than MAX_CONCURRENT_STREAMS");
+            }
+            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::DialUpgradeError(_) => {}
+            ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }
 
@@ -123,7 +234,7 @@ pub enum OutEvent {
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
-pub enum OpenInfo {
+pub enum InEvent {
     RegisterRequest(NewRegistration),
     UnregisterRequest(Namespace),
     DiscoverRequest {

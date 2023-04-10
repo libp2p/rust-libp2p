@@ -32,6 +32,10 @@ where
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn len(&self) -> usize {
         self.inner.len()
     }
@@ -169,7 +173,7 @@ mod tests {
             .try_push(futures::stream::once(futures::future::ready(())))
             .unwrap();
 
-        assert_eq!((streams.next().await).unwrap().unwrap(), ());
+        streams.next().await.unwrap().unwrap()
     }
 
     #[tokio::test]
@@ -180,7 +184,7 @@ mod tests {
             .try_push(futures::stream::once(futures::future::ready(())))
             .unwrap();
 
-        assert_eq!((streams.next().await).unwrap().unwrap(), ());
+        streams.next().await.unwrap().unwrap();
 
         streams.next().now_or_never(); // allow for clean-up
         assert_eq!(streams.len(), 0)
