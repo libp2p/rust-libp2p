@@ -47,8 +47,8 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -103,7 +103,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerIn<QueryId>>>,
+    queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     listen_addresses: ListenAddresses,
 
@@ -522,20 +522,19 @@ where
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::RoutingUpdated {
-                                peer: *peer,
-                                is_new_peer: false,
-                                addresses: entry.value().clone(),
-                                old_peer: None,
-                                bucket_range: self
-                                    .kbuckets
-                                    .bucket(&key)
-                                    .map(|b| b.range())
-                                    .expect("Not kbucket::Entry::SelfEntry."),
-                            },
-                        ))
+                    self.queued_events.push_back(ToSwarm::GenerateEvent(
+                        KademliaEvent::RoutingUpdated {
+                            peer: *peer,
+                            is_new_peer: false,
+                            addresses: entry.value().clone(),
+                            old_peer: None,
+                            bucket_range: self
+                                .kbuckets
+                                .bucket(&key)
+                                .map(|b| b.range())
+                                .expect("Not kbucket::Entry::SelfEntry."),
+                        },
+                    ))
                 }
                 RoutingUpdate::Success
             }
@@ -552,20 +551,19 @@ where
                 };
                 match entry.insert(addresses.clone(), status) {
                     kbucket::InsertResult::Inserted => {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutingUpdated {
-                                    peer: *peer,
-                                    is_new_peer: true,
-                                    addresses,
-                                    old_peer: None,
-                                    bucket_range: self
-                                        .kbuckets
-                                        .bucket(&key)
-                                        .map(|b| b.range())
-                                        .expect("Not kbucket::Entry::SelfEntry."),
-                                },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::RoutingUpdated {
+                                peer: *peer,
+                                is_new_peer: true,
+                                addresses,
+                                old_peer: None,
+                                bucket_range: self
+                                    .kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
+                            },
+                        ));
                         RoutingUpdate::Success
                     }
                     kbucket::InsertResult::Full => {
@@ -573,7 +571,7 @@ where
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                        self.queued_events.push_back(ToSwarm::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
                         });
                         RoutingUpdate::Pending
@@ -727,15 +725,14 @@ where
         let stats = QueryStats::empty();
 
         if let Some(record) = record {
-            self.queued_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::OutboundQueryProgressed {
-                        id,
-                        result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
-                        step,
-                        stats,
-                    },
-                ));
+            self.queued_events.push_back(ToSwarm::GenerateEvent(
+                KademliaEvent::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
+                    step,
+                    stats,
+                },
+            ));
         }
 
         id
@@ -975,18 +972,17 @@ where
         let stats = QueryStats::empty();
 
         if !providers.is_empty() {
-            self.queued_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    KademliaEvent::OutboundQueryProgressed {
-                        id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
-                            key,
-                            providers,
-                        })),
-                        step,
-                        stats,
-                    },
-                ));
+            self.queued_events.push_back(ToSwarm::GenerateEvent(
+                KademliaEvent::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                        key,
+                        providers,
+                    })),
+                    step,
+                    stats,
+                },
+            ));
         }
         id
     }
@@ -1134,20 +1130,19 @@ where
                 }
                 if let Some(address) = address {
                     if entry.value().insert(address) {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutingUpdated {
-                                    peer,
-                                    is_new_peer: false,
-                                    addresses: entry.value().clone(),
-                                    old_peer: None,
-                                    bucket_range: self
-                                        .kbuckets
-                                        .bucket(&key)
-                                        .map(|b| b.range())
-                                        .expect("Not kbucket::Entry::SelfEntry."),
-                                },
-                            ))
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::RoutingUpdated {
+                                peer,
+                                is_new_peer: false,
+                                addresses: entry.value().clone(),
+                                old_peer: None,
+                                bucket_range: self
+                                    .kbuckets
+                                    .bucket(&key)
+                                    .map(|b| b.range())
+                                    .expect("Not kbucket::Entry::SelfEntry."),
+                            },
+                        ))
                     }
                 }
             }
@@ -1168,16 +1163,14 @@ where
                 }
                 match (address, self.kbucket_inserts) {
                     (None, _) => {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::UnroutablePeer { peer },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::UnroutablePeer { peer },
+                        ));
                     }
                     (Some(a), KademliaBucketInserts::Manual) => {
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::RoutablePeer { peer, address: a },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::RoutablePeer { peer, address: a },
+                        ));
                     }
                     (Some(a), KademliaBucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
@@ -1194,25 +1187,20 @@ where
                                         .map(|b| b.range())
                                         .expect("Not kbucket::Entry::SelfEntry."),
                                 };
-                                self.queued_events
-                                    .push_back(NetworkBehaviourAction::GenerateEvent(event));
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
                             kbucket::InsertResult::Full => {
                                 debug!("Bucket full. Peer not added to routing table: {}", peer);
                                 let address = addresses.first().clone();
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(
-                                        KademliaEvent::RoutablePeer { peer, address },
-                                    ),
-                                );
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                    KademliaEvent::RoutablePeer { peer, address },
+                                ));
                             }
                             kbucket::InsertResult::Pending { disconnected } => {
                                 let address = addresses.first().clone();
-                                self.queued_events.push_back(
-                                    NetworkBehaviourAction::GenerateEvent(
-                                        KademliaEvent::PendingRoutablePeer { peer, address },
-                                    ),
-                                );
+                                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                    KademliaEvent::PendingRoutablePeer { peer, address },
+                                ));
 
                                 // `disconnected` might already be in the process of re-connecting.
                                 // In other words `disconnected` might have already re-connected but
@@ -1221,7 +1209,7 @@ where
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                                    self.queued_events.push_back(ToSwarm::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
                                     })
@@ -1678,16 +1666,15 @@ where
                             record.key,
                             record.value.len()
                         );
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::InboundRequest {
-                                    request: InboundRequest::PutRecord {
-                                        source,
-                                        connection,
-                                        record: None,
-                                    },
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::InboundRequest {
+                                request: InboundRequest::PutRecord {
+                                    source,
+                                    connection,
+                                    record: None,
                                 },
-                            ));
+                            },
+                        ));
                     }
                     Err(e) => {
                         info!("Record not stored: {:?}", e);
@@ -1696,16 +1683,15 @@ where
                     }
                 },
                 KademliaStoreInserts::FilterBoth => {
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::PutRecord {
-                                    source,
-                                    connection,
-                                    record: Some(record.clone()),
-                                },
+                    self.queued_events.push_back(ToSwarm::GenerateEvent(
+                        KademliaEvent::InboundRequest {
+                            request: InboundRequest::PutRecord {
+                                source,
+                                connection,
+                                record: Some(record.clone()),
                             },
-                        ));
+                        },
+                    ));
                 }
             }
         }
@@ -1739,22 +1725,20 @@ where
                         return;
                     }
 
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::AddProvider { record: None },
-                            },
-                        ));
+                    self.queued_events.push_back(ToSwarm::GenerateEvent(
+                        KademliaEvent::InboundRequest {
+                            request: InboundRequest::AddProvider { record: None },
+                        },
+                    ));
                 }
                 KademliaStoreInserts::FilterBoth => {
-                    self.queued_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::AddProvider {
-                                    record: Some(record),
-                                },
+                    self.queued_events.push_back(ToSwarm::GenerateEvent(
+                        KademliaEvent::InboundRequest {
+                            request: InboundRequest::AddProvider {
+                                record: Some(record),
                             },
-                        ));
+                        },
+                    ));
                 }
             }
         }
@@ -1827,12 +1811,11 @@ where
                     .position(|(p, _)| p == &peer_id)
                     .map(|p| q.inner.pending_rpcs.remove(p))
             }) {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        event,
-                        handler: NotifyHandler::Any,
-                    });
+                self.queued_events.push_back(ToSwarm::NotifyHandler {
+                    peer_id,
+                    event,
+                    handler: NotifyHandler::Any,
+                });
             }
 
             self.connected_peers.insert(peer_id);
@@ -1905,8 +1888,8 @@ where
         };
 
         match error {
+            #[allow(deprecated)]
             DialError::Banned
-            | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
@@ -1933,6 +1916,8 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
+            #[allow(deprecated)]
+            DialError::ConnectionLimit(_) => {}
         }
     }
 
@@ -2066,7 +2051,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                    .push_back(ToSwarm::GenerateEvent(
                         KademliaEvent::InboundRequest {
                             request: InboundRequest::FindNode {
                                 num_closer_peers: closer_peers.len(),
@@ -2087,15 +2072,14 @@ where
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        KademliaEvent::InboundRequest {
-                            request: InboundRequest::GetProvider {
-                                num_closer_peers: closer_peers.len(),
-                                num_provider_peers: provider_peers.len(),
-                            },
+                self.queued_events.push_back(ToSwarm::GenerateEvent(
+                    KademliaEvent::InboundRequest {
+                        request: InboundRequest::GetProvider {
+                            num_closer_peers: closer_peers.len(),
+                            num_provider_peers: provider_peers.len(),
                         },
-                    ));
+                    },
+                ));
 
                 responder.respond(KadResponseMsg::GetProviders {
                     closer_peers,
@@ -2122,20 +2106,19 @@ where
                         *providers_found += provider_peers.len();
                         let providers = provider_peers.iter().map(|p| p.node_id).collect();
 
-                        self.queued_events
-                            .push_back(NetworkBehaviourAction::GenerateEvent(
-                                KademliaEvent::OutboundQueryProgressed {
-                                    id: user_data,
-                                    result: QueryResult::GetProviders(Ok(
-                                        GetProvidersOk::FoundProviders {
-                                            key: key.clone(),
-                                            providers,
-                                        },
-                                    )),
-                                    step: step.clone(),
-                                    stats,
-                                },
-                            ));
+                        self.queued_events.push_back(ToSwarm::GenerateEvent(
+                            KademliaEvent::OutboundQueryProgressed {
+                                id: user_data,
+                                result: QueryResult::GetProviders(Ok(
+                                    GetProvidersOk::FoundProviders {
+                                        key: key.clone(),
+                                        providers,
+                                    },
+                                )),
+                                step: step.clone(),
+                                stats,
+                            },
+                        ));
                         *step = step.next();
                     }
                 }
@@ -2181,7 +2164,7 @@ where
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                    .push_back(ToSwarm::GenerateEvent(
                         KademliaEvent::InboundRequest {
                             request: InboundRequest::GetRecord {
                                 num_closer_peers: closer_peers.len(),
@@ -2216,17 +2199,16 @@ where
                                 record,
                             };
 
-                            self.queued_events
-                                .push_back(NetworkBehaviourAction::GenerateEvent(
-                                    KademliaEvent::OutboundQueryProgressed {
-                                        id: user_data,
-                                        result: QueryResult::GetRecord(Ok(
-                                            GetRecordOk::FoundRecord(record),
-                                        )),
-                                        step: step.clone(),
-                                        stats,
-                                    },
-                                ));
+                            self.queued_events.push_back(ToSwarm::GenerateEvent(
+                                KademliaEvent::OutboundQueryProgressed {
+                                    id: user_data,
+                                    result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
+                                        record,
+                                    ))),
+                                    step: step.clone(),
+                                    stats,
+                                },
+                            ));
 
                             *step = step.next();
                         } else {
@@ -2291,7 +2273,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2350,7 +2332,7 @@ where
                     addresses: value,
                     old_peer: entry.evicted.map(|n| n.key.into_preimage()),
                 };
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                return Poll::Ready(ToSwarm::GenerateEvent(event));
             }
 
             // Look for a finished query.
@@ -2358,12 +2340,12 @@ where
                 match self.queries.poll(now) {
                     QueryPoolState::Finished(q) => {
                         if let Some(event) = self.query_finished(q) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
                     }
                     QueryPoolState::Timeout(q) => {
                         if let Some(event) = self.query_timeout(q) {
-                            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+                            return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
                     }
                     QueryPoolState::Waiting(Some((query, peer_id))) => {
@@ -2382,15 +2364,14 @@ where
                         }
 
                         if self.connected_peers.contains(&peer_id) {
-                            self.queued_events
-                                .push_back(NetworkBehaviourAction::NotifyHandler {
-                                    peer_id,
-                                    event,
-                                    handler: NotifyHandler::Any,
-                                });
+                            self.queued_events.push_back(ToSwarm::NotifyHandler {
+                                peer_id,
+                                event,
+                                handler: NotifyHandler::Any,
+                            });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            self.queued_events.push_back(NetworkBehaviourAction::Dial {
+                            self.queued_events.push_back(ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
                             });
                         }

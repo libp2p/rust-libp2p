@@ -110,6 +110,7 @@ impl Keypair {
     #[cfg(feature = "ed25519")]
     pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Ed25519(inner) => Some(inner),
             _ => None,
@@ -119,6 +120,7 @@ impl Keypair {
     #[cfg(feature = "secp256k1")]
     pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Secp256k1(inner) => Some(inner),
             _ => None,
@@ -128,6 +130,7 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Rsa(inner) => Some(inner),
             _ => None,
@@ -137,6 +140,7 @@ impl Keypair {
     #[cfg(feature = "ecdsa")]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             Keypair::Ecdsa(inner) => Some(inner),
             _ => None,
@@ -264,6 +268,38 @@ impl Keypair {
     }
 }
 
+#[cfg(feature = "ecdsa")]
+impl From<ecdsa::Keypair> for Keypair {
+    fn from(kp: ecdsa::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Ecdsa(kp)
+    }
+}
+
+#[cfg(feature = "ed25519")]
+impl From<ed25519::Keypair> for Keypair {
+    fn from(kp: ed25519::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Ed25519(kp)
+    }
+}
+
+#[cfg(feature = "secp256k1")]
+impl From<secp256k1::Keypair> for Keypair {
+    fn from(kp: secp256k1::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Secp256k1(kp)
+    }
+}
+
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+impl From<rsa::Keypair> for Keypair {
+    fn from(kp: rsa::Keypair) -> Self {
+        #[allow(deprecated)]
+        Keypair::Rsa(kp)
+    }
+}
+
 /// The public key of a node's identity keypair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PublicKey {
@@ -322,6 +358,7 @@ impl PublicKey {
     #[cfg(feature = "ed25519")]
     pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Ed25519(inner) => Some(inner),
             _ => None,
@@ -331,6 +368,7 @@ impl PublicKey {
     #[cfg(feature = "secp256k1")]
     pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Secp256k1(inner) => Some(inner),
             _ => None,
@@ -340,6 +378,7 @@ impl PublicKey {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Rsa(inner) => Some(inner),
             _ => None,
@@ -349,6 +388,7 @@ impl PublicKey {
     #[cfg(feature = "ecdsa")]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
         #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
         match self {
             PublicKey::Ecdsa(inner) => Some(inner),
             _ => None,
