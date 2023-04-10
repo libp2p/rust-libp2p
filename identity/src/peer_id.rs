@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::{Code, Error, MultihashGeneric};
+use multihash::{Error, MultihashGeneric};
 use rand::Rng;
 use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
@@ -105,8 +105,7 @@ impl PeerId {
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
-            multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large"),
+            multihash: Multihash::wrap(0x0, &peer_id).expect("The digest size is never too large"),
         }
     }
 
@@ -125,12 +124,13 @@ impl PeerId {
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
     pub fn is_public_key(&self, public_key: &crate::PublicKey) -> Option<bool> {
-        use multihash::MultihashDigest as _;
+        let other_peer_id = PeerId::from_public_key(public_key);
 
-        let alg = Code::try_from(self.multihash.code())
-            .expect("Internal multihash is always a valid `Code`");
-        let enc = public_key.to_protobuf_encoding();
-        Some(alg.digest(&enc) == self.multihash)
+        if self.multihash.code() != other_peer_id.multihash.code() {
+            return None;
+        }
+
+        Some(self == &other_peer_id)
     }
 }
 

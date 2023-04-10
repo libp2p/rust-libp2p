@@ -13,7 +13,7 @@ async-std = { version = "1.12.0", optional = true }
 bytes = "1.4.0"
 futures = "0.3.28"
 futures-timer = "3.0.2"
-if-watch = "3.0.0"
+if-watch = "3.0.1"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-tls = { version = "0.1.0", path = "../tls" }
 libp2p-identity = { version = "0.2.0", path = "../../identity" }
@@ -23,7 +23,7 @@ quinn-proto = { version = "0.9.3", default-features = false, features = ["tls-ru
 rand = "0.8.5"
 rustls = { version = "0.20.2", default-features = false }
 thiserror = "1.0.40"
-tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
+tokio = { version = "1.27.0", default-features = false, features = ["net", "rt"], optional = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
@@ -44,7 +44,7 @@ libp2p-noise = { path = "../noise" }
 libp2p-tcp = { path = "../tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = "1"
-tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.27.0", features = ["macros", "rt-multi-thread", "time"] }
 
 [[test]]
 name = "stream_compliance"
