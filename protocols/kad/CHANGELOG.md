@@ -1,7 +1,9 @@
 ## 0.43.2 - unreleased
 
-- Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738]
+- Export pub enum `RoutingUpdate`. See [PR 3739].
+- Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738].
 
+[PR 3739]: https://github.com/libp2p/rust-libp2p/pull/3739
 [PR 3738]: https://github.com/libp2p/rust-libp2p/pull/3738
 
 ## 0.43.1
