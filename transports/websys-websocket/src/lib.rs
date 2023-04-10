@@ -141,7 +141,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub(crate) fn invalid_websocket_url(url: &str) -> Self {
+    fn invalid_websocket_url(url: &str) -> Self {
         Self {
             msg: format!("Invalid websocket url: {url}"),
         }
