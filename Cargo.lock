@@ -1801,12 +1801,6 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hex-literal"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bcb5b3e439c92a7191df2f9bbe733de8de55c3f86368cdb1c63f8be7e9e328e"
-
-[[package]]
-name = "hex-literal"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
@@ -2506,7 +2500,7 @@ dependencies = [
  "bs58",
  "criterion",
  "ed25519-dalek",
- "hex-literal 0.4.1",
+ "hex-literal",
  "libsecp256k1",
  "log",
  "multiaddr",
@@ -2935,7 +2929,7 @@ dependencies = [
  "futures",
  "futures-rustls",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-swarm",
@@ -2986,7 +2980,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "hex",
- "hex-literal 0.3.4",
+ "hex-literal",
  "if-watch",
  "libp2p-core",
  "libp2p-identity",
