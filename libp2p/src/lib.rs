@@ -138,8 +138,7 @@ pub use libp2p_tls as tls;
 pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
 #[deprecated(
-    since = "0.39.0",
-    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websys-transport`."
+    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websys-websocket`."
 )]
 pub mod wasm_ext {
     #[doc(inline)]

@@ -1,3 +1,11 @@
+## 0.53.3 - unreleased
+
+- Introduce `libp2p::websys_websocket` module behind `websys-websocket` feature flag.
+  This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
+  See [PR 3679].
+
+[PR 3679]: https://github.com/libp2p/rust-libp2p/pull/3679
+
 ## 0.52.2
 
 - Introduce `libp2p::connection_limits` module.
