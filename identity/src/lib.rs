@@ -33,6 +33,12 @@
 //! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
 //! All key types have functions to enable conversion to/from their binary representations.
 
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 mod proto {
     include!("generated/mod.rs");
     pub use self::keys_proto::*;
