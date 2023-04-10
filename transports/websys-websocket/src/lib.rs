@@ -30,7 +30,6 @@ use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{MessageEvent, WebSocket};
 
 use std::{
-    collections::VecDeque,
     pin::Pin,
     sync::Arc,
     task::Poll,
@@ -164,7 +163,7 @@ struct Shared {
 
 enum State {
     Connecting,
-    Open { buffer: VecDeque<u8> },
+    Open { buffer: Vec<u8> },
     Closing,
     Closed,
     Error,
@@ -214,7 +213,7 @@ impl Connection {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
                     locked.state = State::Open {
-                        buffer: VecDeque::default(),
+                        buffer: Vec::default(),
                     };
                     locked.wake_read_write();
                 }
@@ -317,9 +316,11 @@ impl AsyncRead for Connection {
         };
 
         let n = buffer.len().min(buf.len());
-        for k in buf.iter_mut().take(n) {
-            *k = buffer.pop_front().unwrap();
-        }
+
+        let remaining_buffer = buffer.split_off(n);
+        buf.copy_from_slice(buffer);
+        buffer.clear();
+        *buffer = remaining_buffer;
 
         Poll::Ready(Ok(n))
     }
