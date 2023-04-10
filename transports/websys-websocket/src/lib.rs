@@ -174,12 +174,19 @@ enum State {
 }
 
 impl Shared {
-    fn wake(&self) {
-        if let Some(waker) = &self.read_waker {
+    fn wake_read_write(&self) {
+        self.wake_read();
+        self.wake_write()
+    }
+
+    fn wake_write(&self) {
+        if let Some(waker) = &self.write_waker {
             waker.wake_by_ref();
         }
+    }
 
-        if let Some(waker) = &self.write_waker {
+    fn wake_read(&self) {
+        if let Some(waker) = &self.read_waker {
             waker.wake_by_ref();
         }
     }
@@ -212,7 +219,7 @@ impl Connection {
                     locked.state = State::Open {
                         buffer: VecDeque::default(),
                     };
-                    locked.wake();
+                    locked.wake_read_write();
                 }
             }
         });
@@ -228,7 +235,7 @@ impl Connection {
 
                         if let State::Open { buffer } = &mut locked.state {
                             buffer.extend(bytes.into_iter());
-                            locked.wake();
+                            locked.wake_read();
                         }
                     }
                 } else {
@@ -247,7 +254,7 @@ impl Connection {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
                     locked.state = State::Error;
-                    locked.wake();
+                    locked.wake_read_write();
                 }
             }
         });
@@ -259,7 +266,7 @@ impl Connection {
                 if let Some(shared) = weak_shared.upgrade() {
                     let mut locked = shared.lock();
                     locked.state = State::Closed;
-                    locked.wake();
+                    locked.wake_write();
                 }
             }
         });
