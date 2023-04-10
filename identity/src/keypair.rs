@@ -108,8 +108,32 @@ impl Keypair {
     }
 
     #[cfg(feature = "ed25519")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ed25519` instead."
+    )]
+    pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
+        match self.try_into() {
+            Ok(k) => Some(k),
+            Err(_) => None,
+        }
+    }
+
+    #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::Keypair, OtherVariantError> {
         self.try_into()
+    }
+
+    #[cfg(feature = "secp256k1")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_secp256k1` instead."
+    )]
+    pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
+        match self.try_into() {
+            Ok(k) => Some(k),
+            Err(_) => None,
+        }
     }
 
     #[cfg(feature = "secp256k1")]
@@ -117,9 +141,33 @@ impl Keypair {
         self.try_into()
     }
 
+    #[cfg(feature = "rsa")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
+    )]
+    pub fn into_rsa(self) -> Option<rsa::Keypair> {
+        match self.try_into() {
+            Ok(k) => Some(k),
+            Err(_) => None,
+        }
+    }
+
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::Keypair, OtherVariantError> {
         self.try_into()
+    }
+
+    #[cfg(feature = "ecdsa")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
+    )]
+    pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
+        match self.try_into() {
+            Ok(k) => Some(k),
+            Err(_) => None,
+        }
     }
 
     #[cfg(feature = "ecdsa")]
