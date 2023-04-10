@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! Libp2p websocket transports built on [Websys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+//! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
 use futures::{future::Ready, io, prelude::*};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
