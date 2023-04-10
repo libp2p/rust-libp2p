@@ -276,20 +276,26 @@ impl AsyncRead for Connection {
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
+
         if shared.error {
-            Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")))
-        } else if shared.closed {
-            Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
-        } else if shared.data.is_empty() {
-            shared.read_waker = Some(cx.waker().clone());
-            Poll::Pending
-        } else {
-            let n = shared.data.len().min(buf.len());
-            for k in buf.iter_mut().take(n) {
-                *k = shared.data.pop_front().unwrap();
-            }
-            Poll::Ready(Ok(n))
+            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
         }
+
+        if shared.closed {
+            return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
+        }
+
+        if shared.data.is_empty() {
+            shared.read_waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
+
+        let n = shared.data.len().min(buf.len());
+        for k in buf.iter_mut().take(n) {
+            *k = shared.data.pop_front().unwrap();
+        }
+
+        Poll::Ready(Ok(n))
     }
 }
 
@@ -301,21 +307,29 @@ impl AsyncWrite for Connection {
     ) -> Poll<Result<usize, io::Error>> {
         let mut shared = self.shared.lock();
         if shared.error {
-            Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")))
-        } else if shared.closed {
-            Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
-        } else if !shared.opened {
-            shared.write_waker = Some(cx.waker().clone());
-            Poll::Pending
-        } else {
-            match shared.socket.send_with_u8_array(buf) {
-                Ok(()) => Poll::Ready(Ok(buf.len())),
-                Err(err) => Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Write error: {err:?}"),
-                ))),
-            }
+            return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
         }
+
+        if shared.closed {
+            return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
+        }
+
+        if !shared.opened {
+            shared.write_waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
+
+        shared.socket.send_with_u8_array(buf).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "Failed to write data: {}",
+                    e.as_string().unwrap_or_default()
+                ),
+            )
+        })?;
+
+        Poll::Ready(Ok(buf.len()))
     }
 
     fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
