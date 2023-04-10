@@ -37,13 +37,13 @@ use std::{
     task::{Context, Waker},
 };
 
-/// A Websocket transport that can be used in a Wasm client.
+/// A Websocket transport that can be used in a wasm environment.
 ///
 /// ## Example
 ///
 /// To create an authenticated transport instance with Noise protocol and Yamux:
 ///
-/// ```no_run
+/// ```
 /// # use libp2p_core::{upgrade::Version, Transport};
 /// # use libp2p_identity::Keypair;
 /// # use libp2p_yamux::YamuxConfig;
@@ -57,7 +57,7 @@ use std::{
 /// ```
 ///
 #[derive(Default)]
-pub struct Transport;
+pub struct Transport {}
 
 impl libp2p_core::Transport for Transport {
     type Output = Connection;
@@ -65,8 +65,8 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn listen_on(&mut self, _addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        Err(TransportError::Other(Error::NotSupported))
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn remove_listener(&mut self, _id: ListenerId) -> bool {
@@ -74,16 +74,13 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let ws_url = if let Some(url) = websocket_url(&addr) {
-            url
-        } else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+        let url = extract_websocket_url(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
 
         Ok(async move {
-            let socket = match WebSocket::new(&ws_url) {
+            let socket = match WebSocket::new(&url) {
                 Ok(ws) => ws,
-                Err(_) => return Err(Error::JsError(format!("Invalid websocket url: {ws_url}"))),
+                Err(_) => return Err(Error::invalid_websocket_url(&url)),
             };
 
             Ok(Connection::new(socket))
@@ -93,9 +90,9 @@ impl libp2p_core::Transport for Transport {
 
     fn dial_as_listener(
         &mut self,
-        _addr: Multiaddr,
+        addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        Err(TransportError::Other(Error::NotSupported))
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn poll(
@@ -111,7 +108,7 @@ impl libp2p_core::Transport for Transport {
 }
 
 // Try to convert Multiaddr to a Websocket url.
-fn websocket_url(addr: &Multiaddr) -> Option<String> {
+fn extract_websocket_url(addr: &Multiaddr) -> Option<String> {
     let mut protocols = addr.iter();
     let host_port = match (protocols.next(), protocols.next()) {
         (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
@@ -139,11 +136,17 @@ fn websocket_url(addr: &Multiaddr) -> Option<String> {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("js function error {0}")]
-    JsError(String),
-    #[error("operation not supported")]
-    NotSupported,
+#[error("{msg}")]
+pub struct Error {
+    msg: String,
+}
+
+impl Error {
+    pub(crate) fn invalid_websocket_url(url: &str) -> Self {
+        Self {
+            msg: format!("Invalid websocket url: {url}"),
+        }
+    }
 }
 
 /// A Websocket connection created by the [`Transport`].
