@@ -164,10 +164,7 @@ struct Shared {
 
 enum State {
     Connecting,
-    Open {
-        buffer: VecDeque<u8>,
-    },
-    #[allow(dead_code)]
+    Open { buffer: VecDeque<u8> },
     Closing,
     Closed,
     Error,
@@ -360,8 +357,24 @@ impl AsyncWrite for Connection {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Poll::Pending
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let mut shared = self.shared.lock();
+
+        match &shared.state {
+            State::Open { .. } | State::Connecting => {
+                let _ = shared.socket.close();
+                shared.state = State::Closing;
+
+                shared.write_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            State::Closing => {
+                shared.write_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            State::Closed => Poll::Ready(Ok(())),
+            State::Error => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error"))),
+        }
     }
 }
 
