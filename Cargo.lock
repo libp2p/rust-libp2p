@@ -2580,24 +2580,16 @@ dependencies = [
 name = "libp2p-metrics"
 version = "0.12.0"
 dependencies = [
- "env_logger 0.10.0",
- "futures",
- "hyper",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-kad",
- "libp2p-noise",
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
- "libp2p-tcp",
- "libp2p-yamux",
- "log",
  "prometheus-client",
- "tokio",
 ]
 
 [[package]]
@@ -3192,6 +3184,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metrics-example"
+version = "0.1.0"
+dependencies = [
+ "env_logger 0.10.0",
+ "futures",
+ "hyper",
+ "libp2p",
+ "log",
+ "prometheus-client",
+ "tokio",
 ]
 
 [[package]]
