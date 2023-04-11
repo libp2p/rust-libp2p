@@ -248,6 +248,8 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
+    /// 
+    /// See <https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#key-types> for details on the encoding.
     pub fn encode_protobuf(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
