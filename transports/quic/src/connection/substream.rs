@@ -36,10 +36,7 @@ pub struct Substream {
 
 impl Substream {
     pub(super) fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
-        Self {
-            send,
-            recv,
-        }
+        Self { send, recv }
     }
 }
 
