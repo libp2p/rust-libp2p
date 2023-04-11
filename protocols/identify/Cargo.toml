@@ -18,7 +18,7 @@ libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.1"
-lru = "0.9.0"
+lru = "0.10.0"
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
 quick-protobuf = "0.8"
 smallvec = "1.6.1"
