@@ -78,7 +78,69 @@ use libp2p_identity::PeerId;
 use std::pin::Pin;
 use zeroize::Zeroize;
 
+/// The configuration for the noise handshake.
+#[derive(Clone)]
+pub struct Config {
+    inner: NoiseAuthenticated<XX, X25519Spec, ()>,
+}
+
+impl Config {
+    /// Construct a new configuration for the noise handshake using the XX handshake pattern.
+    #[allow(deprecated)]
+    pub fn new(identity: &identity::Keypair) -> Result<Self, NoiseError> {
+        Ok(Config {
+            inner: NoiseAuthenticated::xx(identity)?,
+        })
+    }
+
+    /// Set the noise prologue.
+    #[allow(deprecated)]
+    pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
+        self.inner.config.prologue = prologue;
+
+        self
+    }
+}
+
+impl UpgradeInfo for Config {
+    type Info = &'static [u8];
+    type InfoIter = std::iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        std::iter::once(b"/noise")
+    }
+}
+
+impl<T> InboundUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = (PeerId, NoiseOutput<T>);
+    type Error = NoiseError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
+        self.inner.upgrade_inbound(socket, info)
+    }
+}
+
+impl<T> OutboundUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = (PeerId, NoiseOutput<T>);
+    type Error = NoiseError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
+        self.inner.upgrade_outbound(socket, info)
+    }
+}
+
 /// The protocol upgrade configuration.
+#[deprecated(
+    note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
+)]
 #[derive(Clone)]
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
@@ -97,6 +159,7 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     prologue: Vec<u8>,
 }
 
+#[allow(deprecated)]
 impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
     /// with a `Swarm`.
@@ -124,6 +187,7 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
 /// Implement `into_responder` and `into_initiator` for all configs where `R = ()`.
 ///
 /// This allows us to ignore the `remote` field.
+#[allow(deprecated)]
 impl<H, C> NoiseConfig<H, C, ()>
 where
     C: Zeroize + Protocol<C> + AsRef<[u8]>,
@@ -151,6 +215,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C> NoiseConfig<IX, C>
 where
     C: Protocol<C> + Zeroize,
@@ -171,6 +236,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C> NoiseConfig<XX, C>
 where
     C: Protocol<C> + Zeroize,
@@ -191,6 +257,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C> NoiseConfig<IK, C>
 where
     C: Protocol<C> + Zeroize,
@@ -214,6 +281,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C> NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     C: Protocol<C> + Zeroize + AsRef<[u8]>,
@@ -318,6 +386,7 @@ impl From<quick_protobuf::Error> for NoiseError {
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -349,6 +418,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -384,6 +454,7 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -420,6 +491,7 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -455,6 +527,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
     NoiseConfig<IK, C>: UpgradeInfo,
@@ -489,6 +562,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
+#[allow(deprecated)]
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
@@ -526,13 +600,16 @@ where
 /// transport for use with a `Swarm`.
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {
+    #[allow(deprecated)]
     config: NoiseConfig<P, C, R>,
 }
 
+#[allow(deprecated)]
 impl NoiseAuthenticated<XX, X25519Spec, ()> {
     /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
     ///
     /// For now, this is the only combination that is guaranteed to be compatible with other libp2p implementations.
+    #[deprecated(note = "Use `libp2p_noise::Config::new` instead.")]
     pub fn xx(id_keys: &identity::Keypair) -> Result<Self, NoiseError> {
         let dh_keys = Keypair::<X25519Spec>::new();
         let noise_keys = dh_keys.into_authentic(id_keys)?;
@@ -542,6 +619,7 @@ impl NoiseAuthenticated<XX, X25519Spec, ()> {
     }
 }
 
+#[allow(deprecated)]
 impl<P, C: Zeroize, R> UpgradeInfo for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo,
@@ -554,6 +632,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<T, P, C, R> InboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo
@@ -579,6 +658,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<T, P, C, R> OutboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo

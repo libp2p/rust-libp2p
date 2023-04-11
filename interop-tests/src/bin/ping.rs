@@ -8,7 +8,7 @@ use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade, Version};
-use libp2p::noise::{NoiseOutput, X25519Spec, XX};
+use libp2p::noise::NoiseOutput;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
@@ -168,17 +168,14 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
     identity: &identity::Keypair,
 ) -> Result<
     MapOutboundUpgrade<
-        MapInboundUpgrade<
-            Either<noise::NoiseAuthenticated<XX, X25519Spec, ()>, tls::Config>,
-            MapSecOutputFn<C>,
-        >,
+        MapInboundUpgrade<Either<noise::Config, tls::Config>, MapSecOutputFn<C>>,
         MapSecOutputFn<C>,
     >,
 > {
     let either_sec_upgrade = match from_env("security")? {
-        SecProtocol::Noise => Either::Left(
-            noise::NoiseAuthenticated::xx(identity).context("failed to intialise noise")?,
-        ),
+        SecProtocol::Noise => {
+            Either::Left(noise::Config::new(identity).context("failed to intialise noise")?)
+        }
         SecProtocol::Tls => {
             Either::Right(tls::Config::new(identity).context("failed to initialise tls")?)
         }

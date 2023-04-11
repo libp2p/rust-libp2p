@@ -22,6 +22,7 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
+#[allow(deprecated)]
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
@@ -84,6 +85,7 @@ impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
     }
 }
 
+#[allow(deprecated)]
 impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
@@ -94,6 +96,7 @@ impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
 }
 
 /// **Note**: This is not currentlyy a standardised upgrade.
+#[allow(deprecated)]
 impl UpgradeInfo for NoiseConfig<IX, X25519Spec> {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
@@ -104,6 +107,7 @@ impl UpgradeInfo for NoiseConfig<IX, X25519Spec> {
 }
 
 /// **Note**: This is not currently a standardised upgrade.
+#[allow(deprecated)]
 impl<R> UpgradeInfo for NoiseConfig<IK, X25519Spec, R> {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;

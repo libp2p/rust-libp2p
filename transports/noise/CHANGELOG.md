@@ -1,3 +1,11 @@
+## 0.42.2 - unreleased
+
+- Deprecate all noise handshakes apart from XX.
+  This deprecates `NoiseConfig` and `NoiseAuthenticated` in favor of a new `libp2p_noise::Config` struct.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.42.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

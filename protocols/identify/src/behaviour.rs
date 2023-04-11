@@ -564,13 +564,10 @@ mod tests {
         transport::Boxed<(PeerId, StreamMuxerBox)>,
     ) {
         let id_keys = identity::Keypair::generate_ed25519();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
         let pubkey = id_keys.public();
         let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .authenticate(noise::Config::new(&id_keys).unwrap())
             .multiplex(MplexConfig::new())
             .boxed();
         (pubkey, transport)
