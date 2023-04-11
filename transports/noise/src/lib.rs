@@ -59,6 +59,7 @@
 mod io;
 mod protocol;
 
+pub use io::handshake::RemoteIdentity;
 pub use io::Output;
 
 pub use protocol::Protocol;
@@ -117,11 +118,6 @@ pub type IX = protocol::IX;
     note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
 )]
 pub type XX = protocol::XX;
-
-#[deprecated(
-    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
-)]
-pub type RemoteIdentity<C> = handshake::RemoteIdentity<C>;
 
 #[deprecated(
     note = "This type has been renamed to drop the `Noise` prefix, refer to it as `noise::Error` instead."
@@ -649,6 +645,9 @@ where
 /// for creating an [`authenticated`](libp2p_core::transport::upgrade::Authenticate)
 /// transport for use with a `Swarm`.
 #[derive(Clone)]
+#[deprecated(
+    note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
+)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {
     config: NoiseConfig<P, C, R>,
 }
