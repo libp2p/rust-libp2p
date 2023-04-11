@@ -37,6 +37,9 @@ use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
 
 /// The identity of the remote established during a handshake.
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
 pub enum RemoteIdentity<C> {
     /// The remote provided no identifying information.
     ///
