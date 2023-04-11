@@ -132,8 +132,8 @@ impl Benchmark for Custom {
             swarm.behaviour_mut().perf(
                 server_peer_id,
                 RunParams {
-                    to_send: 1,
-                    to_receive: 1,
+                    to_send: self.upload_bytes,
+                    to_receive: self.download_bytes,
                 },
             )?;
 
