@@ -295,5 +295,4 @@ mod tests {
         let invalid_msg = "h3ll0 w0rld".as_bytes();
         assert!(!pk.verify(invalid_msg, &sig));
     }
-
 }
