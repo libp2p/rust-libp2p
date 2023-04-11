@@ -113,10 +113,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ed25519` instead."
     )]
     pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
-        match self.try_into() {
-            Ok(k) => Some(k),
-            Err(_) => None,
-        }
+        self.try_into().ok()
     }
 
     #[cfg(feature = "ed25519")]
@@ -130,10 +127,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_secp256k1` instead."
     )]
     pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
-        match self.try_into() {
-            Ok(k) => Some(k),
-            Err(_) => None,
-        }
+        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -147,10 +141,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
     )]
     pub fn into_rsa(self) -> Option<rsa::Keypair> {
-        match self.try_into() {
-            Ok(k) => Some(k),
-            Err(_) => None,
-        }
+        self.try_into().ok()
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
@@ -164,10 +155,7 @@ impl Keypair {
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
     )]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
-        match self.try_into() {
-            Ok(k) => Some(k),
-            Err(_) => None,
-        }
+        self.try_into().ok()
     }
 
     #[cfg(feature = "ecdsa")]
