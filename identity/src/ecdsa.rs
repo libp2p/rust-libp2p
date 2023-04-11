@@ -34,7 +34,7 @@ use p256::{
 use void::Void;
 
 /// An ECDSA keypair.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct Keypair {
     secret: SecretKey,
     public: PublicKey,
@@ -93,7 +93,7 @@ impl From<Keypair> for SecretKey {
 }
 
 /// An ECDSA secret key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SecretKey(SigningKey);
 
 impl SecretKey {
