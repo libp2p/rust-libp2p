@@ -35,7 +35,7 @@ use libp2p_swarm::{
 };
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };
@@ -90,7 +90,7 @@ pub struct AsClient<'a> {
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
 
-    pub servers: &'a Vec<PeerId>,
+    pub servers: &'a HashSet<PeerId>,
     pub throttled_servers: &'a mut Vec<(PeerId, Instant)>,
 
     pub nat_status: &'a mut NatStatus,
