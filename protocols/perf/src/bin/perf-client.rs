@@ -30,6 +30,7 @@ use libp2p_identity::PeerId;
 use libp2p_perf::client::{RunParams, RunStats, RunTimers};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use log::info;
+use serde::{Deserialize, Serialize};
 
 mod schema {
     use serde::{Deserialize, Serialize};
@@ -44,6 +45,12 @@ mod schema {
 struct Opts {
     #[arg(long)]
     server_address: Multiaddr,
+    #[arg(long)]
+    upload_bytes: Option<usize>,
+    #[arg(long)]
+    download_bytes: Option<usize>,
+    #[arg(long)]
+    n_times: Option<usize>,
 }
 
 #[async_std::main]
@@ -52,12 +59,20 @@ async fn main() -> Result<()> {
 
     let opts = Opts::parse();
 
-    let benchmarks: [Box<dyn Benchmark>; 4] = [
-        Box::new(Latency {}),
-        Box::new(Throughput {}),
-        Box::new(RequestsPerSecond {}),
-        Box::new(ConnectionsPerSecond {}),
-    ];
+    let benchmarks: Vec<Box<dyn Benchmark>> = if opts.n_times.is_some() {
+        vec![Box::new(Custom {
+            upload_bytes: opts.upload_bytes.unwrap(),
+            download_bytes: opts.download_bytes.unwrap(),
+            n_times: opts.n_times.unwrap(),
+        })]
+    } else {
+        vec![
+            Box::new(Latency {}),
+            Box::new(Throughput {}),
+            Box::new(RequestsPerSecond {}),
+            Box::new(ConnectionsPerSecond {}),
+        ]
+    };
 
     let mut results = vec![];
 
@@ -73,14 +88,16 @@ async fn main() -> Result<()> {
         }
     }
 
-    println!(
-        "{}",
-        serde_json::to_string(&schema::Benchmarks {
-            benchmarks: results,
-            schema: None,
-        })
-        .unwrap()
-    );
+    if !results.is_empty() {
+        println!(
+            "{}",
+            serde_json::to_string(&schema::Benchmarks {
+                benchmarks: results,
+                schema: None,
+            })
+            .unwrap()
+        );
+    }
 
     Ok(())
 }
@@ -90,6 +107,82 @@ trait Benchmark {
     fn name(&self) -> &'static str;
 
     async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>>;
+}
+
+struct Custom {
+    upload_bytes: usize,
+    download_bytes: usize,
+    n_times: usize,
+}
+
+#[async_trait]
+impl Benchmark for Custom {
+    fn name(&self) -> &'static str {
+        "custom"
+    }
+
+    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+        let mut latencies = Vec::new();
+
+        for _ in 0..self.n_times {
+            let mut swarm = swarm().await;
+
+            let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+
+            swarm.behaviour_mut().perf(
+                server_peer_id,
+                RunParams {
+                    to_send: 1,
+                    to_receive: 1,
+                },
+            )?;
+
+            let latency = loop {
+                match swarm.next().await.unwrap() {
+                    SwarmEvent::ConnectionEstablished {
+                        peer_id, endpoint, ..
+                    } => {
+                        info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    }
+                    SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                        info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                    }
+                    SwarmEvent::Behaviour(libp2p_perf::client::Event {
+                        id: _,
+                        result:
+                            Ok(RunStats {
+                                timers:
+                                    RunTimers {
+                                        write_start,
+                                        read_done,
+                                        ..
+                                    },
+                                ..
+                            }),
+                    }) => break read_done.duration_since(write_start).as_secs_f64(),
+                    e => panic!("{e:?}"),
+                };
+            };
+            latencies.push(latency);
+        }
+
+        info!(
+            "Finished: Established {} connections uploading {} and download {} bytes each",
+            self.n_times, self.upload_bytes, self.download_bytes
+        );
+
+        println!(
+            "{}",
+            serde_json::to_string(&CustomResult { latencies }).unwrap()
+        );
+
+        Ok(None)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct CustomResult {
+    latencies: Vec<f64>,
 }
 
 struct Latency {}
