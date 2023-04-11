@@ -32,24 +32,24 @@ impl Keypair {
         unreachable!("Can never construct empty enum")
     }
 
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
     }
 
-    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn encode_protobuf(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
     }
 
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        Self::try_decode_protobuf_encoding(bytes)
+        Self::try_decode_protobuf(bytes)
     }
 
-    pub fn try_decode_protobuf_encoding(_: &[u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_decode_protobuf(_: &[u8]) -> Result<Keypair, DecodingError> {
         Err(DecodingError::missing_feature(
             "ecdsa|rsa|ed25519|secp256k1",
         ))
@@ -69,24 +69,24 @@ impl PublicKey {
         unreachable!("Can never encode empty enum")
     }
 
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
     }
 
-    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn encode_protobuf(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
     }
 
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_protobuf_encoding(bytes)
+        Self::try_decode_protobuf(bytes)
     }
 
-    pub fn try_decode_protobuf_encoding(_: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode_protobuf(_: &[u8]) -> Result<PublicKey, DecodingError> {
         Err(DecodingError::missing_feature(
             "ecdsa|rsa|ed25519|secp256k1",
         ))

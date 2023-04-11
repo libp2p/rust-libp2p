@@ -169,7 +169,7 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.encode_protobuf_encoding();
+    let pubkey_bytes = info.public_key.encode_protobuf();
 
     let message = proto::Identify {
         agentVersion: Some(info.agent_version),
@@ -236,7 +236,7 @@ impl TryFrom<proto::Identify> for Info {
         };
 
         let public_key =
-            PublicKey::try_decode_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
+            PublicKey::try_decode_protobuf(&msg.publicKey.unwrap_or_default())?;
 
         let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,
@@ -387,7 +387,7 @@ mod tests {
             publicKey: Some(
                 identity::Keypair::generate_ed25519()
                     .public()
-                    .encode_protobuf_encoding(),
+                    .encode_protobuf(),
             ),
         };
 

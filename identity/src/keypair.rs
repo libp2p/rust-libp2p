@@ -254,13 +254,13 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        self.encode_protobuf_encoding()
+        self.encode_protobuf()
     }
 
     /// Encode a private key as protobuf structure.
-    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn encode_protobuf(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         #[allow(deprecated)]
@@ -297,15 +297,15 @@ impl Keypair {
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        Self::try_decode_protobuf_encoding(bytes)
+        Self::try_decode_protobuf(bytes)
     }
 
     /// Try to decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[cfg_attr(not(feature = "ed25519"), allow(unused_mut))]
-    pub fn try_decode_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_decode_protobuf(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -509,14 +509,14 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf_encoding`")]
+    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        self.encode_protobuf_encoding()
+        self.encode_protobuf()
     }
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    pub fn encode_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn encode_protobuf(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
         let public_key = proto::PublicKey::from(self);
@@ -534,15 +534,15 @@ impl PublicKey {
     /// or received from another node.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf_encoding` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_protobuf_encoding(bytes)
+        Self::try_decode_protobuf(bytes)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    pub fn try_decode_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+    pub fn try_decode_protobuf(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         use quick_protobuf::MessageRead;
 
         let mut reader = BytesReader::from_bytes(bytes);
@@ -665,8 +665,8 @@ mod tests {
     #[test]
     #[cfg(feature = "ed25519")]
     fn keypair_protobuf_roundtrip_ed25519() {
-        let priv_key = Keypair::try_decode_protobuf_encoding(&hex_literal::hex!("080112407e0830617c4a7de83925dfb2694556b12936c477a0e1feb2e148ec9da60fee7d1ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e")).unwrap();
-        let pub_key = PublicKey::try_decode_protobuf_encoding(&hex_literal::hex!(
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!("080112407e0830617c4a7de83925dfb2694556b12936c477a0e1feb2e148ec9da60fee7d1ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
             "080112201ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e"
         ))
         .unwrap();
@@ -677,11 +677,11 @@ mod tests {
     #[test]
     #[cfg(feature = "secp256k1")]
     fn keypair_protobuf_roundtrip_secp256k1() {
-        let priv_key = Keypair::try_decode_protobuf_encoding(&hex_literal::hex!(
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
             "080212201e4f6a12b43bec6871976295bcb13aace62a7e7b821334125d3ed3b720af419f"
         ))
         .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf_encoding(&hex_literal::hex!(
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
             "0802122102f0a81ddde0a3180610155ff3b2d98d683a6831fad0c84ba36cd49b81eaa7cf8f"
         ))
         .unwrap();
@@ -692,11 +692,11 @@ mod tests {
     #[test]
     #[cfg(feature = "ecdsa")]
     fn keypair_protobuf_roundtrip_ecdsa() {
-        let priv_key = Keypair::try_decode_protobuf_encoding(&hex_literal::hex!(
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
             "08031220f0d87659b402f0d47589e7670ca0954036f87b2fbf11fafbc66f4de7c3eb10a2"
         ))
         .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf_encoding(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de6af15d8bc9b7f7c6eb8b32888d0da721d33f16af062306bafc64cdad741240cd61d6d9884c4899308ea25513a5cc03495ff88200dc7ae8e603ceb6698d2fee")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de6af15d8bc9b7f7c6eb8b32888d0da721d33f16af062306bafc64cdad741240cd61d6d9884c4899308ea25513a5cc03495ff88200dc7ae8e603ceb6698d2fee")).unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }
@@ -704,8 +704,8 @@ mod tests {
     #[test]
     #[cfg(feature = "rsa")]
     fn keypair_protobuf_roundtrip_rsa() {
-        let priv_key = Keypair::try_decode_protobuf_encoding(&hex_literal::hex!("080012c81230820944020100300d06092a864886f70d01010105000482092e3082092a02010002820201009c897f33e0d0b3297f2fe404ea5b7a98096b329693292aefc2d05ef1e82fd0e121ce74ec77d75ef4b532fa34dee2a19626f3389c6d2bb9b8de614e138302bc4254727a7ee35f7827f1094403bc2fe8e1f64d0e8a2a77e8f3a879f69f94a71f3589de184f5910d6b5270f58e684f71ddd3a3f486a4cb2c390194ee6e9b65f9f1dff7b8f6c0bf4e0c4ac683bd4ba2d2fd022fdaaa3db75e90e16662fc4b3aca4c9aa65514d51690cd372c2b96c61a1ed4f9298ec213d5398aa9120379477118391104deb77ab157a59b70714e95caa9b55d15fa386b0c80f36e50d738bdd10e0baa3c3eafb4703dec3d6a757601f18541eb87ae9111f60eae17d843cf1047dbf5a8982ad9ef0aa88f59b17689f1210a305f7da8a012c1a58e4e82b48811618e98cef13c9eb28ce6fcc589ea5d902149ee4f49f8b39758b349ca90be5a8bddf4a46bacaaa48aec1c0c6e996ab13f2cb351c351d40b0a7b8e0c12b366a8555c392b0aadf71fe746eb4f8ea0b829da6ddcc39081abdd40ea2f3d8778b9a3f06a480ef34234975e919c0d64d818f2e904a9f251c8669dbb1666cb2c28e955446fc7efd460d4677ed922ccff1e24bb5a8699e050075c7897a64daa1bc2f05e4132e76c4f72baea5d073042254236c116ea3e40540bb7986468b4468aadfadad068331ef9dbe13e4012196e8eb9f8cdba096c35f09e80893ea68f3253dc41053983855e50203010001028202002699dd6d4c960a68443dea0bb04308b32f37690d2a92ef4c9a8cc9acfba5b6eb9d6b8cf7b701bc1fba032d2216886a725d7e82ca483d8d19e274ba4d23746c3a2b1ae3cc2083ad5ca41ab5d3f9f712858e38284ab7f843d0ba0e015c0ecb3b6df766763632ef6d12d4e3faf73578bebb8c1e88dbf5b7eb73c059eda55a5cb01f349e229af143dc9d832a5cfeb33e6b58f717f8995987f5058d4e7b9f14f390db4e1297feea016eb141ce74ed1e125133db21acb0f1af88a91f0a83ca2fa678fc2fba1743b643a09d38fe1d1102d1eb6639304d61ec7c190c5f6576c5d9a8ccd2198a398ae75333feb51324ffc60b38cb2e90d8a2694b7c0048f47016bb15cb36c482e038e455254e35fc4f0e0babc84e046bd441b0291412c784e4e9639664cad07cb09a01626049cdbfd1d9ad75b314448df811f4988c6e64d93ebefc602b574d0763e31e9d567c891349cfe75f0ca37429b743d6452d1fffc1f9f4901e5f68772b4f24542d654fd29b893e44c85e6037bba304d48873721131f18248b16bd71384abd00f9336c73f071a4ca2456878070f9704ed7df0cd64e5c3e5949a78968525865b96e71d5015dc68bff857f2bba05a3976d83d8866d4dfe8caac144741ae97879a765dc0d4c7c34aa79ef6ebc86b5bf32b50ad995780f5f1a6c052eec5671164f407061a9c6bd49251b1bb7803bb222f5d859c321601236dd893dc9d810282010100cf13fe9908fe59e947122d5606cf9f70c123b7cb43a1916463e729f01dc31c3b70cb6a37bde542ecdc6029cea39b28c99c6395d0aaa29c1c4cf14b3fed9e0fcd793e31b7a09930352261c03b3dc0b66a62f8ae3771b705382cfeb6130d4a7e5b4854117a05767b99915099e2d542fc3fa505a0dbe217b169b46714384774380408bd8b3dbf0c9a177bbd3e64af115988159f485d70c885171007646765b50eb9bbebfabe60e71c69b2b822a124e235ad05f2b55cda9ddc78d671436981a3064a80c29bb37e6b5581a9372a6366c79af695a39ea0f3839ed77ec3985252f2e126955774727955b63ccbeff64208fd7280e8ba52e4297cb6bf72b44b07618923610282010100c184cd27d3a643df768764a7c66de40c222bdb4b7e02c35aa1e4a8377676247c629df58ecb5bb541fb4aac1bde35057b0b266bddd818876909b8fff1aca4859515069258d84b0c5178e4bff6842c68d39cad9a3a03aa6533fa76b92c995f381eb9c83f5e6118fd962807c931b7ca50dc20b261f2a71928f3e882af4da979cef843970cb2af68b86477b92ca90c8c0f1d640d39e943704366314c446f7a54851419e60f4e92e1e69bd52ee7294f9eddc6dc873144b0d0d9f13eb8d6aa955cf11edbd5a0673d8b70ef937e54fdaade185facc8437496d43a53169342280718a3679170ef4a0e582af4db598210fb64616f0d8daa08519d875e37c4d02e1af1c5050282010100c14865648c3b74cac3b698b06a4d130218947131fd9f69e8ed42d0273a706a02a546888f1ce547f173c52260a8dee354436fc45f6f55b626c83e94c147d637e3cede1963cf380d021b64681c2388a3fb6b03b9013157e63c47eb3b214f4f8fdf3e04920775dfe080375da7354d5f67b9341babc87121324c7ac197e2ebf6f36df8868ad8086207d6117e5325812ecd85b2c0e8b7a6d4d33cf28e23ce4ae593a8135ab0c1500b87beb4bd203d8f02c19d0d273cd73d8b094594cb4563ce47cf506d1cb85df28ad6d5de8f0a369bb185d7d1565672deb8a4e37983b1c26d801c5d7a19962c5f4a7c7e04d0a6e77e22aae4ddd54417890dca39aa23d4c03feed4210282010100915975de1c121d9892264f6bd496655ad7afa91ea29ee0ac0a3cfc3bec3600618c90a80780a67915fdf0b0249e59a4ac2e4bc568f30e3966a36ed88e64e58d8fd4230378c7bc569c3af955558b20effb410b0373df9cf4367e40fe04898e0350d0a99f2efc2f1108df3839dda5f5c7960ed8ecc89cc9410131fa364156b1aecab9b992480387dc3759d533be25366d83ddca315d0ad21f4d7a69965d44bc86d7fa3bd9f3624f5a2e6188c1073e4e4cb5389e325b2d93309f0a453ab71548a1b253dbb886d2ab114060bfda864cf853c648b88231e7b7afb70895c272de219b5a06db945f4336e5ccd393ff25522cab220644091a06731361a8f1a28b7ea169210282010100bd80196d3d11a8257b5f439776388f4d53e4da3690f710e9aff3e3e970e545ec92d285e7049da000d5364dd7f550c17cf662d516282fe89813cab322ce5aad5cc744c52a024dd1a94aa9484037281637d1c8e3503b6ed6231225c93f7865d29269c899bbf5d248cf9d41f9aee9b9cb2afac172ba17c2df0699c6604b4ce7ab95c91c5f7fc7804f2bde268a7e15c512920f7325cfba47463da1c201549fc44c2bc4fbe5d8619cde9733470c5e38b996f5c3633c6311af88663ce4d2d0dc415ac5c8258e1aa7659f9f35d4b90b7b9a5a888867d75636e6443cce5391c57d48d56409029edef53e1a5130eb1fa708758bc821e15f7c53edf6d4c6f868a6b5b0c1e6")).unwrap();
-        let pub_key = PublicKey::try_decode_protobuf_encoding(&hex_literal::hex!("080012a60430820222300d06092a864886f70d01010105000382020f003082020a02820201009c897f33e0d0b3297f2fe404ea5b7a98096b329693292aefc2d05ef1e82fd0e121ce74ec77d75ef4b532fa34dee2a19626f3389c6d2bb9b8de614e138302bc4254727a7ee35f7827f1094403bc2fe8e1f64d0e8a2a77e8f3a879f69f94a71f3589de184f5910d6b5270f58e684f71ddd3a3f486a4cb2c390194ee6e9b65f9f1dff7b8f6c0bf4e0c4ac683bd4ba2d2fd022fdaaa3db75e90e16662fc4b3aca4c9aa65514d51690cd372c2b96c61a1ed4f9298ec213d5398aa9120379477118391104deb77ab157a59b70714e95caa9b55d15fa386b0c80f36e50d738bdd10e0baa3c3eafb4703dec3d6a757601f18541eb87ae9111f60eae17d843cf1047dbf5a8982ad9ef0aa88f59b17689f1210a305f7da8a012c1a58e4e82b48811618e98cef13c9eb28ce6fcc589ea5d902149ee4f49f8b39758b349ca90be5a8bddf4a46bacaaa48aec1c0c6e996ab13f2cb351c351d40b0a7b8e0c12b366a8555c392b0aadf71fe746eb4f8ea0b829da6ddcc39081abdd40ea2f3d8778b9a3f06a480ef34234975e919c0d64d818f2e904a9f251c8669dbb1666cb2c28e955446fc7efd460d4677ed922ccff1e24bb5a8699e050075c7897a64daa1bc2f05e4132e76c4f72baea5d073042254236c116ea3e40540bb7986468b4468aadfadad068331ef9dbe13e4012196e8eb9f8cdba096c35f09e80893ea68f3253dc41053983855e50203010001")).unwrap();
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!("080012c81230820944020100300d06092a864886f70d01010105000482092e3082092a02010002820201009c897f33e0d0b3297f2fe404ea5b7a98096b329693292aefc2d05ef1e82fd0e121ce74ec77d75ef4b532fa34dee2a19626f3389c6d2bb9b8de614e138302bc4254727a7ee35f7827f1094403bc2fe8e1f64d0e8a2a77e8f3a879f69f94a71f3589de184f5910d6b5270f58e684f71ddd3a3f486a4cb2c390194ee6e9b65f9f1dff7b8f6c0bf4e0c4ac683bd4ba2d2fd022fdaaa3db75e90e16662fc4b3aca4c9aa65514d51690cd372c2b96c61a1ed4f9298ec213d5398aa9120379477118391104deb77ab157a59b70714e95caa9b55d15fa386b0c80f36e50d738bdd10e0baa3c3eafb4703dec3d6a757601f18541eb87ae9111f60eae17d843cf1047dbf5a8982ad9ef0aa88f59b17689f1210a305f7da8a012c1a58e4e82b48811618e98cef13c9eb28ce6fcc589ea5d902149ee4f49f8b39758b349ca90be5a8bddf4a46bacaaa48aec1c0c6e996ab13f2cb351c351d40b0a7b8e0c12b366a8555c392b0aadf71fe746eb4f8ea0b829da6ddcc39081abdd40ea2f3d8778b9a3f06a480ef34234975e919c0d64d818f2e904a9f251c8669dbb1666cb2c28e955446fc7efd460d4677ed922ccff1e24bb5a8699e050075c7897a64daa1bc2f05e4132e76c4f72baea5d073042254236c116ea3e40540bb7986468b4468aadfadad068331ef9dbe13e4012196e8eb9f8cdba096c35f09e80893ea68f3253dc41053983855e50203010001028202002699dd6d4c960a68443dea0bb04308b32f37690d2a92ef4c9a8cc9acfba5b6eb9d6b8cf7b701bc1fba032d2216886a725d7e82ca483d8d19e274ba4d23746c3a2b1ae3cc2083ad5ca41ab5d3f9f712858e38284ab7f843d0ba0e015c0ecb3b6df766763632ef6d12d4e3faf73578bebb8c1e88dbf5b7eb73c059eda55a5cb01f349e229af143dc9d832a5cfeb33e6b58f717f8995987f5058d4e7b9f14f390db4e1297feea016eb141ce74ed1e125133db21acb0f1af88a91f0a83ca2fa678fc2fba1743b643a09d38fe1d1102d1eb6639304d61ec7c190c5f6576c5d9a8ccd2198a398ae75333feb51324ffc60b38cb2e90d8a2694b7c0048f47016bb15cb36c482e038e455254e35fc4f0e0babc84e046bd441b0291412c784e4e9639664cad07cb09a01626049cdbfd1d9ad75b314448df811f4988c6e64d93ebefc602b574d0763e31e9d567c891349cfe75f0ca37429b743d6452d1fffc1f9f4901e5f68772b4f24542d654fd29b893e44c85e6037bba304d48873721131f18248b16bd71384abd00f9336c73f071a4ca2456878070f9704ed7df0cd64e5c3e5949a78968525865b96e71d5015dc68bff857f2bba05a3976d83d8866d4dfe8caac144741ae97879a765dc0d4c7c34aa79ef6ebc86b5bf32b50ad995780f5f1a6c052eec5671164f407061a9c6bd49251b1bb7803bb222f5d859c321601236dd893dc9d810282010100cf13fe9908fe59e947122d5606cf9f70c123b7cb43a1916463e729f01dc31c3b70cb6a37bde542ecdc6029cea39b28c99c6395d0aaa29c1c4cf14b3fed9e0fcd793e31b7a09930352261c03b3dc0b66a62f8ae3771b705382cfeb6130d4a7e5b4854117a05767b99915099e2d542fc3fa505a0dbe217b169b46714384774380408bd8b3dbf0c9a177bbd3e64af115988159f485d70c885171007646765b50eb9bbebfabe60e71c69b2b822a124e235ad05f2b55cda9ddc78d671436981a3064a80c29bb37e6b5581a9372a6366c79af695a39ea0f3839ed77ec3985252f2e126955774727955b63ccbeff64208fd7280e8ba52e4297cb6bf72b44b07618923610282010100c184cd27d3a643df768764a7c66de40c222bdb4b7e02c35aa1e4a8377676247c629df58ecb5bb541fb4aac1bde35057b0b266bddd818876909b8fff1aca4859515069258d84b0c5178e4bff6842c68d39cad9a3a03aa6533fa76b92c995f381eb9c83f5e6118fd962807c931b7ca50dc20b261f2a71928f3e882af4da979cef843970cb2af68b86477b92ca90c8c0f1d640d39e943704366314c446f7a54851419e60f4e92e1e69bd52ee7294f9eddc6dc873144b0d0d9f13eb8d6aa955cf11edbd5a0673d8b70ef937e54fdaade185facc8437496d43a53169342280718a3679170ef4a0e582af4db598210fb64616f0d8daa08519d875e37c4d02e1af1c5050282010100c14865648c3b74cac3b698b06a4d130218947131fd9f69e8ed42d0273a706a02a546888f1ce547f173c52260a8dee354436fc45f6f55b626c83e94c147d637e3cede1963cf380d021b64681c2388a3fb6b03b9013157e63c47eb3b214f4f8fdf3e04920775dfe080375da7354d5f67b9341babc87121324c7ac197e2ebf6f36df8868ad8086207d6117e5325812ecd85b2c0e8b7a6d4d33cf28e23ce4ae593a8135ab0c1500b87beb4bd203d8f02c19d0d273cd73d8b094594cb4563ce47cf506d1cb85df28ad6d5de8f0a369bb185d7d1565672deb8a4e37983b1c26d801c5d7a19962c5f4a7c7e04d0a6e77e22aae4ddd54417890dca39aa23d4c03feed4210282010100915975de1c121d9892264f6bd496655ad7afa91ea29ee0ac0a3cfc3bec3600618c90a80780a67915fdf0b0249e59a4ac2e4bc568f30e3966a36ed88e64e58d8fd4230378c7bc569c3af955558b20effb410b0373df9cf4367e40fe04898e0350d0a99f2efc2f1108df3839dda5f5c7960ed8ecc89cc9410131fa364156b1aecab9b992480387dc3759d533be25366d83ddca315d0ad21f4d7a69965d44bc86d7fa3bd9f3624f5a2e6188c1073e4e4cb5389e325b2d93309f0a453ab71548a1b253dbb886d2ab114060bfda864cf853c648b88231e7b7afb70895c272de219b5a06db945f4336e5ccd393ff25522cab220644091a06731361a8f1a28b7ea169210282010100bd80196d3d11a8257b5f439776388f4d53e4da3690f710e9aff3e3e970e545ec92d285e7049da000d5364dd7f550c17cf662d516282fe89813cab322ce5aad5cc744c52a024dd1a94aa9484037281637d1c8e3503b6ed6231225c93f7865d29269c899bbf5d248cf9d41f9aee9b9cb2afac172ba17c2df0699c6604b4ce7ab95c91c5f7fc7804f2bde268a7e15c512920f7325cfba47463da1c201549fc44c2bc4fbe5d8619cde9733470c5e38b996f5c3633c6311af88663ce4d2d0dc415ac5c8258e1aa7659f9f35d4b90b7b9a5a888867d75636e6443cce5391c57d48d56409029edef53e1a5130eb1fa708758bc821e15f7c53edf6d4c6f868a6b5b0c1e6")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("080012a60430820222300d06092a864886f70d01010105000382020f003082020a02820201009c897f33e0d0b3297f2fe404ea5b7a98096b329693292aefc2d05ef1e82fd0e121ce74ec77d75ef4b532fa34dee2a19626f3389c6d2bb9b8de614e138302bc4254727a7ee35f7827f1094403bc2fe8e1f64d0e8a2a77e8f3a879f69f94a71f3589de184f5910d6b5270f58e684f71ddd3a3f486a4cb2c390194ee6e9b65f9f1dff7b8f6c0bf4e0c4ac683bd4ba2d2fd022fdaaa3db75e90e16662fc4b3aca4c9aa65514d51690cd372c2b96c61a1ed4f9298ec213d5398aa9120379477118391104deb77ab157a59b70714e95caa9b55d15fa386b0c80f36e50d738bdd10e0baa3c3eafb4703dec3d6a757601f18541eb87ae9111f60eae17d843cf1047dbf5a8982ad9ef0aa88f59b17689f1210a305f7da8a012c1a58e4e82b48811618e98cef13c9eb28ce6fcc589ea5d902149ee4f49f8b39758b349ca90be5a8bddf4a46bacaaa48aec1c0c6e996ab13f2cb351c351d40b0a7b8e0c12b366a8555c392b0aadf71fe746eb4f8ea0b829da6ddcc39081abdd40ea2f3d8778b9a3f06a480ef34234975e919c0d64d818f2e904a9f251c8669dbb1666cb2c28e955446fc7efd460d4677ed922ccff1e24bb5a8699e050075c7897a64daa1bc2f05e4132e76c4f72baea5d073042254236c116ea3e40540bb7986468b4468aadfadad068331ef9dbe13e4012196e8eb9f8cdba096c35f09e80893ea68f3253dc41053983855e50203010001")).unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }
@@ -713,8 +713,8 @@ mod tests {
     fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey) {
         assert_eq!(&private_key.public(), public_key);
 
-        let encoded_priv = private_key.encode_protobuf_encoding();
-        let decoded_priv = Keypair::try_decode_protobuf_encoding(&encoded_priv).unwrap();
+        let encoded_priv = private_key.encode_protobuf();
+        let decoded_priv = Keypair::try_decode_protobuf(&encoded_priv).unwrap();
 
         assert_eq!(
             private_key.public().to_peer_id(),
@@ -722,8 +722,8 @@ mod tests {
             "PeerId from roundtripped private key should be the same"
         );
 
-        let encoded_public = private_key.public().encode_protobuf_encoding();
-        let decoded_public = PublicKey::try_decode_protobuf_encoding(&encoded_public).unwrap();
+        let encoded_public = private_key.public().encode_protobuf();
+        let decoded_public = PublicKey::try_decode_protobuf(&encoded_public).unwrap();
 
         assert_eq!(
             private_key.public().to_peer_id(),
@@ -741,7 +741,7 @@ mod tests {
 
         let encoded = BASE64_STANDARD.decode(base_64_encoded).unwrap();
 
-        let keypair = Keypair::try_decode_protobuf_encoding(&encoded).unwrap();
+        let keypair = Keypair::try_decode_protobuf(&encoded).unwrap();
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
