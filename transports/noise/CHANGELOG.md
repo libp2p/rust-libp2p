@@ -2,9 +2,11 @@
 
 - Deprecate all noise handshakes apart from XX.
   This deprecates `NoiseConfig` and `NoiseAuthenticated` in favor of a new `libp2p_noise::Config` struct.
-  See [PR XXXX].
+  In addition, we deprecate all types with a `Noise` prefix.
+  Users are encouraged to import the `noise` module and refer to types as `noise::Error` etc.
+  See [PR 3768].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3768]: https://github.com/libp2p/rust-libp2p/pull/3768
 
 ## 0.42.1
 
