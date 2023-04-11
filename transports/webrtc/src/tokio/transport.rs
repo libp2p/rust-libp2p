@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn parse_valid_address_with_certhash_and_p2p() {
-        let addr = "/ip4/127.0.0.1/udp/39901/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/p2p/12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
+        let addr = "/ip4/127.0.0.1/udp/39901/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/p2p/12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
             .parse()
             .unwrap();
 
@@ -499,7 +499,7 @@ mod tests {
 
     #[test]
     fn peer_id_is_not_required() {
-        let addr = "/ip4/127.0.0.1/udp/39901/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
+        let addr = "/ip4/127.0.0.1/udp/39901/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
             .parse()
             .unwrap();
 
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn tcp_is_invalid_protocol() {
-        let addr = "/ip4/127.0.0.1/tcp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
+        let addr = "/ip4/127.0.0.1/tcp/12345/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
             .parse()
             .unwrap();
 
@@ -529,7 +529,7 @@ mod tests {
 
     #[test]
     fn cannot_follow_other_protocols_after_certhash() {
-        let addr = "/ip4/127.0.0.1/udp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/tcp/12345"
+        let addr = "/ip4/127.0.0.1/udp/12345/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/tcp/12345"
             .parse()
             .unwrap();
 
@@ -541,7 +541,7 @@ mod tests {
     #[test]
     fn parse_ipv6() {
         let addr =
-            "/ip6/::1/udp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/p2p/12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
+            "/ip6/::1/udp/12345/webrtc-direct/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/p2p/12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
                 .parse()
                 .unwrap();
 
@@ -560,7 +560,7 @@ mod tests {
 
     #[test]
     fn can_parse_valid_addr_without_certhash() {
-        let addr = "/ip6/::1/udp/12345/webrtc".parse().unwrap();
+        let addr = "/ip6/::1/udp/12345/webrtc-direct".parse().unwrap();
 
         let maybe_parsed = parse_webrtc_listen_addr(&addr);
 
@@ -574,7 +574,7 @@ mod tests {
     fn fails_to_parse_if_certhash_present_but_wrong_hash_function() {
         // We only support SHA2-256 for now but this certhash has been encoded with SHA3-256.
         let addr =
-            "/ip6/::1/udp/12345/webrtc/certhash/uFiCH_tkkzpAwkoIDbE4I7QtQksFMYs5nQ4MyYrkgCJYi4A"
+            "/ip6/::1/udp/12345/webrtc-direct/certhash/uFiCH_tkkzpAwkoIDbE4I7QtQksFMYs5nQ4MyYrkgCJYi4A"
                 .parse()
                 .unwrap();
 
@@ -597,7 +597,7 @@ mod tests {
         // is temporarily empty.
         for _ in 0..2 {
             let listener = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/webrtc".parse().unwrap())
+                .listen_on("/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap())
                 .unwrap();
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {
