@@ -1,3 +1,10 @@
+## 0.15.2 - unreleased
+
+- As a relay, when forwarding data between relay-connection-source and -destination and vice versa, flush write side when read currently has no more data available.
+  See [PR XXX].
+
+[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+
 ## 0.15.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
