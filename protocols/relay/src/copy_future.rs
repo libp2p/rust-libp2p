@@ -358,7 +358,7 @@ mod tests {
         // The source has two reads available, handing them out on `AsyncRead::poll_read` one by one.
         let mut source = BufReader::new(NeverEndingSource { read: vec![1, 2] });
 
-        // The destination is wrapped by a `BufWrite` with a capacity of `3`, i.e. one larger than
+        // The destination is wrapped by a `BufWriter` with a capacity of `3`, i.e. one larger than
         // the available reads of the source. Without an explicit `AsyncWrite::poll_flush` the two
         // reads would thus never make it to the destination, but instead be stuck in the buffer of
         // the `BufWrite`.
