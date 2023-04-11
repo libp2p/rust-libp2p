@@ -1,3 +1,10 @@
+## 0.15.2 - unreleased
+
+- Send correct `PeerId` in outbound STOP message to client.
+  See [PR 3767].
+
+[PR 3767]: https://github.com/libp2p/rust-libp2p/pull/3767
+
 ## 0.15.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
