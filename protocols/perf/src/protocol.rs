@@ -54,9 +54,16 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
     let write_done = Instant::now();
 
     let mut received = 0;
-    while received < to_receive {
-        received += stream.read(&mut receive_buf).await?;
+    loop {
+        let n = stream.read(&mut receive_buf).await?;
+        received += n;
+        // Make sure to wait for the remote to close the stream. Otherwise with `to_receive` of `0`
+        // one does not measure the full round-trip of the previous write.
+        if n == 0 {
+            break;
+        }
     }
+    assert_eq!(received, to_receive);
 
     let read_done = Instant::now();
 
