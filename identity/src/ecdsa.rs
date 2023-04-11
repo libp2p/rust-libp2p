@@ -119,7 +119,7 @@ impl SecretKey {
         since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead"
     )]
-    pub fn from_bytes(buf: &[u8]) -> Result<SecretKey, DecodingError> {
+    pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
         Self::try_from_bytes(buf)
     }
 
