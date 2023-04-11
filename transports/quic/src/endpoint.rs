@@ -471,7 +471,7 @@ impl<P: Provider> Driver<P> {
                 if is_drained_event {
                     self.alive_connections.remove(&connection_id);
                     if self.is_decoupled && self.alive_connections.is_empty() {
-                        log::info!(
+                        log::debug!(
                             "Driver is decoupled and no active connections remain. Shutting down."
                         );
                         return ControlFlow::Break(());
