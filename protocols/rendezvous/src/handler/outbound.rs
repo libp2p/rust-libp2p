@@ -97,6 +97,12 @@ impl ConnectionHandler for Handler {
         loop {
             match self.streams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(Ok(Message::RegisterResponse(Ok(ttl)))))) => {
+                    // TODO: How do we learn here, which registration completed?
+                    // Options:
+                    // 1. Store a hashmap with ID mapping in `ConnectionHandler`: potentially unbounded memory growth for failed streams (they don't report IDs)
+                    // 2. Pass a "context" with `send-recv` that is emitted once it is done
+                    // 3. Write it using an async-fn
+
                     self.pending_events.push_back(OutEvent::Registered {
                         namespace: todo!(),
                         ttl,
