@@ -23,8 +23,8 @@
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
-use libp2p_core::identity;
 use libp2p_core::UpgradeInfo;
+use libp2p_identity as identity;
 use rand::Rng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;

@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.1.0-alpha.2"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.60.0"
 description = "TLS configuration based on libp2p TLS specs."
@@ -9,15 +9,16 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { version = "0.3.26", default-features = false }
+futures = { version = "0.3.28", default-features = false }
 futures-rustls = "0.22.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 rcgen = "0.10.0"
 ring = "0.16.20"
-thiserror = "1.0.36"
+thiserror = "1.0.40"
 webpki = "0.22.0"
-x509-parser = "0.14.0"
-yasna = "0.5.0"
+x509-parser = "0.15.0"
+yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
@@ -27,11 +28,12 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 
 [dev-dependencies]
 hex = "0.4.3"
-hex-literal = "0.3.4"
-libp2p-core = { path = "../../core", features = ["rsa", "ecdsa", "secp256k1"] }
+hex-literal = "0.4.1"
+libp2p-core = { path = "../../core" }
+libp2p-identity = { path = "../../identity", features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
 libp2p-swarm = { path = "../../swarm" }
 libp2p-yamux = { path = "../../muxers/yamux" }
-tokio = { version = "1.21.1", features = ["full"] }
+tokio = { version = "1.27.0", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

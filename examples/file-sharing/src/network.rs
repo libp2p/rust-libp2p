@@ -7,7 +7,7 @@ use futures::prelude::*;
 use libp2p::{
     core::{
         upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName},
-        Multiaddr, PeerId,
+        Multiaddr,
     },
     identity,
     kad::{
@@ -15,7 +15,8 @@ use libp2p::{
     },
     multiaddr::Protocol,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent},
+    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
+    PeerId,
 };
 
 use std::collections::{hash_map, HashMap, HashSet};
@@ -38,10 +39,7 @@ pub async fn new(
         Some(seed) => {
             let mut bytes = [0u8; 32];
             bytes[0] = seed;
-            let secret_key = identity::ed25519::SecretKey::from_bytes(&mut bytes).expect(
-                "this returns `Err` only if the length is wrong; the length is correct; qed",
-            );
-            identity::Keypair::Ed25519(secret_key.into())
+            identity::Keypair::ed25519_from_bytes(bytes).unwrap()
         }
         None => identity::Keypair::generate_ed25519(),
     };
@@ -49,7 +47,7 @@ pub async fn new(
 
     // Build the Swarm, connecting the lower layer transport logic with the
     // higher layer network behaviour logic.
-    let swarm = Swarm::with_threadpool_executor(
+    let swarm = SwarmBuilder::with_async_std_executor(
         libp2p::development_transport(id_keys).await?,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -60,7 +58,8 @@ pub async fn new(
             ),
         },
         peer_id,
-    );
+    )
+    .build();
 
     let (command_sender, command_receiver) = mpsc::channel(0);
     let (event_sender, event_receiver) = mpsc::channel(0);

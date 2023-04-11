@@ -2,19 +2,24 @@
 name = "libp2p-swarm-test"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.65.0"
 license = "MIT"
-publish = false
+description = "Test framework for code building on top of libp2p-swarm"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.57"
-libp2p-core = { path = "../core" }
-libp2p-swarm = { path = "../swarm" }
-libp2p-yamux = { path = "../muxers/yamux" }
-libp2p-plaintext = { path = "../transports/plaintext" }
-libp2p-tcp = { path = "../transports/tcp", features = ["async-io"] }
-futures = "0.3.24"
+async-trait = "0.1.68"
+libp2p-core = { version = "0.39.1", path = "../core" }
+libp2p-identity = { version = "0.1.1", path = "../identity" }
+libp2p-plaintext = { version = "0.39.1", path = "../transports/plaintext" }
+libp2p-swarm = { version = "0.42.0", path = "../swarm" }
+libp2p-tcp = { version = "0.39.0", path = "../transports/tcp", features = ["async-io"] }
+libp2p-yamux = { version = "0.43.0", path = "../muxers/yamux" }
+futures = "0.3.28"
 log = "0.4.17"
 rand = "0.8.5"
 futures-timer = "3.0.2"

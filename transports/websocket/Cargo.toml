@@ -13,15 +13,16 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures-rustls = "0.22"
 either = "1.5.3"
-futures = "0.3.26"
+futures = "0.3.28"
 libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.8"
 parking_lot = "0.12.0"
 quicksink = "0.1"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
 soketto = { version = "0.7.0", features = ["deflate"] }
 url = "2.1"
-webpki-roots = "0.22"
+webpki-roots = "0.23"
 
 [dev-dependencies]
 libp2p-tcp = { path = "../tcp", features = ["async-io"] }

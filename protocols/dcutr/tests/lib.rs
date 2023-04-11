@@ -21,11 +21,12 @@
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::{identity, PeerId};
 use libp2p_dcutr as dcutr;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
@@ -123,7 +124,7 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::without_executor(
+    SwarmBuilder::without_executor(
         transport,
         Client {
             relay: behaviour,
@@ -131,6 +132,7 @@ fn build_client() -> Swarm<Client> {
         },
         local_peer_id,
     )
+    .build()
 }
 
 #[derive(NetworkBehaviour)]

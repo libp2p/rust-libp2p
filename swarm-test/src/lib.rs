@@ -23,11 +23,14 @@ use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
     identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
-    Multiaddr, PeerId, Transport,
+    Multiaddr, Transport,
 };
+use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
+    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
+    THandlerErr,
 };
 use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
@@ -217,7 +220,7 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::without_executor(transport, behaviour_fn(identity), peer_id)
+        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id).build()
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
@@ -233,6 +236,7 @@ where
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
+            .condition(PeerCondition::Always)
             .build();
 
         self.dial(dial_opts).unwrap();

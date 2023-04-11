@@ -24,7 +24,8 @@ pub mod store;
 
 use bytes::Bytes;
 use instant::Instant;
-use libp2p_core::{multihash::Multihash, Multiaddr, PeerId};
+use libp2p_core::{multihash::Multihash, Multiaddr};
+use libp2p_identity::PeerId;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
@@ -160,14 +161,14 @@ impl ProviderRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::Code;
+    use crate::SHA_256_MH;
     use quickcheck::*;
     use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary(g: &mut Gen) -> Key {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+            Key::from(Multihash::wrap(SHA_256_MH, &hash).unwrap())
         }
     }
 

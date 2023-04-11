@@ -3,7 +3,7 @@ name = "libp2p-identify"
 edition = "2021"
 rust-version = "1.62.0"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.42.0"
+version = "0.42.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,10 +12,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-futures = "0.3.26"
+futures = "0.3.28"
 futures-timer = "3.0.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
+libp2p-identity = { version = "0.1.0", path = "../../identity" }
 log = "0.4.1"
 lru = "0.10.0"
 quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }

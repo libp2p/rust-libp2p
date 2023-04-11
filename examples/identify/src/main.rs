@@ -38,10 +38,10 @@
 
 use futures::prelude::*;
 use libp2p::{
-    core::{multiaddr::Multiaddr, upgrade::Version, PeerId},
+    core::{multiaddr::Multiaddr, upgrade::Version},
     identify, identity, noise,
-    swarm::{Swarm, SwarmEvent},
-    tcp, yamux, Transport,
+    swarm::{SwarmBuilder, SwarmEvent},
+    tcp, yamux, PeerId, Transport,
 };
 use std::error::Error;
 
@@ -63,7 +63,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         local_key.public(),
     ));
 
-    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
+    let mut swarm =
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

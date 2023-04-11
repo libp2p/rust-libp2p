@@ -3,14 +3,18 @@ edition = "2021"
 name = "interop-tests"
 version = "0.1.0"
 publish = false
+license = "MIT"
 
 [dependencies]
 anyhow = "1"
 either = "1.8.0"
 env_logger = "0.10.0"
-futures = "0.3.26"
-libp2p = { path = "../", features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
+futures = "0.3.28"
+libp2p = { path = "../libp2p", features = ["websocket", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros"] }
+libp2p-quic = { path = "../transports/quic", features = ["tokio"] }
+libp2p-webrtc = { path = "../transports/webrtc", features = ["tokio"] }
+libp2p-mplex = { path = "../muxers/mplex" }
 log = "0.4"
 rand = "0.8.5"
 redis = { version = "0.22.1", default-features = false, features = ["tokio-comp"] }
-tokio = { version = "1.24.1", features = ["full"] }
+tokio = { version = "1.27.0", features = ["full"] }
