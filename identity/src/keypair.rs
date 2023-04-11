@@ -170,7 +170,7 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.2.0",
-        note = "Deprecated, use `rsa::Keypair::try_decode_pkcs8` or `rsa::Keypair::try_decode_der` and promote it into `Keypair` instead."
+        note = "Deprecated, use `rsa::Keypair::try_decode_pkcs8` and promote it into `Keypair` instead."
     )]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
