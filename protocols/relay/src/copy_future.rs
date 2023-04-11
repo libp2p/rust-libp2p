@@ -157,7 +157,7 @@ fn forward_data<S: AsyncBufRead + Unpin, D: AsyncWrite + Unpin>(
 
 #[cfg(test)]
 mod tests {
-    use super::{forward_data, CopyFuture};
+    use super::*;
     use futures::executor::block_on;
     use futures::io::{AsyncRead, AsyncWrite, BufReader, BufWriter};
     use quickcheck::QuickCheck;
