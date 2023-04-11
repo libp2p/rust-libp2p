@@ -18,7 +18,7 @@ futures-timer = "3"
 instant = "0.1.11"
 libp2p-identity = { version = "0.1", path = "../identity", features = ["peerid", "ed25519"] }
 log = "0.4"
-multiaddr = { version = "0.17.0" }
+multiaddr = { version = "0.17.1" }
 multihash = { version = "0.17.0", default-features = false, features = ["std"] }
 multistream-select = { version = "0.12.1", path = "../misc/multistream-select" }
 once_cell = "1.17.1"

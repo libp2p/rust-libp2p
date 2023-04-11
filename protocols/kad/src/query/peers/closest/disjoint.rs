@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use crate::kbucket::{Key, KeyBytes};
+use crate::kbucket_priv::{Key, KeyBytes};
 use instant::Instant;
 use libp2p_identity::PeerId;
 use std::{
