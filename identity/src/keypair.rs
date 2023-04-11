@@ -370,8 +370,11 @@ impl TryInto<ed25519::Keypair> for Keypair {
         #[allow(deprecated)]
         match self {
             Keypair::Ed25519(inner) => Ok(inner),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "secp256k1")]
             Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            #[cfg(feature = "ecdsa")]
             Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
@@ -385,8 +388,11 @@ impl TryInto<ecdsa::Keypair> for Keypair {
         #[allow(deprecated)]
         match self {
             Keypair::Ecdsa(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "secp256k1")]
             Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
         }
     }
@@ -400,8 +406,11 @@ impl TryInto<secp256k1::Keypair> for Keypair {
         #[allow(deprecated)]
         match self {
             Keypair::Secp256k1(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "ecdsa")]
             Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
@@ -415,8 +424,11 @@ impl TryInto<rsa::Keypair> for Keypair {
         #[allow(deprecated)]
         match self {
             Keypair::Rsa(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(feature = "secp256k1")]
             Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            #[cfg(feature = "ecdsa")]
             Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
