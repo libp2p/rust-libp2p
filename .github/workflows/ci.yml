@@ -62,6 +62,8 @@ jobs:
       - name: Check if we compile without any features activated
         run: cargo build --package ${{ matrix.crate }} --no-default-features
 
+      - run: cargo clean
+
       - name: Check if crate has been released
         id: check-released
         run: |
