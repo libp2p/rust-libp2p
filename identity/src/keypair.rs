@@ -248,7 +248,7 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    /// 
+    ///
     /// See <https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#key-types> for details on the encoding.
     pub fn encode_protobuf(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
@@ -605,8 +605,11 @@ impl TryInto<ed25519::PublicKey> for PublicKey {
         #[allow(deprecated)]
         match self {
             PublicKey::Ed25519(inner) => Ok(inner),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
@@ -620,8 +623,11 @@ impl TryInto<ecdsa::PublicKey> for PublicKey {
         #[allow(deprecated)]
         match self {
             PublicKey::Ecdsa(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
         }
     }
@@ -635,8 +641,11 @@ impl TryInto<secp256k1::PublicKey> for PublicKey {
         #[allow(deprecated)]
         match self {
             PublicKey::Secp256k1(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
@@ -650,8 +659,11 @@ impl TryInto<rsa::PublicKey> for PublicKey {
         #[allow(deprecated)]
         match self {
             PublicKey::Rsa(inner) => Ok(inner),
+            #[cfg(feature = "ed25519")]
             PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
         }
     }
