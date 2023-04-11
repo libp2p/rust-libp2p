@@ -1,8 +1,12 @@
 ## 0.15.2 - unreleased
 
+- Send correct `PeerId` in outbound STOP message to client.
+  See [PR 3767].
+
 - As a relay, when forwarding data between relay-connection-source and -destination and vice versa, flush write side when read currently has no more data available.
   See [PR 3765].
 
+[PR 3767]: https://github.com/libp2p/rust-libp2p/pull/3767
 [PR 3765]: https://github.com/libp2p/rust-libp2p/pull/3765
 
 ## 0.15.1
