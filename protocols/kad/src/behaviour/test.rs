@@ -22,8 +22,8 @@
 
 use super::*;
 
-use crate::kbucket::Distance;
-use crate::record::{store::MemoryStore, Key};
+use crate::kbucket_priv::Distance;
+use crate::record_priv::{store::MemoryStore, Key};
 use crate::{K_VALUE, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
@@ -234,10 +234,10 @@ fn bootstrap() {
 
 #[test]
 fn query_iter() {
-    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
+    fn distances<K>(key: &kbucket_priv::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
         peers
             .into_iter()
-            .map(kbucket::Key::from)
+            .map(kbucket_priv::Key::from)
             .map(|k| k.distance(key))
             .collect()
     }
@@ -253,7 +253,7 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::from(search_target);
+        let search_target_key = kbucket_priv::Key::from(search_target);
         let qid = swarms[0].behaviour_mut().get_closest_peers(search_target);
 
         match swarms[0].behaviour_mut().query(&qid) {
@@ -290,7 +290,7 @@ fn query_iter() {
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
                             assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
-                            let key = kbucket::Key::new(ok.key);
+                            let key = kbucket_priv::Key::new(ok.key);
                             assert_eq!(expected_distances, distances(&key, ok.peers));
                             return Poll::Ready(());
                         }
@@ -445,7 +445,7 @@ fn get_record_not_found() {
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
 
-    let target_key = record::Key::from(random_multihash());
+    let target_key = record_priv::Key::from(random_multihash());
     let qid = swarms[0].behaviour_mut().get_record(target_key.clone());
 
     block_on(poll_fn(move |ctx| {
@@ -653,7 +653,7 @@ fn put_record() {
                 assert_eq!(r.expires, expected.expires);
                 assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
 
-                let key = kbucket::Key::new(r.key.clone());
+                let key = kbucket_priv::Key::new(r.key.clone());
                 let mut expected = swarms
                     .iter()
                     .skip(1)
@@ -661,9 +661,9 @@ fn put_record() {
                     .cloned()
                     .collect::<Vec<_>>();
                 expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
+                    kbucket_priv::Key::from(*id1)
                         .distance(&key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&key))
+                        .cmp(&kbucket_priv::Key::from(*id2).distance(&key))
                 });
 
                 let expected = expected
@@ -862,7 +862,7 @@ fn get_record_many() {
 /// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
-    fn prop(keys: Vec<record::Key>, seed: Seed) {
+    fn prop(keys: Vec<record_priv::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
@@ -992,11 +992,11 @@ fn add_provider() {
                     .map(Swarm::local_peer_id)
                     .cloned()
                     .collect::<Vec<_>>();
-                let kbucket_key = kbucket::Key::new(key);
+                let kbucket_key = kbucket_priv::Key::new(key);
                 expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
+                    kbucket_priv::Key::from(*id1)
                         .distance(&kbucket_key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&kbucket_key))
+                        .cmp(&kbucket_priv::Key::from(*id2).distance(&kbucket_key))
                 });
 
                 let expected = expected
@@ -1379,7 +1379,7 @@ fn network_behaviour_on_address_change() {
 
 #[test]
 fn get_providers_single() {
-    fn prop(key: record::Key) {
+    fn prop(key: record_priv::Key) {
         let (_, mut single_swarm) = build_node();
         single_swarm
             .behaviour_mut()
@@ -1432,7 +1432,7 @@ fn get_providers_single() {
 }
 
 fn get_providers_limit<const N: usize>() {
-    fn prop<const N: usize>(key: record::Key) {
+    fn prop<const N: usize>(key: record_priv::Key) {
         let mut swarms = build_nodes(3);
 
         // Let first peer know of second peer and second peer know of third peer.
