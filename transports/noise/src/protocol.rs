@@ -69,6 +69,9 @@ pub enum XX {}
 
 /// A Noise protocol over DH keys of type `C`. The choice of `C` determines the
 /// protocol parameters for each handshake pattern.
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
 pub trait Protocol<C> {
     /// The protocol parameters for the IK handshake pattern.
     fn params_ik() -> ProtocolParams;
@@ -104,7 +107,7 @@ pub trait Protocol<C> {
     /// without a signature, otherwise a signature over the static DH public key
     /// must be given and is verified with the public identity key, establishing
     /// the authenticity of the static DH public key w.r.t. the public identity key.
-    #[allow(deprecated)]
+
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
         C: AsRef<[u8]>,

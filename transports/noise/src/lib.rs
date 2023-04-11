@@ -54,19 +54,73 @@
 //! [noise]: http://noiseprotocol.org/
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![allow(deprecated)] // Temporarily until we remove deprecated items.
 
 mod io;
 mod protocol;
 
-pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
-#[allow(deprecated)]
+
 pub use protocol::x25519::X25519;
-pub use protocol::x25519_spec::X25519Spec;
-pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+
+pub use protocol::Protocol;
 use std::fmt;
 use std::fmt::Formatter;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type X25519Spec = protocol::x25519_spec::X25519Spec;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type AuthenticKeypair<T> = protocol::AuthenticKeypair<T>;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type Keypair<T> = protocol::Keypair<T>;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type KeypairIdentity = protocol::KeypairIdentity;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type PublicKey<T> = protocol::PublicKey<T>;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type SecretKey<T> = protocol::SecretKey<T>;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type ProtocolParams = protocol::ProtocolParams;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type IK = protocol::IK;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type IX = protocol::IX;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type XX = protocol::XX;
+
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
+pub type RemoteIdentity<C> = handshake::RemoteIdentity<C>;
 
 use crate::handshake::State;
 use crate::io::handshake;
@@ -86,7 +140,7 @@ pub struct Config {
 
 impl Config {
     /// Construct a new configuration for the noise handshake using the XX handshake pattern.
-    #[allow(deprecated)]
+
     pub fn new(identity: &identity::Keypair) -> Result<Self, NoiseError> {
         Ok(Config {
             inner: NoiseAuthenticated::xx(identity)?,
@@ -94,7 +148,7 @@ impl Config {
     }
 
     /// Set the noise prologue.
-    #[allow(deprecated)]
+
     pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
         self.inner.config.prologue = prologue;
 
@@ -145,7 +199,7 @@ where
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
     params: ProtocolParams,
-    #[allow(deprecated)]
+
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
@@ -159,7 +213,6 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     prologue: Vec<u8>,
 }
 
-#[allow(deprecated)]
 impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
     /// with a `Swarm`.
@@ -177,7 +230,7 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
         since = "0.42.0",
         note = "`LegacyConfig` will be removed without replacement."
     )]
-    #[allow(deprecated)]
+
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
@@ -187,7 +240,7 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
 /// Implement `into_responder` and `into_initiator` for all configs where `R = ()`.
 ///
 /// This allows us to ignore the `remote` field.
-#[allow(deprecated)]
+
 impl<H, C> NoiseConfig<H, C, ()>
 where
     C: Zeroize + Protocol<C> + AsRef<[u8]>,
@@ -215,7 +268,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<C> NoiseConfig<IX, C>
 where
     C: Protocol<C> + Zeroize,
@@ -225,10 +277,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
+            legacy: { LegacyConfig::default() },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -236,7 +285,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<C> NoiseConfig<XX, C>
 where
     C: Protocol<C> + Zeroize,
@@ -246,10 +294,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
+            legacy: { LegacyConfig::default() },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -257,7 +302,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<C> NoiseConfig<IK, C>
 where
     C: Protocol<C> + Zeroize,
@@ -270,10 +314,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
+            legacy: { LegacyConfig::default() },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -281,7 +322,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<C> NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     C: Protocol<C> + Zeroize + AsRef<[u8]>,
@@ -298,10 +338,7 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
+            legacy: { LegacyConfig::default() },
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -386,7 +423,7 @@ impl From<quick_protobuf::Error> for NoiseError {
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -418,7 +455,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -454,7 +491,7 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -491,7 +528,7 @@ where
 /// initiator <-{id}- responder
 /// initiator -{id}-> responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -527,7 +564,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
     NoiseConfig<IK, C>: UpgradeInfo,
@@ -562,7 +599,7 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-#[allow(deprecated)]
+
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
@@ -600,11 +637,9 @@ where
 /// transport for use with a `Swarm`.
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {
-    #[allow(deprecated)]
     config: NoiseConfig<P, C, R>,
 }
 
-#[allow(deprecated)]
 impl NoiseAuthenticated<XX, X25519Spec, ()> {
     /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
     ///
@@ -619,7 +654,6 @@ impl NoiseAuthenticated<XX, X25519Spec, ()> {
     }
 }
 
-#[allow(deprecated)]
 impl<P, C: Zeroize, R> UpgradeInfo for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo,
@@ -632,7 +666,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<T, P, C, R> InboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo
@@ -658,7 +691,6 @@ where
     }
 }
 
-#[allow(deprecated)]
 impl<T, P, C, R> OutboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
     NoiseConfig<P, C, R>: UpgradeInfo

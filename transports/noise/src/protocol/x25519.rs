@@ -23,8 +23,6 @@
 //! **Note**: This set of protocols is not interoperable with other
 //! libp2p implementations.
 
-#![allow(deprecated)]
-
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use libp2p_core::UpgradeInfo;
