@@ -323,9 +323,9 @@ mod tests {
 
         #[derive(Debug, PartialEq)]
         enum Method {
-            PollWrite(Vec<u8>),
-            PollFlush,
-            PollClose,
+            Write(Vec<u8>),
+            Flush,
+            Close,
         }
 
         impl AsyncWrite for RecordingDestination {
@@ -334,7 +334,7 @@ mod tests {
                 _cx: &mut Context<'_>,
                 buf: &[u8],
             ) -> Poll<std::io::Result<usize>> {
-                self.method_calls.push(Method::PollWrite(buf.to_vec()));
+                self.method_calls.push(Method::Write(buf.to_vec()));
                 Poll::Ready(Ok(buf.len()))
             }
 
@@ -342,7 +342,7 @@ mod tests {
                 mut self: std::pin::Pin<&mut Self>,
                 _cx: &mut Context<'_>,
             ) -> Poll<std::io::Result<()>> {
-                self.method_calls.push(Method::PollFlush);
+                self.method_calls.push(Method::Flush);
                 Poll::Ready(Ok(()))
             }
 
@@ -350,7 +350,7 @@ mod tests {
                 mut self: std::pin::Pin<&mut Self>,
                 _cx: &mut Context<'_>,
             ) -> Poll<std::io::Result<()>> {
-                self.method_calls.push(Method::PollClose);
+                self.method_calls.push(Method::Close);
                 Poll::Ready(Ok(()))
             }
         }
@@ -410,7 +410,7 @@ mod tests {
         );
         assert_eq!(
             destination.get_ref().method_calls.as_slice(),
-            &[Method::PollWrite(vec![2, 1]), Method::PollFlush],
+            &[Method::Write(vec![2, 1]), Method::Flush],
             "Given that source had no more reads, `forward_data` calls flush, thus instructing the \
             `BufWriter` to flush the two buffered writes down to the destination."
         );
