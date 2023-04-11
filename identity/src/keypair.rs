@@ -135,7 +135,7 @@ impl Keypair {
         self.try_into()
     }
 
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
