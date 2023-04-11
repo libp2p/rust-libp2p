@@ -25,7 +25,7 @@ use libp2p_core::upgrade::Negotiated;
 use libp2p_core::{transport, upgrade};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_noise::{self as noise, NoiseOutput};
+use libp2p_noise as noise;
 use libp2p_tcp as tcp;
 use log::info;
 use quickcheck::*;
@@ -93,7 +93,7 @@ fn xx() {
         .quickcheck(prop as fn(Vec<Message>) -> bool)
 }
 
-type Output = (PeerId, NoiseOutput<Negotiated<Async<TcpStream>>>);
+type Output = (PeerId, noise::Output<Negotiated<Async<TcpStream>>>);
 
 fn run<I>(mut server: transport::Boxed<Output>, mut client: transport::Boxed<Output>, messages: I)
 where

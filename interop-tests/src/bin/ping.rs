@@ -8,7 +8,7 @@ use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade, Version};
-use libp2p::noise::NoiseOutput;
+use libp2p::noise::Output;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
@@ -186,12 +186,10 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
         .map_outbound(factor_peer_id as MapSecOutputFn<C>))
 }
 
-type SecOutput<C> = future::Either<(PeerId, NoiseOutput<C>), (PeerId, TlsStream<C>)>;
-type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>);
+type SecOutput<C> = future::Either<(PeerId, Output<C>), (PeerId, TlsStream<C>)>;
+type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, future::Either<Output<C>, TlsStream<C>>);
 
-fn factor_peer_id<C>(
-    output: SecOutput<C>,
-) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>) {
+fn factor_peer_id<C>(output: SecOutput<C>) -> (PeerId, future::Either<Output<C>, TlsStream<C>>) {
     match output {
         future::Either::Left((peer, stream)) => (peer, future::Either::Left(stream)),
         future::Either::Right((peer, stream)) => (peer, future::Either::Right(stream)),

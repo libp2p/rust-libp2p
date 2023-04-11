@@ -22,7 +22,7 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
-use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
+use crate::{Error, NoiseConfig, Protocol, ProtocolParams};
 use libp2p_core::UpgradeInfo;
 use libp2p_identity as identity;
 use rand::Rng;
@@ -132,9 +132,9 @@ impl Protocol<X25519Spec> for X25519Spec {
         x25519::X25519::params_xx()
     }
 
-    fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, NoiseError> {
+    fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, Error> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidLength);
+            return Err(Error::InvalidLength);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
@@ -151,10 +151,7 @@ impl Protocol<X25519Spec> for X25519Spec {
         })
     }
 
-    fn sign(
-        id_keys: &identity::Keypair,
-        dh_pk: &PublicKey<X25519Spec>,
-    ) -> Result<Vec<u8>, NoiseError> {
+    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<X25519Spec>) -> Result<Vec<u8>, Error> {
         Ok(id_keys.sign(&[STATIC_KEY_DOMAIN.as_bytes(), dh_pk.as_ref()].concat())?)
     }
 }

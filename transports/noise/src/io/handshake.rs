@@ -25,11 +25,11 @@ mod proto {
     pub use self::payload::proto::NoiseHandshakePayload;
 }
 
-use crate::io::{framed::NoiseFramed, NoiseOutput};
+use crate::io::{framed::NoiseFramed, Output};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 
+use crate::Error;
 use crate::LegacyConfig;
-use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
@@ -107,8 +107,8 @@ impl<T> State<T> {
 
 impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
-    /// [`NoiseOutput`] for communicating on the encrypted channel.
-    pub fn finish<C>(self) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+    /// [`Output`] for communicating on the encrypted channel.
+    pub fn finish<C>(self) -> Result<(RemoteIdentity<C>, Output<T>), Error>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {
@@ -120,7 +120,7 @@ impl<T> State<T> {
                 if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
                     RemoteIdentity::IdentityKey(id_pk)
                 } else {
-                    return Err(NoiseError::BadSignature);
+                    return Err(Error::BadSignature);
                 }
             }
         };
@@ -132,7 +132,7 @@ impl<T> State<T> {
 // Handshake Message Futures
 
 /// A future for receiving a Noise handshake message.
-async fn recv<T>(state: &mut State<T>) -> Result<Bytes, NoiseError>
+async fn recv<T>(state: &mut State<T>) -> Result<Bytes, Error>
 where
     T: AsyncRead + Unpin,
 {
@@ -144,7 +144,7 @@ where
 }
 
 /// A future for receiving a Noise handshake message with an empty payload.
-pub async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub async fn recv_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
@@ -158,7 +158,7 @@ where
 }
 
 /// A future for sending a Noise handshake message with an empty payload.
-pub async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub async fn send_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
@@ -171,7 +171,7 @@ where
 ///
 /// In case `expected_key` is passed, this function will fail if the received key does not match the expected key.
 /// In case the remote does not send us a key, the expected key is assumed to be the remote's key.
-pub async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub async fn recv_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
@@ -215,7 +215,7 @@ where
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
-                return Err(NoiseError::UnexpectedKey);
+                return Err(Error::UnexpectedKey);
             }
         }
         state.id_remote_pubkey = Some(pk);
@@ -229,7 +229,7 @@ where
 }
 
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
-pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
@@ -258,7 +258,7 @@ where
 }
 
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
-pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
