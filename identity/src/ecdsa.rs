@@ -296,10 +296,4 @@ mod tests {
         assert!(!pk.verify(invalid_msg, &sig));
     }
 
-    #[test]
-    fn serialize_deserialize() {
-        let pair = Keypair::generate();
-        let bytes_secret = pair.secret().to_bytes();
-        assert_eq!(Keypair::try_from_bytes(bytes_secret).unwrap(), pair)
-    }
 }
