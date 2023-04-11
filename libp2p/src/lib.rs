@@ -83,11 +83,20 @@ pub use libp2p_mdns as mdns;
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
-#[doc(inline)]
-pub use libp2p_mplex as mplex;
+#[deprecated(
+    note = "`mplex` is not recommended anymore. Please use `yamux` instead or depend on `libp2p-mplex` directly if you need it for legacy use cases."
+)]
+pub mod mplex {
+    pub use libp2p_mplex::*;
+}
 #[cfg(feature = "noise")]
 #[doc(inline)]
 pub use libp2p_noise as noise;
+#[cfg(feature = "perf")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "perf")))]
+#[doc(inline)]
+pub use libp2p_perf as perf;
 #[cfg(feature = "ping")]
 #[doc(inline)]
 pub use libp2p_ping as ping;
@@ -223,6 +232,7 @@ pub async fn development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
@@ -279,6 +289,7 @@ pub fn tokio_development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))

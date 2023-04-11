@@ -41,8 +41,8 @@ async fn smoke() {
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
 
-    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
-    start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
+    start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, addr).await;
 
@@ -109,7 +109,8 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
 
             async move {
                 let (peer_id, mut listener) = create_transport();
-                let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/webrtc").await;
+                let addr =
+                    start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
 
                 listeners_tx.send((peer_id, addr)).await.unwrap();
 
