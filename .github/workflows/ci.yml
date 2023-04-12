@@ -16,7 +16,7 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.crate }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "large"]' || '"ubuntu-latest"') }}
     needs: gather_published_crates
     strategy:
       fail-fast: false
