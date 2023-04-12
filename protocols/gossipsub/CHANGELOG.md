@@ -1,3 +1,11 @@
+## 0.45 - unreleased
+
+- Remove deprecated items. See [PR 3701].
+  * `Gossipsub` prefixed items.
+  * Public errors
+
+[PR 3701]: https://github.com/libp2p/rust-libp2p/pull/3701
+
 ## 0.44.3
 
 - Fix erroneously duplicate message IDs. See [PR 3716].
@@ -8,12 +16,8 @@
 
 - Signed messages now use sequential integers in the sequence number field.
   See [PR 3551].
-- Remove deprecated items. See [PR 3701].
-  * `Gossipsub` prefixed items.
-  * Public errors
 
 [PR 3551]: https://github.com/libp2p/rust-libp2p/pull/3551
-[PR 3701]: https://github.com/libp2p/rust-libp2p/pull/3701
 
 ## 0.44.1
 
