@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::record;
+use crate::record_priv;
 use libp2p_core::multihash::Multihash;
 use libp2p_identity::PeerId;
 use sha2::digest::generic_array::{typenum::U32, GenericArray};
@@ -113,8 +113,8 @@ impl From<Vec<u8>> for Key<Vec<u8>> {
     }
 }
 
-impl From<record::Key> for Key<record::Key> {
-    fn from(k: record::Key) -> Self {
+impl From<record_priv::Key> for Key<record_priv::Key> {
+    fn from(k: record_priv::Key) -> Self {
         Key::new(k)
     }
 }
@@ -196,7 +196,7 @@ impl Distance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::Code;
+    use crate::SHA_256_MH;
     use quickcheck::*;
 
     impl Arbitrary for Key<PeerId> {
@@ -208,7 +208,7 @@ mod tests {
     impl Arbitrary for Key<Multihash> {
         fn arbitrary(g: &mut Gen) -> Key<Multihash> {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+            Key::from(Multihash::wrap(SHA_256_MH, &hash).unwrap())
         }
     }
 
