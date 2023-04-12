@@ -489,9 +489,20 @@ impl PublicKey {
         }
     }
 
+
+    #[cfg(feature = "ed25519")]
+    pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
+        self.try_into().ok()
+    }
+
     #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::PublicKey, OtherVariantError> {
         self.try_into()
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
+        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -500,8 +511,18 @@ impl PublicKey {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    pub fn into_rsa(self) -> Option<rsa::PublicKey> {
+        self.try_into().ok()
+    }
+
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::PublicKey, OtherVariantError> {
         self.try_into()
+    }
+
+    #[cfg(feature = "ecdsa")]
+    pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
+        self.try_into().ok()
     }
 
     #[cfg(feature = "ecdsa")]
