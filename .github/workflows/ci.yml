@@ -28,7 +28,7 @@ jobs:
 
       - name: Install Rust
         if: github.repository == 'libp2p/rust-libp2p'
-        run: curl https://sh.rustup.rs -sSf | sh
+        run: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain none
 
       - uses: actions/checkout@v3
 
