@@ -26,6 +26,10 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install -y protobuf-compiler
 
+      - name: Install Rust
+        if: github.repository == 'libp2p/rust-libp2p'
+        run: curl https://sh.rustup.rs -sSf | sh
+
       - uses: actions/checkout@v3
 
       - name: Get MSRV for ${{ matrix.crate }}
@@ -33,6 +37,7 @@ jobs:
         run: |
           RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
         uses: dtolnay/rust-toolchain@master
