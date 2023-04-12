@@ -41,7 +41,15 @@ impl Keypair {
     /// Encode the keypair into a byte array by concatenating the bytes
     /// of the secret scalar and the compressed public point,
     /// an informal standard for encoding Ed25519 keypairs.
+    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::to_bytes`")]
     pub fn encode(&self) -> [u8; 64] {
+        self.to_bytes()
+    }
+
+    /// Encode the keypair into a byte array by concatenating the bytes
+    /// of the secret scalar and the compressed public point,
+    /// an informal standard for encoding Ed25519 keypairs.
+    pub fn to_bytes(&self) -> [u8; 64] {
         self.0.to_bytes()
     }
 
@@ -190,7 +198,7 @@ impl PublicKey {
         self.0.to_bytes()
     }
 
-    /// Decode a public key from a byte array as produced by `encode`.
+    /// Decode a public key from a byte array as produced by `to_bytes`.
     ///
     #[deprecated(
         since = "0.2.0",
@@ -200,7 +208,7 @@ impl PublicKey {
         Self::try_from_bytes(k)
     }
 
-    /// Decode a public key from a byte array as produced by `encode`.
+    /// Decode a public key from a byte array as produced by `to_bytes`.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
@@ -281,7 +289,7 @@ mod tests {
     fn ed25519_keypair_encode_decode() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
-            let mut kp1_enc = kp1.encode();
+            let mut kp1_enc = kp1.to_bytes();
             let kp2 = Keypair::try_from_bytes(&mut kp1_enc).unwrap();
             eq_keypairs(&kp1, &kp2) && kp1_enc.iter().all(|b| *b == 0)
         }
