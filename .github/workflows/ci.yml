@@ -26,11 +26,8 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - name: Install Rust
-        if: github.repository == 'libp2p/rust-libp2p'
-        run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain none
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - if: github.repository == 'libp2p/rust-libp2p'
+        uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/checkout@v3
 
