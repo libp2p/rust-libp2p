@@ -1,4 +1,4 @@
-## 0.15.2 - unreleased
+## 0.15.2
 
 - Send correct `PeerId` in outbound STOP message to client.
   See [PR 3767].
