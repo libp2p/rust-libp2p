@@ -411,7 +411,7 @@ mod test {
         let t2 = TopicHash::from_raw("et3t3te");
         let t3 = TopicHash::from_raw("abcdefghijklmnopqrsuvwxyz");
 
-        let mut filter = RegexSubscriptionFilter(Regex::new("t.*t").unwrap());
+        let mut filter = RegexSubscriptionFilter(regex::Regex::new("t.*t").unwrap());
 
         let old = Default::default();
         let subscriptions = vec![
