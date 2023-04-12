@@ -1,10 +1,3 @@
-# 0.44.0 [unreleased]
-
-- Change `mdns::Event` to hold `Vec` and remove `DiscoveredAddrsIter` and `ExpiredAddrsIter`.
-  See [PR 3621].
-
-[PR 3621]: https://github.com/libp2p/rust-libp2p/pull/3621
-
 ## 0.43.1
 
 - Derive `Clone` for `mdns::Event`. See [PR 3606].
