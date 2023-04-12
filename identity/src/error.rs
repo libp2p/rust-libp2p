@@ -166,7 +166,7 @@ pub struct OtherVariantError {
 }
 
 impl OtherVariantError {
-    pub fn new(actual: KeyType) -> OtherVariantError {
+    pub(crate) fn new(actual: KeyType) -> OtherVariantError {
         OtherVariantError { actual }
     }
 }
