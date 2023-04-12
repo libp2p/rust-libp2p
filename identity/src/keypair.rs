@@ -504,7 +504,7 @@ impl PublicKey {
     /// exchange with other nodes.
     #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::encode_protobuf`.")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        Self::encode_protobuf(&self)
+        Self::encode_protobuf(self)
     }
 
     /// Encode the public key into a protobuf structure for storage or
