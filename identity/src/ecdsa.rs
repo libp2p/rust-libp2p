@@ -113,9 +113,7 @@ impl SecretKey {
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead"
     )]
     pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
-        SigningKey::from_bytes(buf)
-            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
-            .map(SecretKey)
+        Self::try_from_bytes(buf)
     }
 
     /// Try to parse a secret key from a byte buffer.
