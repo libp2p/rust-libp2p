@@ -1,6 +1,7 @@
 ## 0.44.3 - unreleased
 
 - Fix erroneously duplicate message IDs. See [PR 3716].
+- Deprecate `metrics`, `protocol`, `subscription_filter`, `time_cache` modules to make them private.
 
 [PR 3716]: https://github.com/libp2p/rust-libp2p/pull/3716
 

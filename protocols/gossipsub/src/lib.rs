@@ -139,10 +139,38 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod error;
-pub mod metrics;
-pub mod protocol;
-pub mod subscription_filter;
-pub mod time_cache;
+
+mod metrics_priv;
+#[deprecated(
+    note = "The `metrics` module will be made private in the future and should not be depended on."
+)]
+pub mod metrics {
+    pub use super::metrics_priv::*;
+}
+
+mod protocol_priv;
+#[deprecated(
+    note = "The `protocol` module will be made private in the future and should not be depended on."
+)]
+pub mod protocol {
+    pub use super::protocol_priv::*;
+}
+
+mod subscription_filter_priv;
+#[deprecated(
+    note = "The `subscription_filter` module will be made private in the future and should not be depended on."
+)]
+pub mod subscription_filter {
+    pub use super::subscription_filter_priv::*;
+}
+
+mod time_cache_priv;
+#[deprecated(
+    note = "The `time_cache` module will be made private in the future and should not be depended on."
+)]
+pub mod time_cache {
+    pub use super::time_cache_priv::*;
+}
 
 mod backoff;
 mod behaviour;
