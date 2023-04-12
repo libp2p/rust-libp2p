@@ -239,7 +239,7 @@ jobs:
 
       - id: cargo-metadata
         run: |
-          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
+          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(select(.publish == null) | .name)')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
 
   check-proto-files:
