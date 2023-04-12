@@ -30,7 +30,7 @@ jobs:
         if: github.repository == 'libp2p/rust-libp2p'
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain none
-          source "$HOME/.cargo/env"
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - uses: actions/checkout@v3
 
