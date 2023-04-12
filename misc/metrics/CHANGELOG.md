@@ -1,4 +1,4 @@
-# 0.12.0
+## 0.12.0
 
 - Update to `prometheus-client` `v0.19.0`. See [PR 3207].
 
@@ -23,7 +23,7 @@
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134/
 [PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
 
-# 0.11.0
+## 0.11.0
 
 - Update to `libp2p-dcutr` `v0.8.0`.
 
@@ -52,7 +52,7 @@
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 [PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
 
-# 0.10.0
+## 0.10.0
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
@@ -70,7 +70,7 @@
 
 - Update to `libp2p-gossipsub` `v0.42.0`.
 
-# 0.9.0
+## 0.9.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
 
@@ -86,7 +86,7 @@
 
 - Update to `libp2p-core` `v0.36.0`.
 
-# 0.8.0
+## 0.8.0
 
 - Update to `libp2p-swarm` `v0.38.0`.
 
@@ -110,7 +110,7 @@
 
 [PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
-# 0.7.0
+## 0.7.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
@@ -126,11 +126,11 @@
 
 - Update to `libp2p-kad` `v0.38.0`.
 
-# 0.6.1
+## 0.6.1
 
 - Update `dcutr` events from `libp2p_relay_events` to `libp2p_dcutr_events`, to avoid conflict with `relay` events.
 
-# 0.6.0
+## 0.6.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
@@ -150,7 +150,7 @@
 
 [PR 2631]: https://github.com/libp2p/rust-libp2p/pull/2631
 
-# 0.5.0
+## 0.5.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
@@ -164,7 +164,7 @@
 
 - Update to `libp2p-kad` `v0.36.0`.
 
-# 0.4.0 [2022-02-22]
+## 0.4.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
@@ -186,7 +186,7 @@
 
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
 
-# 0.3.0 [2022-01-27]
+## 0.3.0 [2022-01-27]
 
 - Update dependencies.
 
@@ -194,7 +194,7 @@
 
 [PR 2339]: https://github.com/libp2p/rust-libp2p/pull/2339
 
-# 0.2.0 [2021-11-16]
+## 0.2.0 [2021-11-16]
 
 - Include gossipsub metrics (see [PR 2316]).
 
@@ -202,6 +202,6 @@
 
 [PR 2316]: https://github.com/libp2p/rust-libp2p/pull/2316
 
-# 0.1.0 [2021-11-01]
+## 0.1.0 [2021-11-01]
 
 - Add initial version.

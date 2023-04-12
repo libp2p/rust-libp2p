@@ -450,16 +450,16 @@ impl ConnectionHandler for Handler {
             ) {
                 // outbound idle state
                 Some(OutboundSubstreamState::WaitingOutput(substream)) => {
-                    if !self.send_queue.is_empty() {
-                        let message = self.send_queue.remove(0);
+                    if let Some(message) = self.send_queue.pop() {
                         self.send_queue.shrink_to_fit();
                         self.outbound_substream =
                             Some(OutboundSubstreamState::PendingSend(substream, message));
-                    } else {
-                        self.outbound_substream =
-                            Some(OutboundSubstreamState::WaitingOutput(substream));
-                        break;
+                        continue;
                     }
+
+                    self.outbound_substream =
+                        Some(OutboundSubstreamState::WaitingOutput(substream));
+                    break;
                 }
                 Some(OutboundSubstreamState::PendingSend(mut substream, message)) => {
                     match Sink::poll_ready(Pin::new(&mut substream), cx) {
