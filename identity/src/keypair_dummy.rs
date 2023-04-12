@@ -65,10 +65,6 @@ impl PublicKey {
         unreachable!("Can never construct empty enum")
     }
 
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        unreachable!("Can never encode empty enum")
-    }
-
     #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
