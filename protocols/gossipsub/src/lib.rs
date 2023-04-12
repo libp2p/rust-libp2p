@@ -158,10 +158,14 @@ pub mod protocol {
 
 mod subscription_filter_priv;
 #[deprecated(
-    note = "The `subscription_filter` module will be made private in the future and should not be depended on."
+    note = "The `subscription_filter` module will be made private in the future, import the types from the crate root instead."
 )]
 pub mod subscription_filter {
     pub use super::subscription_filter_priv::*;
+
+    pub mod regex {
+        pub use crate::subscription_filter_priv::RegexSubscriptionFilter;
+    }
 }
 
 mod time_cache_priv;
@@ -193,6 +197,11 @@ pub use self::metrics_priv::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
+};
+pub use self::subscription_filter_priv::{
+    AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
+    MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
+    WhitelistSubscriptionFilter,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
