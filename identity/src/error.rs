@@ -159,7 +159,7 @@ impl Error for SigningError {
     }
 }
 
-/// Error produced when failing to convert `libp2p_identity::Keypair` to a more concrete keypair.
+/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more concrete keypair.
 #[derive(Debug)]
 pub struct OtherVariantError {
     actual: KeyType,
