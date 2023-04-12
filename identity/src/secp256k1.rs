@@ -132,7 +132,7 @@ impl SecretKey {
             .and_then(Vec::load)
             .map_err(|e| DecodingError::failed_to_parse("secp256k1 SecretKey bytes", e))?;
 
-        let sk = SecretKey::from_bytes(&mut sk_bytes)?;
+        let sk = SecretKey::try_from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         der_obj.zeroize();
         Ok(sk)
@@ -171,7 +171,7 @@ pub struct PublicKey(libsecp256k1::PublicKey);
 impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("PublicKey(compressed): ")?;
-        for byte in &self.encode() {
+        for byte in &self.to_bytes() {
             write!(f, "{byte:x}")?;
         }
         Ok(())
@@ -180,25 +180,25 @@ impl fmt::Debug for PublicKey {
 
 impl cmp::PartialEq for PublicKey {
     fn eq(&self, other: &Self) -> bool {
-        self.encode().eq(&other.encode())
+        self.to_bytes().eq(&other.to_bytes())
     }
 }
 
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.encode().hash(state);
+        self.to_bytes().hash(state);
     }
 }
 
 impl cmp::PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.encode().partial_cmp(&other.encode())
+        self.to_bytes().partial_cmp(&other.to_bytes())
     }
 }
 
 impl cmp::Ord for PublicKey {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.encode().cmp(&other.encode())
+        self.to_bytes().cmp(&other.to_bytes())
     }
 }
 
@@ -270,7 +270,7 @@ mod tests {
         let sk1 = SecretKey::generate();
         let mut sk_bytes = [0; 32];
         sk_bytes.copy_from_slice(&sk1.0.serialize()[..]);
-        let sk2 = SecretKey::from_bytes(&mut sk_bytes).unwrap();
+        let sk2 = SecretKey::try_from_bytes(&mut sk_bytes).unwrap();
         assert_eq!(sk1.0.serialize(), sk2.0.serialize());
         assert_eq!(sk_bytes, [0; 32]);
     }

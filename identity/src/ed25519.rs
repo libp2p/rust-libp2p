@@ -82,7 +82,7 @@ impl Keypair {
 
     /// Get the secret key of this keypair.
     pub fn secret(&self) -> SecretKey {
-        SecretKey::from_bytes(&mut self.0.secret.to_bytes())
+        SecretKey::try_from_bytes(&mut self.0.secret.to_bytes())
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
     }
 }
@@ -98,7 +98,7 @@ impl fmt::Debug for Keypair {
 impl Clone for Keypair {
     fn clone(&self) -> Keypair {
         let mut sk_bytes = self.0.secret.to_bytes();
-        let secret = SecretKey::from_bytes(&mut sk_bytes)
+        let secret = SecretKey::try_from_bytes(&mut sk_bytes)
             .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
             .0;
 
@@ -221,7 +221,7 @@ impl AsRef<[u8]> for SecretKey {
 impl Clone for SecretKey {
     fn clone(&self) -> SecretKey {
         let mut sk_bytes = self.0.to_bytes();
-        Self::from_bytes(&mut sk_bytes).expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
+        Self::try_from_bytes(&mut sk_bytes).expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
     }
 }
 
@@ -281,7 +281,7 @@ mod tests {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
             let mut kp1_enc = kp1.encode();
-            let kp2 = Keypair::decode(&mut kp1_enc).unwrap();
+            let kp2 = Keypair::try_from_bytes(&mut kp1_enc).unwrap();
             eq_keypairs(&kp1, &kp2) && kp1_enc.iter().all(|b| *b == 0)
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);
@@ -292,7 +292,7 @@ mod tests {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
             let mut sk = kp1.0.secret.to_bytes();
-            let kp2 = Keypair::from(SecretKey::from_bytes(&mut sk).unwrap());
+            let kp2 = Keypair::from(SecretKey::try_from_bytes(&mut sk).unwrap());
             eq_keypairs(&kp1, &kp2) && sk == [0u8; 32]
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);

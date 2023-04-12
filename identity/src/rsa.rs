@@ -336,22 +336,22 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary(g: &mut Gen) -> SomeKeypair {
             let mut key = g.choose(&[KEY1, KEY2, KEY3]).unwrap().to_vec();
-            SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
+            SomeKeypair(Keypair::try_decode_pkcs8(&mut key).unwrap())
         }
     }
 
     #[test]
     fn rsa_from_pkcs8() {
-        assert!(Keypair::from_pkcs8(&mut KEY1.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY2.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY3.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY1.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY2.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY3.to_vec()).is_ok());
     }
 
     #[test]
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::decode_x509(&pk.encode_x509())
+            PublicKey::try_decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
