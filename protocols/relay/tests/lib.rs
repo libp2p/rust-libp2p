@@ -203,34 +203,46 @@ fn connect() {
         relay_peer_id,
         false, // No renewal.
     ));
-    spawn_swarm_on_pool(&pool, dst);
 
     let mut src = build_client();
+    let src_peer_id = *src.local_peer_id();
 
     src.dial(dst_addr).unwrap();
 
-    pool.run_until(async {
-        loop {
-            match src.select_next_some().await {
-                SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
-                    if peer == dst_peer_id =>
-                {
-                    break
-                }
-                SwarmEvent::Behaviour(ClientEvent::Relay(
-                    relay::client::Event::OutboundCircuitEstablished { .. },
-                )) => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
-                    if peer == relay_peer_id => {}
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
-                    break
-                }
-                e => panic!("{e:?}"),
+    pool.run_until(futures::future::join(
+        connection_established_to(src, relay_peer_id, dst_peer_id),
+        connection_established_to(dst, relay_peer_id, src_peer_id),
+    ));
+}
+
+async fn connection_established_to(mut swarm: Swarm<Client>, relay_peer_id: PeerId, other: PeerId) {
+    loop {
+        match swarm.select_next_some().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
+                break
             }
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                relay::client::Event::OutboundCircuitEstablished { .. },
+            )) => {}
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                relay::client::Event::InboundCircuitEstablished { src_peer_id, .. },
+            )) => {
+                assert_eq!(src_peer_id, other);
+            }
+            SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
+                if peer == relay_peer_id => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == other => break,
+            SwarmEvent::IncomingConnection { send_back_addr, .. } => {
+                let peer_id_from_addr =
+                    PeerId::try_from_multiaddr(&send_back_addr).expect("to have /p2p");
+
+                assert_eq!(peer_id_from_addr, other)
+            }
+            e => panic!("{e:?}"),
         }
-    })
+    }
 }
 
 #[test]

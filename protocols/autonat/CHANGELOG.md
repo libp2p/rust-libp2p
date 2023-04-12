@@ -1,3 +1,10 @@
+## 0.10.2 - unreleased
+
+- Store server `PeerId`s in `HashSet` to avoid duplicates and lower memory consumption.
+  See [PR 3736].
+
+[PR 3736]: https://github.com/libp2p/rust-libp2p/pull/3736
+
 ## 0.10.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

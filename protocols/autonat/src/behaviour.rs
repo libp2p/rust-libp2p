@@ -42,7 +42,7 @@ use libp2p_swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -170,7 +170,7 @@ pub struct Behaviour {
     config: Config,
 
     // Additional peers apart from the currently connected ones, that may be used for probes.
-    servers: Vec<PeerId>,
+    servers: HashSet<PeerId>,
 
     // Assumed NAT status.
     nat_status: NatStatus,
@@ -227,7 +227,7 @@ impl Behaviour {
             inner,
             schedule_probe: Delay::new(config.boot_delay),
             config,
-            servers: Vec::new(),
+            servers: HashSet::new(),
             ongoing_inbound: HashMap::default(),
             ongoing_outbound: HashMap::default(),
             connected: HashMap::default(),
@@ -266,7 +266,7 @@ impl Behaviour {
     /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
     /// establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
-        self.servers.push(peer);
+        self.servers.insert(peer);
         if let Some(addr) = address {
             self.inner.add_address(&peer, addr);
         }
