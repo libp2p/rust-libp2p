@@ -221,7 +221,8 @@ impl AsRef<[u8]> for SecretKey {
 impl Clone for SecretKey {
     fn clone(&self) -> SecretKey {
         let mut sk_bytes = self.0.to_bytes();
-        Self::try_from_bytes(&mut sk_bytes).expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
+        Self::try_from_bytes(&mut sk_bytes)
+            .expect("ed25519::SecretKey::from_bytes(to_bytes(k)) != k")
     }
 }
 
