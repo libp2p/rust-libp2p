@@ -213,6 +213,7 @@ impl TopicSubscriptionFilter for RegexSubscriptionFilter {
 mod test {
     use super::*;
     use crate::types::SubscriptionAction::*;
+    use regex::Regex;
     use std::iter::FromIterator;
 
     #[test]
