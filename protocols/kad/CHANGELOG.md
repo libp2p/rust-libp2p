@@ -1,4 +1,4 @@
-## 0.43.2 - unreleased
+## 0.43.2
 
 - Export pub enum `RoutingUpdate`. See [PR 3739].
 - Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738].
