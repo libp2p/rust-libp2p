@@ -16,7 +16,7 @@ RUN --mount=type=cache,target=./target \
 
 FROM debian:bullseye-slim
 
-COPY --from=builder /usr/local/bin/perf-server /usr/local/bin/perf-server
-COPY --from=builder /usr/local/bin/perf-client /usr/local/bin/perf-client
+COPY --from=builder /usr/local/bin/perf-server /app/server
+COPY --from=builder /usr/local/bin/perf-client /app/perf
 
-ENTRYPOINT [ "perf-server"]
+ENTRYPOINT [ "/app/perf" ]
