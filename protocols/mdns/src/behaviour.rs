@@ -285,7 +285,7 @@ where
             }
         }
         // Emit discovered event.
-        let mut discovered = Vec::new();
+        let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         for iface_state in self.iface_states.values_mut() {
             while let Poll::Ready((peer, addr, expiration)) =
                 iface_state.poll(cx, &self.listen_addresses)
@@ -304,13 +304,15 @@ where
             }
         }
         if !discovered.is_empty() {
-            let event = Event::Discovered(discovered);
+            let event = Event::Discovered(DiscoveredAddrsIter {
+                inner: discovered.into_iter(),
+            });
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         // Emit expired event.
         let now = Instant::now();
         let mut closest_expiration = None;
-        let mut expired = Vec::new();
+        let mut expired = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         self.discovered_nodes.retain(|(peer, addr, expiration)| {
             if *expiration <= now {
                 log::info!("expired: {} {}", peer, addr);
@@ -321,7 +323,9 @@ where
             true
         });
         if !expired.is_empty() {
-            let event = Event::Expired(expired);
+            let event = Event::Expired(ExpiredAddrsIter {
+                inner: expired.into_iter(),
+            });
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
@@ -338,11 +342,67 @@ where
 #[derive(Debug, Clone)]
 pub enum Event {
     /// Discovered nodes through mDNS.
-    Discovered(Vec<(PeerId, Multiaddr)>),
+    Discovered(DiscoveredAddrsIter),
 
     /// The given combinations of `PeerId` and `Multiaddr` have expired.
     ///
     /// Each discovered record has a time-to-live. When this TTL expires and the address hasn't
     /// been refreshed, we remove it from the list and emit it as an `Expired` event.
-    Expired(Vec<(PeerId, Multiaddr)>),
+    Expired(ExpiredAddrsIter),
+}
+
+/// Iterator that produces the list of addresses that have been discovered.
+#[derive(Clone)]
+pub struct DiscoveredAddrsIter {
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
+}
+
+impl Iterator for DiscoveredAddrsIter {
+    type Item = (PeerId, Multiaddr);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl ExactSizeIterator for DiscoveredAddrsIter {}
+
+impl fmt::Debug for DiscoveredAddrsIter {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("DiscoveredAddrsIter").finish()
+    }
+}
+
+/// Iterator that produces the list of addresses that have expired.
+#[derive(Clone)]
+pub struct ExpiredAddrsIter {
+    inner: smallvec::IntoIter<[(PeerId, Multiaddr); 4]>,
+}
+
+impl Iterator for ExpiredAddrsIter {
+    type Item = (PeerId, Multiaddr);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl ExactSizeIterator for ExpiredAddrsIter {}
+
+impl fmt::Debug for ExpiredAddrsIter {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("ExpiredAddrsIter").finish()
+    }
 }
