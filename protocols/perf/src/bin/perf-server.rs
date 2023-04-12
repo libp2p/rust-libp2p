@@ -28,16 +28,20 @@ use log::{error, info};
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf server")]
-struct Opts {}
+struct Opts {
+    /// Fixed value to generate deterministic peer id.
+    #[clap(long)]
+    secret_key_seed: u8,
+}
 
 #[async_std::main]
 async fn main() {
     env_logger::init();
 
-    let _opts = Opts::parse();
+    let opts = Opts::parse();
 
     // Create a random PeerId
-    let local_key = libp2p_identity::Keypair::generate_ed25519();
+    let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id}");
 
@@ -125,4 +129,11 @@ async fn main() {
             e => panic!("{e:?}"),
         }
     }
+}
+
+fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {
+    let mut bytes = [0u8; 32];
+    bytes[0] = secret_key_seed;
+
+    libp2p_identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
 }
