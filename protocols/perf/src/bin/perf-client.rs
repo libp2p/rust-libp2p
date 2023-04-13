@@ -53,7 +53,7 @@ struct Opts {
     n_times: Option<usize>,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -74,19 +74,24 @@ async fn main() -> Result<()> {
         ]
     };
 
-    let mut results = vec![];
+    let results = tokio::spawn(async move {
+        let mut results = vec![];
 
-    for benchmark in benchmarks {
-        info!(
-            "{}",
-            format!("Start benchmark: {}", benchmark.name()).underline(),
-        );
+        for benchmark in benchmarks {
+            info!(
+                "{}",
+                format!("Start benchmark: {}", benchmark.name()).underline(),
+            );
 
-        let result = benchmark.run(opts.server_address.clone()).await?;
-        if let Some(result) = result {
-            results.push(result);
+            let result = benchmark.run(opts.server_address.clone()).await?;
+            if let Some(result) = result {
+                results.push(result);
+            }
         }
-    }
+
+        anyhow::Ok(results)
+    })
+    .await??;
 
     if !results.is_empty() {
         println!(
@@ -103,7 +108,7 @@ async fn main() -> Result<()> {
 }
 
 #[async_trait]
-trait Benchmark {
+trait Benchmark: Send + Sync + 'static {
     fn name(&self) -> &'static str;
 
     async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>>;
@@ -492,7 +497,7 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);
             config.support_draft_29 = true;
-            libp2p_quic::async_std::Transport::new(config)
+            libp2p_quic::tokio::Transport::new(config)
         };
 
         let dns = DnsConfig::system(OrTransport::new(quic, tcp))
@@ -506,7 +511,7 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
         .boxed()
     };
 
-    SwarmBuilder::with_async_std_executor(
+    SwarmBuilder::with_tokio_executor(
         transport,
         libp2p_perf::client::Behaviour::default(),
         local_peer_id,

@@ -25,7 +25,7 @@ use libp2p_perf::{
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn perf() {
     let _ = env_logger::try_init();
 
@@ -36,7 +36,7 @@ async fn perf() {
     server.listen().await;
     client.connect(&mut server).await;
 
-    async_std::task::spawn(server.loop_on_next());
+    tokio::spawn(server.loop_on_next());
 
     client
         .behaviour_mut()

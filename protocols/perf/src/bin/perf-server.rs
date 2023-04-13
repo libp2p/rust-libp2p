@@ -34,7 +34,7 @@ struct Opts {
     secret_key_seed: u8,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     env_logger::init();
 
@@ -46,19 +46,18 @@ async fn main() {
     println!("Local peer id: {local_peer_id}");
 
     let transport = {
-        let tcp =
-            libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
-                .upgrade(upgrade::Version::V1Lazy)
-                .authenticate(
-                    libp2p_noise::NoiseAuthenticated::xx(&local_key)
-                        .expect("Signing libp2p-noise static DH keypair failed."),
-                )
-                .multiplex(libp2p_yamux::YamuxConfig::default());
+        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
+            .upgrade(upgrade::Version::V1Lazy)
+            .authenticate(
+                libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                    .expect("Signing libp2p-noise static DH keypair failed."),
+            )
+            .multiplex(libp2p_yamux::YamuxConfig::default());
 
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);
             config.support_draft_29 = true;
-            libp2p_quic::async_std::Transport::new(config)
+            libp2p_quic::tokio::Transport::new(config)
         };
 
         let dns = DnsConfig::system(OrTransport::new(quic, tcp))
@@ -72,7 +71,7 @@ async fn main() {
         .boxed()
     };
 
-    let mut swarm = SwarmBuilder::with_async_std_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         transport,
         libp2p_perf::server::Behaviour::default(),
         local_peer_id,
@@ -88,34 +87,35 @@ async fn main() {
         .listen_on("/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap())
         .unwrap();
 
-    loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {address}");
-            }
-            SwarmEvent::IncomingConnection { .. } => {}
-            e @ SwarmEvent::IncomingConnectionError { .. } => {
-                error!("{e:?}");
-            }
-            SwarmEvent::ConnectionEstablished {
-                peer_id, endpoint, ..
-            } => {
-                info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-            }
-            SwarmEvent::ConnectionClosed { .. } => {}
-            SwarmEvent::Behaviour(libp2p_perf::server::Event {
-                remote_peer_id,
-                stats,
-            }) => {
-                let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
-                let receive_time = (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
-                let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
+    tokio::spawn(async move {
+        loop {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    info!("Listening on {address}");
+                }
+                SwarmEvent::IncomingConnection { .. } => {}
+                e @ SwarmEvent::IncomingConnectionError { .. } => {
+                    error!("{e:?}");
+                }
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } => {
+                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                }
+                SwarmEvent::ConnectionClosed { .. } => {}
+                SwarmEvent::Behaviour(libp2p_perf::server::Event {
+                                          remote_peer_id,
+                                          stats,
+                                      }) => {
+                    let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
+                    let receive_time = (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
+                    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
 
-                let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
-                let sent_time = (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
-                let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
+                    let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
+                    let sent_time = (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
+                    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
 
-                info!(
+                    info!(
                         "Finished run with {}: Received {:.2} MiB in {:.2} s with {:.2} MiBit/s and sent {:.2} MiB in {:.2} s with {:.2} MiBit/s",
                         remote_peer_id,
                         received_mebibytes,
@@ -125,10 +125,11 @@ async fn main() {
                         sent_time,
                         sent_bandwidth_mebibit_second,
                     )
+                }
+                e => panic!("{e:?}"),
             }
-            e => panic!("{e:?}"),
         }
-    }
+    }).await.unwrap();
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {
