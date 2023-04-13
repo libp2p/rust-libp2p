@@ -219,6 +219,21 @@ where
             supported_protocols,
         } = self.get_mut();
 
+        let protocol = handler.listen_protocol();
+
+        let new_protocols = protocol
+            .upgrade()
+            .protocol_info()
+            .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
+            .collect::<HashSet<_>>();
+
+        handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+            ProtocolsChange::Added(ProtocolsAdded {
+                protocols: new_protocols.difference(&HashSet::new()).peekable(),
+            }),
+        ));
+        *supported_protocols = new_protocols;
+
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,

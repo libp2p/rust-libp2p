@@ -51,11 +51,11 @@ pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, U
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use std::collections::hash_set::{Difference};
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 use std::collections::hash_map::RandomState;
+use std::collections::hash_set::Difference;
 use std::collections::HashSet;
 use std::iter::Peekable;
+use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;

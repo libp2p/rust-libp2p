@@ -30,7 +30,10 @@ use libp2p_core::upgrade::SelectUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolsChange, ProtocolSupport};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ProtocolSupport, ProtocolsChange,
+};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
@@ -200,12 +203,16 @@ impl Handler {
 
                 if !remote_added_protocols.is_empty() {
                     self.events
-                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(ProtocolSupport::Added(remote_added_protocols)));
+                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                            ProtocolSupport::Added(remote_added_protocols),
+                        ));
                 }
 
                 if !remote_removed_protocols.is_empty() {
                     self.events
-                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(ProtocolSupport::Removed(remote_removed_protocols)));
+                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                            ProtocolSupport::Removed(remote_removed_protocols),
+                        ));
                 }
 
                 self.remote_supported_protocols = new_remote_protocols;
