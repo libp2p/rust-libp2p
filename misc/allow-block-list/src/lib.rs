@@ -105,7 +105,7 @@ impl Behaviour<AllowedPeers> {
     ///
     /// All active connections to this peer will be closed immediately.
     pub fn disallow_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
+        self.state.peers.remove(&peer);
         self.close_connections.push_back(peer);
         if let Some(waker) = self.waker.take() {
             waker.wake()
@@ -127,7 +127,7 @@ impl Behaviour<BlockedPeers> {
 
     /// Unblock connections to a given peer.
     pub fn unblock_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
+        self.state.peers.remove(&peer);
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
