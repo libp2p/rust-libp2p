@@ -16,7 +16,11 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.crate }}
-    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "large"]' || '"ubuntu-latest"') }}
+    runs-on: ${{ fromJSON(
+      github.repository == 'libp2p/rust-libp2p' && (
+        (contains(['libp2p-webrtc', 'libp2p', 'libp2p-quic', 'libp2p-perf'], matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+        '["self-hosted", "linux", "x64", "large"]'
+      ) || '"ubuntu-latest"') }}
     needs: gather_published_crates
     strategy:
       fail-fast: false
