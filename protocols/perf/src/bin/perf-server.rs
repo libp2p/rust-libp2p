@@ -21,7 +21,7 @@
 use clap::Parser;
 use futures::{future::Either, StreamExt};
 use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Transport};
-use libp2p_dns::DnsConfig;
+use libp2p_dns::TokioDnsConfig;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{SwarmBuilder, SwarmEvent};
 use log::{error, info};
@@ -60,9 +60,7 @@ async fn main() {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = DnsConfig::system(OrTransport::new(quic, tcp))
-            .await
-            .unwrap();
+        let dns = TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),

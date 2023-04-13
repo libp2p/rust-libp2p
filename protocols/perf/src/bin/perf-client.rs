@@ -25,7 +25,7 @@ use colored::*;
 use futures::{future::Either, StreamExt};
 use instant::{Duration, Instant};
 use libp2p_core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, Transport};
-use libp2p_dns::DnsConfig;
+use libp2p_dns::TokioDnsConfig;
 use libp2p_identity::PeerId;
 use libp2p_perf::client::{RunParams, RunStats, RunTimers};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
@@ -485,14 +485,13 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
     let local_peer_id = PeerId::from(local_key.public());
 
     let transport = {
-        let tcp =
-            libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
-                .upgrade(upgrade::Version::V1Lazy)
-                .authenticate(
-                    libp2p_noise::NoiseAuthenticated::xx(&local_key)
-                        .expect("Signing libp2p-noise static DH keypair failed."),
-                )
-                .multiplex(libp2p_yamux::YamuxConfig::default());
+        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
+            .upgrade(upgrade::Version::V1Lazy)
+            .authenticate(
+                libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                    .expect("Signing libp2p-noise static DH keypair failed."),
+            )
+            .multiplex(libp2p_yamux::YamuxConfig::default());
 
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);
@@ -500,9 +499,7 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = DnsConfig::system(OrTransport::new(quic, tcp))
-            .await
-            .unwrap();
+        let dns = TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
