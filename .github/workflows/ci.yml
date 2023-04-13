@@ -51,6 +51,8 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
+      # consider using https://github.com/mozilla/sccache/blob/main/docs/S3.md
+      # and https://github.com/mozilla/sccache/blob/main/docs/GHA.md
       - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: msrv-cache
@@ -61,6 +63,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # consider using https://github.com/mozilla/sccache/blob/main/docs/S3.md
+      # and https://github.com/mozilla/sccache/blob/main/docs/GHA.md
       - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
         with:
           shared-key: stable-cache
