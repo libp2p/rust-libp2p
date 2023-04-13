@@ -118,7 +118,7 @@ pub use behaviour::{
 };
 #[allow(deprecated)]
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
-pub use connection::{ConnectionError, ConnectionId};
+pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
 #[allow(deprecated)]
 pub use handler::IntoConnectionHandler;

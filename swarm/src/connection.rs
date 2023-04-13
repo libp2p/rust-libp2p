@@ -21,11 +21,13 @@
 mod error;
 
 pub(crate) mod pool;
+mod supported_protocols;
 
 pub use error::{
     ConnectionError, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
+pub use supported_protocols::SupportedProtocols;
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
@@ -408,15 +410,15 @@ where
                             let mut removed_protocols =
                                 supported_protocols.difference(&new_protocols).peekable();
 
-                            if added_protocols.peek().is_some() {
+                            if dbg!(added_protocols.peek()).is_some() {
                                 handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                                    ProtocolsChange::Removed(ProtocolsRemoved {
+                                    ProtocolsChange::Added(ProtocolsAdded {
                                         protocols: added_protocols,
                                     }),
                                 ));
                             }
 
-                            if removed_protocols.peek().is_some() {
+                            if dbg!(removed_protocols.peek()).is_some() {
                                 handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                                     ProtocolsChange::Removed(ProtocolsRemoved {
                                         protocols: removed_protocols,
@@ -424,6 +426,8 @@ where
                                 ));
                             }
                         }
+
+                        *supported_protocols = new_protocols;
 
                         negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
 
@@ -679,6 +683,7 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connection::supported_protocols::SupportedProtocols;
     use crate::keep_alive;
     use futures::future;
     use futures::AsyncRead;
@@ -754,21 +759,54 @@ mod tests {
             None,
             2,
         );
-        connection.handler.active_protocols = vec!["/foo"];
+        connection.handler.active_protocols = HashSet::from(["/foo"]);
 
         // DummyStreamMuxer will yield a new stream
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
-        assert_eq!(connection.handler.reported_protocols, vec!["/foo"]);
+        assert_eq!(
+            connection
+                .handler
+                .supported_local_protocols
+                .iter()
+                .cloned()
+                .collect::<HashSet<_>>(),
+            HashSet::from(["/foo".to_owned()])
+        );
 
-        connection.handler.active_protocols = vec!["/foo", "/bar"];
+        connection.handler.active_protocols = HashSet::from(["/foo", "/bar"]);
         connection.negotiating_in.clear(); // Hack to request more substreams from the muxer.
 
         // DummyStreamMuxer will yield a new stream
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
 
-        assert_eq!(connection.handler.reported_protocols, vec!["/bar", "/foo"])
+        assert_eq!(
+            connection
+                .handler
+                .supported_local_protocols
+                .iter()
+                .cloned()
+                .collect::<HashSet<_>>(),
+            HashSet::from(["/bar".to_owned(), "/foo".to_owned()])
+        );
+
+        connection.handler.active_protocols = HashSet::from(["/bar"]);
+        connection.negotiating_in.clear(); // Hack to request more substreams from the muxer.
+
+        // DummyStreamMuxer will yield a new stream
+        let _ = Pin::new(&mut connection)
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+
+        assert_eq!(
+            connection
+                .handler
+                .supported_local_protocols
+                .iter()
+                .cloned()
+                .collect::<HashSet<_>>(),
+            HashSet::from(["/bar".to_owned()])
+        );
     }
 
     struct DummyStreamMuxer {
@@ -890,8 +928,8 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        active_protocols: Vec<&'static str>,
-        reported_protocols: Vec<String>,
+        active_protocols: HashSet<&'static str>,
+        supported_local_protocols: SupportedProtocols,
     }
 
     impl ConnectionHandler for MockConnectionHandler {
@@ -982,7 +1020,7 @@ mod tests {
         ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
             SubstreamProtocol::new(
                 ManyProtocolsUpgrade {
-                    protocols: self.active_protocols.clone(),
+                    protocols: Vec::from_iter(self.active_protocols.clone()),
                 },
                 (),
             )
@@ -997,16 +1035,8 @@ mod tests {
                 Self::OutboundOpenInfo,
             >,
         ) {
-            match event {
-                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
-                    self.reported_protocols.extend(added.cloned());
-                }
-                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
-                    for protocol in removed {
-                        self.reported_protocols.retain(|p| p != protocol);
-                    }
-                }
-                _ => {}
+            if let ConnectionEvent::LocalProtocolsChange(change) = event {
+                self.supported_local_protocols.on_protocols_change(change);
             }
         }
 

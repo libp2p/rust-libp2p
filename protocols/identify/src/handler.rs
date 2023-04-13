@@ -32,11 +32,11 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolSupport, ProtocolsChange,
+    ProtocolSupport,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    NegotiatedSubstream, SubstreamProtocol, SupportedProtocols,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -85,7 +85,7 @@ pub struct Handler {
     /// Address observed by or for the remote.
     observed_addr: Multiaddr,
 
-    local_supported_protocols: HashSet<String>,
+    local_supported_protocols: SupportedProtocols,
     remote_supported_protocols: HashSet<String>,
 }
 
@@ -139,8 +139,8 @@ impl Handler {
             protocol_version,
             agent_version,
             observed_addr,
-            local_supported_protocols: HashSet::new(),
-            remote_supported_protocols: HashSet::new(),
+            local_supported_protocols: SupportedProtocols::default(),
+            remote_supported_protocols: HashSet::default(),
         }
     }
 
@@ -277,7 +277,7 @@ impl ConnectionHandler for Handler {
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs,
-            protocols: Vec::from_iter(self.local_supported_protocols.clone()),
+            protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
             observed_addr: self.observed_addr.clone(),
         };
 
@@ -380,13 +380,8 @@ impl ConnectionHandler for Handler {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
-            ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
-                self.local_supported_protocols.extend(added.cloned());
-            }
-            ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
-                for p in removed {
-                    self.local_supported_protocols.remove(p);
-                }
+            ConnectionEvent::LocalProtocolsChange(change) => {
+                self.local_supported_protocols.on_protocols_change(change);
             }
             ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
