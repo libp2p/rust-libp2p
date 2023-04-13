@@ -1,4 +1,4 @@
-## 0.1.2
+## 0.1.2 - unreleased
 
 - Follow Rust naming conventions for conversion methods.
   See [PR 3775].
