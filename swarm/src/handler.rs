@@ -51,7 +51,11 @@ pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, U
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
+use std::collections::hash_set::{Difference};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use std::collections::hash_map::RandomState;
+use std::collections::HashSet;
+use std::iter::Peekable;
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
@@ -244,9 +248,34 @@ pub struct AddressChange<'a> {
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
-#[derive(Clone, Copy)]
-pub struct ProtocolsChange<'a> {
-    pub protocols: &'a [String],
+#[derive(Clone)]
+pub enum ProtocolsChange<'a> {
+    Added(ProtocolsAdded<'a>),
+    Removed(ProtocolsRemoved<'a>),
+}
+
+#[derive(Clone)]
+pub struct ProtocolsAdded<'a> {
+    pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
+}
+
+#[derive(Clone)]
+pub struct ProtocolsRemoved<'a> {
+    pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
+}
+
+impl<'a> Iterator for ProtocolsAdded<'a> {
+    type Item = &'a String;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
+}
+
+impl<'a> Iterator for ProtocolsRemoved<'a> {
+    type Item = &'a String;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
 }
 
 /// [`ConnectionEvent`] variant that informs the handler
@@ -357,18 +386,19 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// the connection, return [`KeepAlive::No`] in
     /// [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
-
-    /// We learned that the remote supports the provided protocols on this connection.
-    ///
-    /// This list will directly be passed back to the [`ConnectionHandler`] in [`ConnectionHandler::on_connection_event`].
-    /// Due to the composed nature of [`ConnectionHandler`]s,
-    /// this mechanism effectively shares this list with all other handlers on a connection.
-    ///
-    /// Other handlers MAY use this to preemptively enable / disable themselves.
-    ReportRemoteProtocols { protocols: Vec<String> },
+    /// We learned something about the protocols supported by the remote.
+    ReportRemoteProtocols(ProtocolSupport),
 
     /// Other event.
     Custom(TCustom),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProtocolSupport {
+    /// The remote now supports these protocols.
+    Added(HashSet<String>),
+    /// The remote no longer supports these protocols.
+    Removed(HashSet<String>),
 }
 
 /// Event produced by a handler.
@@ -392,8 +422,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
-            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
-                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
         }
     }
@@ -415,8 +445,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
-            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
-                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
         }
     }
@@ -435,8 +465,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
-            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
-                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
         }
     }
@@ -455,8 +485,8 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
-            ConnectionHandlerEvent::ReportRemoteProtocols { protocols } => {
-                ConnectionHandlerEvent::ReportRemoteProtocols { protocols }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
             }
         }
     }

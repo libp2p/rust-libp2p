@@ -400,8 +400,8 @@ where
                         .map_info(Either::Left),
                 });
             }
-            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
-                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols });
+            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
+                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support));
             }
             Poll::Pending => (),
         };
@@ -420,8 +420,8 @@ where
                         .map_info(Either::Right),
                 });
             }
-            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
-                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols });
+            Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support)) => {
+                return Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(support));
             }
             Poll::Pending => (),
         };
@@ -486,7 +486,7 @@ where
             ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        supported_protocols,
+                        supported_protocols.clone(),
                     ));
                 self.proto2
                     .on_connection_event(ConnectionEvent::LocalProtocolsChange(
@@ -496,7 +496,7 @@ where
             ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        supported_protocols,
+                        supported_protocols.clone(),
                     ));
                 self.proto2
                     .on_connection_event(ConnectionEvent::RemoteProtocolsChange(

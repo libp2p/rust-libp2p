@@ -38,7 +38,7 @@ use libp2p_swarm::{
     NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
@@ -86,6 +86,8 @@ pub struct KademliaHandler<TUserData> {
 
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
+
+    remote_supported_protocols: HashSet<String>,
 }
 
 /// The states of protocol confirmation that a connection
@@ -503,6 +505,7 @@ where
             requested_streams: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unknown,
+            remote_supported_protocols: Default::default(),
         }
     }
 
@@ -790,25 +793,36 @@ where
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_) => {}
-            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange { protocols }) => {
-                // TODO: We should cache this / it will get simpler with #2831.
-                let kademlia_protocols = self
-                    .config
-                    .protocol_config
-                    .protocol_names()
-                    .iter()
-                    .filter_map(|b| String::from_utf8(b.to_vec()).ok())
-                    .collect::<Vec<_>>();
-
-                let remote_supports_our_kademlia_protocols =
-                    kademlia_protocols.iter().all(|p| protocols.contains(p));
-
-                if remote_supports_our_kademlia_protocols {
-                    self.protocol_status = ProtocolStatus::Confirmed;
-                } else {
-                    self.protocol_status = ProtocolStatus::NotSupported;
+            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(added)) => {
+                for p in added {
+                    self.remote_supported_protocols.insert(p.to_owned());
                 }
             }
+            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                for p in removed {
+                    self.remote_supported_protocols.remove(p);
+                }
+            }
+        }
+
+        // TODO: We should cache this / it will get simpler with #2831.
+        let our_kademlia_protocols = self
+            .config
+            .protocol_config
+            .protocol_names()
+            .iter()
+            .filter_map(|b| String::from_utf8(b.to_vec()).ok())
+            .collect::<Vec<_>>();
+
+        let remote_supports_our_kademlia_protocols = self
+            .remote_supported_protocols
+            .iter()
+            .any(|p| our_kademlia_protocols.contains(p));
+
+        if remote_supports_our_kademlia_protocols {
+            self.protocol_status = ProtocolStatus::Confirmed;
+        } else {
+            self.protocol_status = ProtocolStatus::NotSupported;
         }
     }
 }

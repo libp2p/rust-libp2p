@@ -29,7 +29,8 @@ pub use error::{
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolsChange,
+    FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
+    ProtocolsRemoved,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
@@ -45,6 +46,7 @@ use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::Endpoint;
 use libp2p_core::{upgrade, ProtocolName as _, UpgradeError};
 use libp2p_identity::PeerId;
+use std::collections::HashSet;
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
@@ -146,7 +148,7 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    supported_protocols: Vec<String>,
+    supported_protocols: HashSet<String>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -184,7 +186,7 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
-            supported_protocols: vec![],
+            supported_protocols: HashSet::new(),
         }
     }
 
@@ -248,11 +250,23 @@ where
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
                     return Poll::Ready(Err(ConnectionError::Handler(err)));
                 }
-                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols { protocols }) => {
+                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(protocols),
+                )) => {
                     handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        ProtocolsChange {
-                            protocols: &protocols,
-                        },
+                        ProtocolsChange::Added(ProtocolsAdded {
+                            protocols: protocols.difference(&HashSet::new()).peekable(), // This is a bit of a hack to use the same type internally in `ProtocolsAdded`.
+                        }),
+                    ));
+                    continue;
+                }
+                Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(protocols),
+                )) => {
+                    handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        ProtocolsChange::Removed(ProtocolsRemoved {
+                            protocols: protocols.difference(&HashSet::new()).peekable(), // This is a bit of a hack to use the same type internally in `ProtocolsRemoved`.
+                        }),
                     ));
                     continue;
                 }
@@ -367,21 +381,33 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        let mut new_protocols = protocol
+                        let new_protocols = protocol
                             .upgrade()
                             .protocol_info()
                             .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
-                            .collect::<Vec<_>>();
+                            .collect::<HashSet<_>>();
 
-                        new_protocols.sort();
+                        if &new_protocols != supported_protocols {
+                            let mut added_protocols =
+                                new_protocols.difference(supported_protocols).peekable();
+                            let mut removed_protocols =
+                                supported_protocols.difference(&new_protocols).peekable();
 
-                        if supported_protocols != &new_protocols {
-                            handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                                ProtocolsChange {
-                                    protocols: &new_protocols,
-                                },
-                            ));
-                            *supported_protocols = new_protocols;
+                            if added_protocols.peek().is_some() {
+                                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                                    ProtocolsChange::Removed(ProtocolsRemoved {
+                                        protocols: added_protocols,
+                                    }),
+                                ));
+                            }
+
+                            if removed_protocols.peek().is_some() {
+                                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                                    ProtocolsChange::Removed(ProtocolsRemoved {
+                                        protocols: removed_protocols,
+                                    }),
+                                ));
+                            }
                         }
 
                         negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
@@ -956,8 +982,16 @@ mod tests {
                 Self::OutboundOpenInfo,
             >,
         ) {
-            if let ConnectionEvent::LocalProtocolsChange(ProtocolsChange { protocols }) = event {
-                self.reported_protocols = protocols.to_vec();
+            match event {
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.reported_protocols.extend(added.cloned());
+                }
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    for protocol in removed {
+                        self.reported_protocols.retain(|p| p != protocol);
+                    }
+                }
+                _ => {}
             }
         }
 

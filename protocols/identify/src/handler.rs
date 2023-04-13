@@ -30,17 +30,14 @@ use libp2p_core::upgrade::SelectUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolsChange,
-};
+use libp2p_swarm::handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolsChange, ProtocolSupport};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// Protocol handler for sending and receiving identification requests.
@@ -85,7 +82,8 @@ pub struct Handler {
     /// Address observed by or for the remote.
     observed_addr: Multiaddr,
 
-    local_supported_protocols: Vec<String>,
+    local_supported_protocols: HashSet<String>,
+    remote_supported_protocols: HashSet<String>,
 }
 
 /// An event from `Behaviour` with the information requested by the `Handler`.
@@ -138,7 +136,8 @@ impl Handler {
             protocol_version,
             agent_version,
             observed_addr,
-            local_supported_protocols: vec![],
+            local_supported_protocols: HashSet::new(),
+            remote_supported_protocols: HashSet::new(),
         }
     }
 
@@ -187,10 +186,30 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(remote_info) => {
-                self.events
-                    .push(ConnectionHandlerEvent::ReportRemoteProtocols {
-                        protocols: remote_info.protocols.clone(),
-                    });
+                let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
+
+                let remote_added_protocols = new_remote_protocols
+                    .difference(&self.remote_supported_protocols)
+                    .cloned()
+                    .collect::<HashSet<_>>();
+                let remote_removed_protocols = self
+                    .remote_supported_protocols
+                    .difference(&new_remote_protocols)
+                    .cloned()
+                    .collect::<HashSet<_>>();
+
+                if !remote_added_protocols.is_empty() {
+                    self.events
+                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(ProtocolSupport::Added(remote_added_protocols)));
+                }
+
+                if !remote_removed_protocols.is_empty() {
+                    self.events
+                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(ProtocolSupport::Removed(remote_removed_protocols)));
+                }
+
+                self.remote_supported_protocols = new_remote_protocols;
+
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
@@ -251,7 +270,7 @@ impl ConnectionHandler for Handler {
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs,
-            protocols: self.local_supported_protocols.clone(),
+            protocols: Vec::from_iter(self.local_supported_protocols.clone()),
             observed_addr: self.observed_addr.clone(),
         };
 
@@ -311,10 +330,11 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(info) = res {
-                self.events
-                    .push(ConnectionHandlerEvent::ReportRemoteProtocols {
-                        protocols: info.protocols.clone(),
-                    });
+                // TODO: report new protocols
+                // self.events
+                //     .push(ConnectionHandlerEvent::ReportRemoteProtocols {
+                //         protocols: info.protocols.clone(),
+                //     });
                 return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
             }
         }
@@ -353,8 +373,13 @@ impl ConnectionHandler for Handler {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
-            ConnectionEvent::LocalProtocolsChange(ProtocolsChange { protocols }) => {
-                self.local_supported_protocols = protocols.to_vec();
+            ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
+                self.local_supported_protocols.extend(added.cloned());
+            }
+            ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                for p in removed {
+                    self.local_supported_protocols.remove(p);
+                }
             }
             ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
