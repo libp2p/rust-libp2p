@@ -26,7 +26,7 @@ use peers::closest::{
 use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
 
-use crate::kbucket::{Key, KeyBytes};
+use crate::kbucket_priv::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
