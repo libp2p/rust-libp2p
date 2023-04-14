@@ -1,4 +1,4 @@
-## 0.1.0 - unreleased
+## 0.1.1 - unreleased
 
 - Correctly unblock and disallow peer in `unblock_peer` and `disallow_peer` functions.
   See [PR 3789].
