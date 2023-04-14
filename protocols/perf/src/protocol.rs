@@ -24,7 +24,7 @@ use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{client, server};
 
-const BUF: [u8; 1024] = [0; 1024];
+const BUF: [u8; 65536] = [0; 64 << 10];
 
 pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
     params: client::RunParams,
@@ -35,7 +35,7 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
         to_receive,
     } = params;
 
-    let mut receive_buf = vec![0; 1024];
+    let mut receive_buf = vec![0; 64 << 10];
 
     stream.write_all(&(to_receive as u64).to_be_bytes()).await?;
 
@@ -77,6 +77,8 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
 pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
 ) -> Result<server::RunStats, std::io::Error> {
+    let mut receive_buf = vec![0; 64 << 10];
+
     let to_send = {
         let mut buf = [0; 8];
         stream.read_exact(&mut buf).await?;
@@ -86,7 +88,6 @@ pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
 
     let read_start = Instant::now();
 
-    let mut receive_buf = vec![0; 1024];
     let mut received = 0;
     loop {
         let n = stream.read(&mut receive_buf).await?;
