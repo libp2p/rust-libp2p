@@ -54,7 +54,7 @@ impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.to_protobuf_encoding()),
+            pubkey: Some(config.local_public_key.encode_protobuf()),
         };
         let mut buf = Vec::with_capacity(exchange.get_size());
         let mut writer = Writer::new(&mut buf);
@@ -77,7 +77,7 @@ impl HandshakeContext<Local> {
         let mut reader = BytesReader::from_bytes(&exchange_bytes);
         let prop = Exchange::from_reader(&mut reader, &exchange_bytes)?;
 
-        let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
+        let public_key = PublicKey::try_decode_protobuf(&prop.pubkey.unwrap_or_default())?;
         let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;
 
         // Check the validity of the remote's `Exchange`.
