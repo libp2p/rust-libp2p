@@ -203,7 +203,7 @@ impl From<MessageAuthenticity> for PublishConfig {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
                 let public_key = keypair.public();
-                let key_enc = public_key.to_protobuf_encoding();
+                let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::proto::Message::key`] field.

@@ -234,13 +234,9 @@ impl GossipsubCodec {
 
         // If there is a key value in the protobuf, use that key otherwise the key must be
         // obtained from the inlined source peer_id.
-        let public_key = match message
-            .key
-            .as_deref()
-            .map(PublicKey::from_protobuf_encoding)
-        {
+        let public_key = match message.key.as_deref().map(PublicKey::try_decode_protobuf) {
             Some(Ok(key)) => key,
-            _ => match PublicKey::from_protobuf_encoding(&source.to_bytes()[2..]) {
+            _ => match PublicKey::try_decode_protobuf(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
                     warn!("Signature verification failed: No valid public key supplied");
