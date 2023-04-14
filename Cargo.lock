@@ -2438,6 +2438,7 @@ dependencies = [
  "base64 0.21.0",
  "byteorder",
  "bytes",
+ "either",
  "env_logger 0.10.0",
  "fnv",
  "futures",
@@ -2462,6 +2463,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
+ "void",
  "wasm-timer",
 ]
 
@@ -2841,7 +2843,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.1"
+version = "0.42.2"
 dependencies = [
  "async-std",
  "either",

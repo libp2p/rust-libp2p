@@ -11,7 +11,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
+either = "1.5"
+libp2p-swarm = { version = "0.42.2", path = "../../swarm" }
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-identity = { version = "0.1.2", path = "../../identity" }
 bytes = "1.4"
@@ -33,6 +34,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 thiserror = "1.0"
 wasm-timer = "0.2.5"
 instant = "0.1.11"
+void = "1.0.2"
 # Metrics dependencies
 prometheus-client = "0.19.0"
 
