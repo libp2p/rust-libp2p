@@ -22,22 +22,23 @@ jobs:
       fail-fast: false
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
+    env:
+      CRATE: ${{ matrix.crate }}
     steps:
       - name: Install Protoc
         run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - name: Get MSRV for ${{ matrix.crate }}
-        id: parse-msrv
+      - name: Get MSRV for $CRATE
         run: |
-          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
-          echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
+          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == env.CRATE) | .rust_version')
+          echo "RUST_VERSION=${RUST_VERSION}" >> $GITHUB_ENV
 
-      - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
+      - name: Install Rust $RUST_VERSION for MSRV check
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ steps.parse-msrv.outputs.version }}
+          toolchain: env.RUST_VERSION
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
@@ -46,8 +47,8 @@ jobs:
           shared-key: msrv-cache
           save-if: false
 
-      - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
+      - name: Check if env.CRATE compiles on MSRV (Rust env.RUST_VERSION)
+        run: cargo +"$RUST_VERSION" build --package "$CRATE" --all-features
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -57,29 +58,29 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package "$CRATE" --all-features
 
       - name: Check if we compile without any features activated
-        run: cargo build --package ${{ matrix.crate }} --no-default-features
+        run: cargo build --package "$CRATE" --no-default-features
 
       - run: cargo clean
 
       - name: Check if crate has been released
         id: check-released
         run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
+          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          crate: ${{ matrix.crate }}
+          crate: env.CRATE
 
       - name: Enforce no dependency on meta crate
         run: |
           cargo metadata --format-version=1 --no-deps | \
-          jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
+          jq -e -r '.packages[] | select(.name == "$CRATE") | .dependencies | all(.name != "libp2p")'
 
   cross:
     name: Compile on ${{ matrix.target }}
