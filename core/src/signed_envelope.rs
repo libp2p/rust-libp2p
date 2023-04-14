@@ -76,7 +76,7 @@ impl SignedEnvelope {
         use quick_protobuf::MessageWrite;
 
         let envelope = proto::Envelope {
-            public_key: self.key.to_protobuf_encoding(),
+            public_key: self.key.encode_protobuf(),
             payload_type: self.payload_type,
             payload: self.payload,
             signature: self.signature,
@@ -101,7 +101,7 @@ impl SignedEnvelope {
             proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError::from)?;
 
         Ok(Self {
-            key: PublicKey::from_protobuf_encoding(&envelope.public_key)?,
+            key: PublicKey::try_decode_protobuf(&envelope.public_key)?,
             payload_type: envelope.payload_type.to_vec(),
             payload: envelope.payload.to_vec(),
             signature: envelope.signature.to_vec(),

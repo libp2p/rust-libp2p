@@ -1,4 +1,4 @@
-## 0.10.2 - unreleased
+## 0.10.2
 
 - Store server `PeerId`s in `HashSet` to avoid duplicates and lower memory consumption.
   See [PR 3736].

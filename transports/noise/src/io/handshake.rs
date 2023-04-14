@@ -214,7 +214,7 @@ where
     let pb = pb_result?;
 
     if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
+        let pk = identity::PublicKey::try_decode_protobuf(&pb.identity_key)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
                 return Err(NoiseError::UnexpectedKey);
@@ -236,7 +236,7 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = proto::NoiseHandshakePayload {
-        identity_key: state.identity.public.to_protobuf_encoding(),
+        identity_key: state.identity.public.encode_protobuf(),
         ..Default::default()
     };
 
