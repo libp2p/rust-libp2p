@@ -62,6 +62,8 @@ jobs:
       - name: Check if we compile without any features activated
         run: cargo build --package ${{ matrix.crate }} --no-default-features
 
+      - run: cargo clean
+
       - name: Check if crate has been released
         id: check-released
         run: |
@@ -237,7 +239,7 @@ jobs:
 
       - id: cargo-metadata
         run: |
-          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
+          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(select(.publish == null) | .name)')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
 
   check-proto-files:
@@ -251,7 +253,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v16
+        uses: tj-actions/glob@v17
         id: glob
         with:
           files: |

@@ -23,13 +23,13 @@
 //! In one terminal run:
 //!
 //! ```
-//! cargo run --example metrics
+//! cargo run
 //! ```
 //!
 //! In a second terminal run:
 //!
 //! ```
-//! cargo run --example metrics -- <listen-addr-of-first-node>
+//! cargo run -- <listen-addr-of-first-node>
 //! ```
 //!
 //! Where `<listen-addr-of-first-node>` is replaced by the listen address of the
@@ -51,16 +51,11 @@
 use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p_core::{upgrade::Version, Multiaddr, Transport};
-use libp2p_identify as identify;
-use libp2p_identity as identity;
-use libp2p_identity::PeerId;
-use libp2p_metrics::{Metrics, Recorder};
-use libp2p_noise as noise;
-use libp2p_ping as ping;
-use libp2p_swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p_tcp as tcp;
-use libp2p_yamux as yamux;
+use libp2p::core::{upgrade::Version, Multiaddr, Transport};
+use libp2p::identity::PeerId;
+use libp2p::metrics::{Metrics, Recorder};
+use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -125,7 +120,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
-#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,

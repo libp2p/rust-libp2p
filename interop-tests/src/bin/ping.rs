@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
                 .boxed(),
             format!("/ip4/{ip}/tcp/0/ws"),
         ),
-        Transport::Webrtc => (
+        Transport::WebRtcDirect => (
             webrtc::tokio::Transport::new(
                 local_key,
                 webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
@@ -213,7 +213,7 @@ fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexCo
 pub enum Transport {
     Tcp,
     QuicV1,
-    Webrtc,
+    WebRtcDirect,
     Ws,
 }
 
@@ -224,7 +224,7 @@ impl FromStr for Transport {
         Ok(match s {
             "tcp" => Self::Tcp,
             "quic-v1" => Self::QuicV1,
-            "webrtc" => Self::Webrtc,
+            "webrtc-direct" => Self::WebRtcDirect,
             "ws" => Self::Ws,
             other => bail!("unknown transport {other}"),
         })
