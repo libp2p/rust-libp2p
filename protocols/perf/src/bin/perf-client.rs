@@ -485,7 +485,7 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
     let local_peer_id = PeerId::from(local_key.public());
 
     let transport = {
-        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
+        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1Lazy)
             .authenticate(
                 libp2p_noise::NoiseAuthenticated::xx(&local_key)
