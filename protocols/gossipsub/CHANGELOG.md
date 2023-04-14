@@ -1,4 +1,4 @@
-## 0.44.3 - unreleased
+## 0.44.3
 
 - Fix erroneously duplicate message IDs. See [PR 3716].
 

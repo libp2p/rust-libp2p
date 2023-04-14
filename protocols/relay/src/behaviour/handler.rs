@@ -69,7 +69,6 @@ pub enum In {
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        relay_peer_id: PeerId,
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
     },
@@ -112,13 +111,11 @@ impl fmt::Debug for In {
             In::NegotiateOutboundConnect {
                 circuit_id,
                 inbound_circuit_req: _,
-                relay_peer_id,
                 src_peer_id,
                 src_connection_id,
             } => f
                 .debug_struct("In::NegotiateOutboundConnect")
                 .field("circuit_id", circuit_id)
-                .field("relay_peer_id", relay_peer_id)
                 .field("src_peer_id", src_peer_id)
                 .field("src_connection_id", src_connection_id)
                 .finish(),
@@ -655,7 +652,6 @@ impl ConnectionHandler for Handler {
             In::NegotiateOutboundConnect {
                 circuit_id,
                 inbound_circuit_req,
-                relay_peer_id,
                 src_peer_id,
                 src_connection_id,
             } => {
@@ -663,7 +659,7 @@ impl ConnectionHandler for Handler {
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             outbound_stop::Upgrade {
-                                relay_peer_id,
+                                src_peer_id,
                                 max_circuit_duration: self.config.max_circuit_duration,
                                 max_circuit_bytes: self.config.max_circuit_bytes,
                             },
