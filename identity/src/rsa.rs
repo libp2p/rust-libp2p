@@ -49,12 +49,27 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_pkcs8` instead."
-    )]
+    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::try_decode_pkcs8`.")]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         Self::try_decode_pkcs8(der)
+    }
+
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
+    /// format (i.e. unencrypted) as defined in [RFC5208].
+    ///
+    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
+    pub fn try_decode_pkcs8(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
+        match RsaKeyPair::from_pkcs8(bytes) {
+            Ok(kp) => {
+                let kp = Self {
+                    inner: Arc::new(kp),
+                    raw_key: bytes.to_vec(),
+                };
+                bytes.zeroize();
+                Ok(kp)
+            }
+            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
+        }
     }
 
     /// Get the public key from the keypair.
@@ -72,26 +87,6 @@ impl Keypair {
         {
             Ok(()) => Ok(signature),
             Err(e) => Err(SigningError::new("RSA", Some(Box::new(e)))),
-        }
-    }
-
-    /// Try to decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
-    /// format (i.e. unencrypted) as defined in [RFC5208].
-    /// Decoding from DER-encoded private key bytes is also supported.
-    /// Note that a copy of the undecoded byte array will be stored for encoding.
-    ///
-    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    pub fn try_decode_pkcs8(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
-        match RsaKeyPair::from_pkcs8(bytes) {
-            Ok(kp) => {
-                let kp = Self {
-                    inner: Arc::new(kp),
-                    raw_key: bytes.to_vec(),
-                };
-                bytes.zeroize();
-                Ok(kp)
-            }
-            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
         }
     }
 
@@ -380,7 +375,7 @@ mod tests {
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::try_decode_x509(pk.encode_x509())
+            PublicKey::try_decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }

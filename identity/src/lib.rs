@@ -121,9 +121,7 @@ impl From<&PublicKey> for proto::PublicKey {
     }
 }
 
-use std::fmt::Display;
-
-pub use error::{DecodingError, SigningError};
+pub use error::{DecodingError, OtherVariantError, SigningError};
 pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
@@ -137,7 +135,7 @@ pub enum KeyType {
     Ecdsa,
 }
 
-impl Display for KeyType {
+impl std::fmt::Display for KeyType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             KeyType::Ed25519 => f.write_str("Ed25519"),

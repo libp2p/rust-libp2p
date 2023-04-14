@@ -21,7 +21,7 @@
 //! Errors during identity key operations.
 
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt;
 
 use crate::KeyType;
 
@@ -121,19 +121,19 @@ impl Error for SigningError {
     }
 }
 
-/// Error produced when failing to convert `libp2p_identity::Keypair` to a more concrete keypair.
+/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more concrete keypair.
 #[derive(Debug)]
 pub struct OtherVariantError {
     actual: KeyType,
 }
 
 impl OtherVariantError {
-    pub fn new(actual: KeyType) -> OtherVariantError {
+    pub(crate) fn new(actual: KeyType) -> OtherVariantError {
         OtherVariantError { actual }
     }
 }
 
-impl Display for OtherVariantError {
+impl fmt::Display for OtherVariantError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&format!(
             "Cannot convert to the given type, the actual key type inside is {}",

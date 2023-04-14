@@ -307,7 +307,8 @@ impl Keypair {
         match private_key.Type {
             proto::KeyType::Ed25519 => {
                 #[cfg(feature = "ed25519")]
-                return ed25519::Keypair::try_decode(&mut private_key.Data).map(Keypair::Ed25519);
+                return ed25519::Keypair::try_from_bytes(&mut private_key.Data)
+                    .map(Keypair::Ed25519);
                 Err(DecodingError::missing_feature("ed25519"))
             }
             proto::KeyType::RSA => {
@@ -489,8 +490,11 @@ impl PublicKey {
         }
     }
 
-
     #[cfg(feature = "ed25519")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ed25519` instead."
+    )]
     pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
         self.try_into().ok()
     }
@@ -501,6 +505,10 @@ impl PublicKey {
     }
 
     #[cfg(feature = "secp256k1")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_secp256k1` instead."
+    )]
     pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
         self.try_into().ok()
     }
@@ -511,6 +519,10 @@ impl PublicKey {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_rsa` instead."
+    )]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
         self.try_into().ok()
     }
@@ -521,6 +533,10 @@ impl PublicKey {
     }
 
     #[cfg(feature = "ecdsa")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ecdsa` instead."
+    )]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
         self.try_into().ok()
     }
@@ -532,9 +548,9 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
+    #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::encode_protobuf`.")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        self.encode_protobuf()
+        Self::encode_protobuf(self)
     }
 
     /// Encode the public key into a protobuf structure for storage or
@@ -592,7 +608,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
         match pubkey.Type {
             proto::KeyType::Ed25519 => {
                 #[cfg(feature = "ed25519")]
-                return ed25519::PublicKey::try_decode(&pubkey.Data).map(PublicKey::Ed25519);
+                return ed25519::PublicKey::try_from_bytes(&pubkey.Data).map(PublicKey::Ed25519);
                 log::debug!("support for ed25519 was disabled at compile-time");
                 Err(DecodingError::missing_feature("ed25519"))
             }
@@ -604,7 +620,8 @@ impl TryFrom<proto::PublicKey> for PublicKey {
             }
             proto::KeyType::Secp256k1 => {
                 #[cfg(feature = "secp256k1")]
-                return secp256k1::PublicKey::try_decode(&pubkey.Data).map(PublicKey::Secp256k1);
+                return secp256k1::PublicKey::try_from_bytes(&pubkey.Data)
+                    .map(PublicKey::Secp256k1);
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err(DecodingError::missing_feature("secp256k1"))
             }

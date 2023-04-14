@@ -41,27 +41,35 @@ impl Keypair {
     /// Encode the keypair into a byte array by concatenating the bytes
     /// of the secret scalar and the compressed public point,
     /// an informal standard for encoding Ed25519 keypairs.
+    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::to_bytes`")]
     pub fn encode(&self) -> [u8; 64] {
+        self.to_bytes()
+    }
+
+    /// Convert the keypair into a byte array by concatenating the bytes
+    /// of the secret scalar and the compressed public point,
+    /// an informal standard for encoding Ed25519 keypairs.
+    pub fn to_bytes(&self) -> [u8; 64] {
         self.0.to_bytes()
     }
 
     /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
-    /// produced by [`Keypair::encode`], zeroing the input on success.
+    /// produced by [`Keypair::to_bytes`], zeroing the input on success.
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_from_bytes` instead."
     )]
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
-        Self::try_decode(kp)
+        Self::try_from_bytes(kp)
     }
 
-    /// Try to decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
-    /// produced by [`Keypair::encode`], zeroing the input on success.
+    /// Try to parse a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
+    /// produced by [`Keypair::to_bytes`], zeroing the input on success.
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
-    pub fn try_decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
+    pub fn try_from_bytes(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
         ed25519::Keypair::from_bytes(kp)
             .map(|k| {
                 kp.zeroize();
@@ -176,21 +184,31 @@ impl PublicKey {
 
     /// Encode the public key into a byte array in compressed form, i.e.
     /// where one coordinate is represented by a single bit.
+    #[deprecated(
+        since = "0.2.0",
+        note = "Renamed to `PublicKey::to_bytes` to reflect actual behaviour."
+    )]
     pub fn encode(&self) -> [u8; 32] {
+        self.to_bytes()
+    }
+
+    /// Convert the public key to a byte array in compressed form, i.e.
+    /// where one coordinate is represented by a single bit.
+    pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes()
     }
 
-    /// Decode a public key from a byte array as produced by `encode`.
+    /// Decode a public key from a byte array as produced by `to_bytes`.
     #[deprecated(
         since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode(k)
+        Self::try_from_bytes(k)
     }
 
-    /// Try to decode a public key from a byte array as produced by `encode`.
-    pub fn try_decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
+    /// Try to parse a public key from a byte array containing the actual key as produced by `to_bytes`.
+    pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         ed25519::PublicKey::from_bytes(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
             .map(PublicKey)
@@ -240,11 +258,13 @@ impl SecretKey {
         since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
-    pub fn from_bytes(sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
+    #[allow(unused_mut)]
+    pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         Self::try_from_bytes(sk_bytes)
     }
 
-    /// Try to create an Ed25519 secret key from a byte slice, zeroing the input on success.
+    /// Try to parse an Ed25519 secret key from a byte slice
+    /// containing the actual key, zeroing the input on success.
     /// If the bytes do not constitute a valid Ed25519 secret key, an error is
     /// returned.
     pub fn try_from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
@@ -269,8 +289,8 @@ mod tests {
     fn ed25519_keypair_encode_decode() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
-            let mut kp1_enc = kp1.encode();
-            let kp2 = Keypair::try_decode(&mut kp1_enc).unwrap();
+            let mut kp1_enc = kp1.to_bytes();
+            let kp2 = Keypair::try_from_bytes(&mut kp1_enc).unwrap();
             eq_keypairs(&kp1, &kp2) && kp1_enc.iter().all(|b| *b == 0)
         }
         QuickCheck::new().tests(10).quickcheck(prop as fn() -> _);

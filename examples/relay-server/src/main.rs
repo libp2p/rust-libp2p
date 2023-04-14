@@ -102,7 +102,7 @@ struct Behaviour {
 fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
     bytes[0] = secret_key_seed;
-    identity::ed25519::Keypair::try_decode(&mut bytes)
+    identity::ed25519::Keypair::try_from_bytes(&mut bytes)
         .expect("only errors on wrong length")
         .into()
 }
