@@ -24,8 +24,8 @@ use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
+use crate::ValidationError;
 use crate::{rpc_proto::proto, Config};
-use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -37,6 +37,7 @@ use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
+use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
@@ -147,7 +148,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -168,7 +169,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -268,18 +269,18 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = proto::RPC;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
-        Ok(self.codec.encode(item, dst)?)
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        self.codec.encode(item, dst)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, HandlerError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let rpc = match self.codec.decode(src)? {
             Some(p) => p,
             None => return Ok(None),

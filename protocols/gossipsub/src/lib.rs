@@ -158,9 +158,12 @@ mod types;
 
 mod rpc_proto;
 
+#[deprecated(note = "This error will no longer be emitted")]
+pub type HandlerError = error_priv::HandlerError;
+
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error_priv::{HandlerError, PublishError, SubscriptionError, ValidationError};
+pub use self::error_priv::{PublishError, SubscriptionError, ValidationError};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
