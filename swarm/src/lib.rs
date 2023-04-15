@@ -140,18 +140,21 @@ use connection::{
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
+use libp2p_core::upgrade::{SelectUpgrade, Version};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr::Protocol,
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, ProtocolName, StreamMuxer, Transport,
 };
+use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::{
     convert::TryFrom,
@@ -1514,6 +1517,73 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
     fn local_peer_id(&self) -> &PeerId {
         self.local_peer_id
+    }
+}
+
+pub struct SwarmBuilder2<TState> {
+    state: TState,
+}
+
+pub struct NeedsExecutor {}
+
+pub struct NeedsTransport<TExecutor> {
+    phantom_exec: PhantomData<TExecutor>,
+}
+
+pub struct NeedsBehaviour {
+    transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+}
+
+#[cfg(feature = "tokio")]
+pub struct TokioExecutor {}
+
+impl SwarmBuilder2<NeedsExecutor> {
+    pub fn new() -> Self {
+        SwarmBuilder2 {
+            state: NeedsExecutor {},
+        }
+    }
+
+    #[cfg(feature = "tokio")]
+    pub fn with_tokio_executor(self) -> SwarmBuilder2<NeedsTransport<TokioExecutor>> {
+        SwarmBuilder2 {
+            state: NeedsTransport {
+                phantom_exec: Default::default(),
+            },
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl SwarmBuilder2<NeedsTransport<TokioExecutor>> {
+    #[cfg(all(feature = "tcp", feature = "tls", feature = "noise", feature = "yamux"))]
+    pub fn with_default_transports(self, key: identity::Keypair) -> SwarmBuilder2<NeedsBehaviour> {
+        let transport = libp2p_tcp::tokio::Transport::default()
+            .upgrade(Version::V1Lazy)
+            .authenticate(SelectUpgrade::new(
+                libp2p_noise::NoiseAuthenticated::xx(&key).expect("TODO"),
+                libp2p_tls::Config::new(&key).expect("TODO"),
+            ))
+            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .boxed();
+
+        self.with_transport(transport)
+    }
+}
+
+impl<E> SwarmBuilder2<NeedsTransport<E>> {
+    pub fn with_transport<T, M>(self, transport: T) -> SwarmBuilder2<NeedsBehaviour>
+    where
+        T: Transport<Output = (PeerId, M)>,
+        M: StreamMuxer,
+    {
+        SwarmBuilder2 {
+            state: NeedsBehaviour {
+                transport: transport
+                    .map(|(peer, stream), _| (peer, StreamMuxerBox::new(stream)))
+                    .boxed(),
+            },
+        }
     }
 }
 

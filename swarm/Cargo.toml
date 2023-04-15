@@ -26,15 +26,24 @@ void = "1"
 wasm-bindgen-futures = { version = "0.4.34", optional = true }
 getrandom = { version = "0.2.9", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 
+libp2p-tcp = { version = "0.39.0", path = "../transports/tcp", optional = true }
+libp2p-noise = { version = "0.42.1", path = "../transports/noise", optional = true }
+libp2p-tls = { version = "0.1.0", path = "../transports/tls", optional = true }
+libp2p-yamux = { version = "0.43.0", path = "../muxers/yamux", optional = true }
+
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 async-std = { version = "1.6.2", optional = true }
 tokio = { version = "1.27", features = ["rt"], optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
-tokio = ["dep:tokio"]
+tokio = ["dep:tokio", "libp2p-tcp?/tokio"]
 async-std = ["dep:async-std"]
 wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
+tcp = ["dep:libp2p-tcp"]
+tls = ["dep:libp2p-tls"]
+noise = ["dep:libp2p-noise"]
+yamux = ["dep:libp2p-yamux"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
