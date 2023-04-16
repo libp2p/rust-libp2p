@@ -372,7 +372,7 @@ where
     }
 
     /// Writes data to a substream.
-    pub fn poll_write_stream(
+    pub(crate) fn poll_write_stream(
         &mut self,
         cx: &mut Context<'_>,
         id: LocalStreamId,
@@ -422,7 +422,7 @@ where
     /// and under consideration of the number of already used substreams,
     /// thereby waking the task that last called `poll_next_stream`, if any.
     /// Inbound substreams received in excess of that limit are immediately reset.
-    pub fn poll_read_stream(
+    pub(crate) fn poll_read_stream(
         &mut self,
         cx: &mut Context<'_>,
         id: LocalStreamId,
@@ -514,7 +514,7 @@ where
     /// > **Note**: This is equivalent to `poll_flush()`, i.e. to flushing
     /// > all substreams, except that this operation returns an error if
     /// > the underlying I/O stream is already closed.
-    pub fn poll_flush_stream(
+    pub(crate) fn poll_flush_stream(
         &mut self,
         cx: &mut Context<'_>,
         id: LocalStreamId,
@@ -530,7 +530,7 @@ where
     /// Closes a stream for writing.
     ///
     /// > **Note**: As opposed to `poll_close()`, a flush it not implied.
-    pub fn poll_close_stream(
+    pub(crate) fn poll_close_stream(
         &mut self,
         cx: &mut Context<'_>,
         id: LocalStreamId,

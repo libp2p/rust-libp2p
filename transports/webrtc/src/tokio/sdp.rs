@@ -219,7 +219,7 @@ struct DescriptionContext {
     pub(crate) fingerprint_algorithm: String,
     pub(crate) fingerprint_value: String,
     pub(crate) ufrag: String,
-    pub pwd: String,
+    pub(crate) pwd: String,
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.

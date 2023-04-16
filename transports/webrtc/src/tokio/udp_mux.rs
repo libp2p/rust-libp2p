@@ -183,7 +183,7 @@ impl UDPMuxNewAddr {
 
     /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
     /// muxed connection.
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
+    pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
         let mut recv_buf = [0u8; RECEIVE_MTU];
 
         loop {
@@ -419,7 +419,7 @@ impl UDPMuxNewAddr {
 
 /// Handle which utilizes [`req_res_chan`] to transmit commands (e.g. remove connection) from the
 /// WebRTC ICE agent to [`UDPMuxNewAddr::poll`].
-pub struct UdpMuxHandle {
+pub(crate) struct UdpMuxHandle {
     close_sender: req_res_chan::Sender<(), Result<(), Error>>,
     get_conn_sender: req_res_chan::Sender<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
     remove_sender: req_res_chan::Sender<String, ()>,
@@ -427,7 +427,7 @@ pub struct UdpMuxHandle {
 
 impl UdpMuxHandle {
     /// Returns a new `UdpMuxHandle` and `close`, `get_conn` and `remove` receivers.
-    pub fn new() -> (
+    pub(crate) fn new() -> (
         Self,
         req_res_chan::Receiver<(), Result<(), Error>>,
         req_res_chan::Receiver<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
@@ -477,7 +477,7 @@ impl UDPMux for UdpMuxHandle {
 
 /// Handle which utilizes [`req_res_chan`] to transmit commands from [`UDPMuxConn`] connections to
 /// [`UDPMuxNewAddr::poll`].
-pub struct UdpMuxWriterHandle {
+pub(crate) struct UdpMuxWriterHandle {
     registration_channel: req_res_chan::Sender<(UDPMuxConn, SocketAddr), ()>,
     send_channel: req_res_chan::Sender<(Vec<u8>, SocketAddr), Result<usize, Error>>,
 }
