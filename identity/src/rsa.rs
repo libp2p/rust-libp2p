@@ -46,7 +46,16 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
+    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::try_decode_pkcs8`.")]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        Self::try_decode_pkcs8(der)
+    }
+
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
+    /// format (i.e. unencrypted) as defined in [RFC5208].
+    ///
+    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
+    pub fn try_decode_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(der)
             .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
         der.zeroize();
@@ -109,7 +118,17 @@ impl PublicKey {
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
+    #[deprecated(
+        since = "0.2.0",
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_x509` instead."
+    )]
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
+        Self::try_decode_x509(pk)
+    }
+
+    /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
+    /// structure. See also `encode_x509`.
+    pub fn try_decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::decode(pk)
             .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
             .map(|spki| spki.subjectPublicKey.0)
@@ -317,22 +336,22 @@ mod tests {
     impl Arbitrary for SomeKeypair {
         fn arbitrary(g: &mut Gen) -> SomeKeypair {
             let mut key = g.choose(&[KEY1, KEY2, KEY3]).unwrap().to_vec();
-            SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
+            SomeKeypair(Keypair::try_decode_pkcs8(&mut key).unwrap())
         }
     }
 
     #[test]
     fn rsa_from_pkcs8() {
-        assert!(Keypair::from_pkcs8(&mut KEY1.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY2.to_vec()).is_ok());
-        assert!(Keypair::from_pkcs8(&mut KEY3.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY1.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY2.to_vec()).is_ok());
+        assert!(Keypair::try_decode_pkcs8(&mut KEY3.to_vec()).is_ok());
     }
 
     #[test]
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::decode_x509(&pk.encode_x509())
+            PublicKey::try_decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
