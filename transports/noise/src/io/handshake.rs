@@ -21,8 +21,9 @@
 //! Noise protocol handshake I/O.
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
-    pub(crate) use self::payload::proto::NoiseHandshakePayload;
+    pub use self::payload::proto::NoiseHandshakePayload;
 }
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
