@@ -127,7 +127,7 @@ pub(crate) async fn new_for_pending_outgoing_connection(
     }
 }
 
-pub async fn new_for_pending_incoming_connection<TFut>(
+pub(crate) async fn new_for_pending_incoming_connection<TFut>(
     connection_id: ConnectionId,
     future: TFut,
     abort_receiver: oneshot::Receiver<Void>,

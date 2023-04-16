@@ -22,9 +22,9 @@ mod error;
 
 pub(crate) mod pool;
 
-pub use error::{
-    ConnectionError, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+pub use error::ConnectionError;
+pub(crate) use error::{
+    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 
 use crate::handler::{
