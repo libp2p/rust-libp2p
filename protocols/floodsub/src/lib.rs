@@ -30,6 +30,7 @@ mod layer;
 mod topic;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }

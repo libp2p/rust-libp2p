@@ -559,6 +559,7 @@ impl From<UnmappableStatusCode> for ConversionError {
 pub struct UnmappableStatusCode(proto::ResponseStatus);
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::rendezvous::pb::{mod_Message::*, Message};
 }

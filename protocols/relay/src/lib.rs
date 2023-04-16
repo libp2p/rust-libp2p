@@ -31,6 +31,7 @@ mod protocol;
 pub mod v2;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::message_v2::pb::mod_HopMessage::Type as HopMessageType;
     pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;

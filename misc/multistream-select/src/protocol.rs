@@ -105,7 +105,7 @@ impl fmt::Display for Protocol {
 /// Multistream-select protocol messages are exchanged with the goal
 /// of agreeing on a application-layer protocol to use on an I/O stream.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Message {
+pub(crate) enum Message {
     /// A header message identifies the multistream-select protocol
     /// that the sender wishes to speak.
     Header(HeaderLine),
@@ -122,7 +122,7 @@ pub enum Message {
 
 impl Message {
     /// Encodes a `Message` into its byte representation.
-    pub fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
+    fn encode(&self, dest: &mut BytesMut) -> Result<(), ProtocolError> {
         match self {
             Message::Header(HeaderLine::V1) => {
                 dest.reserve(MSG_MULTISTREAM_1_0.len());
@@ -163,7 +163,7 @@ impl Message {
     }
 
     /// Decodes a `Message` from its byte representation.
-    pub fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
+    fn decode(mut msg: Bytes) -> Result<Message, ProtocolError> {
         if msg == MSG_MULTISTREAM_1_0 {
             return Ok(Message::Header(HeaderLine::V1));
         }
@@ -219,14 +219,14 @@ impl Message {
 
 /// A `MessageIO` implements a [`Stream`] and [`Sink`] of [`Message`]s.
 #[pin_project::pin_project]
-pub struct MessageIO<R> {
+pub(crate) struct MessageIO<R> {
     #[pin]
     inner: LengthDelimited<R>,
 }
 
 impl<R> MessageIO<R> {
     /// Constructs a new `MessageIO` resource wrapping the given I/O stream.
-    pub fn new(inner: R) -> MessageIO<R>
+    pub(crate) fn new(inner: R) -> MessageIO<R>
     where
         R: AsyncRead + AsyncWrite,
     {
@@ -242,7 +242,7 @@ impl<R> MessageIO<R> {
     /// This is typically done if further negotiation messages are expected to be
     /// received but no more messages are written, allowing the writing of
     /// follow-up protocol data to commence.
-    pub fn into_reader(self) -> MessageReader<R> {
+    pub(crate) fn into_reader(self) -> MessageReader<R> {
         MessageReader {
             inner: self.inner.into_reader(),
         }
@@ -257,7 +257,7 @@ impl<R> MessageIO<R> {
     /// has not yet been flushed. The read buffer is guaranteed to be empty whenever
     /// `MessageIO::poll` returned a message. The write buffer is guaranteed to be empty
     /// when the sink has been flushed.
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }
@@ -310,7 +310,7 @@ where
 /// I/O resource combined with direct `AsyncWrite` access.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct MessageReader<R> {
+pub(crate) struct MessageReader<R> {
     #[pin]
     inner: LengthDelimitedReader<R>,
 }
@@ -327,7 +327,7 @@ impl<R> MessageReader<R> {
     /// outgoing frame has not yet been flushed. The read buffer is guaranteed to
     /// be empty whenever `MessageReader::poll` returned a message. The write
     /// buffer is guaranteed to be empty whenever the sink has been flushed.
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }

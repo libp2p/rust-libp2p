@@ -28,6 +28,7 @@ mod handler;
 mod protocol;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
 }

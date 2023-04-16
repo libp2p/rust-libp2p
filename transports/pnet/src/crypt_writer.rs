@@ -50,7 +50,7 @@ impl<W: AsyncWrite> CryptWriter<W> {
     /// Gets a pinned mutable reference to the inner writer.
     ///
     /// It is inadvisable to directly write to the inner writer.
-    pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut W> {
+    pub(crate) fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut W> {
         self.project().inner
     }
 }

@@ -95,7 +95,7 @@ impl HandshakeContext<Local> {
     }
 }
 
-pub async fn handshake<S>(
+pub(crate) async fn handshake<S>(
     socket: S,
     config: PlainText2Config,
 ) -> Result<(S, Remote, Bytes), PlainTextError>

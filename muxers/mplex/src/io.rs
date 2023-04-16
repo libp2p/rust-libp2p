@@ -35,7 +35,7 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-pub(crate) use std::io::{Error, ErrorKind, Result};
+pub(crate) use std::io::{Error, Result};
 /// A connection identifier.
 ///
 /// Randomly generated and mainly intended to improve log output
