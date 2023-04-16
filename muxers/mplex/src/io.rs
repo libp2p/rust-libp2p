@@ -322,7 +322,7 @@ where
     /// > **Note**: All substreams obtained via `poll_next_stream`
     /// > or `poll_open_stream` must eventually be "dropped" by
     /// > calling this method when they are no longer used.
-    pub fn drop_stream(&mut self, id: LocalStreamId) {
+    pub(crate) fn drop_stream(&mut self, id: LocalStreamId) {
         // Check if the underlying stream is ok.
         match self.status {
             Status::Closed | Status::Err(_) => return,

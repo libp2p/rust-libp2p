@@ -217,7 +217,7 @@ struct DescriptionContext {
     pub(crate) target_ip: IpAddr,
     pub(crate) target_port: u16,
     pub(crate) fingerprint_algorithm: String,
-    pub fingerprint_value: String,
+    pub(crate) fingerprint_value: String,
     pub(crate) ufrag: String,
     pub pwd: String,
 }

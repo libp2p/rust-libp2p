@@ -190,7 +190,7 @@ enum CodecDecodeState {
 }
 
 impl Codec {
-    pub fn new() -> Codec {
+    pub(crate) fn new() -> Codec {
         Codec {
             varint_decoder: codec::Uvi::default(),
             decoder_state: CodecDecodeState::Begin,

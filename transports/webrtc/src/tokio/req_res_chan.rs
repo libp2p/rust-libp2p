@@ -66,7 +66,7 @@ pub(crate) struct Receiver<Req, Res> {
 }
 
 impl<Req, Res> Receiver<Req, Res> {
-    pub fn poll_next_unpin(
+    pub(crate) fn poll_next_unpin(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<(Req, oneshot::Sender<Res>)>> {

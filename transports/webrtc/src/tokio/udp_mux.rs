@@ -135,7 +135,7 @@ impl UDPMuxNewAddr {
         self.listen_addr
     }
 
-    pub fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
+    pub(crate) fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
         self.udp_mux_handle.clone()
     }
 

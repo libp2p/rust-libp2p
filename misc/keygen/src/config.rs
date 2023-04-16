@@ -33,7 +33,7 @@ impl Config {
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct Identity {
     #[serde(rename = "PeerID")]
-    pub peer_id: String,
+    pub(crate) peer_id: String,
     pub(crate) priv_key: String,
 }
 
