@@ -104,7 +104,7 @@ impl FixedPeersIter {
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
-    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
+    pub(crate) fn on_failure(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Failed;
@@ -115,22 +115,22 @@ impl FixedPeersIter {
         false
     }
 
-    pub fn is_waiting(&self, peer: &PeerId) -> bool {
+    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
         self.peers.get(peer) == Some(&PeerState::Waiting)
     }
 
-    pub fn finish(&mut self) {
+    pub(crate) fn finish(&mut self) {
         if let State::Waiting { .. } = self.state {
             self.state = State::Finished
         }
     }
 
     /// Checks whether the iterator has finished.
-    pub fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.state == State::Finished
     }
 
-    pub fn next(&mut self) -> PeersIterState<'_> {
+    pub(crate) fn next(&mut self) -> PeersIterState<'_> {
         match &mut self.state {
             State::Finished => PeersIterState::Finished,
             State::Waiting { num_waiting } => {
@@ -161,7 +161,7 @@ impl FixedPeersIter {
         }
     }
 
-    pub fn into_result(self) -> impl Iterator<Item = PeerId> {
+    pub(crate) fn into_result(self) -> impl Iterator<Item = PeerId> {
         self.peers.into_iter().filter_map(|(p, s)| {
             if let PeerState::Succeeded = s {
                 Some(p)

@@ -103,7 +103,7 @@ pub(crate) fn build_query() -> MdnsPacket {
 /// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
-pub fn build_query_response<'a>(
+pub(crate) fn build_query_response<'a>(
     id: u16,
     peer_id: PeerId,
     addresses: impl ExactSizeIterator<Item = &'a Multiaddr>,
@@ -165,7 +165,7 @@ pub fn build_query_response<'a>(
 }
 
 /// Builds the response to a service discovery DNS query.
-pub fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
+pub(crate) fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
 

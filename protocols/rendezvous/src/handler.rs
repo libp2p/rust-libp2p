@@ -44,6 +44,6 @@ pub(crate) type OutboundInEvent = crate::substream_handler::InEvent<outbound::Op
 pub(crate) type OutboundOutEvent =
     crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
 
-pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
+pub(crate) type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
 pub(crate) type InboundOutEvent =
     crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;

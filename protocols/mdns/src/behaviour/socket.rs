@@ -26,7 +26,8 @@ use std::{
 };
 
 /// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async mode
-pub(crate) trait AsyncSocket: Unpin + Send + 'static {
+#[allow(unreachable_pub)] // Users should not depend on this.
+pub trait AsyncSocket: Unpin + Send + 'static {
     /// Create the async socket from the [`std::net::UdpSocket`]
     fn from_std(socket: UdpSocket) -> std::io::Result<Self>
     where
@@ -55,8 +56,7 @@ pub(crate) mod asio {
     use futures::FutureExt;
 
     /// AsyncIo UdpSocket
-    pub type AsyncUdpSocket = Async<UdpSocket>;
-
+    pub(crate) type AsyncUdpSocket = Async<UdpSocket>;
     impl AsyncSocket for AsyncUdpSocket {
         fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
             Async::new(socket)
@@ -92,13 +92,12 @@ pub(crate) mod asio {
 }
 
 #[cfg(feature = "tokio")]
-pub mod tokio {
+pub(crate) mod tokio {
     use super::*;
     use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};
 
     /// Tokio ASync Socket`
-    pub type TokioUdpSocket = TkUdpSocket;
-
+    pub(crate) type TokioUdpSocket = TkUdpSocket;
     impl AsyncSocket for TokioUdpSocket {
         fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
             socket.set_nonblocking(true)?;

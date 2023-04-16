@@ -145,11 +145,11 @@ where
         self.timeout = T::interval(self.query_interval);
     }
 
-    pub fn fire_timer(&mut self) {
+    pub(crate) fn fire_timer(&mut self) {
         self.timeout = T::interval_at(Instant::now(), self.query_interval);
     }
 
-    pub fn poll(
+    pub(crate) fn poll(
         &mut self,
         cx: &mut Context,
         listen_addresses: &ListenAddresses,

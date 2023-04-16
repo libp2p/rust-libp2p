@@ -252,7 +252,7 @@ impl Addresses {
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
-    pub fn iter(&self) -> AddressIter<'_> {
+    pub(crate) fn iter(&self) -> AddressIter<'_> {
         AddressIter {
             items: &self.registry,
             offset: 0,
@@ -262,7 +262,7 @@ impl Addresses {
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
-    pub fn into_iter(self) -> AddressIntoIter {
+    pub(crate) fn into_iter(self) -> AddressIntoIter {
         AddressIntoIter {
             items: self.registry,
         }
@@ -271,7 +271,7 @@ impl Addresses {
 
 /// An iterator over [`Multiaddr`] values.
 #[derive(Clone)]
-pub struct AddressIter<'a> {
+pub(crate) struct AddressIter<'a> {
     items: &'a [AddressRecord],
     offset: usize,
 }

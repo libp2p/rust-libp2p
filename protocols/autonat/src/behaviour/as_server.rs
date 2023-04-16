@@ -81,7 +81,7 @@ pub(crate) struct AsServer<'a> {
     pub(crate) probe_id: &'a mut ProbeId,
     pub(crate) throttled_clients: &'a mut Vec<(PeerId, Instant)>,
     #[allow(clippy::type_complexity)]
-    pub ongoing_inbound: &'a mut HashMap<
+    pub(crate) ongoing_inbound: &'a mut HashMap<
         PeerId,
         (
             ProbeId,
@@ -195,7 +195,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
 }
 
 impl<'a> AsServer<'a> {
-    pub fn on_outbound_connection(
+    pub(crate) fn on_outbound_connection(
         &mut self,
         peer: &PeerId,
         address: &Multiaddr,
@@ -227,7 +227,7 @@ impl<'a> AsServer<'a> {
         })
     }
 
-    pub fn on_outbound_dial_error(
+    pub(crate) fn on_outbound_dial_error(
         &mut self,
         peer: Option<PeerId>,
         error: &DialError,

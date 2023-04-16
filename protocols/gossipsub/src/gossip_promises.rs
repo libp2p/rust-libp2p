@@ -59,7 +59,7 @@ impl GossipPromises {
         self.promises.remove(message_id);
     }
 
-    pub fn reject_message(&mut self, message_id: &MessageId, reason: &RejectReason) {
+    pub(crate) fn reject_message(&mut self, message_id: &MessageId, reason: &RejectReason) {
         // A message got rejected, so we can stop tracking promises and let the score penalty apply
         // from invalid message delivery.
         // We do take exception and apply promise penalty regardless in the following cases, where
@@ -77,7 +77,7 @@ impl GossipPromises {
     /// request.
     /// This should be called not too often relative to the expire times, since it iterates over
     /// the whole stored data.
-    pub fn get_broken_promises(&mut self) -> HashMap<PeerId, usize> {
+    pub(crate) fn get_broken_promises(&mut self) -> HashMap<PeerId, usize> {
         let now = Instant::now();
         let mut result = HashMap::new();
         self.promises.retain(|msg, peers| {

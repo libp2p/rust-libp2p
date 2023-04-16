@@ -127,13 +127,13 @@ impl BackoffStorage {
     ///
     /// This method should be used for deciding if we can already send a GRAFT to a previously
     /// backoffed peer.
-    pub fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
+    pub(crate) fn is_backoff_with_slack(&self, topic: &TopicHash, peer: &PeerId) -> bool {
         self.backoffs
             .get(topic)
             .map_or(false, |m| m.contains_key(peer))
     }
 
-    pub fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
+    pub(crate) fn get_backoff_time(&self, topic: &TopicHash, peer: &PeerId) -> Option<Instant> {
         Self::get_backoff_time_from_backoffs(&self.backoffs, topic, peer)
     }
 
@@ -149,7 +149,7 @@ impl BackoffStorage {
 
     /// Applies a heartbeat. That should be called regularly in intervals of length
     /// `heartbeat_interval`.
-    pub fn heartbeat(&mut self) {
+    pub(crate) fn heartbeat(&mut self) {
         // Clean up backoffs_by_heartbeat
         if let Some(s) = self.backoffs_by_heartbeat.get_mut(self.heartbeat_index.0) {
             let backoffs = &mut self.backoffs;

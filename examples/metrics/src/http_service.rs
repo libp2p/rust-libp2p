@@ -102,12 +102,12 @@ impl Service<Request<Body>> for MetricService {
     }
 }
 
-pub struct MakeMetricService {
+pub(crate) struct MakeMetricService {
     reg: SharedRegistry,
 }
 
 impl MakeMetricService {
-    pub fn new(registry: Registry) -> MakeMetricService {
+    pub(crate) fn new(registry: Registry) -> MakeMetricService {
         MakeMetricService {
             reg: Arc::new(Mutex::new(registry)),
         }
