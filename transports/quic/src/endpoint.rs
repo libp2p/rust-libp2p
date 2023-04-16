@@ -290,8 +290,7 @@ impl Channel {
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 #[error("Background task disconnected")]
-pub struct Disconnected {}
-
+pub(crate) struct Disconnected {}
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
 pub(crate) enum ToEndpoint {

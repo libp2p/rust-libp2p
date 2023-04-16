@@ -215,7 +215,7 @@ enum IpVersion {
 struct DescriptionContext {
     pub(crate) ip_version: IpVersion,
     pub(crate) target_ip: IpAddr,
-    pub target_port: u16,
+    pub(crate) target_port: u16,
     pub(crate) fingerprint_algorithm: String,
     pub fingerprint_value: String,
     pub(crate) ufrag: String,

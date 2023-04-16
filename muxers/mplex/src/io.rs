@@ -208,7 +208,10 @@ where
     /// [`MaxBufferBehaviour::Block`] is used, this method is blocked
     /// (i.e. `Pending`) on some task reading from the substream whose
     /// buffer is full.
-    pub fn poll_next_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_next_stream(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Try to read from the buffer first.

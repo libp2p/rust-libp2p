@@ -123,7 +123,7 @@ impl LocalStreamId {
     }
 
     #[cfg(test)]
-    pub fn into_remote(self) -> RemoteStreamId {
+    pub(crate) fn into_remote(self) -> RemoteStreamId {
         RemoteStreamId {
             num: self.num,
             role: !self.role,
@@ -158,7 +158,7 @@ impl RemoteStreamId {
 
 /// An Mplex protocol frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Frame<T> {
+pub(crate) enum Frame<T> {
     Open { stream_id: T },
     Data { stream_id: T, data: Bytes },
     Close { stream_id: T },

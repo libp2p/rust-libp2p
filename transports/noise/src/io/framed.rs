@@ -362,7 +362,7 @@ where
 }
 
 /// A stateful context in which Noise protocol messages can be read and written.
-pub trait SessionState {
+pub(crate) trait SessionState {
     fn read_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error>;
     fn write_message(&mut self, msg: &[u8], buf: &mut [u8]) -> Result<usize, snow::Error>;
 }

@@ -73,7 +73,7 @@ impl Libp2pCertificateVerifier {
             remote_peer_id: None,
         }
     }
-    pub fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
+    pub(crate) fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
         Self { remote_peer_id }
     }
 

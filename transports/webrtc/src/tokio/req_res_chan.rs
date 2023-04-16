@@ -61,7 +61,7 @@ impl<Req, Res> Sender<Req, Res> {
     }
 }
 
-pub struct Receiver<Req, Res> {
+pub(crate) struct Receiver<Req, Res> {
     inner: mpsc::Receiver<(Req, oneshot::Sender<Res>)>,
 }
 

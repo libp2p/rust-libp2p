@@ -17,7 +17,10 @@ impl Config {
         Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
     }
 
-    pub fn from_key_material(peer_id: PeerId, keypair: &Keypair) -> Result<Self, Box<dyn Error>> {
+    pub(crate) fn from_key_material(
+        peer_id: PeerId,
+        keypair: &Keypair,
+    ) -> Result<Self, Box<dyn Error>> {
         let priv_key = BASE64_STANDARD.encode(keypair.to_protobuf_encoding()?);
         let peer_id = peer_id.to_base58();
         Ok(Self {

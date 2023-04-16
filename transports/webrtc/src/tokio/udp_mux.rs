@@ -131,7 +131,7 @@ impl UDPMuxNewAddr {
         })
     }
 
-    pub fn listen_addr(&self) -> SocketAddr {
+    pub(crate) fn listen_addr(&self) -> SocketAddr {
         self.listen_addr
     }
 
