@@ -368,7 +368,7 @@ pub(crate) enum ToEndpoint {
 /// The background task shuts down if an [`ToEndpoint::Decoupled`] event was received and the
 /// last active connection has drained.
 #[derive(Debug)]
-pub struct Driver<P: Provider> {
+pub(crate) struct Driver<P: Provider> {
     // The actual QUIC state machine.
     endpoint: quinn_proto::Endpoint,
     // QuinnConfig for client connections.

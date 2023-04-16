@@ -31,7 +31,7 @@ impl Config {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Identity {
+pub(crate) struct Identity {
     #[serde(rename = "PeerID")]
     pub peer_id: String,
     pub(crate) priv_key: String,

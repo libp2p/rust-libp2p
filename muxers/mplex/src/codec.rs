@@ -166,7 +166,7 @@ pub(crate) enum Frame<T> {
 }
 
 impl Frame<RemoteStreamId> {
-    pub fn remote_id(&self) -> RemoteStreamId {
+    pub(crate) fn remote_id(&self) -> RemoteStreamId {
         match *self {
             Frame::Open { stream_id } => stream_id,
             Frame::Data { stream_id, .. } => stream_id,

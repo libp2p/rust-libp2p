@@ -252,7 +252,10 @@ where
     }
 
     /// Creates a new (outbound) substream, returning the allocated stream ID.
-    pub fn poll_open_stream(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_open_stream(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Check the stream limits.
