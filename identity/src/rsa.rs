@@ -164,7 +164,7 @@ impl<'a> Asn1RawOid<'a> {
     }
 
     /// Writes an OID raw `value` as DER-object to `sink`.
-    pub fn write<S: Sink>(value: &[u8], sink: &mut S) -> Result<(), Asn1DerError> {
+    pub(crate) fn write<S: Sink>(value: &[u8], sink: &mut S) -> Result<(), Asn1DerError> {
         DerObject::write(Self::TAG, value.len(), &mut value.iter(), sink)
     }
 }

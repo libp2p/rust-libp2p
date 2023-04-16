@@ -39,7 +39,7 @@ pub(crate) struct CryptWriter<W> {
 
 impl<W: AsyncWrite> CryptWriter<W> {
     /// Creates a new `CryptWriter` with the specified buffer capacity.
-    pub fn with_capacity(capacity: usize, inner: W, cipher: XSalsa20) -> CryptWriter<W> {
+    pub(crate) fn with_capacity(capacity: usize, inner: W, cipher: XSalsa20) -> CryptWriter<W> {
         CryptWriter {
             inner,
             buf: Vec::with_capacity(capacity),

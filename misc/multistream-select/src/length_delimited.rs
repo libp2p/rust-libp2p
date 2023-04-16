@@ -76,7 +76,7 @@ impl Default for ReadState {
 impl<R> LengthDelimited<R> {
     /// Creates a new I/O resource for reading and writing unsigned-varint
     /// length delimited frames.
-    pub fn new(inner: R) -> LengthDelimited<R> {
+    pub(crate) fn new(inner: R) -> LengthDelimited<R> {
         LengthDelimited {
             inner,
             read_state: ReadState::default(),

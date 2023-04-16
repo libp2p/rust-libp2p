@@ -68,8 +68,7 @@ impl From<Version> for HeaderLine {
 
 /// A protocol (name) exchanged during protocol negotiation.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Protocol(Bytes);
-
+pub(crate) struct Protocol(Bytes);
 impl AsRef<[u8]> for Protocol {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
