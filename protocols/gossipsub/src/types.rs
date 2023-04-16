@@ -92,7 +92,7 @@ pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub(crate) kind: PeerKind,
     /// Its current connections.
-    pub connections: Vec<ConnectionId>,
+    pub(crate) connections: Vec<ConnectionId>,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.

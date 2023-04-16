@@ -171,7 +171,10 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
+    pub(crate) fn poll_ready_notify_handler(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), ()>> {
         self.sender.poll_ready(cx).map_err(|_| ())
     }
 

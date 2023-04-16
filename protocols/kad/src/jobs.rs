@@ -127,7 +127,7 @@ enum PeriodicJobState<T> {
 // PutRecordJob
 
 /// Periodic job for replicating / publishing records.
-pub struct PutRecordJob {
+pub(crate) struct PutRecordJob {
     local_id: PeerId,
     next_publish: Option<Instant>,
     publish_interval: Option<Duration>,

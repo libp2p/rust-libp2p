@@ -59,7 +59,7 @@ impl<TKey, TVal> PendingNode<TKey, TVal> {
         &self.node.key
     }
 
-    pub fn status(&self) -> NodeStatus {
+    pub(crate) fn status(&self) -> NodeStatus {
         self.status
     }
 

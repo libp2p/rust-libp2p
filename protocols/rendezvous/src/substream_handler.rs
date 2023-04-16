@@ -516,7 +516,7 @@ impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
         }
     }
 
-    pub fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
+    pub(crate) fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
         if self.future.is_terminated() {
             return Ok(Next::Done);
         }

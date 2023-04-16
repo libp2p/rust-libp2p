@@ -43,7 +43,7 @@ pub(crate) trait Builder: Send + Unpin + 'static {
 }
 
 #[cfg(feature = "async-io")]
-pub mod asio {
+pub(crate) mod asio {
     use super::*;
     use async_io::Timer as AsioTimer;
     use futures::Stream;

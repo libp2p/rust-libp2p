@@ -82,7 +82,7 @@ impl MdnsPacket {
 }
 
 /// A received mDNS query.
-pub struct MdnsQuery {
+pub(crate) struct MdnsQuery {
     /// Sender of the address.
     from: SocketAddr,
     /// Id of the received DNS query. We need to pass this ID back in the results.

@@ -60,7 +60,7 @@ pub(crate) enum QueryPoolState<'a, TInner> {
 
 impl<TInner> QueryPool<TInner> {
     /// Creates a new `QueryPool` with the given configuration.
-    pub fn new(config: QueryConfig) -> Self {
+    pub(crate) fn new(config: QueryConfig) -> Self {
         QueryPool {
             next_id: 0,
             config,

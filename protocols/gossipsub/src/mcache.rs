@@ -61,7 +61,7 @@ impl fmt::Debug for MessageCache {
 
 /// Implementation of the MessageCache.
 impl MessageCache {
-    pub fn new(gossip: usize, history_capacity: usize) -> Self {
+    pub(crate) fn new(gossip: usize, history_capacity: usize) -> Self {
         MessageCache {
             gossip,
             msgs: HashMap::default(),

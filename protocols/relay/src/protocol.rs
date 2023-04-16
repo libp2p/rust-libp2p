@@ -24,8 +24,7 @@ use std::time::Duration;
 pub(crate) mod inbound_hop;
 pub(crate) mod inbound_stop;
 pub(crate) mod outbound_hop;
-pub mod outbound_stop;
-
+pub(crate) mod outbound_stop;
 pub const HOP_PROTOCOL_NAME: &[u8; 31] = b"/libp2p/circuit/relay/0.2.0/hop";
 pub const STOP_PROTOCOL_NAME: &[u8; 32] = b"/libp2p/circuit/relay/0.2.0/stop";
 

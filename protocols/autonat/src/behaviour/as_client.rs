@@ -86,7 +86,7 @@ pub enum OutboundProbeEvent {
 pub(crate) struct AsClient<'a> {
     pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub(crate) local_peer_id: PeerId,
-    pub config: &'a Config,
+    pub(crate) config: &'a Config,
     pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
 

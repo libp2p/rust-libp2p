@@ -70,7 +70,7 @@ where
 }
 
 /// Waits for a ping and sends a pong.
-pub async fn recv_ping<S>(mut stream: S) -> io::Result<S>
+pub(crate) async fn recv_ping<S>(mut stream: S) -> io::Result<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

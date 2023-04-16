@@ -63,7 +63,7 @@ impl ClosestDisjointPeersIter {
     }
 
     /// Creates a new iterator with the given configuration.
-    pub fn with_config<I, T>(
+    pub(crate) fn with_config<I, T>(
         config: ClosestPeersIterConfig,
         target: T,
         known_closest_peers: I,

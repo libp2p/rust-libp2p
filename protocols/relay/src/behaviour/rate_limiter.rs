@@ -75,7 +75,7 @@ mod generic {
     /// Rate limiter using the [Token Bucket] algorithm.
     ///
     /// [Token Bucket]: https://en.wikipedia.org/wiki/Token_bucket
-    pub struct RateLimiter<Id> {
+    pub(crate) struct RateLimiter<Id> {
         limit: u32,
         interval: Duration,
 

@@ -240,7 +240,7 @@ impl Addresses {
     ///
     /// Returns `true` if the address existed in the collection
     /// and was thus removed, false otherwise.
-    pub fn remove(&mut self, addr: &Multiaddr) -> bool {
+    pub(crate) fn remove(&mut self, addr: &Multiaddr) -> bool {
         if let Some(pos) = self.registry.iter().position(|r| &r.addr == addr) {
             self.registry.remove(pos);
             true

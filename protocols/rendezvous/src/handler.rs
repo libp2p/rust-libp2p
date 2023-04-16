@@ -40,7 +40,7 @@ pub enum Error {
     UnexpectedEndOfStream,
 }
 
-pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
+pub(crate) type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
 pub(crate) type OutboundOutEvent =
     crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
 

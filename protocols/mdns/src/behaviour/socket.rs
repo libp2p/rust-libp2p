@@ -49,7 +49,7 @@ pub(crate) trait AsyncSocket: Unpin + Send + 'static {
 }
 
 #[cfg(feature = "async-io")]
-pub mod asio {
+pub(crate) mod asio {
     use super::*;
     use async_io::Async;
     use futures::FutureExt;

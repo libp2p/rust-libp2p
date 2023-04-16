@@ -71,7 +71,7 @@ impl BackoffStorage {
 
     /// Updates the backoff for a peer (if there is already a more restrictive backoff then this call
     /// doesn't change anything).
-    pub fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
+    pub(crate) fn update_backoff(&mut self, topic: &TopicHash, peer: &PeerId, time: Duration) {
         let instant = Instant::now() + time;
         let insert_into_backoffs_by_heartbeat =
             |heartbeat_index: HeartbeatIndex,

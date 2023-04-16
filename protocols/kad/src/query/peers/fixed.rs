@@ -83,7 +83,7 @@ impl FixedPeersIter {
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
-    pub fn on_success(&mut self, peer: &PeerId) -> bool {
+    pub(crate) fn on_success(&mut self, peer: &PeerId) -> bool {
         if let State::Waiting { num_waiting } = &mut self.state {
             if let Some(state @ PeerState::Waiting) = self.peers.get_mut(peer) {
                 *state = PeerState::Succeeded;

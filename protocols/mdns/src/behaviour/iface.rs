@@ -141,7 +141,7 @@ where
         })
     }
 
-    pub fn reset_timer(&mut self) {
+    pub(crate) fn reset_timer(&mut self) {
         self.timeout = T::interval(self.query_interval);
     }
 

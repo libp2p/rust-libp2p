@@ -143,7 +143,7 @@ enum MeshStatus {
 
 impl MeshStatus {
     /// Initialises a new [`MeshStatus::Active`] mesh status.
-    pub fn new_active() -> Self {
+    pub(crate) fn new_active() -> Self {
         MeshStatus::Active {
             graft_time: Instant::now(),
             mesh_time: Duration::from_secs(0),
