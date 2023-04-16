@@ -84,7 +84,7 @@ pub enum OutboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a client role.
 pub(crate) struct AsClient<'a> {
-    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub(crate) local_peer_id: PeerId,
     pub config: &'a Config,
     pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,

@@ -31,7 +31,7 @@ pub struct Timer<T> {
 }
 
 /// Builder interface to homogenize the different implementations
-pub trait Builder: Send + Unpin + 'static {
+pub(crate) trait Builder: Send + Unpin + 'static {
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
 

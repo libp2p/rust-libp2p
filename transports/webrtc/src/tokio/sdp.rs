@@ -44,7 +44,7 @@ pub(crate) fn answer(
 /// Creates the SDP offer used by the server.
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
+pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
     RTCSessionDescription::offer(render_description(
         CLIENT_SESSION_DESCRIPTION,
         addr,
@@ -213,7 +213,7 @@ enum IpVersion {
 /// `{IP_VERSION}`) with real values.
 #[derive(Serialize)]
 struct DescriptionContext {
-    pub ip_version: IpVersion,
+    pub(crate) ip_version: IpVersion,
     pub(crate) target_ip: IpAddr,
     pub target_port: u16,
     pub(crate) fingerprint_algorithm: String,

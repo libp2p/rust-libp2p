@@ -74,7 +74,7 @@ pub(crate) async fn new(
 }
 
 #[derive(Clone)]
-pub struct Client {
+pub(crate) struct Client {
     sender: mpsc::Sender<Command>,
 }
 

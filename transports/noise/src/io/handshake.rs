@@ -89,7 +89,7 @@ impl<T> State<T> {
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
     #[allow(deprecated)]
-    pub fn new(
+    pub(crate) fn new(
         io: T,
         session: snow::HandshakeState,
         identity: KeypairIdentity,
@@ -109,7 +109,7 @@ impl<T> State<T> {
 impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`NoiseOutput`] for communicating on the encrypted channel.
-    pub fn finish<C>(self) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
+    pub(crate) fn finish<C>(self) -> Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {

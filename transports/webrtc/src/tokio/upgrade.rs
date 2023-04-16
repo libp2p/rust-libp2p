@@ -79,7 +79,7 @@ pub(crate) async fn outbound(
 }
 
 /// Creates a new inbound WebRTC connection.
-pub async fn inbound(
+pub(crate) async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,

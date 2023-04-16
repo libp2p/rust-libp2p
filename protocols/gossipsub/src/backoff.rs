@@ -52,7 +52,7 @@ impl BackoffStorage {
             as usize
     }
 
-    pub fn new(
+    pub(crate) fn new(
         prune_backoff: &Duration,
         heartbeat_interval: Duration,
         backoff_slack: u32,

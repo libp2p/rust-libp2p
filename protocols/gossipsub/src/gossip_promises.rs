@@ -43,7 +43,7 @@ impl GossipPromises {
     }
 
     /// Track a promise to deliver a message from a list of [`MessageId`]s we are requesting.
-    pub fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
+    pub(crate) fn add_promise(&mut self, peer: PeerId, messages: &[MessageId], expires: Instant) {
         for message_id in messages {
             // If a promise for this message id and peer already exists we don't update the expiry!
             self.promises

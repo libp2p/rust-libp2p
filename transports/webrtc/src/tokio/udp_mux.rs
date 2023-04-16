@@ -50,7 +50,7 @@ const RECEIVE_MTU: usize = 8192;
 /// A previously unseen address of a remote which has sent us an ICE binding request.
 #[derive(Debug)]
 pub(crate) struct NewAddr {
-    pub addr: SocketAddr,
+    pub(crate) addr: SocketAddr,
     pub(crate) ufrag: String,
 }
 
@@ -100,7 +100,7 @@ pub(crate) struct UDPMuxNewAddr {
 }
 
 impl UDPMuxNewAddr {
-    pub fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
+    pub(crate) fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
         let std_sock = std::net::UdpSocket::bind(addr)?;
         std_sock.set_nonblocking(true)?;
 

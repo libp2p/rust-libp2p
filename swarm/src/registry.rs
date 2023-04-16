@@ -171,7 +171,7 @@ pub enum AddAddressResult {
 impl Addresses {
     /// Create a new ranked address collection with the given size limit
     /// for [finitely scored](AddressScore::Finite) addresses.
-    pub fn new(limit: NonZeroUsize) -> Self {
+    pub(crate) fn new(limit: NonZeroUsize) -> Self {
         Addresses {
             registry: SmallVec::new(),
             limit,
@@ -189,7 +189,7 @@ impl Addresses {
     /// as per this limited history has its score reduced by the amount
     /// used in this prior report, with removal from the collection
     /// occurring when the score drops to 0.
-    pub fn add(&mut self, addr: Multiaddr, score: AddressScore) -> AddAddressResult {
+    pub(crate) fn add(&mut self, addr: Multiaddr, score: AddressScore) -> AddAddressResult {
         // If enough reports (i.e. address additions) occurred, reduce
         // the score of the least-recently added address.
         if self.reports.len() == self.limit.get() {

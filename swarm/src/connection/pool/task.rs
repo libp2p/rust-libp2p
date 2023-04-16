@@ -49,7 +49,7 @@ pub(crate) enum Command<T> {
     Close,
 }
 
-pub enum PendingConnectionEvent {
+pub(crate) enum PendingConnectionEvent {
     ConnectionEstablished {
         id: ConnectionId,
         output: (PeerId, StreamMuxerBox),
@@ -66,7 +66,7 @@ pub enum PendingConnectionEvent {
 }
 
 #[derive(Debug)]
-pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
+pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,

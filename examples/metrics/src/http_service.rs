@@ -47,7 +47,7 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
     })
 }
 
-pub struct MetricService {
+pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
 }
 

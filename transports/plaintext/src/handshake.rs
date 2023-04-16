@@ -45,9 +45,8 @@ struct Local {
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
 pub(crate) struct Remote {
     // The remote's peer ID:
-    pub peer_id: PeerId,
-    // The remote's public key:
-    pub public_key: PublicKey,
+    pub(crate) peer_id: PeerId, // The remote's public key:
+    pub(crate) public_key: PublicKey,
 }
 
 impl HandshakeContext<Local> {

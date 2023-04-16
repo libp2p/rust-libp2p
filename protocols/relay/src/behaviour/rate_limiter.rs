@@ -41,7 +41,7 @@ pub(crate) fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimi
     Box::new(move |peer_id, _addr: &Multiaddr, now| limiter.try_next(peer_id, now))
 }
 
-pub fn new_per_ip(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+pub(crate) fn new_per_ip(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
     let mut limiter = GenericRateLimiter::new(config);
     Box::new(move |_peer_id, addr: &Multiaddr, now| {
         multiaddr_to_ip(addr)

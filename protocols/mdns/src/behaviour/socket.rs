@@ -26,7 +26,7 @@ use std::{
 };
 
 /// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async mode
-pub trait AsyncSocket: Unpin + Send + 'static {
+pub(crate) trait AsyncSocket: Unpin + Send + 'static {
     /// Create the async socket from the [`std::net::UdpSocket`]
     fn from_std(socket: UdpSocket) -> std::io::Result<Self>
     where

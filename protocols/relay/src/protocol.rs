@@ -22,7 +22,7 @@ use crate::proto;
 use std::time::Duration;
 
 pub(crate) mod inbound_hop;
-pub mod inbound_stop;
+pub(crate) mod inbound_stop;
 pub(crate) mod outbound_hop;
 pub mod outbound_stop;
 

@@ -9,11 +9,11 @@ use libp2p_identity::PeerId;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub(crate) struct Config {
-    pub identity: Identity,
+    pub(crate) identity: Identity,
 }
 
 impl Config {
-    pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
+    pub(crate) fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
         Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
     }
 

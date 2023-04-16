@@ -42,7 +42,7 @@ where
 {
     /// The prototype protocols handler that is cloned for every
     /// invocation of `new_handler`.
-    pub handler_proto: THandler,
+    pub(crate) handler_proto: THandler,
     /// The addresses to return from `addresses_of_peer`.
     pub addresses: HashMap<PeerId, Vec<Multiaddr>>,
     /// The next action to return from `poll`.
@@ -159,9 +159,9 @@ where
     pub(crate) handle_established_inbound_connection:
         Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
     pub handle_established_outbound_connection: Vec<(PeerId, Multiaddr, Endpoint, ConnectionId)>,
-    pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub(crate) on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub(crate) on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
+    pub(crate) on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
     pub(crate) on_dial_failure: Vec<Option<PeerId>>,
     pub on_new_listener: Vec<ListenerId>,
     pub(crate) on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,

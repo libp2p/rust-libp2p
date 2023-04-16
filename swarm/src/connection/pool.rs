@@ -140,7 +140,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct EstablishedConnection<TInEvent> {
+pub(crate) struct EstablishedConnection<TInEvent> {
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
@@ -157,7 +157,7 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     /// `poll_ready_notify_handler` without another intervening execution
     /// of `notify_handler`, it only fails if the connection is now about
     /// to close.
-    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
+    pub(crate) fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
         let cmd = task::Command::NotifyHandler(event);
         self.sender.try_send(cmd).map_err(|e| match e.into_inner() {
             task::Command::NotifyHandler(event) => event,

@@ -38,7 +38,7 @@ pub(crate) struct CacheEntry {
 
 /// MessageCache struct holding history of messages.
 #[derive(Clone)]
-pub struct MessageCache {
+pub(crate) struct MessageCache {
     msgs: HashMap<MessageId, (RawMessage, HashSet<PeerId>)>,
     /// For every message and peer the number of times this peer asked for the message
     iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,

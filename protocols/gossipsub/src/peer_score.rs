@@ -125,7 +125,7 @@ struct TopicStats {
 
 impl TopicStats {
     /// Returns true if the peer is in the `mesh`.
-    pub fn in_mesh(&self) -> bool {
+    pub(crate) fn in_mesh(&self) -> bool {
         matches!(self.mesh_status, MeshStatus::Active { .. })
     }
 }

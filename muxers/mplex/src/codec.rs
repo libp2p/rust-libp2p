@@ -97,7 +97,7 @@ pub(crate) struct RemoteStreamId {
 }
 
 impl LocalStreamId {
-    pub fn dialer(num: u64) -> Self {
+    pub(crate) fn dialer(num: u64) -> Self {
         Self {
             num,
             role: Endpoint::Dialer,
@@ -105,14 +105,14 @@ impl LocalStreamId {
     }
 
     #[cfg(test)]
-    pub fn listener(num: u64) -> Self {
+    pub(crate) fn listener(num: u64) -> Self {
         Self {
             num,
             role: Endpoint::Listener,
         }
     }
 
-    pub fn next(self) -> Self {
+    pub(crate) fn next(self) -> Self {
         Self {
             num: self
                 .num
@@ -148,7 +148,7 @@ impl RemoteStreamId {
 
     /// Converts this `RemoteStreamId` into the corresponding `LocalStreamId`
     /// that identifies the same substream.
-    pub fn into_local(self) -> LocalStreamId {
+    pub(crate) fn into_local(self) -> LocalStreamId {
         LocalStreamId {
             num: self.num,
             role: !self.role,

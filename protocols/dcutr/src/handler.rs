@@ -19,4 +19,4 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub(crate) mod direct;
-pub mod relayed;
+pub(crate) mod relayed;

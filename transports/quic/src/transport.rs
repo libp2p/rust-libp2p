@@ -542,7 +542,7 @@ pub(crate) enum ProtocolVersion {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SocketFamily {
+pub(crate) enum SocketFamily {
     Ipv4,
     Ipv6,
 }

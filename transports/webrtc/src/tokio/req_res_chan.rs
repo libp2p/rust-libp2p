@@ -39,12 +39,12 @@ pub(crate) fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req,
     )
 }
 
-pub struct Sender<Req, Res> {
+pub(crate) struct Sender<Req, Res> {
     inner: futures::lock::Mutex<mpsc::Sender<(Req, oneshot::Sender<Res>)>>,
 }
 
 impl<Req, Res> Sender<Req, Res> {
-    pub async fn send(&self, req: Req) -> io::Result<Res> {
+    pub(crate) async fn send(&self, req: Req) -> io::Result<Res> {
         let (sender, receiver) = oneshot::channel();
 
         self.inner

@@ -42,7 +42,7 @@ pub(crate) struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("identify");
 
         let protocols = Protocols::default();

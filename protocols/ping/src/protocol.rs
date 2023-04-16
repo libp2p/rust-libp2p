@@ -49,7 +49,7 @@ pub(crate) struct Ping;
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
-pub async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
+pub(crate) async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

@@ -39,8 +39,7 @@
 //! [`Finished`]: PeersIterState::Finished
 
 pub(crate) mod closest;
-pub mod fixed;
-
+pub(crate) mod fixed;
 use libp2p_identity::PeerId;
 use std::borrow::Cow;
 

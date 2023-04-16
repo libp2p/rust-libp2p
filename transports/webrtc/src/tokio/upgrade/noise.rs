@@ -54,7 +54,7 @@ where
     Ok(peer_id)
 }
 
-pub async fn outbound<T>(
+pub(crate) async fn outbound<T>(
     id_keys: identity::Keypair,
     stream: T,
     server_fingerprint: Fingerprint,
@@ -81,7 +81,10 @@ where
     Ok(peer_id)
 }
 
-pub fn noise_prologue(client_fingerprint: Fingerprint, server_fingerprint: Fingerprint) -> Vec<u8> {
+pub(crate) fn noise_prologue(
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
+) -> Vec<u8> {
     let client = client_fingerprint.to_multihash().to_bytes();
     let server = server_fingerprint.to_multihash().to_bytes();
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";

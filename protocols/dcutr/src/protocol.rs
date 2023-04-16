@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 pub(crate) mod inbound;
-pub mod outbound;
-
+pub(crate) mod outbound;
 pub const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

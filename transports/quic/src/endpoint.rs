@@ -241,7 +241,7 @@ impl Channel {
         Ok(channel)
     }
 
-    pub fn socket_addr(&self) -> &SocketAddr {
+    pub(crate) fn socket_addr(&self) -> &SocketAddr {
         &self.socket_addr
     }
 
@@ -252,7 +252,7 @@ impl Channel {
     /// and the context's waker is registered for wake-up.
     ///
     /// If the background task crashed `Err` is returned.
-    pub fn try_send(
+    pub(crate) fn try_send(
         &mut self,
         to_endpoint: ToEndpoint,
         cx: &mut Context<'_>,
@@ -283,7 +283,7 @@ impl Channel {
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
     /// This should *not* be called for regular messages.
-    pub fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
+    pub(crate) fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
         let _ = self.to_endpoint.clone().try_send(to_endpoint);
     }
 }

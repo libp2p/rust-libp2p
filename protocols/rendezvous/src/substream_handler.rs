@@ -508,7 +508,9 @@ pub(crate) struct FutureSubstream<TOutEvent, TError> {
 }
 
 impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
-    pub fn new(future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static) -> Self {
+    pub(crate) fn new(
+        future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static,
+    ) -> Self {
         Self {
             future: future.boxed().fuse(),
         }

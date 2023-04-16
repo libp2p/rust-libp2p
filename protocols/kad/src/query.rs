@@ -46,7 +46,7 @@ pub(crate) struct QueryPool<TInner> {
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
-pub enum QueryPoolState<'a, TInner> {
+pub(crate) enum QueryPoolState<'a, TInner> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates

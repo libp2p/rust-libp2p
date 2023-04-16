@@ -51,7 +51,7 @@ pub(crate) struct ClosestDisjointPeersIter {
 
 impl ClosestDisjointPeersIter {
     /// Creates a new iterator with a default configuration.
-    pub fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
+    pub(crate) fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
     {

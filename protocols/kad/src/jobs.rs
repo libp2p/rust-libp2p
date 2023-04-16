@@ -78,8 +78,7 @@ use std::vec;
 pub(crate) const JOBS_MAX_QUERIES: usize = 100;
 /// The maximum number of new queries started by a background job
 /// per invocation of `Kademlia::poll`.
-pub const JOBS_MAX_NEW_QUERIES: usize = 10;
-
+pub(crate) const JOBS_MAX_NEW_QUERIES: usize = 10;
 /// A background job run periodically.
 #[derive(Debug)]
 struct PeriodicJob<T> {

@@ -48,7 +48,7 @@ static_assertions::const_assert! {
 ///
 /// `T` is the type of the underlying I/O resource and `S` the
 /// type of the Noise session state.
-pub struct NoiseFramed<T, S> {
+pub(crate) struct NoiseFramed<T, S> {
     io: T,
     session: S,
     read_state: ReadState,
@@ -69,7 +69,7 @@ impl<T, S> fmt::Debug for NoiseFramed<T, S> {
 
 impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// Creates a nwe `NoiseFramed` for beginning a Noise protocol handshake.
-    pub fn new(io: T, state: snow::HandshakeState) -> Self {
+    pub(crate) fn new(io: T, state: snow::HandshakeState) -> Self {
         NoiseFramed {
             io,
             session: state,
@@ -89,7 +89,9 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub fn into_transport<C>(self) -> Result<(Option<PublicKey<C>>, NoiseOutput<T>), NoiseError>
+    pub(crate) fn into_transport<C>(
+        self,
+    ) -> Result<(Option<PublicKey<C>>, NoiseOutput<T>), NoiseError>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {

@@ -44,7 +44,7 @@ pub(crate) enum MdnsPacket {
 }
 
 impl MdnsPacket {
-    pub fn new_from_bytes(
+    pub(crate) fn new_from_bytes(
         buf: &[u8],
         from: SocketAddr,
     ) -> Result<Option<MdnsPacket>, trust_dns_proto::error::ProtoError> {

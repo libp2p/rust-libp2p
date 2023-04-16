@@ -55,7 +55,7 @@ pub enum NodeStatus {
 }
 
 impl<TKey, TVal> PendingNode<TKey, TVal> {
-    pub fn key(&self) -> &TKey {
+    pub(crate) fn key(&self) -> &TKey {
         &self.node.key
     }
 

@@ -115,7 +115,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     /// Creates a new multiplexed I/O stream.
-    pub fn new(io: C, config: MplexConfig) -> Self {
+    pub(crate) fn new(io: C, config: MplexConfig) -> Self {
         let id = ConnectionId(rand::random());
         debug!("New multiplexed connection: {}", id);
         Multiplexed {
@@ -143,7 +143,7 @@ where
     }
 
     /// Flushes the underlying I/O stream.
-    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
@@ -169,7 +169,7 @@ where
     /// > **Note**: No `Close` or `Reset` frames are sent on open substreams
     /// > before closing the underlying connection. However, the connection
     /// > close implies a flush of any frames already sent.
-    pub fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
