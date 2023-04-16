@@ -609,7 +609,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone)]
-    struct PeerVec(pub Vec<Key<PeerId>>);
+    struct PeerVec(Vec<Key<PeerId>>);
 
     impl Arbitrary for PeerVec {
         fn arbitrary(g: &mut Gen) -> Self {
