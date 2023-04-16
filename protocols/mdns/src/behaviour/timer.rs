@@ -31,7 +31,7 @@ pub struct Timer<T> {
 }
 
 /// Builder interface to homogenize the different implementations
-pub(crate) trait Builder: Send + Unpin + 'static {
+pub trait Builder: Send + Unpin + 'static {
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
 
@@ -87,12 +87,12 @@ pub mod asio {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::*;
+    use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
     use futures::Stream;
     use std::{
         pin::Pin,
         task::{Context, Poll},
     };
-    use tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
 
     /// Tokio wrapper
     pub type TokioTimer = Timer<Interval>;

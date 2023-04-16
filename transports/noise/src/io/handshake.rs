@@ -145,7 +145,7 @@ where
 }
 
 /// A future for receiving a Noise handshake message with an empty payload.
-pub async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub(crate) async fn recv_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin,
 {
@@ -159,7 +159,7 @@ where
 }
 
 /// A future for sending a Noise handshake message with an empty payload.
-pub async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub(crate) async fn send_empty<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -172,7 +172,7 @@ where
 ///
 /// In case `expected_key` is passed, this function will fail if the received key does not match the expected key.
 /// In case the remote does not send us a key, the expected key is assumed to be the remote's key.
-pub async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub(crate) async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin,
 {
@@ -231,7 +231,7 @@ where
 }
 
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
-pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub(crate) async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -261,7 +261,7 @@ where
 }
 
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
-pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseError>
+pub(crate) async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {

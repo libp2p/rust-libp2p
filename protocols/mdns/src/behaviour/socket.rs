@@ -26,7 +26,7 @@ use std::{
 };
 
 /// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async mode
-pub(crate) trait AsyncSocket: Unpin + Send + 'static {
+pub trait AsyncSocket: Unpin + Send + 'static {
     /// Create the async socket from the [`std::net::UdpSocket`]
     fn from_std(socket: UdpSocket) -> std::io::Result<Self>
     where
@@ -94,7 +94,7 @@ pub mod asio {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::*;
-    use tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};
+    use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};
 
     /// Tokio ASync Socket`
     pub type TokioUdpSocket = TkUdpSocket;

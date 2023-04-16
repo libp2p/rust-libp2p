@@ -91,7 +91,7 @@ impl nohash_hasher::IsEnabled for LocalStreamId {}
 /// and mapped by the receiver to `LocalStreamId`s via
 /// [`RemoteStreamId::into_local()`].
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct RemoteStreamId {
+pub(crate) struct RemoteStreamId {
     num: u64,
     role: Endpoint,
 }
@@ -176,7 +176,7 @@ impl Frame<RemoteStreamId> {
     }
 }
 
-pub struct Codec {
+pub(crate) struct Codec {
     varint_decoder: codec::Uvi<u64>,
     decoder_state: CodecDecodeState,
 }

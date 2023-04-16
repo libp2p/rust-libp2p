@@ -99,7 +99,7 @@ pub struct Position(usize);
 /// A `KBucket` is a list of up to `K_VALUE` keys and associated values,
 /// ordered from least-recently connected to most-recently connected.
 #[derive(Debug, Clone)]
-pub struct KBucket<TKey, TVal> {
+pub(crate) struct KBucket<TKey, TVal> {
     /// The nodes contained in the bucket.
     nodes: ArrayVec<Node<TKey, TVal>, { K_VALUE.get() }>,
 

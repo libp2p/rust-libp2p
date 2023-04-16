@@ -91,7 +91,7 @@ pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     },
 }
 
-pub async fn new_for_pending_outgoing_connection(
+pub(crate) async fn new_for_pending_outgoing_connection(
     connection_id: ConnectionId,
     dial: ConcurrentDial,
     abort_receiver: oneshot::Receiver<Void>,
@@ -167,7 +167,7 @@ pub async fn new_for_pending_incoming_connection<TFut>(
     }
 }
 
-pub async fn new_for_established_connection<THandler>(
+pub(crate) async fn new_for_established_connection<THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
     mut connection: crate::connection::Connection<THandler>,

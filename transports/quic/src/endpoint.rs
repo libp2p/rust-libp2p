@@ -169,7 +169,7 @@ impl From<Config> for QuinnConfig {
 
 /// Channel used to send commands to the [`Driver`].
 #[derive(Debug, Clone)]
-pub struct Channel {
+pub(crate) struct Channel {
     /// Channel to the background of the endpoint.
     to_endpoint: mpsc::Sender<ToEndpoint>,
     /// Address that the socket is bound to.
@@ -179,7 +179,7 @@ pub struct Channel {
 
 impl Channel {
     /// Builds a new endpoint that is listening on the [`SocketAddr`].
-    pub fn new_bidirectional<P: Provider>(
+    pub(crate) fn new_bidirectional<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
     ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
@@ -190,7 +190,7 @@ impl Channel {
     }
 
     /// Builds a new endpoint that only supports outbound connections.
-    pub fn new_dialer<P: Provider>(
+    pub(crate) fn new_dialer<P: Provider>(
         quinn_config: QuinnConfig,
         socket_family: SocketFamily,
     ) -> Result<Self, Error> {
@@ -294,7 +294,7 @@ pub struct Disconnected {}
 
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
-pub enum ToEndpoint {
+pub(crate) enum ToEndpoint {
     /// Instruct the [`quinn_proto::Endpoint`] to start connecting to the given address.
     Dial {
         /// UDP address to connect to.

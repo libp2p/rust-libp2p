@@ -55,7 +55,7 @@ impl fmt::Display for ConnectionId {
     }
 }
 /// A multiplexed I/O stream.
-pub struct Multiplexed<C> {
+pub(crate) struct Multiplexed<C> {
     /// A unique ID for the multiplexed stream (i.e. connection).
     id: ConnectionId,
     /// The current operating status of the multiplex stream.

@@ -56,7 +56,7 @@ pub(crate) struct NewAddr {
 
 /// An event emitted by [`UDPMuxNewAddr`] when it's polled.
 #[derive(Debug)]
-pub enum UDPMuxEvent {
+pub(crate) enum UDPMuxEvent {
     /// Connection error. UDP mux should be stopped.
     Error(std::io::Error),
     /// Got a [`NewAddr`] from the socket.
@@ -67,7 +67,7 @@ pub enum UDPMuxEvent {
 ///
 /// - It has been rewritten to work without locks and channels instead.
 /// - It reports previously unseen addresses instead of ignoring them.
-pub struct UDPMuxNewAddr {
+pub(crate) struct UDPMuxNewAddr {
     udp_sock: UdpSocket,
 
     listen_addr: SocketAddr,
