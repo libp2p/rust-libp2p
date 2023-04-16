@@ -50,7 +50,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
 #[derive(Copy, Clone, Eq, Debug)]
-pub struct LocalStreamId {
+pub(crate) struct LocalStreamId {
     num: u64,
     role: Endpoint,
 }

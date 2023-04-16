@@ -95,7 +95,7 @@ impl Default for PeerStats {
 impl PeerStats {
     /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
     /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
-    pub fn stats_or_default_mut(
+    pub(crate) fn stats_or_default_mut(
         &mut self,
         topic_hash: TopicHash,
         params: &PeerScoreParams,

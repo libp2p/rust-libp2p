@@ -74,14 +74,12 @@ pub enum InboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a server role.
-pub struct AsServer<'a> {
+pub(crate) struct AsServer<'a> {
     pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
-    pub config: &'a Config,
+    pub(crate) config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub throttled_clients: &'a mut Vec<(PeerId, Instant)>,
-
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) throttled_clients: &'a mut Vec<(PeerId, Instant)>,
     #[allow(clippy::type_complexity)]
     pub ongoing_inbound: &'a mut HashMap<
         PeerId,

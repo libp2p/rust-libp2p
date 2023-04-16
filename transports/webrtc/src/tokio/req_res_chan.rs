@@ -28,7 +28,7 @@ use std::{
     task::{Context, Poll},
 };
 
-pub fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
+pub(crate) fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
     let (sender, receiver) = mpsc::channel(capacity);
 
     (

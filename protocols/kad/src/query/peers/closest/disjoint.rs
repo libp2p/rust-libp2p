@@ -30,7 +30,7 @@ use std::{
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
-pub struct ClosestDisjointPeersIter {
+pub(crate) struct ClosestDisjointPeersIter {
     config: ClosestPeersIterConfig,
     target: KeyBytes,
 

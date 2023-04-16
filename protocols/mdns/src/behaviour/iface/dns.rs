@@ -47,8 +47,7 @@ const MAX_PACKET_SIZE: usize = 9000 - 68;
 const MAX_RECORDS_PER_PACKET: usize = (MAX_PACKET_SIZE - 100) / MAX_TXT_RECORD_SIZE;
 
 /// An encoded MDNS packet.
-pub type MdnsPacket = Vec<u8>;
-
+pub(crate) type MdnsPacket = Vec<u8>;
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
 pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {

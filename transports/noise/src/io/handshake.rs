@@ -22,7 +22,7 @@
 
 mod proto {
     include!("../generated/mod.rs");
-    pub use self::payload::proto::NoiseHandshakePayload;
+    pub(crate) use self::payload::proto::NoiseHandshakePayload;
 }
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
@@ -67,7 +67,7 @@ pub enum RemoteIdentity<C> {
 // Internal
 
 /// Handshake state.
-pub struct State<T> {
+pub(crate) struct State<T> {
     /// The underlying I/O resource.
     io: NoiseFramed<T, snow::HandshakeState>,
     /// The associated public identity of the local node's static DH keypair,

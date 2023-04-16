@@ -42,7 +42,7 @@ use std::{cmp::Ordering, collections::VecDeque, num::NonZeroUsize};
 ///     it is removed from the collection.
 ///
 #[derive(Debug, Clone)]
-pub struct Addresses {
+pub(crate) struct Addresses {
     /// The ranked sequence of addresses, from highest to lowest score.
     ///
     /// By design, the number of finitely scored addresses stored here is

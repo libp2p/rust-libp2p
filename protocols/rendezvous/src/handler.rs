@@ -24,7 +24,7 @@ use void::Void;
 
 const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
 
-pub mod inbound;
+pub(crate) mod inbound;
 pub mod outbound;
 
 /// Errors that can occur while interacting with a substream.
@@ -42,7 +42,7 @@ pub enum Error {
 }
 
 pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
-pub type OutboundOutEvent =
+pub(crate) type OutboundOutEvent =
     crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
 
 pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;

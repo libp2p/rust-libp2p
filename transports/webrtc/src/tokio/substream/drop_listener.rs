@@ -31,7 +31,7 @@ use crate::proto::{Flag, Message};
 use crate::tokio::substream::framed_dc::FramedDc;
 
 #[must_use]
-pub struct DropListener {
+pub(crate) struct DropListener {
     state: State,
 }
 

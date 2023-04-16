@@ -536,7 +536,7 @@ impl<P: Provider> Drop for Listener<P> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolVersion {
+pub(crate) enum ProtocolVersion {
     V1, // i.e. RFC9000
     Draft29,
 }

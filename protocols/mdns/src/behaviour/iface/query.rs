@@ -34,7 +34,7 @@ use trust_dns_proto::{
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
-pub enum MdnsPacket {
+pub(crate) enum MdnsPacket {
     /// A query made by a remote.
     Query(MdnsQuery),
     /// A response sent by a remote in response to one of our queries.

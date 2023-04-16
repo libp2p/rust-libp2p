@@ -36,7 +36,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct CopyFuture<S, D> {
+pub(crate) struct CopyFuture<S, D> {
     src: BufReader<S>,
     dst: BufReader<D>,
 

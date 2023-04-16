@@ -112,7 +112,7 @@ impl Config {
 
 /// Represents the inner configuration for [`quinn_proto`].
 #[derive(Debug, Clone)]
-pub struct QuinnConfig {
+pub(crate) struct QuinnConfig {
     client_config: quinn_proto::ClientConfig,
     server_config: Arc<quinn_proto::ServerConfig>,
     endpoint_config: Arc<quinn_proto::EndpointConfig>,

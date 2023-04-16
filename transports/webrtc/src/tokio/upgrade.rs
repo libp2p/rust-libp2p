@@ -43,7 +43,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
 
 /// Creates a new outbound WebRTC connection.
-pub async fn outbound(
+pub(crate) async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,

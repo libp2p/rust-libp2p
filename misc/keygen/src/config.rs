@@ -8,7 +8,7 @@ use libp2p_identity::PeerId;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Config {
+pub(crate) struct Config {
     pub identity: Identity,
 }
 
@@ -31,7 +31,7 @@ impl Config {
 pub struct Identity {
     #[serde(rename = "PeerID")]
     pub peer_id: String,
-    pub priv_key: String,
+    pub(crate) priv_key: String,
 }
 
 impl zeroize::Zeroize for Config {

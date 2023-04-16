@@ -30,7 +30,7 @@ pub use crate::K_VALUE;
 
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
-pub struct PendingNode<TKey, TVal> {
+pub(crate) struct PendingNode<TKey, TVal> {
     /// The pending node to insert.
     node: Node<TKey, TVal>,
 

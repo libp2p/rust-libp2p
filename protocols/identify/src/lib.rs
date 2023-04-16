@@ -71,5 +71,5 @@ mod protocol;
 
 mod proto {
     include!("generated/mod.rs");
-    pub use self::structs::Identify;
+    pub(crate) use self::structs::Identify;
 }

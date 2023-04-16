@@ -503,7 +503,7 @@ where
 /// A helper struct for substream handlers that can be implemented as async functions.
 ///
 /// This only works for substreams without an `InEvent` because - once constructed - the state of an inner future is opaque.
-pub struct FutureSubstream<TOutEvent, TError> {
+pub(crate) struct FutureSubstream<TOutEvent, TError> {
     future: Fuse<BoxFuture<'static, Result<TOutEvent, TError>>>,
 }
 

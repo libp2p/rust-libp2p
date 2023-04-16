@@ -32,7 +32,7 @@ use wasm_timer::Instant;
 struct HeartbeatIndex(usize);
 
 /// Stores backoffs in an efficient manner.
-pub struct BackoffStorage {
+pub(crate) struct BackoffStorage {
     /// Stores backoffs and the index in backoffs_by_heartbeat per peer per topic.
     backoffs: HashMap<TopicHash, HashMap<PeerId, (Instant, HeartbeatIndex)>>,
     /// Stores peer topic pairs per heartbeat (this is cyclic the current index is

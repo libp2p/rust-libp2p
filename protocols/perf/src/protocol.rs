@@ -26,7 +26,7 @@ use crate::{client, server};
 
 const BUF: [u8; 1024] = [0; 1024];
 
-pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
+pub(crate) async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
     params: client::RunParams,
     mut stream: S,
 ) -> Result<client::RunTimers, std::io::Error> {

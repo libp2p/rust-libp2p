@@ -27,7 +27,7 @@ use std::net::{IpAddr, SocketAddr};
 use crate::tokio::fingerprint::Fingerprint;
 
 /// Creates the SDP answer used by the client.
-pub fn answer(
+pub(crate) fn answer(
     addr: SocketAddr,
     server_fingerprint: &Fingerprint,
     client_ufrag: &str,
@@ -214,11 +214,11 @@ enum IpVersion {
 #[derive(Serialize)]
 struct DescriptionContext {
     pub ip_version: IpVersion,
-    pub target_ip: IpAddr,
+    pub(crate) target_ip: IpAddr,
     pub target_port: u16,
-    pub fingerprint_algorithm: String,
+    pub(crate) fingerprint_algorithm: String,
     pub fingerprint_value: String,
-    pub ufrag: String,
+    pub(crate) ufrag: String,
     pub pwd: String,
 }
 

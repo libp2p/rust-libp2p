@@ -29,7 +29,7 @@ mod protocol;
 
 mod proto {
     include!("generated/mod.rs");
-    pub use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
+    pub(crate) use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
 }
 
 pub use behaviour_impl::Behaviour;

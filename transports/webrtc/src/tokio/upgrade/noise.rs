@@ -27,7 +27,7 @@ use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use crate::tokio::fingerprint::Fingerprint;
 use crate::tokio::Error;
 
-pub async fn inbound<T>(
+pub(crate) async fn inbound<T>(
     id_keys: identity::Keypair,
     stream: T,
     client_fingerprint: Fingerprint,

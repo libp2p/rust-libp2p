@@ -34,7 +34,7 @@ use std::task::{Context, Poll};
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
 /// the instrumentation of return values, without keeping
 /// any further state.
-pub struct MockBehaviour<THandler, TOutEvent>
+pub(crate) struct MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
     THandler::OutEvent: Clone,
@@ -154,22 +154,23 @@ where
     inner: TInner,
 
     pub handle_pending_inbound_connection: Vec<(ConnectionId, Multiaddr, Multiaddr)>,
-    pub handle_pending_outbound_connection:
+    pub(crate) handle_pending_outbound_connection:
         Vec<(Option<PeerId>, Vec<Multiaddr>, Endpoint, ConnectionId)>,
-    pub handle_established_inbound_connection: Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
+    pub(crate) handle_established_inbound_connection:
+        Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
     pub handle_established_outbound_connection: Vec<(PeerId, Multiaddr, Endpoint, ConnectionId)>,
     pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub(crate) on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
-    pub on_dial_failure: Vec<Option<PeerId>>,
+    pub(crate) on_dial_failure: Vec<Option<PeerId>>,
     pub on_new_listener: Vec<ListenerId>,
-    pub on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub(crate) on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub on_new_external_addr: Vec<Multiaddr>,
-    pub on_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub(crate) on_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
     pub on_expired_external_addr: Vec<Multiaddr>,
-    pub on_listener_error: Vec<ListenerId>,
+    pub(crate) on_listener_error: Vec<ListenerId>,
     pub on_listener_closed: Vec<(ListenerId, bool)>,
-    pub poll: usize,
+    pub(crate) poll: usize,
 }
 
 impl<TInner> CallTraceBehaviour<TInner>
@@ -177,7 +178,7 @@ where
     TInner: NetworkBehaviour,
     THandlerOutEvent<TInner>: Clone,
 {
-    pub fn new(inner: TInner) -> Self {
+    pub(crate) fn new(inner: TInner) -> Self {
         Self {
             inner,
             handle_pending_inbound_connection: Vec::new(),

@@ -40,7 +40,7 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// unlikely to be more than 16KiB long.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct LengthDelimited<R> {
+pub(crate) struct LengthDelimited<R> {
     /// The inner I/O resource.
     #[pin]
     inner: R,

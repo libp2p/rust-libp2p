@@ -41,7 +41,7 @@
 ))]
 mod proto {
     include!("generated/mod.rs");
-    pub use self::keys_proto::*;
+    pub(crate) use self::keys_proto::*;
 }
 
 #[cfg(feature = "ecdsa")]

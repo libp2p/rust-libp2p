@@ -49,9 +49,9 @@ const RECEIVE_MTU: usize = 8192;
 
 /// A previously unseen address of a remote which has sent us an ICE binding request.
 #[derive(Debug)]
-pub struct NewAddr {
+pub(crate) struct NewAddr {
     pub addr: SocketAddr,
-    pub ufrag: String,
+    pub(crate) ufrag: String,
 }
 
 /// An event emitted by [`UDPMuxNewAddr`] when it's polled.

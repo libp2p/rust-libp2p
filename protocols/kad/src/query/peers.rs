@@ -38,7 +38,7 @@
 //!
 //! [`Finished`]: PeersIterState::Finished
 
-pub mod closest;
+pub(crate) mod closest;
 pub mod fixed;
 
 use libp2p_identity::PeerId;

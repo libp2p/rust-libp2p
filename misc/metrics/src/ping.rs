@@ -52,7 +52,7 @@ enum Failure {
     Other,
 }
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     rtt: Histogram,
     failure: Family<FailureLabels, Counter>,
     pong_received: Counter,

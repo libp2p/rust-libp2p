@@ -85,7 +85,7 @@ impl ConnectionId {
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Connected {
+pub(crate) struct Connected {
     /// The connected endpoint, including network address information.
     pub endpoint: ConnectedPoint,
     /// Information obtained from the transport.

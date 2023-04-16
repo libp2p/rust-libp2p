@@ -53,7 +53,7 @@ const MSG_LS: &[u8] = b"ls\n";
 ///
 /// Every [`Version`] has a corresponding header line.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum HeaderLine {
+pub(crate) enum HeaderLine {
     /// The `/multistream/1.0.0` header line.
     V1,
 }

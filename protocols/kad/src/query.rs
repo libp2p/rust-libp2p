@@ -39,7 +39,7 @@ use std::{num::NonZeroUsize, time::Duration};
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub struct QueryPool<TInner> {
+pub(crate) struct QueryPool<TInner> {
     next_id: usize,
     config: QueryConfig,
     queries: FnvHashMap<QueryId, Query<TInner>>,

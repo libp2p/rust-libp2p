@@ -43,7 +43,7 @@ struct Local {
 }
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
-pub struct Remote {
+pub(crate) struct Remote {
     // The remote's peer ID:
     pub peer_id: PeerId,
     // The remote's public key:

@@ -84,7 +84,7 @@ impl ExecSwitch {
 }
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler>
+pub(crate) struct Pool<THandler>
 where
     THandler: ConnectionHandler,
 {

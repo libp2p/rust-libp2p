@@ -41,7 +41,7 @@ use std::{
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
 /// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
-pub struct InterfaceState<U, T> {
+pub(crate) struct InterfaceState<U, T> {
     /// Address this instance is bound to.
     addr: IpAddr,
     /// Receive socket.

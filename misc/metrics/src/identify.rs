@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     protocols: Protocols,
     error: Counter,
     pushed: Counter,

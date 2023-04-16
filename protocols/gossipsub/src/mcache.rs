@@ -31,7 +31,7 @@ use std::{
 
 /// CacheEntry stored in the history.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CacheEntry {
+pub(crate) struct CacheEntry {
     mid: MessageId,
     topic: TopicHash,
 }

@@ -36,7 +36,7 @@ pub trait RateLimiter: Send {
     fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;
 }
 
-pub fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
+pub(crate) fn new_per_peer(config: GenericRateLimiterConfig) -> Box<dyn RateLimiter> {
     let mut limiter = GenericRateLimiter::new(config);
     Box::new(move |peer_id, _addr: &Multiaddr, now| limiter.try_next(peer_id, now))
 }

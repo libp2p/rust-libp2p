@@ -30,7 +30,7 @@ use std::{fmt, pin::Pin};
 
 /// A writer that encrypts and forwards to an inner writer
 #[pin_project]
-pub struct CryptWriter<W> {
+pub(crate) struct CryptWriter<W> {
     #[pin]
     inner: W,
     buf: Vec<u8>,

@@ -31,7 +31,7 @@ mod topic;
 
 mod proto {
     include!("generated/mod.rs");
-    pub use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
+    pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }
 
 pub use self::layer::{Floodsub, FloodsubEvent};

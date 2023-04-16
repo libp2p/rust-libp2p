@@ -25,7 +25,7 @@ use libp2p_identity::PeerId;
 use std::{collections::hash_map::Entry, num::NonZeroUsize, vec};
 
 /// A peer iterator for a fixed set of peers.
-pub struct FixedPeersIter {
+pub(crate) struct FixedPeersIter {
     /// Ther permitted parallelism, i.e. number of pending results.
     parallelism: NonZeroUsize,
 

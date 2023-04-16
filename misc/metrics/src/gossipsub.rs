@@ -21,7 +21,7 @@
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     messages: Counter,
 }
 

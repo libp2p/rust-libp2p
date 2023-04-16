@@ -24,7 +24,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::{Registry, Unit};
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     query_result_get_record_ok: Counter,
     query_result_get_record_error: Family<GetRecordResult, Counter>,
 

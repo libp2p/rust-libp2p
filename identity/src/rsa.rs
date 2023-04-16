@@ -159,7 +159,7 @@ struct Asn1RawOid<'a> {
 
 impl<'a> Asn1RawOid<'a> {
     /// The underlying OID as byte literal.
-    pub fn oid(&self) -> &[u8] {
+    pub(crate) fn oid(&self) -> &[u8] {
         self.object.value()
     }
 

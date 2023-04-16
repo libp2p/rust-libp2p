@@ -25,7 +25,7 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
-pub use multistream_select::Version;
+pub(crate) use multistream_select::Version;
 use smallvec::SmallVec;
 use std::fmt;
 

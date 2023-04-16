@@ -38,7 +38,7 @@ pub(crate) struct GossipPromises {
 
 impl GossipPromises {
     /// Returns true if the message id exists in the promises.
-    pub fn contains(&self, message: &MessageId) -> bool {
+    pub(crate) fn contains(&self, message: &MessageId) -> bool {
         self.promises.contains_key(message)
     }
 

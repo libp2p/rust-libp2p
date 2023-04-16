@@ -560,7 +560,7 @@ pub struct UnmappableStatusCode(proto::ResponseStatus);
 
 mod proto {
     include!("generated/mod.rs");
-    pub use self::rendezvous::pb::{mod_Message::*, Message};
+    pub(crate) use self::rendezvous::pb::{mod_Message::*, Message};
 }
 
 #[cfg(test)]

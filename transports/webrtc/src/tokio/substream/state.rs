@@ -25,7 +25,7 @@ use std::io;
 use crate::proto::Flag;
 
 #[derive(Debug, Copy, Clone)]
-pub enum State {
+pub(crate) enum State {
     Open,
     ReadClosed,
     WriteClosed,

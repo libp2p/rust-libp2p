@@ -88,7 +88,7 @@ declare_message_id_type!(MessageId, "MessageId");
 declare_message_id_type!(FastMessageId, "FastMessageId");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerConnections {
+pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub kind: PeerKind,
     /// Its current connections.

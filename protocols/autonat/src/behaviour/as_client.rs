@@ -83,25 +83,22 @@ pub enum OutboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a client role.
-pub struct AsClient<'a> {
+pub(crate) struct AsClient<'a> {
     pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
-    pub local_peer_id: PeerId,
+    pub(crate) local_peer_id: PeerId,
     pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
 
-    pub servers: &'a HashSet<PeerId>,
+    pub(crate) servers: &'a HashSet<PeerId>,
     pub throttled_servers: &'a mut Vec<(PeerId, Instant)>,
 
     pub nat_status: &'a mut NatStatus,
-    pub confidence: &'a mut usize,
-
-    pub ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
-
+    pub(crate) confidence: &'a mut usize,
+    pub(crate) ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
     pub last_probe: &'a mut Option<Instant>,
-    pub schedule_probe: &'a mut Delay,
-
-    pub listen_addresses: &'a ListenAddresses,
+    pub(crate) schedule_probe: &'a mut Delay,
+    pub(crate) listen_addresses: &'a ListenAddresses,
     pub external_addresses: &'a ExternalAddresses,
 }
 

@@ -41,7 +41,7 @@ use void::Void;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
-pub enum Command<T> {
+pub(crate) enum Command<T> {
     /// Notify the connection handler of an event.
     NotifyHandler(T),
     /// Gracefully close the connection (active close) before

@@ -31,8 +31,7 @@ impl Executor for ThreadPool {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub struct TokioExecutor;
-
+pub(crate) struct TokioExecutor;
 #[cfg(all(
     feature = "tokio",
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
