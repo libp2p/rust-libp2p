@@ -40,14 +40,16 @@ def fix_unreachable_pub_warning(warning):
 
 
 def main():
-    workspace_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
-
     for line in sys.stdin:
         # Ignore other compiler messages
-        if not "unreachable_pub" in line:
+        if "unreachable_pub" not in line:
             continue
 
         warning = json.loads(line.strip())
+
+        # Don't modify code that is not in the current workspace
+        if str(Path.cwd()) not in str(warning['target']['src_path']):
+            return
 
         m = warning["message"]
 
