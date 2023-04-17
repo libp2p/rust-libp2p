@@ -243,8 +243,8 @@ impl Keypair {
 
     /// Encode a private key as protobuf structure.
     #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        self.encode_protobuf()
+    pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
+        Ok(self.encode_protobuf())
     }
 
     /// Encode a private key as protobuf structure.

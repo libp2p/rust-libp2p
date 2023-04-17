@@ -33,7 +33,7 @@ impl Keypair {
     }
 
     #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
+    pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         unreachable!("Can never encode empty enum")
     }
 
