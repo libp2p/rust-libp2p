@@ -59,17 +59,14 @@ impl Keypair {
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn try_decode_pkcs8(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
-        match RsaKeyPair::from_pkcs8(bytes) {
-            Ok(kp) => {
-                let kp = Self {
-                    inner: Arc::new(kp),
-                    raw_key: bytes.to_vec(),
-                };
-                bytes.zeroize();
-                Ok(kp)
-            }
-            Err(e) => Err(DecodingError::failed_to_parse("RSA", e)),
-        }
+        let kp = RsaKeyPair::from_pkcs8(bytes)
+            .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
+        let kp = Keypair {
+            inner: Arc::new(kp),
+            raw_key: bytes.to_vec(),
+        };
+        bytes.zeroize();
+        Ok(kp)
     }
 
     /// Get the public key from the keypair.
