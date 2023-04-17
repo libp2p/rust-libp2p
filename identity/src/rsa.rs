@@ -149,8 +149,8 @@ impl PublicKey {
 
     /// Try to decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
-    pub fn try_decode_x509(pk: impl AsRef<[u8]>) -> Result<PublicKey, DecodingError> {
-        Asn1SubjectPublicKeyInfo::decode(pk.as_ref())
+    pub fn try_decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
+        Asn1SubjectPublicKeyInfo::decode(pk)
             .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
             .map(|spki| spki.subjectPublicKey.0)
     }
@@ -372,7 +372,7 @@ mod tests {
     fn rsa_x509_encode_decode() {
         fn prop(SomeKeypair(kp): SomeKeypair) -> Result<bool, String> {
             let pk = kp.public();
-            PublicKey::try_decode_x509(pk.encode_x509())
+            PublicKey::try_decode_x509(&pk.encode_x509())
                 .map_err(|e| e.to_string())
                 .map(|pk2| pk2 == pk)
         }
