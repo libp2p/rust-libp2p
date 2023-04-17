@@ -29,6 +29,7 @@ use p256::{
         signature::{Signer, Verifier},
         Signature, SigningKey, VerifyingKey,
     },
+    elliptic_curve::pkcs8::EncodePrivateKey,
     EncodedPoint,
 };
 use void::Void;
@@ -125,9 +126,13 @@ impl SecretKey {
 
     /// Try to parse a secret key from a byte buffer containing raw scalar of the key.
     pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<SecretKey, DecodingError> {
-        SigningKey::from_bytes(buf.as_ref())
+        SigningKey::from_bytes(buf.as_ref().into())
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
+    }
+
+    pub fn encode_pkcs8_der(&self) -> Vec<u8> {
+        self.0.to_pkcs8_der().unwrap().to_bytes().to_vec()
     }
 }
 

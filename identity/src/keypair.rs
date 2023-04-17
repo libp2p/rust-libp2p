@@ -273,7 +273,7 @@ impl Keypair {
             #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => proto::PrivateKey {
                 Type: proto::KeyType::ECDSA,
-                Data: data.secret().to_bytes(),
+                Data: data.secret().encode_pkcs8_der(),
             },
         };
 
