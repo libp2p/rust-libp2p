@@ -32,8 +32,7 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - if: github.repository == 'libp2p/rust-libp2p'
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/checkout@v3
 
