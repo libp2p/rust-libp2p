@@ -53,7 +53,9 @@ use std::iter;
 ///     });
 /// ```
 ///
-#[deprecated(note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`.")]
+#[deprecated(
+    note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`."
+)]
 #[allow(deprecated)]
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
@@ -69,7 +71,9 @@ where
 ///
 /// The upgrade consists in calling the function passed when creating this struct.
 #[derive(Debug, Clone)]
-#[deprecated(note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`.")]
+#[deprecated(
+    note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`."
+)]
 pub struct FromFnUpgrade<P, F> {
     protocol_name: P,
     fun: F,
