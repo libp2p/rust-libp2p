@@ -1725,9 +1725,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.15"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f9f29bc9dda355256b2916cf526ab02ce0aeaaaf2bad60d65ef3f12f11dd0f4"
+checksum = "66b91535aa35fea1523ad1b86cb6b53c28e0ae566ba4a460f4457e936cad7c6f"
 dependencies = [
  "bytes",
  "fnv",
@@ -1923,9 +1923,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "0.14.24"
+version = "0.14.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e011372fa0b68db8350aa7a248930ecc7839bf46d8485577d69f117a75f164c"
+checksum = "cc5e554ff619822309ffd57d8734d77cd5ce6238bc956f037ea06c58238c9899"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2282,7 +2282,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2438,6 +2438,7 @@ dependencies = [
  "base64 0.21.0",
  "byteorder",
  "bytes",
+ "either",
  "env_logger 0.10.0",
  "fnv",
  "futures",
@@ -2462,6 +2463,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
+ "void",
  "wasm-timer",
 ]
 
@@ -2493,7 +2495,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "asn1_der",
  "base64 0.21.0",
@@ -2580,24 +2582,16 @@ dependencies = [
 name = "libp2p-metrics"
 version = "0.12.0"
 dependencies = [
- "env_logger 0.10.0",
- "futures",
- "hyper",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
  "libp2p-identify",
  "libp2p-identity",
  "libp2p-kad",
- "libp2p-noise",
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
- "libp2p-tcp",
- "libp2p-yamux",
- "log",
  "prometheus-client",
- "tokio",
 ]
 
 [[package]]
@@ -2772,7 +2766,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.15.1"
+version = "0.15.2"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2849,7 +2843,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.1"
+version = "0.42.2"
 dependencies = [
  "async-std",
  "either",
@@ -3133,9 +3127,9 @@ dependencies = [
 
 [[package]]
 name = "lru"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e7d46de488603ffdd5f30afbc64fbba2378214a2c3a2fb83abf3d33126df17"
+checksum = "03f1160296536f10c833a82dca22267d5486734230d47bf00bf435885814ba1e"
 dependencies = [
  "hashbrown 0.13.2",
 ]
@@ -3192,6 +3186,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "metrics-example"
+version = "0.1.0"
+dependencies = [
+ "env_logger 0.10.0",
+ "futures",
+ "hyper",
+ "libp2p",
+ "log",
+ "prometheus-client",
+ "tokio",
 ]
 
 [[package]]
@@ -4079,9 +4086,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.22.3"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8455fa3621f6b41c514946de66ea0531f57ca017b2e6c7cc368035ea5b46df"
+checksum = "3ea8c51b5dc1d8e5fd3350ec8167f464ec0995e79f2e90a075b63371500d557f"
 dependencies = [
  "async-trait",
  "bytes",
