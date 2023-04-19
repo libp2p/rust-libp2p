@@ -27,7 +27,7 @@
 //! is used to send messages to remote peers.
 
 use crate::proto;
-use crate::record::{self, Record};
+use crate::record_priv::{self, Record};
 use asynchronous_codec::Framed;
 use bytes::BytesMut;
 use codec::UviBytes;
@@ -291,13 +291,13 @@ pub enum KadRequestMsg {
     /// this key.
     GetProviders {
         /// Identifier being searched.
-        key: record::Key,
+        key: record_priv::Key,
     },
 
     /// Indicates that this list of providers is known for this key.
     AddProvider {
         /// Key for which we should add providers.
-        key: record::Key,
+        key: record_priv::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -305,7 +305,7 @@ pub enum KadRequestMsg {
     /// Request to get a value from the dht records.
     GetValue {
         /// The key we are searching for.
-        key: record::Key,
+        key: record_priv::Key,
     },
 
     /// Request to put a value into the dht records.
@@ -343,7 +343,7 @@ pub enum KadResponseMsg {
     /// Response to a `PutValue`.
     PutValue {
         /// The key of the record.
-        key: record::Key,
+        key: record_priv::Key,
         /// Value of the record.
         value: Vec<u8>,
     },
@@ -447,11 +447,11 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
             Ok(KadRequestMsg::PutValue { record })
         }
         proto::MessageType::GET_VALUE => Ok(KadRequestMsg::GetValue {
-            key: record::Key::from(message.key),
+            key: record_priv::Key::from(message.key),
         }),
         proto::MessageType::FIND_NODE => Ok(KadRequestMsg::FindNode { key: message.key }),
         proto::MessageType::GET_PROVIDERS => Ok(KadRequestMsg::GetProviders {
-            key: record::Key::from(message.key),
+            key: record_priv::Key::from(message.key),
         }),
         proto::MessageType::ADD_PROVIDER => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
@@ -463,7 +463,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
             if let Some(provider) = provider {
-                let key = record::Key::from(message.key);
+                let key = record_priv::Key::from(message.key);
                 Ok(KadRequestMsg::AddProvider { key, provider })
             } else {
                 Err(invalid_data("AddProvider message with no valid peer."))
@@ -527,7 +527,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         }
 
         proto::MessageType::PUT_VALUE => {
-            let key = record::Key::from(message.key);
+            let key = record_priv::Key::from(message.key);
             let rec = message
                 .record
                 .ok_or_else(|| invalid_data("received PutValue message with no record"))?;
@@ -545,7 +545,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 }
 
 fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
-    let key = record::Key::from(record.key);
+    let key = record_priv::Key::from(record.key);
     let value = record.value;
 
     let publisher = if !record.publisher.is_empty() {

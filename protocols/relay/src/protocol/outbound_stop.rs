@@ -32,7 +32,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub struct Upgrade {
-    pub relay_peer_id: PeerId,
+    pub src_peer_id: PeerId,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
 }
@@ -55,7 +55,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::CONNECT,
             peer: Some(proto::Peer {
-                id: self.relay_peer_id.to_bytes(),
+                id: self.src_peer_id.to_bytes(),
                 addrs: vec![],
             }),
             limit: Some(proto::Limit {
