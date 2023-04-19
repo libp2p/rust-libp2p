@@ -39,7 +39,7 @@ use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -95,9 +95,30 @@ impl<P: Provider> GenTransport<P> {
         server_config: Option<quinn::ServerConfig>,
         socket_addr: SocketAddr,
     ) -> Result<quinn::Endpoint, Error> {
-        let socket = UdpSocket::bind(socket_addr)?;
-        let endpoint = quinn::Endpoint::new(endpoint_config, server_config, socket, P::runtime())?;
-        Ok(endpoint)
+        use crate::provider::Runtime;
+        match P::runtime() {
+            #[cfg(feature = "tokio")]
+            Runtime::Tokio(runtime) => {
+                let socket = std::net::UdpSocket::bind(socket_addr)?;
+                let endpoint =
+                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
+                Ok(endpoint)
+            }
+            #[cfg(feature = "async-std")]
+            Runtime::AsyncStd(runtime) => {
+                let socket = std::net::UdpSocket::bind(socket_addr)?;
+                let endpoint =
+                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
+                Ok(endpoint)
+            }
+            Runtime::Dummy => {
+                let _ = endpoint_config;
+                let _ = server_config;
+                let _ = socket_addr;
+                let err = std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found");
+                Err(Error::Io(err))
+            }
+        }
     }
 }
 

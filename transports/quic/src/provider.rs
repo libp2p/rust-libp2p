@@ -30,13 +30,20 @@ pub mod async_std;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
+pub enum Runtime {
+    #[cfg(feature = "tokio")]
+    Tokio(quinn::TokioRuntime),
+    #[cfg(feature = "async-std")]
+    AsyncStd(quinn::AsyncStdRuntime),
+    Dummy,
+}
+
 /// Provider for a corresponding quinn runtime and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
-    type Runtime: quinn::Runtime;
 
     /// Run the corresponding runtime
-    fn runtime() -> Self::Runtime;
+    fn runtime() -> Runtime;
 
     /// Run the given future in the background until it ends.
     ///

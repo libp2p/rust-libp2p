@@ -35,10 +35,9 @@ pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
-    type Runtime = quinn::AsyncStdRuntime;
 
-    fn runtime() -> Self::Runtime {
-        quinn::AsyncStdRuntime
+    fn runtime() -> super::Runtime {
+        super::Runtime::AsyncStd(quinn::AsyncStdRuntime)
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

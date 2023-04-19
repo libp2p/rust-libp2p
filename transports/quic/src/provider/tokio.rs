@@ -34,10 +34,9 @@ pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
-    type Runtime = quinn::TokioRuntime;
 
-    fn runtime() -> Self::Runtime {
-        quinn::TokioRuntime
+    fn runtime() -> super::Runtime {
+        super::Runtime::Tokio(quinn::TokioRuntime)
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {
