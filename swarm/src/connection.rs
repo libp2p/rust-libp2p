@@ -175,10 +175,18 @@ where
     /// and connection handler.
     pub fn new(
         muxer: StreamMuxerBox,
-        handler: THandler,
+        mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
+        let initial_protocols = gather_supported_protocols(&handler);
+
+        handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+            ProtocolsChange::Added(ProtocolsAdded {
+                protocols: initial_protocols.difference(&HashSet::new()).peekable(),
+            }),
+        ));
+
         Connection {
             muxing: muxer,
             handler,
@@ -188,7 +196,7 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
-            supported_protocols: HashSet::new(),
+            supported_protocols: initial_protocols,
         }
     }
 
@@ -220,21 +228,6 @@ where
             substream_upgrade_protocol_override,
             supported_protocols,
         } = self.get_mut();
-
-        let protocol = handler.listen_protocol();
-
-        let new_protocols = protocol
-            .upgrade()
-            .protocol_info()
-            .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
-            .collect::<HashSet<_>>();
-
-        handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-            ProtocolsChange::Added(ProtocolsAdded {
-                protocols: new_protocols.difference(&HashSet::new()).peekable(),
-            }),
-        ));
-        *supported_protocols = new_protocols;
 
         loop {
             match requested_substreams.poll_next_unpin(cx) {
@@ -396,13 +389,7 @@ where
                 match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let protocol = handler.listen_protocol();
-
-                        let new_protocols = protocol
-                            .upgrade()
-                            .protocol_info()
-                            .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
-                            .collect::<HashSet<_>>();
+                        let new_protocols = gather_supported_protocols(handler);
 
                         if &new_protocols != supported_protocols {
                             let mut added_protocols =
@@ -410,7 +397,7 @@ where
                             let mut removed_protocols =
                                 supported_protocols.difference(&new_protocols).peekable();
 
-                            if dbg!(added_protocols.peek()).is_some() {
+                            if added_protocols.peek().is_some() {
                                 handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                                     ProtocolsChange::Added(ProtocolsAdded {
                                         protocols: added_protocols,
@@ -418,7 +405,7 @@ where
                                 ));
                             }
 
-                            if dbg!(removed_protocols.peek()).is_some() {
+                            if removed_protocols.peek().is_some() {
                                 handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                                     ProtocolsChange::Removed(ProtocolsRemoved {
                                         protocols: removed_protocols,
@@ -428,6 +415,8 @@ where
                         }
 
                         *supported_protocols = new_protocols;
+
+                        let protocol = handler.listen_protocol();
 
                         negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
 
@@ -439,6 +428,15 @@ where
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
     }
+}
+
+fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<String> {
+    handler
+        .listen_protocol()
+        .upgrade()
+        .protocol_info()
+        .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
+        .collect()
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
