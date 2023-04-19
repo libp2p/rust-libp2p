@@ -1,3 +1,9 @@
+## 0.39.2 - unreleased
+
+- Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.39.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
