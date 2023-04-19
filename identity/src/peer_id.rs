@@ -267,10 +267,6 @@ pub enum ParseError {
     B58(#[from] bs58::decode::Error),
     #[error("decoding multihash failed")]
     MultiHash,
-    #[error("decoding public key failed")]
-    DecodingError(crate::error::DecodingError),
-    #[error("unsupported code")]
-    UnsupportedCode(multihash::Error),
 }
 
 impl FromStr for PeerId {
