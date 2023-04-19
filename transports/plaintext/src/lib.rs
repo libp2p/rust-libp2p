@@ -29,7 +29,7 @@ use futures::future::BoxFuture;
 use futures::future::{self, Ready};
 use futures::prelude::*;
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -77,12 +77,11 @@ mod proto {
 #[derive(Debug, Copy, Clone)]
 pub struct PlainText1Config;
 
-impl UpgradeInfo for PlainText1Config {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for PlainText1Config {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/plaintext/1.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("/plaintext/1.0.0"))
     }
 }
 
@@ -113,15 +112,13 @@ pub struct PlainText2Config {
     pub local_public_key: identity::PublicKey,
 }
 
-impl UpgradeInfo for PlainText2Config {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for PlainText2Config {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/plaintext/2.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("/plaintext/2.0.0"))
     }
 }
-
 impl<C> InboundUpgrade<C> for PlainText2Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,

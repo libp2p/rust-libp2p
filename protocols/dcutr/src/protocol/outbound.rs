@@ -23,7 +23,7 @@ use asynchronous_codec::Framed;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, UpgradeProtocols};
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryFrom;
 use std::iter;
@@ -33,11 +33,10 @@ pub struct Upgrade {
     obs_addrs: Vec<Multiaddr>,
 }
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for Upgrade {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(super::PROTOCOL_NAME)
     }
 }
@@ -53,7 +52,11 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(
+        self,
+        substream: NegotiatedSubstream,
+        _: upgrade::Protocol,
+    ) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),

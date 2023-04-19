@@ -20,40 +20,34 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::Protocol;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
+use crate::UpgradeProtocols;
 use futures::future;
 use std::iter;
 use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.
-#[derive(Debug, Copy, Clone)]
-pub struct PendingUpgrade<P> {
-    protocol_name: P,
+#[derive(Debug, Clone)]
+pub struct PendingUpgrade {
+    protocol_name: Protocol,
 }
 
-impl<P> PendingUpgrade<P> {
-    pub fn new(protocol_name: P) -> Self {
+impl PendingUpgrade {
+    pub fn new(protocol_name: Protocol) -> Self {
         Self { protocol_name }
     }
 }
 
-impl<P> UpgradeInfo for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
-{
-    type Info = P;
-    type InfoIter = iter::Once<P>;
+impl UpgradeProtocols for PendingUpgrade {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(self.protocol_name.clone())
     }
 }
 
-impl<C, P> InboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
-{
+impl<C> InboundUpgrade<C> for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
@@ -63,10 +57,7 @@ where
     }
 }
 
-impl<C, P> OutboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
-{
+impl<C> OutboundUpgrade<C> for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;

@@ -32,16 +32,16 @@ use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
+use libp2p_core::UpgradeProtocols;
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
-impl UpgradeInfo for MplexConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for MplexConfig {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_name)
+    fn protocols(&self) -> Self::Iter {
+        iter::once(self.protocol_name.clone())
     }
 }
 

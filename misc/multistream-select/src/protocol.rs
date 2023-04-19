@@ -69,7 +69,7 @@ impl From<Version> for HeaderLine {
 
 /// A protocol (name) exchanged during protocol negotiation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Protocol(Cow<'static, str>);
+pub struct Protocol(Cow<'static, str>); // TODO: Instead of `Cow`, we should probably be storing `Arc<str>`
 
 impl Protocol {
     /// Construct a new protocol from a static string slice.
@@ -91,6 +91,8 @@ impl Protocol {
     /// This function will fail if the protocol does not start with a forward slash: `/`.
     /// Where possible, you should use [`Protocol::from_static`] instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, ProtocolError> {
+        // let arc = Arc::from(protocol.as_str());
+
         if !protocol.starts_with('/') {
             return Err(ProtocolError::InvalidProtocol);
         }

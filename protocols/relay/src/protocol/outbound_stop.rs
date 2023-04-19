@@ -23,7 +23,8 @@ use crate::protocol::{MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade;
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{upgrade, UpgradeProtocols};
 use libp2p_identity::PeerId;
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryInto;
@@ -37,11 +38,10 @@ pub struct Upgrade {
     pub max_circuit_bytes: u64,
 }
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for Upgrade {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(STOP_PROTOCOL_NAME)
     }
 }

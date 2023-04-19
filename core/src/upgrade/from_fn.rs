@@ -18,8 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::upgrade::UpgradeInfo;
 use crate::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName},
     Endpoint,
 };
 
@@ -72,6 +74,7 @@ pub struct FromFnUpgrade<P, F> {
     fun: F,
 }
 
+#[allow(deprecated)] // This is not worth porting because it depends on `ProtocolName` which will go away, plus `FromFnUpgrade` will go away too.
 impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,

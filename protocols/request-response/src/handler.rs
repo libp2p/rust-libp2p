@@ -31,7 +31,7 @@ pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
-use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use libp2p_core::upgrade::{NegotiationError, Protocol, UpgradeError};
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
     SubstreamProtocol,
@@ -60,7 +60,7 @@ where
     TCodec: Codec,
 {
     /// The supported inbound protocols.
-    inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    inbound_protocols: SmallVec<[Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
     /// The keep-alive timeout of idle connections. A connection is considered
@@ -98,7 +98,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     pub(super) fn new(
-        inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+        inbound_protocols: SmallVec<[Protocol; 2]>,
         codec: TCodec,
         keep_alive_timeout: Duration,
         substream_timeout: Duration,

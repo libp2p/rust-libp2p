@@ -26,13 +26,14 @@ use futures::{
     Future,
 };
 use futures::{SinkExt, StreamExt};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_identity::PeerId;
 use std::{io, iter, pin::Pin};
 
 const MAX_MESSAGE_LEN_BYTES: usize = 2048;
 
-const PROTOCOL_NAME: &[u8] = b"/floodsub/1.0.0";
+const PROTOCOL_NAME: Protocol = Protocol::from_static("/floodsub/1.0.0");
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -45,11 +46,10 @@ impl FloodsubProtocol {
     }
 }
 
-impl UpgradeInfo for FloodsubProtocol {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for FloodsubProtocol {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }
@@ -132,11 +132,10 @@ pub struct FloodsubRpc {
     pub subscriptions: Vec<FloodsubSubscription>,
 }
 
-impl UpgradeInfo for FloodsubRpc {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for FloodsubRpc {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }

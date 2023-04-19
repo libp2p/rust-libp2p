@@ -29,7 +29,8 @@ use futures::{
     stream::{BoxStream, LocalBoxStream},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
+use libp2p_core::UpgradeProtocols;
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{
@@ -311,21 +312,19 @@ impl Default for YamuxConfig {
     }
 }
 
-impl UpgradeInfo for YamuxConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for YamuxConfig {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("/yamux/1.0.0"))
     }
 }
 
-impl UpgradeInfo for YamuxLocalConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for YamuxLocalConfig {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("/yamux/1.0.0"))
     }
 }
 

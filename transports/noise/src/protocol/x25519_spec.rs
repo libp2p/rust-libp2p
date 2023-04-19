@@ -23,9 +23,10 @@
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
-use libp2p_core::UpgradeInfo;
+use libp2p_core::{upgrade, UpgradeProtocols};
 use libp2p_identity as identity;
 use rand::Rng;
+use std::iter;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
 
@@ -84,32 +85,33 @@ impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
     }
 }
 
-impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
+impl UpgradeProtocols for NoiseConfig<XX, X25519Spec> {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(upgrade::Protocol::from_static("/noise"))
     }
 }
 
 /// **Note**: This is not currentlyy a standardised upgrade.
-impl UpgradeInfo for NoiseConfig<IX, X25519Spec> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
+impl UpgradeProtocols for NoiseConfig<IX, X25519Spec> {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(upgrade::Protocol::from_static(
+            "/noise/ix/25519/chachapoly/sha256/0.1.0",
+        ))
     }
 }
 
-/// **Note**: This is not currently a standardised upgrade.
-impl<R> UpgradeInfo for NoiseConfig<IK, X25519Spec, R> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
+/// **Note**: This is not currentlyy a standardised upgrade.
+impl<R> UpgradeProtocols for NoiseConfig<IK, X25519Spec, R> {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(upgrade::Protocol::from_static(
+            "/noise/ik/25519/chachapoly/sha256/0.1.0",
+        ))
     }
 }
 

@@ -28,7 +28,8 @@
 use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use instant::Instant;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
@@ -127,21 +128,20 @@ impl fmt::Display for OutboundSubstreamId {
 }
 
 pub struct PassthroughProtocol {
-    ident: Option<&'static [u8]>,
+    ident: Option<Protocol>,
 }
 
 impl PassthroughProtocol {
-    pub fn new(ident: &'static [u8]) -> Self {
+    pub fn new(ident: Protocol) -> Self {
         Self { ident: Some(ident) }
     }
 }
 
-impl UpgradeInfo for PassthroughProtocol {
-    type Info = &'static [u8];
-    type InfoIter = std::option::IntoIter<Self::Info>;
+impl UpgradeProtocols for PassthroughProtocol {
+    type Iter = std::option::IntoIter<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.ident.into_iter()
+    fn protocols(&self) -> Self::Iter {
+        self.ident.clone().into_iter()
     }
 }
 

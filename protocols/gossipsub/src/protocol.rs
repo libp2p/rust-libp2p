@@ -31,6 +31,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
+use libp2p_core::upgrade::Protocol;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, warn};
@@ -101,7 +102,7 @@ impl ProtocolConfig {
 #[derive(Clone, Debug)]
 pub struct ProtocolId {
     /// The RPC message type/name.
-    pub protocol_id: Vec<u8>,
+    pub protocol_id: Protocol,
     /// The type of protocol we support
     pub kind: PeerKind,
 }
@@ -109,16 +110,21 @@ pub struct ProtocolId {
 /// An RPC protocol ID.
 impl ProtocolId {
     pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
+        if !prefix {
+            return ProtocolId {
+                protocol_id: Protocol::try_from_owned(id.to_string()).expect("bad protocol id"),
+                kind,
+            };
+        }
+
         let protocol_id = match kind {
-            PeerKind::Gossipsubv1_1 => match prefix {
-                true => format!("/{}/{}", id, "1.1.0"),
-                false => id.to_string(),
-            },
-            PeerKind::Gossipsub => match prefix {
-                true => format!("/{}/{}", id, "1.0.0"),
-                false => id.to_string(),
-            },
-            PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
+            PeerKind::Gossipsubv1_1 => {
+                Protocol::try_from_owned(format!("/{}/1.1.0", id)).expect("starts with a slash")
+            }
+            PeerKind::Gossipsub => {
+                Protocol::try_from_owned(format!("/{}/1.0.0", id)).expect("starts with a slash")
+            }
+            PeerKind::Floodsub => Protocol::from_static("/floodsub/1.0.0"),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
             // advertise this variant.
             PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),

@@ -24,10 +24,12 @@ use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use rustls::{CommonState, ServerName};
+use std::iter;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
@@ -58,12 +60,11 @@ impl Config {
     }
 }
 
-impl UpgradeInfo for Config {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
+impl UpgradeProtocols for Config {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/tls/1.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("tls"))
     }
 }
 

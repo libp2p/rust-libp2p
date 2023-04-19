@@ -70,6 +70,7 @@ pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
 use handler::{Handler, RequestProtocol};
+use libp2p_core::upgrade::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -338,9 +339,9 @@ where
     TCodec: Codec + Clone + Send + 'static,
 {
     /// The supported inbound protocols.
-    inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    inbound_protocols: SmallVec<[Protocol; 2]>,
     /// The supported outbound protocols.
-    outbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
+    outbound_protocols: SmallVec<[Protocol; 2]>,
     /// The next (local) request ID.
     next_request_id: RequestId,
     /// The next (inbound) request ID.
@@ -370,7 +371,7 @@ where
     /// protocols, codec and configuration.
     pub fn new<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
     where
-        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
+        I: IntoIterator<Item = (Protocol, ProtocolSupport)>,
     {
         let mut inbound_protocols = SmallVec::new();
         let mut outbound_protocols = SmallVec::new();

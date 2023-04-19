@@ -22,9 +22,9 @@ use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    multiaddr,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr,
+    multiaddr, upgrade,
+    upgrade::{InboundUpgrade, OutboundUpgrade},
+    Multiaddr, UpgradeProtocols,
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
@@ -37,9 +37,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
-
-pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
+pub const PROTOCOL_NAME: upgrade::Protocol = upgrade::Protocol::from_static("/ipfs/id/1.0.0");
+pub const PUSH_PROTOCOL_NAME: upgrade::Protocol =
+    upgrade::Protocol::from_static("/ipfs/id/push/1.0.0");
 
 /// The type of the Substream protocol.
 #[derive(Debug, PartialEq, Eq)]
@@ -89,11 +89,10 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-impl UpgradeInfo for Identify {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for Identify {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }
@@ -116,16 +115,15 @@ where
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: C, _: libp2p_core::upgrade::Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: upgrade::Protocol) -> Self::Future {
         recv(socket).boxed()
     }
 }
 
-impl<T> UpgradeInfo for Push<T> {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl<T> UpgradeProtocols for Push<T> {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(PUSH_PROTOCOL_NAME)
     }
 }

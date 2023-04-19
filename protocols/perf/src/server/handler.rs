@@ -67,7 +67,7 @@ impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = Event;
     type Error = Void;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundProtocol = ReadyUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();

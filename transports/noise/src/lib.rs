@@ -72,7 +72,7 @@ use crate::handshake::State;
 use crate::io::handshake;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use std::pin::Pin;
@@ -320,7 +320,7 @@ impl From<quick_protobuf::Error> for NoiseError {
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
-    NoiseConfig<IX, C>: UpgradeInfo,
+    NoiseConfig<IX, C>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -328,7 +328,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -351,7 +351,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
-    NoiseConfig<IX, C>: UpgradeInfo,
+    NoiseConfig<IX, C>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -359,7 +359,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -386,7 +386,7 @@ where
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
-    NoiseConfig<XX, C>: UpgradeInfo,
+    NoiseConfig<XX, C>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -394,7 +394,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -422,7 +422,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
-    NoiseConfig<XX, C>: UpgradeInfo,
+    NoiseConfig<XX, C>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -430,7 +430,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -457,7 +457,7 @@ where
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
-    NoiseConfig<IK, C>: UpgradeInfo,
+    NoiseConfig<IK, C>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -465,7 +465,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_inbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_responder(socket)?;
 
@@ -491,7 +491,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
-    NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
+    NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeProtocols,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -499,7 +499,7 @@ where
     type Error = NoiseError;
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
-    fn upgrade_outbound(self, socket: T, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         async move {
             let mut state = self.into_initiator(socket)?;
 
@@ -542,21 +542,21 @@ impl NoiseAuthenticated<XX, X25519Spec, ()> {
     }
 }
 
-impl<P, C: Zeroize, R> UpgradeInfo for NoiseAuthenticated<P, C, R>
+impl<P, C, R> UpgradeProtocols for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeInfo,
+    NoiseConfig<P, C, R>: UpgradeProtocols,
+    C: Zeroize,
 {
-    type Info = <NoiseConfig<P, C, R> as UpgradeInfo>::Info;
-    type InfoIter = <NoiseConfig<P, C, R> as UpgradeInfo>::InfoIter;
+    type Iter = <NoiseConfig<P, C, R> as UpgradeProtocols>::Iter;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.config.protocol_info()
+    fn protocols(&self) -> Self::Iter {
+        self.config.protocols()
     }
 }
 
 impl<T, P, C, R> InboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeInfo
+    NoiseConfig<P, C, R>: UpgradeProtocols
         + InboundUpgrade<T, Output = (RemoteIdentity<C>, NoiseOutput<T>), Error = NoiseError>
         + 'static,
     <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future: Send,
@@ -567,7 +567,7 @@ where
     type Error = NoiseError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, socket: T, info: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: T, info: libp2p_core::upgrade::Protocol) -> Self::Future {
         Box::pin(
             self.config
                 .upgrade_inbound(socket, info)
@@ -581,7 +581,7 @@ where
 
 impl<T, P, C, R> OutboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeInfo
+    NoiseConfig<P, C, R>: UpgradeProtocols
         + OutboundUpgrade<T, Output = (RemoteIdentity<C>, NoiseOutput<T>), Error = NoiseError>
         + 'static,
     <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future: Send,
@@ -592,7 +592,7 @@ where
     type Error = NoiseError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: T, info: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: T, info: libp2p_core::upgrade::Protocol) -> Self::Future {
         Box::pin(
             self.config
                 .upgrade_outbound(socket, info)

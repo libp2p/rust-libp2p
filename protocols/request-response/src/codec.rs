@@ -22,6 +22,7 @@ pub use libp2p_core::ProtocolName;
 
 use async_trait::async_trait;
 use futures::prelude::*;
+use libp2p_core::upgrade::Protocol;
 use std::io;
 
 /// A `RequestResponseCodec` defines the request and response types
@@ -88,8 +89,6 @@ pub trait RequestResponseCodec {
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
 pub trait Codec {
-    /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol: ProtocolName + Send + Clone;
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.
@@ -99,7 +98,7 @@ pub trait Codec {
     /// negotiated protocol.
     async fn read_request<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
     ) -> io::Result<Self::Request>
     where
@@ -109,7 +108,7 @@ pub trait Codec {
     /// negotiated protocol.
     async fn read_response<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -119,7 +118,7 @@ pub trait Codec {
     /// negotiated protocol.
     async fn write_request<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
@@ -130,7 +129,7 @@ pub trait Codec {
     /// negotiated protocol.
     async fn write_response<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
         res: Self::Response,
     ) -> io::Result<()>
@@ -145,15 +144,13 @@ where
     U: RequestResponseCodec + Send,
     U::Protocol: Sync,
 {
-    type Protocol = U::Protocol;
-
     type Request = U::Request;
 
     type Response = U::Response;
 
     async fn read_request<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
     ) -> io::Result<Self::Request>
     where
@@ -164,7 +161,7 @@ where
 
     async fn read_response<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -175,7 +172,7 @@ where
 
     async fn write_request<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
@@ -187,7 +184,7 @@ where
 
     async fn write_response<T>(
         &mut self,
-        protocol: &Self::Protocol,
+        protocol: &Protocol,
         io: &mut T,
         res: Self::Response,
     ) -> io::Result<()>

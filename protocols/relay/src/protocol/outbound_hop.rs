@@ -25,7 +25,8 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
 use instant::{Duration, SystemTime};
-use libp2p_core::{upgrade, Multiaddr};
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{upgrade, Multiaddr, UpgradeProtocols};
 use libp2p_identity::PeerId;
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryFrom;
@@ -37,11 +38,10 @@ pub enum Upgrade {
     Connect { dst_peer_id: PeerId },
 }
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for Upgrade {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
+    fn protocols(&self) -> Self::Iter {
         iter::once(HOP_PROTOCOL_NAME)
     }
 }

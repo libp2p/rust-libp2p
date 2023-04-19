@@ -21,7 +21,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use futures::{prelude::*, ready};
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::Protocol;
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -37,12 +38,11 @@ impl Default for DeflateConfig {
     }
 }
 
-impl UpgradeInfo for DeflateConfig {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
+impl UpgradeProtocols for DeflateConfig {
+    type Iter = iter::Once<Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/deflate/1.0.0")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(Protocol::from_static("/deflate/1.0.0"))
     }
 }
 

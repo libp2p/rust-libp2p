@@ -7,7 +7,7 @@ use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::transport::memory::Channel;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::{
-    upgrade, InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Transport, UpgradeInfo,
+    upgrade, InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Transport, UpgradeProtocols,
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -17,13 +17,12 @@ use std::{fmt, mem};
 
 pub async fn connected_muxers_on_memory_transport<MC, M, E>() -> (M, M)
 where
-    MC: InboundUpgrade<Negotiated<Channel<Vec<u8>>>, Error = E, Output = M>
+    MC: UpgradeProtocols
+        + InboundUpgrade<Negotiated<Channel<Vec<u8>>>, Error = E, Output = M>
         + OutboundUpgrade<Negotiated<Channel<Vec<u8>>>, Error = E, Output = M>
         + Send
         + 'static
         + Default,
-    <MC as UpgradeInfo>::Info: Send,
-    <<MC as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <MC as InboundUpgrade<Negotiated<Channel<Vec<u8>>>>>::Future: Send,
     <MC as OutboundUpgrade<Negotiated<Channel<Vec<u8>>>>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,

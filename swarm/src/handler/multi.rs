@@ -558,7 +558,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().find(|p| p == &selected_protocol).is_some())
+            .position(|(_, h)| h.protocols().any(|p| p == selected_protocol))
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 
@@ -589,7 +589,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().find(|p| p == &selected_protocol).is_some())
+            .position(|(_, h)| h.protocols().any(|p| p == selected_protocol))
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 

@@ -257,12 +257,12 @@ impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
     type Error = Failure;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundProtocol = ReadyUpgrade;
+    type OutboundProtocol = ReadyUpgrade;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
@@ -279,8 +279,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result, Self::Error>>
-    {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade, (), crate::Result, Self::Error>> {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection

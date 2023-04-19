@@ -20,23 +20,23 @@
 
 use futures::prelude::*;
 use libp2p_core::transport::{MemoryTransport, Transport};
-use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::UpgradeProtocols;
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use multiaddr::{Multiaddr, Protocol};
 use rand::random;
-use std::{io, pin::Pin};
+use std::{io, iter, pin::Pin};
 
 #[derive(Clone)]
 struct HelloUpgrade {}
 
-impl UpgradeInfo for HelloUpgrade {
-    type Info = &'static str;
-    type InfoIter = std::iter::Once<Self::Info>;
+impl UpgradeProtocols for HelloUpgrade {
+    type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once("/hello/1")
+    fn protocols(&self) -> Self::Iter {
+        iter::once(upgrade::Protocol::from_static("/hello/1"))
     }
 }
 
@@ -48,7 +48,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, mut socket: C, _: upgrade::Protocol) -> Self::Future {
         Box::pin(async move {
             let mut buf = [0u8; 5];
             socket.read_exact(&mut buf).await.unwrap();
@@ -66,7 +66,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: C, _: upgrade::Protocol) -> Self::Future {
         Box::pin(async move {
             socket.write_all(b"hello").await.unwrap();
             socket.flush().await.unwrap();
