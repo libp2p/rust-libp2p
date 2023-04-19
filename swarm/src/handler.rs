@@ -395,7 +395,7 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtocolSupport {
-    /// The remote now supports these protocols.
+    /// The remote now supports these additional protocols.
     Added(HashSet<String>),
     /// The remote no longer supports these protocols.
     Removed(HashSet<String>),
