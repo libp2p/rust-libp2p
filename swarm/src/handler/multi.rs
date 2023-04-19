@@ -70,6 +70,8 @@ impl<K, H> MultiHandler<K, H>
 where
     K: Clone + Debug + Hash + Eq + Send + 'static,
     H: ConnectionHandler,
+    H::InboundProtocol: Clone,
+    H::OutboundProtocol: Clone,
 {
     /// Create and populate a `MultiHandler` from the given handler iterator.
     ///
@@ -222,8 +224,8 @@ impl<K, H> ConnectionHandler for MultiHandler<K, H>
 where
     K: Clone + Debug + Hash + Eq + Send + 'static,
     H: ConnectionHandler,
-    H::InboundProtocol: InboundUpgradeSend,
-    H::OutboundProtocol: OutboundUpgradeSend,
+    H::InboundProtocol: InboundUpgradeSend + Clone,
+    H::OutboundProtocol: OutboundUpgradeSend + Clone,
 {
     type InEvent = (K, <H as ConnectionHandler>::InEvent);
     type OutEvent = (K, <H as ConnectionHandler>::OutEvent);
@@ -441,6 +443,8 @@ impl<K, H> IntoConnectionHandler for IntoMultiHandler<K, H>
 where
     K: Debug + Clone + Eq + Hash + Send + 'static,
     H: IntoConnectionHandler,
+    <<H as IntoConnectionHandler>::Handler as ConnectionHandler>::InboundProtocol: Clone,
+    <<H as IntoConnectionHandler>::Handler as ConnectionHandler>::OutboundProtocol: Clone,
 {
     type Handler = MultiHandler<K, H::Handler>;
 
@@ -522,21 +526,25 @@ where
 
 impl<K, H> UpgradeProtocols for Upgrade<K, H>
 where
-    H: UpgradeProtocols,
-    K: Send + 'static,
+    H: Clone + UpgradeProtocols + 'static,
+    K: Clone + Send + 'static,
 {
-    fn protocols(&self) -> Vec<Protocol> {
-        self.upgrades
-            .iter()
-            .flat_map(|(_, u)| u.protocols().into_iter())
-            .collect()
+    type Iter = Box<dyn Iterator<Item = Protocol>>;
+
+    fn protocols(&self) -> Self::Iter {
+        Box::new(
+            self.upgrades
+                .clone()
+                .into_iter()
+                .flat_map(|(_, u)| u.protocols()),
+        )
     }
 }
 
 impl<K, H> InboundUpgradeSend for Upgrade<K, H>
 where
-    H: InboundUpgradeSend,
-    K: Send + 'static,
+    H: Clone + InboundUpgradeSend + 'static,
+    K: Clone + Send + 'static,
 {
     type Output = (K, <H as InboundUpgradeSend>::Output);
     type Error = (K, <H as InboundUpgradeSend>::Error);
@@ -550,7 +558,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().contains(&selected_protocol))
+            .position(|(_, h)| h.protocols().find(|p| p == &selected_protocol).is_some())
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 
@@ -566,8 +574,8 @@ where
 
 impl<K, H> OutboundUpgradeSend for Upgrade<K, H>
 where
-    H: OutboundUpgradeSend,
-    K: Send + 'static,
+    H: Clone + OutboundUpgradeSend + 'static,
+    K: Clone + Send + 'static,
 {
     type Output = (K, <H as OutboundUpgradeSend>::Output);
     type Error = (K, <H as OutboundUpgradeSend>::Error);
@@ -581,7 +589,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().contains(&selected_protocol))
+            .position(|(_, h)| h.protocols().find(|p| p == &selected_protocol).is_some())
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 

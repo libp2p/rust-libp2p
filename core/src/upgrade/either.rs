@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::upgrade::Protocol;
 use crate::upgrade::UpgradeProtocols;
 use crate::{
     either::EitherFuture,
@@ -25,7 +26,6 @@ use crate::{
 };
 use either::Either;
 use futures::future;
-use multistream_select::Protocol;
 
 impl<A, B> UpgradeProtocols for Either<A, B>
 where

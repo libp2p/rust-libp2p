@@ -70,6 +70,7 @@ mod select;
 mod transfer;
 
 use futures::future::Future;
+use std::fmt;
 use std::iter::FilterMap;
 
 pub use self::{
@@ -85,9 +86,7 @@ pub use self::{
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
-pub use multistream_select::{
-    NegotiatedComplete, NegotiationError, Protocol, ProtocolError, Version,
-};
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
 
 /// Types serving as protocol names.
 ///
@@ -148,6 +147,75 @@ pub trait UpgradeInfo {
     fn protocol_info(&self) -> Self::InfoIter;
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Protocol {
+    inner: multistream_select::Protocol,
+}
+
+impl Protocol {
+    /// Construct a new protocol from a static string slice.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the protocol does not start with a forward slash: `/`.
+    pub const fn from_static(s: &'static str) -> Self {
+        Protocol {
+            inner: multistream_select::Protocol::from_static(s),
+        }
+    }
+
+    /// Attempt to construct a protocol from an owned string.
+    ///
+    /// This function will fail if the protocol does not start with a forward slash: `/`.
+    /// Where possible, you should use [`Protocol::from_static`] instead to avoid allocations.
+    pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
+        Ok(Protocol {
+            inner: multistream_select::Protocol::try_from_owned(protocol)
+                .map_err(InvalidProtocol)?,
+        })
+    }
+
+    /// View the protocol as a string slice.
+    pub fn as_str(&self) -> &str {
+        self.inner.as_str()
+    }
+
+    pub(crate) fn from_inner(inner: multistream_select::Protocol) -> Self {
+        Protocol { inner }
+    }
+
+    pub(crate) fn into_inner(self) -> multistream_select::Protocol {
+        self.inner
+    }
+}
+
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl PartialEq<str> for Protocol {
+    fn eq(&self, other: &str) -> bool {
+        self.inner.as_str() == other
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidProtocol(multistream_select::ProtocolError);
+
+impl fmt::Display for InvalidProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid protocol")
+    }
+}
+
+impl std::error::Error for InvalidProtocol {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
 pub trait UpgradeProtocols {
     type Iter: Iterator<Item = Protocol>;
 
@@ -170,8 +238,8 @@ where
 fn filter_non_utf8_protocols(p: impl ProtocolName) -> Option<Protocol> {
     let name = p.protocol_name();
 
-    match Protocol::try_from(name) {
-        Ok(p) => Some(p),
+    match multistream_select::Protocol::try_from(name) {
+        Ok(p) => Some(Protocol::from_inner(p)),
         Err(e) => {
             log::warn!(
                 "ignoring protocol {} during upgrade because it is malformed: {e}",

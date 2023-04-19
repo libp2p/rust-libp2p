@@ -103,7 +103,7 @@ impl<C> InboundUpgrade<C> for Identify {
     type Error = UpgradeError;
     type Future = future::Ready<Result<Self::Output, UpgradeError>>;
 
-    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         future::ok(socket)
     }
 }
@@ -116,7 +116,7 @@ where
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         recv(socket).boxed()
     }
 }
@@ -138,7 +138,7 @@ where
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_inbound(self, socket: C, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
         future::ok(recv(socket).boxed())
     }
@@ -152,7 +152,7 @@ where
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, socket: C, _: Protocol) -> Self::Future {
+    fn upgrade_outbound(self, socket: C, _: libp2p_core::upgrade::Protocol) -> Self::Future {
         send(socket, self.0 .0).boxed()
     }
 }

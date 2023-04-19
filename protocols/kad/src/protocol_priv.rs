@@ -33,7 +33,7 @@ use bytes::BytesMut;
 use codec::UviBytes;
 use futures::prelude::*;
 use instant::Instant;
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use quick_protobuf::{BytesReader, Writer};

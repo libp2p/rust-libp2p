@@ -115,7 +115,9 @@ where
 pub struct SendWrapper<T>(pub T);
 
 impl<T: upgrade::UpgradeProtocols> upgrade::UpgradeProtocols for SendWrapper<T> {
-    fn protocols(&self) -> Vec<Protocol> {
+    type Iter = T::Iter;
+
+    fn protocols(&self) -> Self::Iter {
         self.0.protocols()
     }
 }

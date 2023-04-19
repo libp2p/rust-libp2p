@@ -23,8 +23,8 @@ use crate::{
     Endpoint,
 };
 
+use crate::upgrade::Protocol;
 use futures::prelude::*;
-use multistream_select::Protocol;
 use std::iter;
 
 /// Initializes a new [`FromFnUpgrade`].

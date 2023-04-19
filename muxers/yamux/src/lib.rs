@@ -29,7 +29,7 @@ use futures::{
     stream::{BoxStream, LocalBoxStream},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeInfo};
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{

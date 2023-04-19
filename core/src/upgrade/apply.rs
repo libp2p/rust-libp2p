@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
-use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture, Protocol};
+use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
@@ -55,7 +55,10 @@ where
 {
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future: multistream_select::listener_select_proto(conn, up.protocols().collect()),
+            future: multistream_select::listener_select_proto(
+                conn,
+                up.protocols().map(Protocol::into_inner).collect(),
+            ),
             upgrade: up,
         },
     }
@@ -69,7 +72,11 @@ where
 {
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
-            future: multistream_select::dialer_select_proto(conn, up.protocols().collect(), v),
+            future: multistream_select::dialer_select_proto(
+                conn,
+                up.protocols().map(Protocol::into_inner).collect(),
+                v,
+            ),
             upgrade: up,
         },
     }
@@ -96,7 +103,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
-        name: Protocol,
+        name: multistream_select::Protocol,
     },
     Undefined,
 }
@@ -129,10 +136,14 @@ where
                             return Poll::Pending;
                         }
                     };
-                    self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_inbound(io, selected_protocol.clone())),
-                        name: selected_protocol,
-                    };
+                    self.inner =
+                        InboundUpgradeApplyState::Upgrade {
+                            future: Box::pin(upgrade.upgrade_inbound(
+                                io,
+                                Protocol::from_inner(selected_protocol.clone()),
+                            )),
+                            name: selected_protocol,
+                        };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future, name } => {
                     match Future::poll(Pin::new(&mut future), cx) {
@@ -178,7 +189,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
-        name: Protocol,
+        name: multistream_select::Protocol,
     },
     Undefined,
 }
@@ -213,9 +224,10 @@ where
                             }
                         };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(
-                            upgrade.upgrade_outbound(connection, selected_protocol.clone()),
-                        ),
+                        future: Box::pin(upgrade.upgrade_outbound(
+                            connection,
+                            Protocol::from_inner(selected_protocol.clone()),
+                        )),
                         name: selected_protocol,
                     };
                 }
