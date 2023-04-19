@@ -13,9 +13,10 @@ use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
 use libp2p::{
-    identity, mplex, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, InboundUpgradeExt,
-    Multiaddr, OutboundUpgradeExt, PeerId, Transport as _,
+    identity, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, InboundUpgradeExt, Multiaddr,
+    OutboundUpgradeExt, PeerId, Transport as _,
 };
+use libp2p_mplex as mplex;
 use libp2p_quic as quic;
 use libp2p_webrtc as webrtc;
 use redis::AsyncCommands;
@@ -69,14 +70,14 @@ async fn main() -> Result<()> {
                 .boxed(),
             format!("/ip4/{ip}/tcp/0/ws"),
         ),
-        Transport::Webrtc => (
+        Transport::WebRtcDirect => (
             webrtc::tokio::Transport::new(
                 local_key,
                 webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
             )
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
             .boxed(),
-            format!("/ip4/{ip}/udp/0/webrtc"),
+            format!("/ip4/{ip}/udp/0/webrtc-direct"),
         ),
     };
 
@@ -212,7 +213,7 @@ fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexCo
 pub enum Transport {
     Tcp,
     QuicV1,
-    Webrtc,
+    WebRtcDirect,
     Ws,
 }
 
@@ -223,7 +224,7 @@ impl FromStr for Transport {
         Ok(match s {
             "tcp" => Self::Tcp,
             "quic-v1" => Self::QuicV1,
-            "webrtc" => Self::Webrtc,
+            "webrtc-direct" => Self::WebRtcDirect,
             "ws" => Self::Ws,
             other => bail!("unknown transport {other}"),
         })

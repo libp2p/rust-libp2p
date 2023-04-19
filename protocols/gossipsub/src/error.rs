@@ -30,16 +30,10 @@ pub type PublishError = crate::error_priv::PublishError;
 )]
 pub type SubscriptionError = crate::error_priv::SubscriptionError;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::HandlerError"
-)]
+#[deprecated(note = "This error will no longer be emitted")]
 pub type GossipsubHandlerError = crate::error_priv::HandlerError;
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `libp2p::gossipsub::HandlerError` instead, as the `error` module will become crate-private in the future."
-)]
+#[deprecated(note = "This error will no longer be emitted")]
 pub type HandlerError = crate::error_priv::HandlerError;
 
 #[deprecated(
