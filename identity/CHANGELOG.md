@@ -1,5 +1,13 @@
 ## 0.1.2 - unreleased
 
+- Clarified deprecation notes on `Keypair` and `PublicKey`
+- Add `impl From<ed25519::PublicKey> for PublicKey` so that `PublicKey::from(ed25519::PublicKey)` works
+- Added `PeerId::to_public_key()`
+- Added tests to verify functionality of changes above.
+  See [PR 3805].
+
+[PR 3805]: https://github.com/libp2p/rust-libp2p/pull/3805
+
 - Follow Rust naming conventions for conversion methods.
   See [PR 3775].
 
