@@ -231,6 +231,8 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
             }
             ConnectionEvent::FullyNegotiatedInbound(_)
             | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
             | ConnectionEvent::ListenUpgradeError(_) => false,
         }
     }
@@ -247,6 +249,8 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
             ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
     }
