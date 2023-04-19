@@ -105,7 +105,7 @@ impl Behaviour<AllowedPeers> {
     ///
     /// All active connections to this peer will be closed immediately.
     pub fn disallow_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
+        self.state.peers.remove(&peer);
         self.close_connections.push_back(peer);
         if let Some(waker) = self.waker.take() {
             waker.wake()
@@ -127,7 +127,7 @@ impl Behaviour<BlockedPeers> {
 
     /// Unblock connections to a given peer.
     pub fn unblock_peer(&mut self, peer: PeerId) {
-        self.state.peers.insert(peer);
+        self.state.peers.remove(&peer);
         if let Some(waker) = self.waker.take() {
             waker.wake()
         }
@@ -298,6 +298,24 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn can_dial_unblocked_peer() {
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
+        listener.listen().await;
+
+        dialer
+            .behaviour_mut()
+            .list
+            .block_peer(*listener.local_peer_id());
+        dialer
+            .behaviour_mut()
+            .list
+            .unblock_peer(*listener.local_peer_id());
+
+        dial(&mut dialer, &listener).unwrap();
+    }
+
+    #[async_std::test]
     async fn blocked_peer_cannot_dial_us() {
         let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
         let mut listener = Swarm::new_ephemeral(|_| Behaviour::<BlockedPeers>::new());
@@ -360,6 +378,27 @@ mod tests {
             .list
             .allow_peer(*listener.local_peer_id());
         assert!(dial(&mut dialer, &listener).is_ok());
+    }
+
+    #[async_std::test]
+    async fn cannot_dial_disallowed_peer() {
+        let mut dialer = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        let mut listener = Swarm::new_ephemeral(|_| Behaviour::<AllowedPeers>::new());
+        listener.listen().await;
+
+        dialer
+            .behaviour_mut()
+            .list
+            .allow_peer(*listener.local_peer_id());
+        dialer
+            .behaviour_mut()
+            .list
+            .disallow_peer(*listener.local_peer_id());
+
+        let DialError::Denied { cause } = dial(&mut dialer, &listener).unwrap_err() else {
+            panic!("unexpected dial error")
+        };
+        assert!(cause.downcast::<NotAllowed>().is_ok());
     }
 
     #[async_std::test]
