@@ -77,8 +77,11 @@ impl Protocol {
     /// # Panics
     ///
     /// This function panics if the protocol does not start with a forward slash: `/`.
-    pub fn from_static(protocol: &'static str) -> Self {
-        assert_eq!(&protocol[0..1], "/", "Protocols should start with a /");
+    pub const fn from_static(protocol: &'static str) -> Self {
+        match protocol.as_bytes() {
+            [b'/', ..] => {}
+            _ => panic!("Protocols should start with a /"),
+        }
 
         Self(Cow::Borrowed(protocol))
     }
@@ -86,6 +89,7 @@ impl Protocol {
     /// Attempt to construct a protocol from an owned string.
     ///
     /// This function will fail if the protocol does not start with a forward slash: `/`.
+    /// Where possible, you should use [`Protocol::from_static`] instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, ProtocolError> {
         if !protocol.starts_with('/') {
             return Err(ProtocolError::InvalidProtocol);
