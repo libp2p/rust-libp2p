@@ -77,7 +77,6 @@ pub use self::{
     error::UpgradeError,
     from_fn::{from_fn, FromFnUpgrade},
     map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
-    optional::OptionalUpgrade,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,
@@ -85,6 +84,7 @@ pub use self::{
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+pub use optional::OptionalUpgrade;
 
 /// Types serving as protocol names.
 ///
