@@ -22,21 +22,15 @@
 //!
 //! To start the server run:
 //! ```sh
-//! cargo run --example server -- --listen-port <port>
+//! cargo run --bin autonat_server -- --listen-port <port>
 //! ```
 //! The `listen-port` parameter is optional and allows to set a fixed port at which the local peer should listen.
 
 use clap::Parser;
 use futures::prelude::*;
-use libp2p_autonat as autonat;
-use libp2p_core::{multiaddr::Protocol, upgrade::Version, Multiaddr, Transport};
-use libp2p_identify as identify;
-use libp2p_identity as identity;
-use libp2p_identity::PeerId;
-use libp2p_noise as noise;
-use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p_tcp as tcp;
-use libp2p_yamux as yamux;
+use libp2p::core::{multiaddr::Protocol, upgrade::Version, Multiaddr, Transport};
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
 
@@ -83,7 +77,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "Event", prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     identify: identify::Behaviour,
     auto_nat: autonat::Behaviour,

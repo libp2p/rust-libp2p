@@ -30,7 +30,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    ConnectionId, DialError, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, PollParameters, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -124,14 +124,14 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         self.throttled_clients.push((peer, Instant::now()));
 
                         VecDeque::from([
-                            NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                            ToSwarm::GenerateEvent(Event::InboundProbe(
                                 InboundProbeEvent::Request {
                                     probe_id,
                                     peer,
                                     addresses: addrs.clone(),
                                 },
                             )),
-                            NetworkBehaviourAction::Dial {
+                            ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer)
                                     .condition(PeerCondition::Always)
                                     .override_dial_concurrency_factor(
@@ -155,13 +155,13 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        VecDeque::from([NetworkBehaviourAction::GenerateEvent(
-                            Event::InboundProbe(InboundProbeEvent::Error {
+                        VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                            InboundProbeEvent::Error {
                                 probe_id,
                                 peer,
                                 error: InboundProbeError::Response(error),
-                            }),
-                        )])
+                            },
+                        ))])
                     }
                 }
             }
@@ -183,7 +183,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
                     InboundProbeEvent::Error {
                         probe_id,
                         peer,

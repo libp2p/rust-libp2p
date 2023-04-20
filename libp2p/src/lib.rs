@@ -40,9 +40,13 @@ pub use libp2p_core::multihash;
 #[doc(inline)]
 pub use multiaddr;
 
+#[doc(inline)]
+pub use libp2p_allow_block_list as allow_block_list;
 #[cfg(feature = "autonat")]
 #[doc(inline)]
 pub use libp2p_autonat as autonat;
+#[doc(inline)]
+pub use libp2p_connection_limits as connection_limits;
 #[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
@@ -79,11 +83,20 @@ pub use libp2p_mdns as mdns;
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
-#[doc(inline)]
-pub use libp2p_mplex as mplex;
+#[deprecated(
+    note = "`mplex` is not recommended anymore. Please use `yamux` instead or depend on `libp2p-mplex` directly if you need it for legacy use cases."
+)]
+pub mod mplex {
+    pub use libp2p_mplex::*;
+}
 #[cfg(feature = "noise")]
 #[doc(inline)]
 pub use libp2p_noise as noise;
+#[cfg(feature = "perf")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "perf")))]
+#[doc(inline)]
+pub use libp2p_perf as perf;
 #[cfg(feature = "ping")]
 #[doc(inline)]
 pub use libp2p_ping as ping;
@@ -95,8 +108,12 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_quic as quic;
+#[deprecated(
+    note = "`quic` is only in alpha status. Please depend on `libp2p-quic` directly and don't ues the `quic` feature of `libp2p`."
+)]
+pub mod quic {
+    pub use libp2p_quic::*;
+}
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -129,8 +146,12 @@ pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_webrtc as webrtc;
+#[deprecated(
+    note = "`webrtc` is only in alpha status. Please depend on `libp2p-webrtc` directly and don't ues the `webrtc` feature of `libp2p`."
+)]
+pub mod webrtc {
+    pub use libp2p_webrtc::*;
+}
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
@@ -211,6 +232,7 @@ pub async fn development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
@@ -267,6 +289,7 @@ pub fn tokio_development_transport(
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
+            #[allow(deprecated)]
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))

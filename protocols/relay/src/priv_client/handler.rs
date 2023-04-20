@@ -199,10 +199,7 @@ impl Handler {
                 });
 
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundCircuitEstablished {
-                        src_peer_id: self.remote_peer_id,
-                        limit,
-                    },
+                    Event::InboundCircuitEstablished { src_peer_id, limit },
                 ));
             }
             Reservation::None => {

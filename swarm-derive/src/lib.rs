@@ -62,7 +62,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::Either };
-    let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
+    let network_behaviour_action = quote! { #prelude_path::ToSwarm };
     let connection_handler = quote! { #prelude_path::ConnectionHandler };
     let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
