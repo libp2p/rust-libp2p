@@ -392,7 +392,7 @@ pub enum PublicKey {
     #[cfg(feature = "ed25519")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::from` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ed25519` instead."
     )]
     Ed25519(ed25519::PublicKey),
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
@@ -442,7 +442,7 @@ impl PublicKey {
 
     #[cfg(feature = "ed25519")]
     #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::from` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ed25519` instead."
     )]
     pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
         self.try_into().ok()
@@ -761,15 +761,11 @@ mod tests {
         let pub_key = ed25519::PublicKey::try_from_bytes(&expected_keypair_public_bytes)
             .expect("A ed25519 public key");
 
-        // convert into keypair::PublicKey
         let keypair_pub_key = PublicKey::from(pub_key);
 
-        let peer_id = keypair_pub_key.to_peer_id();
-
-        // expect peer_id as public key to match expected_keypair.public()
         assert_eq!(
-            keypair.public(),
-            peer_id.to_public_key().expect("A public key")
+            keypair_pub_key.encode_protobuf(),
+            keypair.public().encode_protobuf()
         );
     }
 
