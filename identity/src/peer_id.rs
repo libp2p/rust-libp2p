@@ -79,21 +79,6 @@ impl PeerId {
         PeerId { multihash }
     }
 
-    /// Extracts the `PublicKey` from a `PeerId`.
-    /// Only works for Identity Multihash PeerIds from ed25519 keys
-    /// Errors if the PeerId is not an Identity Multihash or decoding fails
-    pub fn to_public_key(&self) -> Result<crate::keypair::PublicKey, Box<dyn std::error::Error>> {
-        if self.multihash.code() != MULTIHASH_IDENTITY_CODE {
-            Err(Box::new(Error::UnsupportedCode(self.multihash.code())))
-        } else {
-            let key_enc = self.multihash.digest();
-            match crate::keypair::PublicKey::try_decode_protobuf(key_enc) {
-                Ok(key) => Ok(key),
-                Err(err) => Err(Box::new(err)),
-            }
-        }
-    }
-
     /// Parses a `PeerId` from bytes.
     pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
         PeerId::from_multihash(Multihash::from_bytes(data)?)
@@ -339,14 +324,5 @@ mod tests {
         let maybe_empty = PeerId::try_from_multiaddr(&address);
 
         assert!(maybe_empty.is_none());
-    }
-
-    #[test]
-    #[cfg(feature = "ed25519")]
-    fn test_to_public_key() {
-        let key = Keypair::generate_ed25519().public();
-        let peer_id = key.to_peer_id();
-        let public_key = peer_id.to_public_key().expect("a public key");
-        assert_eq!(key, public_key);
     }
 }
