@@ -71,11 +71,12 @@ mod transfer;
 
 use futures::future::Future;
 
+#[allow(deprecated)]
+pub use self::from_fn::{from_fn, FromFnUpgrade};
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
-    from_fn::{from_fn, FromFnUpgrade},
     optional::OptionalUpgrade,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
@@ -168,6 +169,7 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
 #[deprecated(
     note = "Will be removed without replacement because it is not used within rust-libp2p."
 )]
+#[allow(deprecated)]
 pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
@@ -212,6 +214,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
 #[deprecated(
     note = "Will be removed without replacement because it is not used within rust-libp2p."
 )]
+#[allow(deprecated)]
 pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
