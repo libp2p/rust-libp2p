@@ -149,7 +149,7 @@ impl Keypair {
 
     #[cfg(feature = "ecdsa")]
     #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::from` instead."
+        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
     )]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
         self.try_into().ok()
@@ -400,21 +400,21 @@ pub enum PublicKey {
 
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::from` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_rsa` instead."
     )]
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::from` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_secp256k1` instead."
     )]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
     #[cfg(feature = "ecdsa")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::from` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ecdsa` instead."
     )]
     Ecdsa(ecdsa::PublicKey),
 }
@@ -455,7 +455,7 @@ impl PublicKey {
 
     #[cfg(feature = "secp256k1")]
     #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::from` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_secp256k1` instead."
     )]
     pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
         self.try_into().ok()
@@ -468,7 +468,7 @@ impl PublicKey {
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::from` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_rsa` instead."
     )]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
         self.try_into().ok()
@@ -481,7 +481,7 @@ impl PublicKey {
 
     #[cfg(feature = "ecdsa")]
     #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::from` instead."
+        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ecdsa` instead."
     )]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
         self.try_into().ok()
@@ -695,12 +695,14 @@ impl From<rsa::PublicKey> for PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::peer_id::PeerId;
+    #[cfg(feature = "peerid")]
+    use crate::PeerId;
     use base64::prelude::*;
     use std::str::FromStr;
 
     #[test]
     #[cfg(feature = "ed25519")]
+    #[cfg(feature = "peerid")]
     fn keypair_protobuf_roundtrip() {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();
@@ -714,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "peerid")]
     fn keypair_from_protobuf_encoding() {
         // E.g. retrieved from an IPFS config file.
         let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
@@ -750,70 +753,38 @@ mod tests {
 
     #[test]
     #[cfg(feature = "ed25519")]
-    fn test_publickey_from_ed25519_public_key_roundtrip_bytes() {
-        let keypair = Keypair::generate_ed25519();
-        let expected_keypair = keypair
+    fn test_publickey_from_ed25519_public_key() {
+        let pubkey = Keypair::generate_ed25519().public();
+        let ed25519_pubkey = pubkey
             .clone()
             .try_into_ed25519()
             .expect("A ed25519 keypair");
-        let expected_keypair_public_bytes = expected_keypair.public().to_bytes().to_vec();
 
-        let pub_key = ed25519::PublicKey::try_from_bytes(&expected_keypair_public_bytes)
-            .expect("A ed25519 public key");
+        let converted_pubkey = PublicKey::from(ed25519_pubkey);
 
-        let keypair_pub_key = PublicKey::from(pub_key);
-
-        assert_eq!(
-            keypair_pub_key.encode_protobuf(),
-            keypair.public().encode_protobuf()
-        );
+        assert_eq!(converted_pubkey, pubkey);
     }
 
     #[test]
     #[cfg(feature = "secp256k1")]
     fn test_publickey_from_secp256k1_public_key() {
-        let expected_keypair = Keypair::generate_secp256k1()
+        let pubkey = Keypair::generate_secp256k1().public();
+        let secp256k1_pubkey = pubkey
+            .clone()
             .try_into_secp256k1()
             .expect("A secp256k1 keypair");
-        let expected_keypair_public_bytes = expected_keypair.public().to_bytes().to_vec();
+        let converted_pubkey = PublicKey::from(secp256k1_pubkey);
 
-        let pub_key = secp256k1::PublicKey::try_from_bytes(&expected_keypair_public_bytes)
-            .expect("A secp256k1 public key");
-
-        // convert into keypair::PublicKey
-        let keypair_pub_key = PublicKey::from(pub_key);
-
-        assert_eq!(
-            expected_keypair.public().to_bytes().to_vec(),
-            keypair_pub_key
-                .try_into_secp256k1()
-                .unwrap()
-                .to_bytes()
-                .to_vec()
-        );
+        assert_eq!(converted_pubkey, pubkey);
     }
 
     #[test]
     #[cfg(feature = "ecdsa")]
     fn test_publickey_from_ecdsa_public_key() {
-        let expected_keypair = Keypair::generate_ecdsa()
-            .try_into_ecdsa()
-            .expect("A ecdsa keypair");
-        let expected_keypair_public_bytes = expected_keypair.public().to_bytes().to_vec();
+        let pubkey = Keypair::generate_ecdsa().public();
+        let ecdsa_pubkey = pubkey.clone().try_into_ecdsa().expect("A ecdsa keypair");
+        let converted_pubkey = PublicKey::from(ecdsa_pubkey);
 
-        let pub_key = ecdsa::PublicKey::try_from_bytes(&expected_keypair_public_bytes)
-            .expect("A ecdsa public key");
-
-        // convert into keypair::PublicKey
-        let keypair_pub_key = PublicKey::from(pub_key);
-
-        assert_eq!(
-            expected_keypair.public().to_bytes().to_vec(),
-            keypair_pub_key
-                .try_into_ecdsa()
-                .unwrap()
-                .to_bytes()
-                .to_vec()
-        );
+        assert_eq!(converted_pubkey, pubkey);
     }
 }
