@@ -63,7 +63,7 @@ pub fn build_transport(
         None => Either::Right(base_transport),
     };
     maybe_encrypted
-        .upgrade(Version::V1)
+        .upgrade(Version::V1Lazy)
         .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
