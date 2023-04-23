@@ -21,30 +21,26 @@
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
-use crate::{HandlerError, ValidationError};
+use crate::ValidationError;
 use asynchronous_codec::Framed;
+use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
     SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
-use log::{error, trace, warn};
 use smallvec::SmallVec;
 use std::{
-    collections::VecDeque,
-    io,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
-
-/// The initial time (in seconds) we set the keep alive for protocol negotiations to occur.
-const INITIAL_KEEP_ALIVE: u64 = 30;
+use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -75,17 +71,23 @@ pub enum HandlerIn {
     LeftMesh,
 }
 
-/// The maximum number of substreams we accept or create before disconnecting from the peer.
+/// The maximum number of inbound or outbound substreams attempts we allow.
 ///
 /// Gossipsub is supposed to have a single long-lived inbound and outbound substream. On failure we
 /// attempt to recreate these. This imposes an upper bound of new substreams before we consider the
-/// connection faulty and disconnect. This also prevents against potential substream creation loops.
-const MAX_SUBSTREAM_CREATION: usize = 5;
+/// connection faulty and disable the handler. This also prevents against potential substream
+/// creation loops.
+const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
+
+pub enum Handler {
+    Enabled(EnabledHandler),
+    Disabled(DisabledHandler),
+}
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
-pub struct Handler {
+pub struct EnabledHandler {
     /// Upgrade configuration for the gossipsub protocol.
-    listen_protocol: SubstreamProtocol<ProtocolConfig, ()>,
+    listen_protocol: ProtocolConfig,
 
     /// The single long-lived outbound substream.
     outbound_substream: Option<OutboundSubstreamState>,
@@ -100,11 +102,11 @@ pub struct Handler {
     /// requests.
     outbound_substream_establishing: bool,
 
-    /// The number of outbound substreams we have created.
-    outbound_substreams_created: usize,
+    /// The number of outbound substreams we have requested.
+    outbound_substream_attempts: usize,
 
     /// The number of inbound substreams that have been created by the peer.
-    inbound_substreams_created: usize,
+    inbound_substream_attempts: usize,
 
     /// The type of peer this handler is associated to.
     peer_kind: Option<PeerKind>,
@@ -114,25 +116,27 @@ pub struct Handler {
     // NOTE: Use this flag rather than checking the substream count each poll.
     peer_kind_sent: bool,
 
-    /// If the peer doesn't support the gossipsub protocol we do not immediately disconnect.
-    /// Rather, we disable the handler and prevent any incoming or outgoing substreams from being
-    /// established.
-    ///
-    /// This value is set to true to indicate the peer doesn't support gossipsub.
-    protocol_unsupported: bool,
+    last_io_activity: Instant,
 
-    /// The amount of time we allow idle connections before disconnecting.
+    /// The amount of time we keep an idle connection alive.
     idle_timeout: Duration,
-
-    /// Collection of errors from attempting an upgrade.
-    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<HandlerError>>,
-
-    /// Flag determining whether to maintain the connection to the peer.
-    keep_alive: KeepAlive,
 
     /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
     /// decisions about the keep alive state for this connection.
     in_mesh: bool,
+}
+
+pub enum DisabledHandler {
+    /// If the peer doesn't support the gossipsub protocol we do not immediately disconnect.
+    /// Rather, we disable the handler and prevent any incoming or outgoing substreams from being
+    /// established.
+    ProtocolUnsupported {
+        /// Keeps track on whether we have sent the peer kind to the behaviour.
+        peer_kind_sent: bool,
+    },
+    /// The maximum number of inbound or outbound substream attempts have happened and thereby the
+    /// handler has been disabled.
+    MaxSubstreamAttempts,
 }
 
 /// State of the inbound substream, opened either by us or by the remote.
@@ -153,8 +157,6 @@ enum OutboundSubstreamState {
     PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, proto::RPC),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
-    /// The substream is being closed. Used by either substream.
-    _Closing(Framed<NegotiatedSubstream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -162,120 +164,57 @@ enum OutboundSubstreamState {
 impl Handler {
     /// Builds a new [`Handler`].
     pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
-        Handler {
-            listen_protocol: SubstreamProtocol::new(protocol_config, ()),
+        Handler::Enabled(EnabledHandler {
+            listen_protocol: protocol_config,
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,
-            outbound_substreams_created: 0,
-            inbound_substreams_created: 0,
+            outbound_substream_attempts: 0,
+            inbound_substream_attempts: 0,
             send_queue: SmallVec::new(),
             peer_kind: None,
             peer_kind_sent: false,
-            protocol_unsupported: false,
+            last_io_activity: Instant::now(),
             idle_timeout,
-            upgrade_errors: VecDeque::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
             in_mesh: false,
-        }
+        })
     }
+}
 
+impl EnabledHandler {
     fn on_fully_negotiated_inbound(
         &mut self,
-        FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
+        (substream, peer_kind): (Framed<NegotiatedSubstream, GossipsubCodec>, PeerKind),
     ) {
-        let (substream, peer_kind) = protocol;
-
-        // If the peer doesn't support the protocol, reject all substreams
-        if self.protocol_unsupported {
-            return;
-        }
-
-        self.inbound_substreams_created += 1;
-
         // update the known kind of peer
         if self.peer_kind.is_none() {
             self.peer_kind = Some(peer_kind);
         }
 
         // new inbound substream. Replace the current one, if it exists.
-        trace!("New inbound substream request");
+        log::trace!("New inbound substream request");
         self.inbound_substream = Some(InboundSubstreamState::WaitingInput(substream));
     }
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound {
-            protocol,
-            info: message,
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
+        FullyNegotiatedOutbound { protocol, .. }: FullyNegotiatedOutbound<
+            <Handler as ConnectionHandler>::OutboundProtocol,
+            <Handler as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
         let (substream, peer_kind) = protocol;
-
-        // If the peer doesn't support the protocol, reject all substreams
-        if self.protocol_unsupported {
-            return;
-        }
-
-        self.outbound_substream_establishing = false;
-        self.outbound_substreams_created += 1;
 
         // update the known kind of peer
         if self.peer_kind.is_none() {
             self.peer_kind = Some(peer_kind);
         }
 
-        // Should never establish a new outbound substream if one already exists.
-        // If this happens, an outbound message is not sent.
-        if self.outbound_substream.is_some() {
-            warn!("Established an outbound substream with one already available");
-            // Add the message back to the send queue
-            self.send_queue.push(message);
-        } else {
-            self.outbound_substream = Some(OutboundSubstreamState::PendingSend(substream, message));
-        }
-    }
-}
-
-impl ConnectionHandler for Handler {
-    type InEvent = HandlerIn;
-    type OutEvent = HandlerEvent;
-    type Error = HandlerError;
-    type InboundOpenInfo = ();
-    type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = proto::RPC;
-    type OutboundProtocol = ProtocolConfig;
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        self.listen_protocol.clone()
-    }
-
-    fn on_behaviour_event(&mut self, message: HandlerIn) {
-        if !self.protocol_unsupported {
-            match message {
-                HandlerIn::Message(m) => self.send_queue.push(m),
-                // If we have joined the mesh, keep the connection alive.
-                HandlerIn::JoinedMesh => {
-                    self.in_mesh = true;
-                    self.keep_alive = KeepAlive::Yes;
-                }
-                // If we have left the mesh, start the idle timer.
-                HandlerIn::LeftMesh => {
-                    self.in_mesh = false;
-                    self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
-                }
-            }
-        }
-    }
-
-    fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        assert!(
+            self.outbound_substream.is_none(),
+            "Established an outbound substream with one already available"
+        );
+        self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
     }
 
     fn poll(
@@ -283,52 +222,12 @@ impl ConnectionHandler for Handler {
         cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
+            <Handler as ConnectionHandler>::OutboundProtocol,
+            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            <Handler as ConnectionHandler>::OutEvent,
+            <Handler as ConnectionHandler>::Error,
         >,
     > {
-        // Handle any upgrade errors
-        if let Some(error) = self.upgrade_errors.pop_front() {
-            let reported_error = match error {
-                // Timeout errors get mapped to NegotiationTimeout and we close the connection.
-                ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                    Some(HandlerError::NegotiationTimeout)
-                }
-                // There was an error post negotiation, close the connection.
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
-                    match negotiation_error {
-                        NegotiationError::Failed => {
-                            // The protocol is not supported
-                            self.protocol_unsupported = true;
-                            if !self.peer_kind_sent {
-                                self.peer_kind_sent = true;
-                                // clear all substreams so the keep alive returns false
-                                self.inbound_substream = None;
-                                self.outbound_substream = None;
-                                self.keep_alive = KeepAlive::No;
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    HandlerEvent::PeerKind(PeerKind::NotSupported),
-                                ));
-                            } else {
-                                None
-                            }
-                        }
-                        NegotiationError::ProtocolError(e) => {
-                            Some(HandlerError::NegotiationProtocolError(e))
-                        }
-                    }
-                }
-            };
-
-            // If there was a fatal error, close the connection.
-            if let Some(error) = reported_error {
-                return Poll::Ready(ConnectionHandlerEvent::Close(error));
-            }
-        }
-
         if !self.peer_kind_sent {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
@@ -338,28 +237,14 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
-            // Too many inbound substreams have been created, end the connection.
-            return Poll::Ready(ConnectionHandlerEvent::Close(
-                HandlerError::MaxInboundSubstreams,
-            ));
-        }
-
-        // determine if we need to create the stream
+        // determine if we need to create the outbound stream
         if !self.send_queue.is_empty()
             && self.outbound_substream.is_none()
             && !self.outbound_substream_establishing
         {
-            if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
-                return Poll::Ready(ConnectionHandlerEvent::Close(
-                    HandlerError::MaxOutboundSubstreams,
-                ));
-            }
-            let message = self.send_queue.remove(0);
-            self.send_queue.shrink_to_fit();
             self.outbound_substream_establishing = true;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: self.listen_protocol.clone().map_info(|()| message),
+                protocol: SubstreamProtocol::new(self.listen_protocol.clone(), ()),
             });
         }
 
@@ -372,34 +257,22 @@ impl ConnectionHandler for Handler {
                 Some(InboundSubstreamState::WaitingInput(mut substream)) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(message))) => {
-                            if !self.in_mesh {
-                                self.keep_alive =
-                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
-                            }
+                            self.last_io_activity = Instant::now();
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
                             return Poll::Ready(ConnectionHandlerEvent::Custom(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
-                            match error {
-                                HandlerError::MaxTransmissionSize => {
-                                    warn!("Message exceeded the maximum transmission size");
-                                    self.inbound_substream =
-                                        Some(InboundSubstreamState::WaitingInput(substream));
-                                }
-                                _ => {
-                                    warn!("Inbound stream error: {}", error);
-                                    // More serious errors, close this side of the stream. If the
-                                    // peer is still around, they will re-establish their
-                                    // connection
-                                    self.inbound_substream =
-                                        Some(InboundSubstreamState::Closing(substream));
-                                }
-                            }
+                            log::debug!("Failed to read from inbound stream: {error}");
+                            // Close this side of the stream. If the
+                            // peer is still around, they will re-establish their
+                            // outbound stream i.e. our inbound stream.
+                            self.inbound_substream =
+                                Some(InboundSubstreamState::Closing(substream));
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
-                            warn!("Peer closed their outbound stream");
+                            log::debug!("Inbound stream closed by remote");
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -417,12 +290,9 @@ impl ConnectionHandler for Handler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                warn!("Inbound substream error while closing: {:?}", e);
+                                log::debug!("Inbound substream error while closing: {e}");
                             }
                             self.inbound_substream = None;
-                            if self.outbound_substream.is_none() {
-                                self.keep_alive = KeepAlive::No;
-                            }
                             break;
                         }
                         Poll::Pending => {
@@ -469,23 +339,19 @@ impl ConnectionHandler for Handler {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
-                                Err(HandlerError::MaxTransmissionSize) => {
-                                    error!("Message exceeded the maximum transmission size and was not sent.");
-                                    self.outbound_substream =
-                                        Some(OutboundSubstreamState::WaitingOutput(substream));
-                                }
                                 Err(e) => {
-                                    error!("Error sending message: {}", e);
-                                    return Poll::Ready(ConnectionHandlerEvent::Close(e));
+                                    log::debug!("Failed to send message on outbound stream: {e}");
+                                    self.outbound_substream = None;
+                                    break;
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
-                            error!("Outbound substream error while sending output: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::Close(e));
+                            log::debug!("Failed to send message on outbound stream: {e}");
+                            self.outbound_substream = None;
+                            break;
                         }
                         Poll::Pending => {
-                            self.keep_alive = KeepAlive::Yes;
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingSend(substream, message));
                             break;
@@ -495,49 +361,18 @@ impl ConnectionHandler for Handler {
                 Some(OutboundSubstreamState::PendingFlush(mut substream)) => {
                     match Sink::poll_flush(Pin::new(&mut substream), cx) {
                         Poll::Ready(Ok(())) => {
-                            if !self.in_mesh {
-                                // if not in the mesh, reset the idle timeout
-                                self.keep_alive =
-                                    KeepAlive::Until(Instant::now() + self.idle_timeout);
-                            }
+                            self.last_io_activity = Instant::now();
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Close(e))
+                            log::debug!("Failed to flush outbound stream: {e}");
+                            self.outbound_substream = None;
+                            break;
                         }
                         Poll::Pending => {
-                            self.keep_alive = KeepAlive::Yes;
                             self.outbound_substream =
                                 Some(OutboundSubstreamState::PendingFlush(substream));
-                            break;
-                        }
-                    }
-                }
-                // Currently never used - manual shutdown may implement this in the future
-                Some(OutboundSubstreamState::_Closing(mut substream)) => {
-                    match Sink::poll_close(Pin::new(&mut substream), cx) {
-                        Poll::Ready(Ok(())) => {
-                            self.outbound_substream = None;
-                            if self.inbound_substream.is_none() {
-                                self.keep_alive = KeepAlive::No;
-                            }
-                            break;
-                        }
-                        Poll::Ready(Err(e)) => {
-                            warn!("Outbound substream error while closing: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::Close(
-                                io::Error::new(
-                                    io::ErrorKind::BrokenPipe,
-                                    "Failed to close outbound substream",
-                                )
-                                .into(),
-                            ));
-                        }
-                        Poll::Pending => {
-                            self.keep_alive = KeepAlive::No;
-                            self.outbound_substream =
-                                Some(OutboundSubstreamState::_Closing(substream));
                             break;
                         }
                     }
@@ -554,6 +389,92 @@ impl ConnectionHandler for Handler {
 
         Poll::Pending
     }
+}
+
+impl ConnectionHandler for Handler {
+    type InEvent = HandlerIn;
+    type OutEvent = HandlerEvent;
+    type Error = Void;
+    type InboundOpenInfo = ();
+    type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
+    type OutboundOpenInfo = ();
+    type OutboundProtocol = ProtocolConfig;
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        match self {
+            Handler::Enabled(handler) => {
+                SubstreamProtocol::new(either::Either::Left(handler.listen_protocol.clone()), ())
+            }
+            Handler::Disabled(_) => {
+                SubstreamProtocol::new(either::Either::Right(DeniedUpgrade), ())
+            }
+        }
+    }
+
+    fn on_behaviour_event(&mut self, message: HandlerIn) {
+        match self {
+            Handler::Enabled(handler) => match message {
+                HandlerIn::Message(m) => handler.send_queue.push(m),
+                HandlerIn::JoinedMesh => {
+                    handler.in_mesh = true;
+                }
+                HandlerIn::LeftMesh => {
+                    handler.in_mesh = false;
+                }
+            },
+            Handler::Disabled(_) => {
+                log::debug!("Handler is disabled. Dropping message {:?}", message);
+            }
+        }
+    }
+
+    fn connection_keep_alive(&self) -> KeepAlive {
+        match self {
+            Handler::Enabled(handler) => {
+                if handler.in_mesh {
+                    return KeepAlive::Yes;
+                }
+
+                if let Some(
+                    OutboundSubstreamState::PendingSend(_, _)
+                    | OutboundSubstreamState::PendingFlush(_),
+                ) = handler.outbound_substream
+                {
+                    return KeepAlive::Yes;
+                }
+
+                KeepAlive::Until(handler.last_io_activity + handler.idle_timeout)
+            }
+            Handler::Disabled(_) => KeepAlive::No,
+        }
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<
+        ConnectionHandlerEvent<
+            Self::OutboundProtocol,
+            Self::OutboundOpenInfo,
+            Self::OutEvent,
+            Self::Error,
+        >,
+    > {
+        match self {
+            Handler::Enabled(handler) => handler.poll(cx),
+            Handler::Disabled(DisabledHandler::ProtocolUnsupported { peer_kind_sent }) => {
+                if !*peer_kind_sent {
+                    *peer_kind_sent = true;
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
+                        PeerKind::NotSupported,
+                    )));
+                }
+
+                Poll::Pending
+            }
+            Handler::Disabled(DisabledHandler::MaxSubstreamAttempts) => Poll::Pending,
+        }
+    }
 
     fn on_connection_event(
         &mut self,
@@ -564,19 +485,83 @@ impl ConnectionHandler for Handler {
             Self::OutboundOpenInfo,
         >,
     ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
-                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+        match self {
+            Handler::Enabled(handler) => {
+                if event.is_inbound() {
+                    handler.inbound_substream_attempts += 1;
+
+                    if handler.inbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
+                        log::warn!(
+                            "The maximum number of inbound substreams attempts has been exceeded"
+                        );
+                        *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
+                        return;
+                    }
+                }
+
+                if event.is_outbound() {
+                    handler.outbound_substream_establishing = false;
+
+                    handler.outbound_substream_attempts += 1;
+
+                    if handler.outbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
+                        log::warn!(
+                            "The maximum number of outbound substream attempts has been exceeded"
+                        );
+                        *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
+                        return;
+                    }
+                }
+
+                match event {
+                    ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                        protocol,
+                        ..
+                    }) => match protocol {
+                        Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
+                        Either::Right(v) => void::unreachable(v),
+                    },
+                    ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                        handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
+                    }
+                    ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                        error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
+                        ..
+                    }) => {
+                        log::debug!("Dial upgrade error: Protocol negotiation timeout");
+                    }
+                    ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        ..
+                    }) => void::unreachable(e),
+                    ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                        error:
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                NegotiationError::Failed,
+                            )),
+                        ..
+                    }) => {
+                        // The protocol is not supported
+                        log::debug!(
+                            "The remote peer does not support gossipsub on this connection"
+                        );
+                        *self = Handler::Disabled(DisabledHandler::ProtocolUnsupported {
+                            peer_kind_sent: false,
+                        });
+                    }
+                    ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                        error:
+                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                                NegotiationError::ProtocolError(e),
+                            )),
+                        ..
+                    }) => {
+                        log::debug!("Protocol negotiation failed: {e}")
+                    }
+                    ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                }
             }
-            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
-                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
-            }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { error: e, .. }) => {
-                self.outbound_substream_establishing = false;
-                warn!("Dial upgrade error {:?}", e);
-                self.upgrade_errors.push_back(e);
-            }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            Handler::Disabled(_) => {}
         }
     }
 }
