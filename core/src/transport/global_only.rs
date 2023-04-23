@@ -25,6 +25,7 @@ use crate::{
 };
 use log::debug;
 use std::{
+    net::Ipv4Addr,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -33,6 +34,143 @@ use std::{
 #[derive(Debug, Clone, Default)]
 pub struct GlobalIpOnly<T> {
     inner: T,
+}
+
+pub struct Ipv4Global;
+
+impl Ipv4Global {
+    /// Returns [`true`] if this address part of the `0.0.0.0/8` range.
+    pub const fn is_this_network(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 0
+    }
+
+    /// Returns [`true`] if this address part of the `0.0.0.0/32` range.
+    pub const fn is_this_host_on_this_network(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 0 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 0
+    }
+
+    /// Returns [`true`] if this address is part of the Shared Address Space defined in
+    /// [IETF RFC 6598] (`100.64.0.0/10`).
+    ///
+    /// [IETF RFC 6598]: https://tools.ietf.org/html/rfc6598
+    pub const fn is_shared(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 100 && (a.octets()[1] & 0b1100_0000 == 0b0100_0000)
+    }
+
+    /// Returns [`true`] if this address is reserved by IANA for future use. [IETF RFC 1112]
+    /// defines the block of reserved addresses as `240.0.0.0/4`. This range normally includes the
+    /// broadcast address `255.255.255.255`, but this implementation explicitly excludes it, since
+    /// it is obviously not reserved for future use.
+    ///
+    /// [IETF RFC 1112]: https://tools.ietf.org/html/rfc1112
+    pub const fn is_reserved(a: Ipv4Addr) -> bool {
+        a.octets()[0] & 240 == 240 && !a.is_broadcast()
+    }
+
+    /// Returns [`true`] if this address part of the `198.18.0.0/15` range, which is reserved for
+    /// network devices benchmarking. This range is defined in [IETF RFC 2544] as `192.18.0.0`
+    /// through `198.19.255.255` but [errata 423] corrects it to `198.18.0.0/15`.
+    ///
+    /// [IETF RFC 2544]: https://tools.ietf.org/html/rfc2544
+    /// [errata 423]: https://www.rfc-editor.org/errata/eid423
+    pub const fn is_benchmarking(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 198 && (a.octets()[1] & 0xfe) == 18
+    }
+
+    /// Returns [`true`] if this address part of the `192.0.0.0/29` range.
+    pub const fn is_ipv4_service_continuity_prefix(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192
+            && a.octets()[1] == 0
+            && a.octets()[2] == 0
+            && (a.octets()[3] & 0b1111_1000 == 0)
+    }
+
+    /// Returns [`true`] if this address part of the `192.0.0.0/24` range.
+    pub const fn is_ietf_protocol_assignments(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0
+    }
+
+    /// Returns [`true`] if this address part of the `192.0.0.8/32` range.
+    pub const fn is_ipv4_dummy_address(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 8
+    }
+
+    /// Returns [`true`] if this address part of the `192.0.0.9/32` range.
+    pub const fn is_port_control_protocol_anycast(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 9
+    }
+
+    /// Returns [`true`] if this address part of the `192.0.0.10/32` range.
+    pub const fn is_traversal_using_relays_around_nat_anycast(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 10
+    }
+
+    /// Returns [`true`] if this is NAT64/DNS64 Discovery. This includes:
+    ///
+    ///  - `192.0.0.170/32`
+    ///  - `192.0.0.171/32`
+    pub const fn is_nat64_dns64_discovery(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192
+            && a.octets()[1] == 0
+            && a.octets()[2] == 0
+            && (a.octets()[3] == 170 || a.octets()[3] == 171)
+    }
+
+    /// Returns [`true`] if this address part of the `192.31.196.0/24` range.
+    pub const fn is_as112_v4(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 31 && a.octets()[1] == 196
+    }
+
+    /// Returns [`true`] if this address part of the `192.52.193.0/24` range.
+    pub const fn is_amt(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 52 && a.octets()[2] == 193
+    }
+
+    /// Returns [`true`] if this address part of the `192.88.99.0/24` range.
+    pub const fn is_deprecated_6to6_relay_anycast(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 88 && a.octets()[2] == 99
+    }
+
+    /// Returns [`true`] if this address part of the `192.175.48.0/24` range.
+    pub const fn is_direct_delegation_as112_service(a: Ipv4Addr) -> bool {
+        a.octets()[0] == 192 && a.octets()[1] == 175 && a.octets()[2] == 48
+    }
+
+    /// The function checks if an IPv4 address is a global address by verifying that it does not belong
+    /// to any of the reserved or special use address ranges.
+    ///
+    /// Arguments:
+    ///
+    /// * `a`: `a` is an `Ipv4Addr` type variable representing an IPv4 address. The function
+    /// `is_global` checks whether the given IPv4 address is a global IP address or not by checking
+    /// against various criteria such as private IP address ranges, reserved IP address ranges, and
+    /// special use
+    ///
+    /// Returns:
+    ///
+    /// A boolean value indicating whether the given IPv4 address is a global address or not.
+    pub fn is_global(a: Ipv4Addr) -> bool {
+        !(Self::is_this_network(a)
+            || Self::is_this_host_on_this_network(a)
+            || a.is_private()
+            || Self::is_shared(a)
+            || a.is_loopback()
+            || a.is_link_local()
+            || Self::is_ietf_protocol_assignments(a)
+            || Self::is_ipv4_service_continuity_prefix(a)
+            || Self::is_ipv4_dummy_address(a)
+            || Self::is_port_control_protocol_anycast(a)
+            || Self::is_traversal_using_relays_around_nat_anycast(a)
+            || Self::is_nat64_dns64_discovery(a)
+            || a.is_documentation()
+            || Self::is_as112_v4(a)
+            || Self::is_amt(a)
+            || Self::is_deprecated_6to6_relay_anycast(a)
+            || Self::is_direct_delegation_as112_service(a))
+            || Self::is_benchmarking(a)
+            || Self::is_reserved(a)
+            || a.is_broadcast()
+    }
 }
 
 impl<T> GlobalIpOnly<T> {
@@ -58,7 +196,7 @@ impl<T: Transport + Unpin> Transport for GlobalIpOnly<T> {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
-                if a.is_global() {
+                if Ipv4Global::is_global(a) {
                     self.inner.dial(addr)
                 } else {
                     debug!("Not dialing non global IP address {:?}.", a);
