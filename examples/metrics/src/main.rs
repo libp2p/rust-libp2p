@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()
-            .upgrade(Version::V1)
+            .upgrade(Version::V1Lazy)
             .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
             .multiplex(yamux::YamuxConfig::default())
             .boxed(),
