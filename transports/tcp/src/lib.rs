@@ -71,6 +71,10 @@ pub struct Config {
     backlog: u32,
     /// Whether port reuse should be enabled.
     enable_port_reuse: bool,
+    /// `SO_RCVBUF` to set the receive buffer size, or `None` to keep the default.
+    recv_buffer_size: Option<usize>,
+    /// `SO_SNDBUF` to set the send buffer size, or `None` to keep the default.
+    send_buffer_size: Option<usize>,
 }
 
 type Port = u16;
@@ -168,6 +172,8 @@ impl Config {
             nodelay: None,
             backlog: 1024,
             enable_port_reuse: false,
+            send_buffer_size: None,
+            recv_buffer_size: None,
         }
     }
 
@@ -186,6 +192,18 @@ impl Config {
     /// Configures the listen backlog for new listen sockets.
     pub fn listen_backlog(mut self, backlog: u32) -> Self {
         self.backlog = backlog;
+        self
+    }
+
+    /// Configures the receive buffer size.
+    pub fn recv_buffer_size(mut self, size: usize) -> Self {
+        self.recv_buffer_size = Some(size);
+        self
+    }
+
+    /// Configures the send buffer size.
+    pub fn send_buffer_size(mut self, size: usize) -> Self {
+        self.send_buffer_size = Some(size);
         self
     }
 
@@ -361,6 +379,20 @@ where
         }
         if let Some(nodelay) = self.config.nodelay {
             socket.set_nodelay(nodelay)?;
+        }
+        if let Some(size) = self.config.send_buffer_size {
+            socket.set_send_buffer_size(size)?;
+            if log::log_enabled!(log::Level::Debug) {
+                let actual = socket.send_buffer_size()?;
+                log::debug!("send_buffer_size: {} (requested {})", actual, size);
+            }
+        }
+        if let Some(size) = self.config.recv_buffer_size {
+            socket.set_recv_buffer_size(size)?;
+            if log::log_enabled!(log::Level::Debug) {
+                let actual = socket.recv_buffer_size()?;
+                log::debug!("recv_buffer_size: {} (requested {})", actual, size);
+            }
         }
         socket.set_reuse_address(true)?;
         #[cfg(unix)]
