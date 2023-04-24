@@ -29,7 +29,7 @@ use libp2p_dns::TokioDnsConfig;
 use libp2p_identity::PeerId;
 use libp2p_perf::client::{RunParams, RunStats, RunTimers};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use log::info;
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 
 mod schema {
@@ -44,13 +44,20 @@ mod schema {
 #[clap(name = "libp2p perf client")]
 struct Opts {
     #[arg(long)]
-    server_address: Multiaddr,
+    server_address: Option<Multiaddr>,
     #[arg(long)]
     upload_bytes: Option<usize>,
     #[arg(long)]
     download_bytes: Option<usize>,
     #[arg(long)]
     n_times: Option<usize>,
+
+    /// Run in server mode.
+    #[clap(long)]
+    run_server: bool,
+    /// Fixed value to generate deterministic peer id.
+    #[clap(long)]
+    secret_key_seed: Option<u8>,
 }
 
 #[tokio::main]
@@ -58,12 +65,135 @@ async fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let opts = Opts::parse();
+    match opts {
+        Opts {
+            server_address: None,
+            upload_bytes: None,
+            download_bytes: None,
+            n_times: None,
+            run_server: true,
+            secret_key_seed: Some(secret_key_seed),
+        } => server(secret_key_seed).await?,
+        Opts {
+            server_address: Some(server_address),
+            upload_bytes,
+            download_bytes,
+            n_times,
+            run_server: false,
+            secret_key_seed: None,
+        } => {
+            client(server_address, upload_bytes, download_bytes, n_times).await?;
+        }
+        _ => panic!("invalid command line arguments: {opts:?}"),
+    };
 
-    let benchmarks: Vec<Box<dyn Benchmark>> = if opts.n_times.is_some() {
+    Ok(())
+}
+
+async fn server(secret_key_seed: u8) -> Result<()> {
+    // Create a random PeerId
+    let local_key = generate_ed25519(secret_key_seed);
+    let local_peer_id = PeerId::from(local_key.public());
+    println!("Local peer id: {local_peer_id}");
+
+    let transport = {
+        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
+            .upgrade(upgrade::Version::V1Lazy)
+            .authenticate(
+                libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                    .expect("Signing libp2p-noise static DH keypair failed."),
+            )
+            .multiplex(libp2p_yamux::YamuxConfig::default());
+
+        let quic = {
+            let mut config = libp2p_quic::Config::new(&local_key);
+            config.support_draft_29 = true;
+            libp2p_quic::tokio::Transport::new(config)
+        };
+
+        let dns = TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
+
+        dns.map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed()
+    };
+
+    let mut swarm = SwarmBuilder::with_tokio_executor(
+        transport,
+        libp2p_perf::server::Behaviour::default(),
+        local_peer_id,
+    )
+    .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+    .build();
+
+    swarm
+        .listen_on("/ip4/0.0.0.0/tcp/4001".parse().unwrap())
+        .unwrap();
+
+    swarm
+        .listen_on("/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap())
+        .unwrap();
+
+    tokio::spawn(async move {
+        loop {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::NewListenAddr { address, .. } => {
+                    info!("Listening on {address}");
+                }
+                SwarmEvent::IncomingConnection { .. } => {}
+                e @ SwarmEvent::IncomingConnectionError { .. } => {
+                    error!("{e:?}");
+                }
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } => {
+                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                }
+                SwarmEvent::ConnectionClosed { .. } => {}
+                SwarmEvent::Behaviour(libp2p_perf::server::Event {
+                                          remote_peer_id,
+                                          stats,
+                                      }) => {
+                    let received_mebibytes = stats.params.received as f64 / 1024.0 / 1024.0;
+                    let receive_time = (stats.timers.read_done - stats.timers.read_start).as_secs_f64();
+                    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
+
+                    let sent_mebibytes = stats.params.sent as f64 / 1024.0 / 1024.0;
+                    let sent_time = (stats.timers.write_done - stats.timers.read_done).as_secs_f64();
+                    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
+
+                    info!(
+                        "Finished run with {}: Received {:.2} MiB in {:.2} s with {:.2} MiBit/s and sent {:.2} MiB in {:.2} s with {:.2} MiBit/s",
+                        remote_peer_id,
+                        received_mebibytes,
+                        receive_time,
+                        receive_bandwidth_mebibit_second,
+                        sent_mebibytes,
+                        sent_time,
+                        sent_bandwidth_mebibit_second,
+                    )
+                }
+                e => panic!("{e:?}"),
+            }
+        }
+    }).await.unwrap();
+
+    Ok(())
+}
+
+async fn client(
+    server_address: Multiaddr,
+    upload_bytes: Option<usize>,
+    download_bytes: Option<usize>,
+    n_times: Option<usize>,
+) -> Result<()> {
+    let benchmarks: Vec<Box<dyn Benchmark>> = if n_times.is_some() {
         vec![Box::new(Custom {
-            upload_bytes: opts.upload_bytes.unwrap(),
-            download_bytes: opts.download_bytes.unwrap(),
-            n_times: opts.n_times.unwrap(),
+            upload_bytes: upload_bytes.unwrap(),
+            download_bytes: download_bytes.unwrap(),
+            n_times: n_times.unwrap(),
         })]
     } else {
         vec![
@@ -83,7 +213,7 @@ async fn main() -> Result<()> {
                 format!("Start benchmark: {}", benchmark.name()).underline(),
             );
 
-            let result = benchmark.run(opts.server_address.clone()).await?;
+            let result = benchmark.run(server_address.clone()).await?;
             if let Some(result) = result {
                 results.push(result);
             }
@@ -534,4 +664,11 @@ async fn connect(
     };
 
     Ok(server_peer_id)
+}
+
+fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {
+    let mut bytes = [0u8; 32];
+    bytes[0] = secret_key_seed;
+
+    libp2p_identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
 }
