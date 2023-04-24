@@ -22,7 +22,7 @@
 
 use futures::{prelude::*, ready};
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
 #[derive(Debug, Copy, Clone)]
@@ -38,10 +38,10 @@ impl Default for DeflateConfig {
     }
 }
 
-impl UpgradeProtocols for DeflateConfig {
+impl ToProtocolsIter for DeflateConfig {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(Protocol::from_static("/deflate/1.0.0"))
     }
 }

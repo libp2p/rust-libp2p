@@ -21,7 +21,7 @@
 use futures::prelude::*;
 use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade};
-use libp2p_core::UpgradeProtocols;
+use libp2p_core::ToProtocolsIter;
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
@@ -32,10 +32,10 @@ use std::{io, iter, pin::Pin};
 #[derive(Clone)]
 struct HelloUpgrade {}
 
-impl UpgradeProtocols for HelloUpgrade {
+impl ToProtocolsIter for HelloUpgrade {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(upgrade::Protocol::from_static("/hello/1"))
     }
 }

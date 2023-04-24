@@ -32,7 +32,7 @@ use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, warn};
 use quick_protobuf::Writer;
@@ -137,10 +137,10 @@ impl ProtocolId {
     }
 }
 
-impl UpgradeProtocols for ProtocolConfig {
+impl ToProtocolsIter for ProtocolConfig {
     type Iter = std::iter::Map<std::vec::IntoIter<ProtocolId>, fn(ProtocolId) -> Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.protocol_ids.clone().into_iter().map(|p| p.protocol_id)
     }
 }

@@ -24,7 +24,7 @@ use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
     multiaddr, upgrade,
     upgrade::{InboundUpgrade, OutboundUpgrade},
-    Multiaddr, UpgradeProtocols,
+    Multiaddr, ToProtocolsIter,
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
@@ -89,10 +89,10 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-impl UpgradeProtocols for Identify {
+impl ToProtocolsIter for Identify {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }
@@ -120,10 +120,10 @@ where
     }
 }
 
-impl<T> UpgradeProtocols for Push<T> {
+impl<T> ToProtocolsIter for Push<T> {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(PUSH_PROTOCOL_NAME)
     }
 }

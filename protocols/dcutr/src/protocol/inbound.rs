@@ -21,7 +21,7 @@
 use crate::proto;
 use asynchronous_codec::Framed;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, UpgradeProtocols};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, ToProtocolsIter};
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryFrom;
 use std::iter;
@@ -29,10 +29,10 @@ use thiserror::Error;
 
 pub struct Upgrade {}
 
-impl UpgradeProtocols for Upgrade {
+impl ToProtocolsIter for Upgrade {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(super::PROTOCOL_NAME)
     }
 }

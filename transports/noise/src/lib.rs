@@ -72,7 +72,7 @@ use crate::handshake::State;
 use crate::io::handshake;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use std::pin::Pin;
@@ -320,7 +320,7 @@ impl From<quick_protobuf::Error> for NoiseError {
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
-    NoiseConfig<IX, C>: UpgradeProtocols,
+    NoiseConfig<IX, C>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -351,7 +351,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
-    NoiseConfig<IX, C>: UpgradeProtocols,
+    NoiseConfig<IX, C>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -386,7 +386,7 @@ where
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
-    NoiseConfig<XX, C>: UpgradeProtocols,
+    NoiseConfig<XX, C>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -422,7 +422,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
-    NoiseConfig<XX, C>: UpgradeProtocols,
+    NoiseConfig<XX, C>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -457,7 +457,7 @@ where
 /// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
-    NoiseConfig<IK, C>: UpgradeProtocols,
+    NoiseConfig<IK, C>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -491,7 +491,7 @@ where
 /// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
-    NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeProtocols,
+    NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: ToProtocolsIter,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
@@ -542,21 +542,21 @@ impl NoiseAuthenticated<XX, X25519Spec, ()> {
     }
 }
 
-impl<P, C, R> UpgradeProtocols for NoiseAuthenticated<P, C, R>
+impl<P, C, R> ToProtocolsIter for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeProtocols,
+    NoiseConfig<P, C, R>: ToProtocolsIter,
     C: Zeroize,
 {
-    type Iter = <NoiseConfig<P, C, R> as UpgradeProtocols>::Iter;
+    type Iter = <NoiseConfig<P, C, R> as ToProtocolsIter>::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.config.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.config.to_protocols_iter()
     }
 }
 
 impl<T, P, C, R> InboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeProtocols
+    NoiseConfig<P, C, R>: ToProtocolsIter
         + InboundUpgrade<T, Output = (RemoteIdentity<C>, NoiseOutput<T>), Error = NoiseError>
         + 'static,
     <NoiseConfig<P, C, R> as InboundUpgrade<T>>::Future: Send,
@@ -581,7 +581,7 @@ where
 
 impl<T, P, C, R> OutboundUpgrade<T> for NoiseAuthenticated<P, C, R>
 where
-    NoiseConfig<P, C, R>: UpgradeProtocols
+    NoiseConfig<P, C, R>: ToProtocolsIter
         + OutboundUpgrade<T, Output = (RemoteIdentity<C>, NoiseOutput<T>), Error = NoiseError>
         + 'static,
     <NoiseConfig<P, C, R> as OutboundUpgrade<T>>::Future: Send,

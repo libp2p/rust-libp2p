@@ -24,7 +24,7 @@ use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{upgrade, UpgradeProtocols};
+use libp2p_core::{upgrade, ToProtocolsIter};
 use libp2p_identity::PeerId;
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryInto;
@@ -38,10 +38,10 @@ pub struct Upgrade {
     pub max_circuit_bytes: u64,
 }
 
-impl UpgradeProtocols for Upgrade {
+impl ToProtocolsIter for Upgrade {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(STOP_PROTOCOL_NAME)
     }
 }

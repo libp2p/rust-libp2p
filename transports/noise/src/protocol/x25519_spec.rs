@@ -23,7 +23,7 @@
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
-use libp2p_core::{upgrade, UpgradeProtocols};
+use libp2p_core::{upgrade, ToProtocolsIter};
 use libp2p_identity as identity;
 use rand::Rng;
 use std::iter;
@@ -85,19 +85,19 @@ impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
     }
 }
 
-impl UpgradeProtocols for NoiseConfig<XX, X25519Spec> {
+impl ToProtocolsIter for NoiseConfig<XX, X25519Spec> {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(upgrade::Protocol::from_static("/noise"))
     }
 }
 
 /// **Note**: This is not currentlyy a standardised upgrade.
-impl UpgradeProtocols for NoiseConfig<IX, X25519Spec> {
+impl ToProtocolsIter for NoiseConfig<IX, X25519Spec> {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(upgrade::Protocol::from_static(
             "/noise/ix/25519/chachapoly/sha256/0.1.0",
         ))
@@ -105,10 +105,10 @@ impl UpgradeProtocols for NoiseConfig<IX, X25519Spec> {
 }
 
 /// **Note**: This is not currentlyy a standardised upgrade.
-impl<R> UpgradeProtocols for NoiseConfig<IK, X25519Spec, R> {
+impl<R> ToProtocolsIter for NoiseConfig<IK, X25519Spec, R> {
     type Iter = iter::Once<upgrade::Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(upgrade::Protocol::from_static(
             "/noise/ik/25519/chachapoly/sha256/0.1.0",
         ))

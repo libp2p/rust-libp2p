@@ -888,7 +888,7 @@ mod test {
     use crate::topic::IdentityHash;
     use crate::Topic;
     use libp2p_core::upgrade::Protocol;
-    use libp2p_core::UpgradeProtocols;
+    use libp2p_core::ToProtocolsIter;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -991,7 +991,7 @@ mod test {
         assert_eq!(builder.custom_id_version(), &None);
 
         let protocol_config = ProtocolConfig::new(&builder);
-        let protocol_ids = protocol_config.protocols().collect::<Vec<Protocol>>();
+        let protocol_ids = protocol_config.to_protocols_iter().collect::<Vec<Protocol>>();
 
         assert_eq!(protocol_ids.len(), 2);
 
@@ -1015,7 +1015,7 @@ mod test {
         assert_eq!(builder.custom_id_version(), &Some(Version::V1_0));
 
         let protocol_config = ProtocolConfig::new(&builder);
-        let protocol_ids = protocol_config.protocols().collect::<Vec<_>>();
+        let protocol_ids = protocol_config.to_protocols_iter().collect::<Vec<_>>();
 
         assert_eq!(protocol_ids.len(), 1);
 

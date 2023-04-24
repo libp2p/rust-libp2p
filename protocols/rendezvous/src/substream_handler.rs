@@ -29,7 +29,7 @@ use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use instant::Instant;
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
@@ -137,10 +137,10 @@ impl PassthroughProtocol {
     }
 }
 
-impl UpgradeProtocols for PassthroughProtocol {
+impl ToProtocolsIter for PassthroughProtocol {
     type Iter = std::option::IntoIter<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.ident.clone().into_iter()
     }
 }

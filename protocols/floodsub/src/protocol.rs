@@ -27,7 +27,7 @@ use futures::{
 };
 use futures::{SinkExt, StreamExt};
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use libp2p_identity::PeerId;
 use std::{io, iter, pin::Pin};
 
@@ -46,10 +46,10 @@ impl FloodsubProtocol {
     }
 }
 
-impl UpgradeProtocols for FloodsubProtocol {
+impl ToProtocolsIter for FloodsubProtocol {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }
@@ -132,10 +132,10 @@ pub struct FloodsubRpc {
     pub subscriptions: Vec<FloodsubSubscription>,
 }
 
-impl UpgradeProtocols for FloodsubRpc {
+impl ToProtocolsIter for FloodsubRpc {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(PROTOCOL_NAME)
     }
 }

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::Protocol;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use either::Either;
 
 /// Upgrade that can be disabled at runtime.
@@ -41,16 +41,16 @@ impl<T> OptionalUpgrade<T> {
     }
 }
 
-impl<T> UpgradeProtocols for OptionalUpgrade<T>
+impl<T> ToProtocolsIter for OptionalUpgrade<T>
 where
-    T: UpgradeProtocols,
+    T: ToProtocolsIter,
 {
     type Iter = Either<T::Iter, std::iter::Empty<Protocol>>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         match self.0.as_ref() {
             None => Either::Right(std::iter::empty()),
-            Some(inner) => Either::Left(inner.protocols()),
+            Some(inner) => Either::Left(inner.to_protocols_iter()),
         }
     }
 }

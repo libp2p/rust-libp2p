@@ -34,7 +34,7 @@ use codec::UviBytes;
 use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
-use libp2p_core::{Multiaddr, UpgradeProtocols};
+use libp2p_core::{Multiaddr, ToProtocolsIter};
 use libp2p_identity::PeerId;
 use quick_protobuf::{BytesReader, Writer};
 use std::{convert::TryFrom, time::Duration};
@@ -171,10 +171,10 @@ impl Default for KademliaProtocolConfig {
     }
 }
 
-impl UpgradeProtocols for KademliaProtocolConfig {
+impl ToProtocolsIter for KademliaProtocolConfig {
     type Iter = std::vec::IntoIter<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.protocol_names.clone().into_iter()
     }
 }

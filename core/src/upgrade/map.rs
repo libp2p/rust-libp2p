@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::Protocol;
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use futures::prelude::*;
 use std::{pin::Pin, task::Context, task::Poll};
 
@@ -36,14 +36,14 @@ impl<U, F> MapInboundUpgrade<U, F> {
     }
 }
 
-impl<U, F> UpgradeProtocols for MapInboundUpgrade<U, F>
+impl<U, F> ToProtocolsIter for MapInboundUpgrade<U, F>
 where
-    U: UpgradeProtocols,
+    U: ToProtocolsIter,
 {
     type Iter = U::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.upgrade.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.upgrade.to_protocols_iter()
     }
 }
 
@@ -90,14 +90,14 @@ impl<U, F> MapOutboundUpgrade<U, F> {
     }
 }
 
-impl<U, F> UpgradeProtocols for MapOutboundUpgrade<U, F>
+impl<U, F> ToProtocolsIter for MapOutboundUpgrade<U, F>
 where
-    U: UpgradeProtocols,
+    U: ToProtocolsIter,
 {
     type Iter = U::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.upgrade.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.upgrade.to_protocols_iter()
     }
 }
 
@@ -144,14 +144,14 @@ impl<U, F> MapInboundUpgradeErr<U, F> {
     }
 }
 
-impl<U, F> UpgradeProtocols for MapInboundUpgradeErr<U, F>
+impl<U, F> ToProtocolsIter for MapInboundUpgradeErr<U, F>
 where
-    U: UpgradeProtocols,
+    U: ToProtocolsIter,
 {
     type Iter = U::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.upgrade.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.upgrade.to_protocols_iter()
     }
 }
 
@@ -198,14 +198,14 @@ impl<U, F> MapOutboundUpgradeErr<U, F> {
     }
 }
 
-impl<U, F> UpgradeProtocols for MapOutboundUpgradeErr<U, F>
+impl<U, F> ToProtocolsIter for MapOutboundUpgradeErr<U, F>
 where
-    U: UpgradeProtocols,
+    U: ToProtocolsIter,
 {
     type Iter = U::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.upgrade.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.upgrade.to_protocols_iter()
     }
 }
 

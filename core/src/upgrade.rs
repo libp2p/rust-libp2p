@@ -220,20 +220,23 @@ impl std::error::Error for InvalidProtocol {
     }
 }
 
-pub trait UpgradeProtocols {
+/// Each protocol upgrade must implement the [`ToProtocolsIter`] trait.
+///
+/// The returned iterator should yield the protocols that the upgrade supports.
+pub trait ToProtocolsIter {
     type Iter: Iterator<Item = Protocol>;
 
-    fn protocols(&self) -> Self::Iter;
+    fn to_protocols_iter(&self) -> Self::Iter;
 }
 
 #[allow(deprecated)]
-impl<U> UpgradeProtocols for U
+impl<U> ToProtocolsIter for U
 where
     U: UpgradeInfo,
 {
     type Iter = FilterMap<<U::InfoIter as IntoIterator>::IntoIter, fn(U::Info) -> Option<Protocol>>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.protocol_info()
             .into_iter()
             .filter_map(filter_non_utf8_protocols)
@@ -258,7 +261,7 @@ fn filter_non_utf8_protocols(p: impl ProtocolName) -> Option<Protocol> {
 }
 
 /// Possible upgrade on an inbound connection or substream.
-pub trait InboundUpgrade<C>: UpgradeProtocols {
+pub trait InboundUpgrade<C>: ToProtocolsIter {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.
@@ -298,7 +301,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
 impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
 
 /// Possible upgrade on an outbound connection or substream.
-pub trait OutboundUpgrade<C>: UpgradeProtocols {
+pub trait OutboundUpgrade<C>: ToProtocolsIter {
     /// Output after the upgrade has been successfully negotiated and the handshake performed.
     type Output;
     /// Possible error during the handshake.

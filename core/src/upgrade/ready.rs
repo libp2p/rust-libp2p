@@ -21,7 +21,7 @@
 
 use crate::upgrade::Protocol;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
-use crate::UpgradeProtocols;
+use crate::ToProtocolsIter;
 use futures::future;
 use std::iter;
 use void::Void;
@@ -38,10 +38,10 @@ impl ReadyUpgrade {
     }
 }
 
-impl UpgradeProtocols for ReadyUpgrade {
+impl ToProtocolsIter for ReadyUpgrade {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(self.protocol_name.clone())
     }
 }

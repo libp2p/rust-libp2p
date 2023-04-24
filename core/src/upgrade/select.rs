@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::EitherFuture;
-use crate::upgrade::{Protocol, UpgradeProtocols};
+use crate::upgrade::{Protocol, ToProtocolsIter};
 use crate::{
     either::EitherName,
     upgrade::{InboundUpgrade, OutboundUpgrade},
@@ -43,15 +43,15 @@ impl<A, B> SelectUpgrade<A, B> {
     }
 }
 
-impl<A, B> UpgradeProtocols for SelectUpgrade<A, B>
+impl<A, B> ToProtocolsIter for SelectUpgrade<A, B>
 where
-    A: UpgradeProtocols,
-    B: UpgradeProtocols,
+    A: ToProtocolsIter,
+    B: ToProtocolsIter,
 {
     type Iter = std::iter::Chain<A::Iter, B::Iter>;
 
-    fn protocols(&self) -> Self::Iter {
-        self.0.protocols().chain(self.1.protocols())
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.0.to_protocols_iter().chain(self.1.to_protocols_iter())
     }
 }
 
@@ -65,11 +65,11 @@ where
     type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
-        if self.0.protocols().any(|p| p == selected_protocol) {
+        if self.0.to_protocols_iter().any(|p| p == selected_protocol) {
             return EitherFuture::First(self.0.upgrade_inbound(sock, selected_protocol));
         }
 
-        if self.1.protocols().any(|p| p == selected_protocol) {
+        if self.1.to_protocols_iter().any(|p| p == selected_protocol) {
             return EitherFuture::Second(self.1.upgrade_inbound(sock, selected_protocol));
         }
 
@@ -87,11 +87,11 @@ where
     type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, selected_protocol: Protocol) -> Self::Future {
-        if self.0.protocols().any(|p| p == selected_protocol) {
+        if self.0.to_protocols_iter().any(|p| p == selected_protocol) {
             return EitherFuture::First(self.0.upgrade_outbound(sock, selected_protocol));
         }
 
-        if self.1.protocols().any(|p| p == selected_protocol) {
+        if self.1.to_protocols_iter().any(|p| p == selected_protocol) {
             return EitherFuture::Second(self.1.upgrade_outbound(sock, selected_protocol));
         }
 

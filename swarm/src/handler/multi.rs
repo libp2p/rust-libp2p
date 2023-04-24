@@ -32,7 +32,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{
-    NegotiationError, Protocol, ProtocolError, UpgradeError, UpgradeProtocols,
+    NegotiationError, Protocol, ProtocolError, UpgradeError, ToProtocolsIter,
 };
 use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
@@ -86,7 +86,7 @@ where
         uniq_proto_names(
             m.handlers
                 .values()
-                .flat_map(|h| h.listen_protocol().upgrade.protocols()),
+                .flat_map(|h| h.listen_protocol().upgrade.to_protocols_iter()),
         )?;
         Ok(m)
     }
@@ -432,7 +432,7 @@ where
         uniq_proto_names(
             m.handlers
                 .values()
-                .flat_map(|h| h.inbound_protocol().protocols()),
+                .flat_map(|h| h.inbound_protocol().to_protocols_iter()),
         )?;
         Ok(m)
     }
@@ -514,19 +514,19 @@ where
     }
 }
 
-impl<K, H> UpgradeProtocols for Upgrade<K, H>
+impl<K, H> ToProtocolsIter for Upgrade<K, H>
 where
-    H: Clone + UpgradeProtocols + 'static,
+    H: Clone + ToProtocolsIter + 'static,
     K: Clone + Send + 'static,
 {
     type Iter = Box<dyn Iterator<Item = Protocol>>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         Box::new(
             self.upgrades
                 .clone()
                 .into_iter()
-                .flat_map(|(_, u)| u.protocols()),
+                .flat_map(|(_, u)| u.to_protocols_iter()),
         )
     }
 }
@@ -548,7 +548,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().any(|p| p == selected_protocol))
+            .position(|(_, h)| h.to_protocols_iter().any(|p| p == selected_protocol))
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 
@@ -579,7 +579,7 @@ where
         let index = self
             .upgrades
             .iter()
-            .position(|(_, h)| h.protocols().any(|p| p == selected_protocol))
+            .position(|(_, h)| h.to_protocols_iter().any(|p| p == selected_protocol))
             .expect("at least one upgrade must contain the selected protocol");
         let (key, upgrade) = self.upgrades.remove(index);
 

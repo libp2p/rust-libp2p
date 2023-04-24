@@ -33,14 +33,14 @@ use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
-use libp2p_core::UpgradeProtocols;
+use libp2p_core::ToProtocolsIter;
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
-impl UpgradeProtocols for MplexConfig {
+impl ToProtocolsIter for MplexConfig {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(self.protocol_name.clone())
     }
 }

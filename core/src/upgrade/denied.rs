@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, UpgradeProtocols};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol, ToProtocolsIter};
 use futures::future;
 use std::iter;
 use void::Void;
@@ -28,10 +28,10 @@ use void::Void;
 #[derive(Debug, Copy, Clone)]
 pub struct DeniedUpgrade;
 
-impl UpgradeProtocols for DeniedUpgrade {
+impl ToProtocolsIter for DeniedUpgrade {
     type Iter = iter::Empty<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::empty()
     }
 }

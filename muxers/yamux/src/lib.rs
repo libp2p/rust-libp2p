@@ -30,7 +30,7 @@ use futures::{
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
-use libp2p_core::UpgradeProtocols;
+use libp2p_core::ToProtocolsIter;
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{
@@ -312,18 +312,18 @@ impl Default for YamuxConfig {
     }
 }
 
-impl UpgradeProtocols for YamuxConfig {
+impl ToProtocolsIter for YamuxConfig {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(Protocol::from_static("/yamux/1.0.0"))
     }
 }
 
-impl UpgradeProtocols for YamuxLocalConfig {
+impl ToProtocolsIter for YamuxLocalConfig {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(Protocol::from_static("/yamux/1.0.0"))
     }
 }

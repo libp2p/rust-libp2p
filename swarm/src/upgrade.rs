@@ -22,14 +22,14 @@ use crate::{NegotiatedSubstream, Protocol};
 
 use futures::prelude::*;
 use libp2p_core::upgrade;
-use libp2p_core::upgrade::UpgradeProtocols;
+use libp2p_core::upgrade::ToProtocolsIter;
 
 /// Implemented automatically on all types that implement
 /// [`OutboundUpgrade`](upgrade::OutboundUpgrade) and `Send + 'static`.
 ///
 /// Do not implement this trait yourself. Instead, please implement
 /// [`OutboundUpgrade`](upgrade::OutboundUpgrade).
-pub trait OutboundUpgradeSend: UpgradeProtocols + Send {
+pub trait OutboundUpgradeSend: ToProtocolsIter + Send {
     /// Equivalent to [`OutboundUpgrade::Output`](upgrade::OutboundUpgrade::Output).
     type Output: Send + 'static;
     /// Equivalent to [`OutboundUpgrade::Error`](upgrade::OutboundUpgrade::Error).
@@ -70,7 +70,7 @@ where
 ///
 /// Do not implement this trait yourself. Instead, please implement
 /// [`InboundUpgrade`](upgrade::InboundUpgrade).
-pub trait InboundUpgradeSend: UpgradeProtocols + Send {
+pub trait InboundUpgradeSend: ToProtocolsIter + Send {
     /// Equivalent to [`InboundUpgrade::Output`](upgrade::InboundUpgrade::Output).
     type Output: Send + 'static;
     /// Equivalent to [`InboundUpgrade::Error`](upgrade::InboundUpgrade::Error).
@@ -114,11 +114,11 @@ where
 /// >           doesn't need to be used directly.
 pub struct SendWrapper<T>(pub T);
 
-impl<T: upgrade::UpgradeProtocols> upgrade::UpgradeProtocols for SendWrapper<T> {
+impl<T: upgrade::ToProtocolsIter> upgrade::ToProtocolsIter for SendWrapper<T> {
     type Iter = T::Iter;
 
-    fn protocols(&self) -> Self::Iter {
-        self.0.protocols()
+    fn to_protocols_iter(&self) -> Self::Iter {
+        self.0.to_protocols_iter()
     }
 }
 

@@ -28,7 +28,7 @@ use crate::RequestId;
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, Protocol};
-use libp2p_core::UpgradeProtocols;
+use libp2p_core::ToProtocolsIter;
 use libp2p_swarm::NegotiatedSubstream;
 use smallvec::SmallVec;
 use std::{fmt, io};
@@ -77,13 +77,13 @@ where
     pub(crate) request_id: RequestId,
 }
 
-impl<TCodec> UpgradeProtocols for ResponseProtocol<TCodec>
+impl<TCodec> ToProtocolsIter for ResponseProtocol<TCodec>
 where
     TCodec: Codec,
 {
     type Iter = smallvec::IntoIter<[Protocol; 2]>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.protocols.clone().into_iter()
     }
 }
@@ -147,13 +147,13 @@ where
     }
 }
 
-impl<TCodec> UpgradeProtocols for RequestProtocol<TCodec>
+impl<TCodec> ToProtocolsIter for RequestProtocol<TCodec>
 where
     TCodec: Codec,
 {
     type Iter = smallvec::IntoIter<[Protocol; 2]>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         self.protocols.clone().into_iter()
     }
 }

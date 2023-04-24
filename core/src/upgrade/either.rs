@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::upgrade::Protocol;
-use crate::upgrade::UpgradeProtocols;
+use crate::upgrade::ToProtocolsIter;
 use crate::{
     either::EitherFuture,
     upgrade::{InboundUpgrade, OutboundUpgrade},
@@ -27,17 +27,17 @@ use crate::{
 use either::Either;
 use futures::future;
 
-impl<A, B> UpgradeProtocols for Either<A, B>
+impl<A, B> ToProtocolsIter for Either<A, B>
 where
-    A: UpgradeProtocols,
-    B: UpgradeProtocols,
+    A: ToProtocolsIter,
+    B: ToProtocolsIter,
 {
     type Iter = Either<A::Iter, B::Iter>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         match self {
-            Either::Left(a) => Either::Left(a.protocols()),
-            Either::Right(b) => Either::Right(b.protocols()),
+            Either::Left(a) => Either::Left(a.to_protocols_iter()),
+            Either::Right(b) => Either::Right(b.to_protocols_iter()),
         }
     }
 }

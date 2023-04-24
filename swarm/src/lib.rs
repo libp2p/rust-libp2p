@@ -140,7 +140,7 @@ use connection::{
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
-use libp2p_core::upgrade::UpgradeProtocols;
+use libp2p_core::upgrade::ToProtocolsIter;
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
@@ -883,7 +883,7 @@ where
                     }
                 };
 
-                let supported_protocols = handler.listen_protocol().upgrade().protocols();
+                let supported_protocols = handler.listen_protocol().upgrade().to_protocols_iter();
                 let other_established_connection_ids = self
                     .pool
                     .iter_established_connections_of_peer(&peer_id)

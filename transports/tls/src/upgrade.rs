@@ -25,7 +25,7 @@ use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use rustls::{CommonState, ServerName};
@@ -60,10 +60,10 @@ impl Config {
     }
 }
 
-impl UpgradeProtocols for Config {
+impl ToProtocolsIter for Config {
     type Iter = iter::Once<Protocol>;
 
-    fn protocols(&self) -> Self::Iter {
+    fn to_protocols_iter(&self) -> Self::Iter {
         iter::once(Protocol::from_static("tls"))
     }
 }
