@@ -126,7 +126,9 @@ pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeProtocols};
+#[allow(deprecated)]
+pub use upgrade::ProtocolName;
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, UpgradeProtocols};
 
 #[allow(deprecated)]
 pub use upgrade::UpgradeInfo;

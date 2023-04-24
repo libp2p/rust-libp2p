@@ -96,7 +96,7 @@ pub struct PeerConnections {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, PartialEq, Hash, EncodeLabelValue, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Hash, EncodeLabelValue, Eq)]
 pub enum PeerKind {
     /// A gossipsub 1.1 peer.
     Gossipsubv1_1,

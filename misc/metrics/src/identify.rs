@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol_stack;
+use libp2p_core::upgrade::Protocol;
 use libp2p_identity::PeerId;
 use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
@@ -134,12 +135,12 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
             }
             libp2p_identify::Event::Received { peer_id, info, .. } => {
                 {
-                    let mut protocols: Vec<String> = info
+                    let mut protocols = info
                         .protocols
                         .iter()
+                        .filter_map(|p| Protocol::try_from_owned(p.to_owned()).ok())
                         .filter(|p| {
-                            let allowed_protocols: &[&[u8]] = &[
-                                #[cfg(feature = "dcutr")]
+                            let allowed_protocols = [
                                 libp2p_dcutr::PROTOCOL_NAME,
                                 // #[cfg(feature = "gossipsub")]
                                 // #[cfg(not(target_os = "unknown"))]
@@ -156,10 +157,10 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 libp2p_relay::HOP_PROTOCOL_NAME,
                             ];
 
-                            allowed_protocols.contains(&p.as_bytes())
+                            allowed_protocols.contains(p)
                         })
-                        .cloned()
-                        .collect();
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>();
 
                     // Signal via an additional label value that one or more
                     // protocols of the remote peer have not been recognized.

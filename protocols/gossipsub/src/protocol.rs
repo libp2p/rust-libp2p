@@ -32,7 +32,7 @@ use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
 use libp2p_core::upgrade::Protocol;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeProtocols};
 use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, warn};
 use quick_protobuf::Writer;
@@ -117,7 +117,7 @@ impl ProtocolId {
             };
         }
 
-        let protocol_id = match kind {
+        let protocol = match kind {
             PeerKind::Gossipsubv1_1 => {
                 Protocol::try_from_owned(format!("/{}/1.1.0", id)).expect("starts with a slash")
             }
@@ -128,24 +128,20 @@ impl ProtocolId {
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
             // advertise this variant.
             PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),
+        };
+
+        ProtocolId {
+            protocol_id: protocol,
+            kind,
         }
-        .into_bytes();
-        ProtocolId { protocol_id, kind }
     }
 }
 
-impl ProtocolName for ProtocolId {
-    fn protocol_name(&self) -> &[u8] {
-        &self.protocol_id
-    }
-}
+impl UpgradeProtocols for ProtocolConfig {
+    type Iter = std::iter::Map<std::vec::IntoIter<ProtocolId>, fn(ProtocolId) -> Protocol>;
 
-impl UpgradeInfo for ProtocolConfig {
-    type Info = ProtocolId;
-    type InfoIter = Vec<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.protocol_ids.clone()
+    fn protocols(&self) -> Self::Iter {
+        self.protocol_ids.clone().into_iter().map(|p| p.protocol_id)
     }
 }
 
@@ -160,12 +156,19 @@ where
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Protocol) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
+
+        let peer_kind = self
+            .protocol_ids
+            .iter()
+            .find_map(|p| (p.protocol_id == protocol_id).then_some(p.kind))
+            .expect("to receive a protocol id we support");
+
         Box::pin(future::ok((
             Framed::new(
                 socket,
                 GossipsubCodec::new(length_codec, self.validation_mode),
             ),
-            protocol_id.kind,
+            peer_kind,
         )))
     }
 }
@@ -181,12 +184,19 @@ where
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Protocol) -> Self::Future {
         let mut length_codec = codec::UviBytes::default();
         length_codec.set_max_len(self.max_transmit_size);
+
+        let peer_kind = self
+            .protocol_ids
+            .iter()
+            .find_map(|p| (p.protocol_id == protocol_id).then_some(p.kind))
+            .expect("to receive a protocol id we support");
+
         Box::pin(future::ok((
             Framed::new(
                 socket,
                 GossipsubCodec::new(length_codec, self.validation_mode),
             ),
-            protocol_id.kind,
+            peer_kind,
         )))
     }
 }

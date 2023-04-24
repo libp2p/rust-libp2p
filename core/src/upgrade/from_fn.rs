@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 #[allow(deprecated)]
-use crate::upgrade::UpgradeInfo;
+use crate::upgrade::{ProtocolName, UpgradeInfo};
 use crate::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName},
+    upgrade::{InboundUpgrade, OutboundUpgrade},
     Endpoint,
 };
 
@@ -55,6 +55,7 @@ use std::iter;
 ///     });
 /// ```
 ///
+#[allow(deprecated)]
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
     // Note: these bounds are there in order to help the compiler infer types
@@ -87,6 +88,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
@@ -102,6 +104,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,

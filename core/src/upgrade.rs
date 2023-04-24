@@ -121,6 +121,7 @@ pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError
 /// }
 /// ```
 ///
+#[deprecated(note = "Use the `Protocol` new-type instead.")]
 pub trait ProtocolName {
     /// The protocol name as bytes. Transmitted on the network.
     ///
@@ -129,6 +130,7 @@ pub trait ProtocolName {
     fn protocol_name(&self) -> &[u8];
 }
 
+#[allow(deprecated)]
 impl<T: AsRef<[u8]>> ProtocolName for T {
     fn protocol_name(&self) -> &[u8] {
         self.as_ref()
@@ -138,6 +140,7 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
 #[deprecated(note = "Implement `UpgradeProtocols` instead.")]
+#[allow(deprecated)]
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
     type Info: ProtocolName + Clone;
@@ -237,6 +240,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 fn filter_non_utf8_protocols(p: impl ProtocolName) -> Option<Protocol> {
     let name = p.protocol_name();
 

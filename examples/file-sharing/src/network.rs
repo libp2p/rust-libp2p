@@ -6,7 +6,7 @@ use futures::prelude::*;
 
 use libp2p::{
     core::{
-        upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName},
+        upgrade::{read_length_prefixed, write_length_prefixed},
         Multiaddr,
     },
     identity,
@@ -19,6 +19,7 @@ use libp2p::{
     PeerId,
 };
 
+use libp2p::core::upgrade;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
 use std::iter;
@@ -53,7 +54,7 @@ pub async fn new(
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
             request_response: request_response::Behaviour::new(
                 FileExchangeCodec(),
-                iter::once((FileExchangeProtocol(), ProtocolSupport::Full)),
+                iter::once((FILE_EXCHANGE_PROTOCOL, ProtocolSupport::Full)),
                 Default::default(),
             ),
         },
@@ -453,8 +454,9 @@ pub enum Event {
 
 // Simple file exchange protocol
 
-#[derive(Debug, Clone)]
-struct FileExchangeProtocol();
+const FILE_EXCHANGE_PROTOCOL: upgrade::Protocol =
+    upgrade::Protocol::from_static("/file-exchange/1");
+
 #[derive(Clone)]
 struct FileExchangeCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -462,21 +464,14 @@ struct FileRequest(String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileResponse(Vec<u8>);
 
-impl ProtocolName for FileExchangeProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/file-exchange/1".as_bytes()
-    }
-}
-
 #[async_trait]
 impl request_response::Codec for FileExchangeCodec {
-    type Protocol = FileExchangeProtocol;
     type Request = FileRequest;
     type Response = FileResponse;
 
     async fn read_request<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &upgrade::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Request>
     where
@@ -493,7 +488,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn read_response<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &upgrade::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -510,7 +505,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &upgrade::Protocol,
         io: &mut T,
         FileRequest(data): FileRequest,
     ) -> io::Result<()>
@@ -525,7 +520,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &upgrade::Protocol,
         io: &mut T,
         FileResponse(data): FileResponse,
     ) -> io::Result<()>

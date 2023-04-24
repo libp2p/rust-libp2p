@@ -3249,7 +3249,7 @@ where
                     .get(&peer_id)
                     .expect("Connected peer must be registered")
                     .kind;
-                metrics.peer_protocol_disconnected(peer_kind.clone());
+                metrics.peer_protocol_disconnected(*peer_kind);
             }
 
             self.connected_peers.remove(&peer_id);
@@ -3346,7 +3346,7 @@ where
                 // We have identified the protocol this peer is using
 
                 if let Some(metrics) = self.metrics.as_mut() {
-                    metrics.peer_protocol_connected(kind.clone());
+                    metrics.peer_protocol_connected(kind);
                 }
 
                 if let PeerKind::NotSupported = kind {

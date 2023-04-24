@@ -39,6 +39,7 @@ use crate::record_priv::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
+use libp2p_core::upgrade::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -56,8 +57,8 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use std::vec;
-use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
 
 pub use crate::query::QueryStats;
@@ -228,7 +229,7 @@ impl KademliaConfig {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
-    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
+    pub fn set_protocol_names(&mut self, names: Vec<Protocol>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self
     }
@@ -411,7 +412,7 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+    pub fn protocol_names(&self) -> &[Protocol] {
         self.protocol_config.protocol_names()
     }
 

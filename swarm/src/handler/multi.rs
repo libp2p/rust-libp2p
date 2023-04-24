@@ -32,7 +32,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{
-    NegotiationError, Protocol, ProtocolError, ProtocolName, UpgradeError, UpgradeProtocols,
+    NegotiationError, Protocol, ProtocolError, UpgradeError, UpgradeProtocols,
 };
 use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
@@ -466,16 +466,6 @@ where
                 .map(|(k, h)| (k.clone(), h.inbound_protocol()))
                 .collect(),
         }
-    }
-}
-
-/// Index and protocol name pair used as `UpgradeInfo::Info`.
-#[derive(Debug, Clone)]
-pub struct IndexedProtoName<H>(usize, H);
-
-impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
-    fn protocol_name(&self) -> &[u8] {
-        self.1.protocol_name()
     }
 }
 
