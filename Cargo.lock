@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.39.1"
+version = "0.39.2"
 dependencies = [
  "async-std",
  "either",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.44.3"
+version = "0.44.4"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2523,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.43.2"
+version = "0.43.3"
 dependencies = [
  "arrayvec",
  "asynchronous-codec",
