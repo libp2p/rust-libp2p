@@ -159,7 +159,7 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
             //    required KeyType Type = 1;
             //    required bytes Data = 2;
             // }
-            let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
+            let public_key = identity::PublicKey::try_decode_protobuf(&public_key)
                 .map_err(|_| webpki::Error::UnknownIssuer)?;
             let ext = P2pExtension {
                 public_key,
@@ -215,7 +215,7 @@ fn make_libp2p_extension(
     //    signature OCTET STRING
     // }
     let extension_content = {
-        let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
+        let serialized_pubkey = identity_keypair.public().encode_protobuf();
         yasna::encode_der(&(serialized_pubkey, signature))
     };
 

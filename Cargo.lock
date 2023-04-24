@@ -1725,9 +1725,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.15"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f9f29bc9dda355256b2916cf526ab02ce0aeaaaf2bad60d65ef3f12f11dd0f4"
+checksum = "66b91535aa35fea1523ad1b86cb6b53c28e0ae566ba4a460f4457e936cad7c6f"
 dependencies = [
  "bytes",
  "fnv",
@@ -2269,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2319,7 +2319,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.39.1"
+version = "0.39.2"
 dependencies = [
  "async-std",
  "either",
@@ -2431,13 +2431,14 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.44.3"
+version = "0.44.4"
 dependencies = [
  "async-std",
  "asynchronous-codec",
  "base64 0.21.0",
  "byteorder",
  "bytes",
+ "either",
  "env_logger 0.10.0",
  "fnv",
  "futures",
@@ -2462,6 +2463,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
+ "void",
  "wasm-timer",
 ]
 
@@ -2493,7 +2495,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "asn1_der",
  "base64 0.21.0",
@@ -2521,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.43.2"
+version = "0.43.3"
 dependencies = [
  "arrayvec",
  "asynchronous-codec",
@@ -2841,7 +2843,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.1"
+version = "0.42.2"
 dependencies = [
  "async-std",
  "either",

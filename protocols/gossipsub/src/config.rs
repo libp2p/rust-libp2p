@@ -884,7 +884,7 @@ impl std::fmt::Debug for Config {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::protocol::ProtocolConfig;
+    use crate::protocol_priv::ProtocolConfig;
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
