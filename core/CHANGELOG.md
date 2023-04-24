@@ -4,10 +4,10 @@
   If you depend on it, we suggest you vendor it.
   See [PR 3747].
 
-- Deprecate `OptionalUpgrade` without replacement. See [PR XXXX].
+- Deprecate `OptionalUpgrade` without replacement. See [PR 3806].
 
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3806]: https://github.com/libp2p/rust-libp2p/pull/3806
 
 ## 0.39.1
 
