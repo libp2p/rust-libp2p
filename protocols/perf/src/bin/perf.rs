@@ -302,7 +302,7 @@ impl Benchmark for Custom {
         }
 
         info!(
-            "Finished: Established {} connections uploading {} and download {} bytes each",
+            "Finished: Sent {} perf requests on single connection uploading {} and download {} bytes each",
             self.n_times, self.upload_bytes, self.download_bytes
         );
 
