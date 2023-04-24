@@ -259,11 +259,11 @@ impl Benchmark for Custom {
     async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
         let mut latencies = Vec::new();
 
+        let mut swarm = swarm().await;
+
+        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+
         for _ in 0..self.n_times {
-            let mut swarm = swarm().await;
-
-            let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-
             swarm.behaviour_mut().perf(
                 server_peer_id,
                 RunParams {
