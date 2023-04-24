@@ -1,3 +1,9 @@
+## Unreleased
+
+- Allow setting send and receive buffer sizes for the TCP socket. See [PR 3818]
+
+[PR 3818]: https://github.com/libp2p/rust-libp2p/pull/3818
+
 ## 0.39.0
 
 - Update to `libp2p-core` `v0.39.0`.
