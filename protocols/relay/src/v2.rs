@@ -33,7 +33,7 @@ pub mod client {
 
     #[deprecated(
         since = "0.15.0",
-        note = "Use libp2p_relay::client::Connection instead."
+        note = "Use libp2p_relay::client::ConnectionState instead."
     )]
     pub type RelayedConnection = crate::client::Connection;
 
