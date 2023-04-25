@@ -167,8 +167,6 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
-#[allow(deprecated)]
-pub use self::core::upgrade::{InboundUpgradeExt, OutboundUpgradeExt};
 pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, OutboundUpgrade},
