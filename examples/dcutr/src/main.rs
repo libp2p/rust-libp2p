@@ -96,7 +96,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )))
         .unwrap(),
     )
-    .upgrade(upgrade::Version::V1)
+    .upgrade(upgrade::Version::V1Lazy)
     .authenticate(
         noise::NoiseAuthenticated::xx(&local_key)
             .expect("Signing libp2p-noise static DH keypair failed."),
