@@ -5,16 +5,13 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use either::Either;
 use env_logger::{Env, Target};
-use futures::{future, AsyncRead, AsyncWrite, StreamExt};
+use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade, Version};
-use libp2p::noise::{NoiseOutput, X25519Spec, XX};
+use libp2p::core::upgrade::Version;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
-use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
 use libp2p::{
-    identity, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, InboundUpgradeExt, Multiaddr,
-    OutboundUpgradeExt, PeerId, Transport as _,
+    identity, noise, ping, swarm::SwarmBuilder, tcp, tls, yamux, Multiaddr, PeerId, Transport as _,
 };
 use libp2p_mplex as mplex;
 use libp2p_quic as quic;
@@ -45,32 +42,56 @@ async fn main() -> Result<()> {
     let client = redis::Client::open(redis_addr).context("Could not connect to redis")?;
 
     // Build the transport from the passed ENV var.
-    let (boxed_transport, local_addr) = match transport_param {
-        Transport::QuicV1 => (
+    let (boxed_transport, local_addr) = match (transport_param, from_env("security")) {
+        (Transport::QuicV1, _) => (
             quic::tokio::Transport::new(quic::Config::new(&local_key))
                 .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
                 .boxed(),
             format!("/ip4/{ip}/udp/0/quic-v1"),
         ),
-        Transport::Tcp => (
+        (Transport::Tcp, Ok(SecProtocol::Tls)) => (
             tcp::tokio::Transport::new(tcp::Config::new())
                 .upgrade(Version::V1Lazy)
-                .authenticate(secure_channel_protocol_from_env(&local_key)?)
+                .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
                 .multiplex(muxer_protocol_from_env()?)
                 .timeout(Duration::from_secs(5))
                 .boxed(),
             format!("/ip4/{ip}/tcp/0"),
         ),
-        Transport::Ws => (
+        (Transport::Tcp, Ok(SecProtocol::Noise)) => (
+            tcp::tokio::Transport::new(tcp::Config::new())
+                .upgrade(Version::V1Lazy)
+                .authenticate(
+                    noise::NoiseAuthenticated::xx(&local_key)
+                        .context("failed to intialise noise")?,
+                )
+                .multiplex(muxer_protocol_from_env()?)
+                .timeout(Duration::from_secs(5))
+                .boxed(),
+            format!("/ip4/{ip}/tcp/0"),
+        ),
+        (Transport::Ws, Ok(SecProtocol::Tls)) => (
             WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                 .upgrade(Version::V1Lazy)
-                .authenticate(secure_channel_protocol_from_env(&local_key)?)
+                .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
                 .multiplex(muxer_protocol_from_env()?)
                 .timeout(Duration::from_secs(5))
                 .boxed(),
             format!("/ip4/{ip}/tcp/0/ws"),
         ),
-        Transport::WebRtcDirect => (
+        (Transport::Ws, Ok(SecProtocol::Noise)) => (
+            WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
+                .upgrade(Version::V1Lazy)
+                .authenticate(
+                    noise::NoiseAuthenticated::xx(&local_key)
+                        .context("failed to intialise noise")?,
+                )
+                .multiplex(muxer_protocol_from_env()?)
+                .timeout(Duration::from_secs(5))
+                .boxed(),
+            format!("/ip4/{ip}/tcp/0/ws"),
+        ),
+        (Transport::WebRtcDirect, _) => (
             webrtc::tokio::Transport::new(
                 local_key,
                 webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
@@ -79,6 +100,8 @@ async fn main() -> Result<()> {
             .boxed(),
             format!("/ip4/{ip}/udp/0/webrtc-direct"),
         ),
+        (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
+        (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
     };
 
     let mut swarm = SwarmBuilder::with_tokio_executor(
@@ -162,43 +185,6 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
-    identity: &identity::Keypair,
-) -> Result<
-    MapOutboundUpgrade<
-        MapInboundUpgrade<
-            Either<noise::NoiseAuthenticated<XX, X25519Spec, ()>, tls::Config>,
-            MapSecOutputFn<C>,
-        >,
-        MapSecOutputFn<C>,
-    >,
-> {
-    let either_sec_upgrade = match from_env("security")? {
-        SecProtocol::Noise => Either::Left(
-            noise::NoiseAuthenticated::xx(identity).context("failed to intialise noise")?,
-        ),
-        SecProtocol::Tls => {
-            Either::Right(tls::Config::new(identity).context("failed to initialise tls")?)
-        }
-    };
-
-    Ok(either_sec_upgrade
-        .map_inbound(factor_peer_id as MapSecOutputFn<C>)
-        .map_outbound(factor_peer_id as MapSecOutputFn<C>))
-}
-
-type SecOutput<C> = future::Either<(PeerId, NoiseOutput<C>), (PeerId, TlsStream<C>)>;
-type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>);
-
-fn factor_peer_id<C>(
-    output: SecOutput<C>,
-) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>) {
-    match output {
-        future::Either::Left((peer, stream)) => (peer, future::Either::Left(stream)),
-        future::Either::Right((peer, stream)) => (peer, future::Either::Right(stream)),
-    }
 }
 
 fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexConfig>> {
