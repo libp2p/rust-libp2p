@@ -391,7 +391,8 @@ pub struct Connection {
 }
 
 /// A [`NegotiatedSubstream`] acting as a [`ConnectionState`].
-pub enum ConnectionState {
+#[allow(dead_code)]
+enum ConnectionState {
     InboundAccepting {
         accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },
