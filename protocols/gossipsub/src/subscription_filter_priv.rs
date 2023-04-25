@@ -200,55 +200,12 @@ where
     }
 }
 
-pub mod regex {
-    use super::TopicSubscriptionFilter;
-    use crate::TopicHash;
-    use regex::Regex;
+///A subscription filter that filters topics based on a regular expression.
+pub struct RegexSubscriptionFilter(pub regex::Regex);
 
-    ///A subscription filter that filters topics based on a regular expression.
-    pub struct RegexSubscriptionFilter(pub Regex);
-
-    impl TopicSubscriptionFilter for RegexSubscriptionFilter {
-        fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
-            self.0.is_match(topic_hash.as_str())
-        }
-    }
-
-    #[cfg(test)]
-    mod test {
-        use super::*;
-        use crate::types::Subscription;
-        use crate::types::SubscriptionAction::*;
-
-        #[test]
-        fn test_regex_subscription_filter() {
-            let t1 = TopicHash::from_raw("tt");
-            let t2 = TopicHash::from_raw("et3t3te");
-            let t3 = TopicHash::from_raw("abcdefghijklmnopqrsuvwxyz");
-
-            let mut filter = RegexSubscriptionFilter(Regex::new("t.*t").unwrap());
-
-            let old = Default::default();
-            let subscriptions = vec![
-                Subscription {
-                    action: Subscribe,
-                    topic_hash: t1,
-                },
-                Subscription {
-                    action: Subscribe,
-                    topic_hash: t2,
-                },
-                Subscription {
-                    action: Subscribe,
-                    topic_hash: t3,
-                },
-            ];
-
-            let result = filter
-                .filter_incoming_subscriptions(&subscriptions, &old)
-                .unwrap();
-            assert_eq!(result, subscriptions[..2].iter().collect());
-        }
+impl TopicSubscriptionFilter for RegexSubscriptionFilter {
+    fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
+        self.0.is_match(topic_hash.as_str())
     }
 }
 
@@ -446,5 +403,35 @@ mod test {
             .filter_incoming_subscriptions(&subscriptions, &old)
             .unwrap();
         assert_eq!(result, vec![&subscriptions[0]].into_iter().collect());
+    }
+
+    #[test]
+    fn test_regex_subscription_filter() {
+        let t1 = TopicHash::from_raw("tt");
+        let t2 = TopicHash::from_raw("et3t3te");
+        let t3 = TopicHash::from_raw("abcdefghijklmnopqrsuvwxyz");
+
+        let mut filter = RegexSubscriptionFilter(regex::Regex::new("t.*t").unwrap());
+
+        let old = Default::default();
+        let subscriptions = vec![
+            Subscription {
+                action: Subscribe,
+                topic_hash: t1,
+            },
+            Subscription {
+                action: Subscribe,
+                topic_hash: t2,
+            },
+            Subscription {
+                action: Subscribe,
+                topic_hash: t3,
+            },
+        ];
+
+        let result = filter
+            .filter_incoming_subscriptions(&subscriptions, &old)
+            .unwrap();
+        assert_eq!(result, subscriptions[..2].iter().collect());
     }
 }
