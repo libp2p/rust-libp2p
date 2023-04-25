@@ -45,14 +45,16 @@ pub struct AutoNatCodec;
 #[async_trait]
 impl request_response::Codec for AutoNatCodec {
     type Protocol = AutoNatProtocol;
-    type Request = DialRequest;
-    type Response = DialResponse;
+    type InRequest = DialRequest;
+    type OutRequest = Self::InRequest;
+    type InResponse = DialResponse;
+    type OutResponse = Self::InResponse;
 
     async fn read_request<T>(
         &mut self,
         _: &AutoNatProtocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Send + Unpin,
     {
@@ -65,7 +67,7 @@ impl request_response::Codec for AutoNatCodec {
         &mut self,
         _: &AutoNatProtocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Send + Unpin,
     {
@@ -78,7 +80,7 @@ impl request_response::Codec for AutoNatCodec {
         &mut self,
         _: &AutoNatProtocol,
         io: &mut T,
-        data: Self::Request,
+        data: Self::OutRequest,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Send + Unpin,
@@ -91,7 +93,7 @@ impl request_response::Codec for AutoNatCodec {
         &mut self,
         _: &AutoNatProtocol,
         io: &mut T,
-        data: Self::Response,
+        data: Self::OutResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Send + Unpin,

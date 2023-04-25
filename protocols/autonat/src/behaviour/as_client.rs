@@ -109,7 +109,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: request_response::Event<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse, DialResponse>,
     ) -> VecDeque<Action> {
         match event {
             request_response::Event::Message {

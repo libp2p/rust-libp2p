@@ -35,10 +35,14 @@ use std::io;
 pub trait RequestResponseCodec {
     /// The type of protocol(s) or protocol versions being negotiated.
     type Protocol: ProtocolName + Send + Clone;
-    /// The type of inbound and outbound requests.
-    type Request: Send;
-    /// The type of inbound and outbound responses.
-    type Response: Send;
+    /// The type of inbound requests.
+    type InRequest: Send;
+    /// The type of outbound requests.
+    type OutRequest: Send;
+    /// The type of inbound responses.
+    type InResponse: Send;
+    /// The type of outbound responses.
+    type OutResponse: Send;
 
     /// Reads a request from the given I/O stream according to the
     /// negotiated protocol.
@@ -46,7 +50,7 @@ pub trait RequestResponseCodec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Unpin + Send;
 
@@ -56,7 +60,7 @@ pub trait RequestResponseCodec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Unpin + Send;
 
@@ -66,7 +70,7 @@ pub trait RequestResponseCodec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        req: Self::Request,
+        req: Self::OutRequest,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
@@ -77,7 +81,7 @@ pub trait RequestResponseCodec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        res: Self::Response,
+        res: Self::OutResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
@@ -90,10 +94,14 @@ pub trait RequestResponseCodec {
 pub trait Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
     type Protocol: ProtocolName + Send + Clone;
-    /// The type of inbound and outbound requests.
-    type Request: Send;
-    /// The type of inbound and outbound responses.
-    type Response: Send;
+    /// The type of inbound requests.
+    type InRequest: Send;
+    /// The type of outbound requests.
+    type OutRequest: Send;
+    /// The type of inbound responses.
+    type InResponse: Send;
+    /// The type of outbound responses.
+    type OutResponse: Send;
 
     /// Reads a request from the given I/O stream according to the
     /// negotiated protocol.
@@ -101,7 +109,7 @@ pub trait Codec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Unpin + Send;
 
@@ -111,7 +119,7 @@ pub trait Codec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Unpin + Send;
 
@@ -121,7 +129,7 @@ pub trait Codec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        req: Self::Request,
+        req: Self::OutRequest,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
@@ -132,7 +140,7 @@ pub trait Codec {
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        res: Self::Response,
+        res: Self::OutResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
@@ -147,15 +155,19 @@ where
 {
     type Protocol = U::Protocol;
 
-    type Request = U::Request;
+    type InRequest = U::InRequest;
 
-    type Response = U::Response;
+    type OutRequest = U::OutRequest;
+
+    type InResponse = U::InResponse;
+
+    type OutResponse = U::OutResponse;
 
     async fn read_request<T>(
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -166,7 +178,7 @@ where
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -177,7 +189,7 @@ where
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        req: Self::Request,
+        req: Self::OutRequest,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
@@ -189,7 +201,7 @@ where
         &mut self,
         protocol: &Self::Protocol,
         io: &mut T,
-        res: Self::Response,
+        res: Self::OutResponse,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,

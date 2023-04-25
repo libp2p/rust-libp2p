@@ -405,12 +405,12 @@ struct ComposedBehaviour {
 
 #[derive(Debug)]
 enum ComposedEvent {
-    RequestResponse(request_response::Event<FileRequest, FileResponse>),
+    RequestResponse(request_response::Event<FileRequest, FileResponse, FileResponse>),
     Kademlia(KademliaEvent),
 }
 
-impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
-    fn from(event: request_response::Event<FileRequest, FileResponse>) -> Self {
+impl From<request_response::Event<FileRequest, FileResponse, FileResponse>> for ComposedEvent {
+    fn from(event: request_response::Event<FileRequest, FileResponse, FileResponse>) -> Self {
         ComposedEvent::RequestResponse(event)
     }
 }
@@ -479,14 +479,16 @@ impl ProtocolName for FileExchangeProtocol {
 #[async_trait]
 impl request_response::Codec for FileExchangeCodec {
     type Protocol = FileExchangeProtocol;
-    type Request = FileRequest;
-    type Response = FileResponse;
+    type InRequest = FileRequest;
+    type OutRequest = Self::InRequest;
+    type InResponse = FileResponse;
+    type OutResponse = Self::InResponse;
 
     async fn read_request<T>(
         &mut self,
         _: &FileExchangeProtocol,
         io: &mut T,
-    ) -> io::Result<Self::Request>
+    ) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -503,7 +505,7 @@ impl request_response::Codec for FileExchangeCodec {
         &mut self,
         _: &FileExchangeProtocol,
         io: &mut T,
-    ) -> io::Result<Self::Response>
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Unpin + Send,
     {

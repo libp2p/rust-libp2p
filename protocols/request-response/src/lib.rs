@@ -103,7 +103,8 @@ pub type RequestResponseConfig = Config;
     since = "0.24.0",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
 )]
-pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
+pub type RequestResponseEvent<TInRequest, TInResponse, TOutResponse> =
+    Event<TInRequest, TInResponse, TOutResponse>;
 
 #[deprecated(
     since = "0.24.0",
@@ -120,19 +121,19 @@ pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]
-pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
+pub enum Message<TInRequest, TInResponse, TOutResponse> {
     /// A request message.
     Request {
         /// The ID of this request.
         request_id: RequestId,
         /// The request message.
-        request: TRequest,
+        request: TInRequest,
         /// The channel waiting for the response.
         ///
         /// If this channel is dropped instead of being used to send a response
         /// via [`Behaviour::send_response`], a [`Event::InboundFailure`]
         /// with [`InboundFailure::ResponseOmission`] is emitted.
-        channel: ResponseChannel<TChannelResponse>,
+        channel: ResponseChannel<TOutResponse>,
     },
     /// A response message.
     Response {
@@ -141,19 +142,19 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
         /// See [`Behaviour::send_request`].
         request_id: RequestId,
         /// The response message.
-        response: TResponse,
+        response: TInResponse,
     },
 }
 
 /// The events emitted by a request-response [`Behaviour`].
 #[derive(Debug)]
-pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
+pub enum Event<TInRequest, TInResponse, TOutResponse> {
     /// An incoming message (request or response).
     Message {
         /// The peer who sent the message.
         peer: PeerId,
         /// The incoming message.
-        message: Message<TRequest, TResponse, TChannelResponse>,
+        message: Message<TInRequest, TInResponse, TOutResponse>,
     },
     /// An outbound request failed.
     OutboundFailure {
@@ -350,8 +351,12 @@ where
     /// The protocol codec for reading and writing requests and responses.
     codec: TCodec,
     /// Pending events to return from `poll`.
-    pending_events:
-        VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, RequestProtocol<TCodec>>>,
+    pending_events: VecDeque<
+        ToSwarm<
+            Event<TCodec::InRequest, TCodec::InResponse, TCodec::OutResponse>,
+            RequestProtocol<TCodec>,
+        >,
+    >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
@@ -408,7 +413,7 @@ where
     /// > address discovery, or known addresses of peers must be
     /// > managed via [`Behaviour::add_address`] and
     /// > [`Behaviour::remove_address`].
-    pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> RequestId {
+    pub fn send_request(&mut self, peer: &PeerId, request: TCodec::OutRequest) -> RequestId {
         let request_id = self.next_request_id();
         let request = RequestProtocol {
             request_id,
@@ -443,9 +448,9 @@ where
     /// [`Message::Request`].
     pub fn send_response(
         &mut self,
-        ch: ResponseChannel<TCodec::Response>,
-        rs: TCodec::Response,
-    ) -> Result<(), TCodec::Response> {
+        ch: ResponseChannel<TCodec::OutResponse>,
+        rs: TCodec::OutResponse,
+    ) -> Result<(), TCodec::OutResponse> {
         ch.sender.send(rs)
     }
 
@@ -717,7 +722,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type ConnectionHandler = Handler<TCodec>;
-    type OutEvent = Event<TCodec::Request, TCodec::Response>;
+    type OutEvent = Event<TCodec::InRequest, TCodec::InResponse, TCodec::OutResponse>;
 
     fn handle_established_inbound_connection(
         &mut self,

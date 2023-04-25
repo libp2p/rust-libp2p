@@ -83,8 +83,8 @@ where
             'static,
             Result<
                 (
-                    (RequestId, TCodec::Request),
-                    oneshot::Sender<TCodec::Response>,
+                    (RequestId, TCodec::InRequest),
+                    oneshot::Sender<TCodec::OutResponse>,
                 ),
                 oneshot::Canceled,
             >,
@@ -207,13 +207,13 @@ where
     /// A request has been received.
     Request {
         request_id: RequestId,
-        request: TCodec::Request,
-        sender: oneshot::Sender<TCodec::Response>,
+        request: TCodec::InRequest,
+        sender: oneshot::Sender<TCodec::OutResponse>,
     },
     /// A response has been received.
     Response {
         request_id: RequestId,
-        response: TCodec::Response,
+        response: TCodec::InResponse,
     },
     /// A response to an inbound request has been sent.
     ResponseSent(RequestId),

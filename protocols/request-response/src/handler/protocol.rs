@@ -71,8 +71,8 @@ where
 {
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
-    pub(crate) request_sender: oneshot::Sender<(RequestId, TCodec::Request)>,
-    pub(crate) response_receiver: oneshot::Receiver<TCodec::Response>,
+    pub(crate) request_sender: oneshot::Sender<(RequestId, TCodec::InRequest)>,
+    pub(crate) response_receiver: oneshot::Receiver<TCodec::OutResponse>,
     pub(crate) request_id: RequestId,
 }
 
@@ -137,7 +137,7 @@ where
     pub(crate) codec: TCodec,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
     pub(crate) request_id: RequestId,
-    pub(crate) request: TCodec::Request,
+    pub(crate) request: TCodec::OutRequest,
 }
 
 impl<TCodec> fmt::Debug for RequestProtocol<TCodec>
@@ -167,7 +167,7 @@ impl<TCodec> OutboundUpgrade<NegotiatedSubstream> for RequestProtocol<TCodec>
 where
     TCodec: Codec + Send + 'static,
 {
-    type Output = TCodec::Response;
+    type Output = TCodec::InResponse;
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 

@@ -304,10 +304,12 @@ impl ProtocolName for PingProtocol {
 #[async_trait]
 impl libp2p_request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
-    type Request = Ping;
-    type Response = Pong;
+    type InRequest = Ping;
+    type OutRequest = Self::InRequest;
+    type InResponse = Pong;
+    type OutResponse = Self::InResponse;
 
-    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::InRequest>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -320,7 +322,11 @@ impl libp2p_request_response::Codec for PingCodec {
         Ok(Ping(vec))
     }
 
-    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        _: &PingProtocol,
+        io: &mut T,
+    ) -> io::Result<Self::InResponse>
     where
         T: AsyncRead + Unpin + Send,
     {
