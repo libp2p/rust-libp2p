@@ -85,6 +85,7 @@ pub use self::{
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+#[allow(deprecated)]
 pub use optional::OptionalUpgrade;
 
 /// Types serving as protocol names.
