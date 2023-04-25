@@ -4,9 +4,14 @@
   If you depend on it, we suggest you vendor it.
   See [PR 3747].
 
-- Add `GlobalOnly` `Transport` implementation. See [PR 3814].
+- Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
+  See [PR 3807].
+
+- Add `GlobalOnly` `Transport` implementation.
+  See [PR 3814].
 
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
+[PR 3807]: https://github.com/libp2p/rust-libp2p/pull/3807
 [PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
 
 ## 0.39.1
