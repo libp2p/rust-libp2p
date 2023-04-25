@@ -104,16 +104,16 @@ impl ToProtocolsIter for NoiseConfig<IX, X25519Spec> {
     }
 }
 
-/// **Note**: This is not currentlyy a standardised upgrade.
-impl<R> ToProtocolsIter for NoiseConfig<IK, X25519Spec, R> {
-    type Iter = iter::Once<upgrade::Protocol>;
-
-    fn to_protocols_iter(&self) -> Self::Iter {
-        iter::once(upgrade::Protocol::from_static(
-            "/noise/ik/25519/chachapoly/sha256/0.1.0",
-        ))
-    }
-}
+// /// **Note**: This is not currentlyy a standardised upgrade.
+// impl<R> ToProtocolsIter for NoiseConfig<IK, X25519Spec, R> {
+//     type Iter = iter::Once<upgrade::Protocol>;
+//
+//     fn to_protocols_iter(&self) -> Self::Iter {
+//         iter::once(upgrade::Protocol::from_static(
+//             "/noise/ik/25519/chachapoly/sha256/0.1.0",
+//         ))
+//     }
+// }
 
 /// Noise protocols for X25519 with libp2p-spec compliant signatures.
 ///

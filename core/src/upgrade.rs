@@ -218,7 +218,7 @@ impl std::error::Error for InvalidProtocol {
 ///
 /// The returned iterator should yield the protocols that the upgrade supports.
 pub trait ToProtocolsIter {
-    type Iter: Iterator<Item = Protocol>;
+    type Iter: Iterator<Item = Protocol> + Send;
 
     fn to_protocols_iter(&self) -> Self::Iter;
 }
@@ -226,7 +226,10 @@ pub trait ToProtocolsIter {
 #[allow(deprecated)]
 impl<U> ToProtocolsIter for U
 where
-    U: UpgradeInfo,
+    U: UpgradeInfo + Send + 'static,
+    U::Info: Send + 'static,
+    U::InfoIter: Send + 'static,
+    <U::InfoIter as IntoIterator>::IntoIter: Send + 'static,
 {
     type Iter = FilterMap<<U::InfoIter as IntoIterator>::IntoIter, fn(U::Info) -> Option<Protocol>>;
 

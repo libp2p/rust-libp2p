@@ -27,7 +27,7 @@ use std::io;
 /// for a request-response [`Behaviour`](crate::Behaviour) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
-pub trait Codec {
+pub trait Codec: Send {
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.

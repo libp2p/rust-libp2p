@@ -57,7 +57,7 @@ where
         inner: InboundUpgradeApplyState::Init {
             future: multistream_select::listener_select_proto(
                 conn,
-                up.to_protocols_iter().map(Protocol::into_inner).collect(),
+                up.to_protocols_iter().map(Protocol::into_inner),
             ),
             upgrade: up,
         },
@@ -74,7 +74,7 @@ where
         inner: OutboundUpgradeApplyState::Init {
             future: multistream_select::dialer_select_proto(
                 conn,
-                up.to_protocols_iter().map(Protocol::into_inner).collect(),
+                up.to_protocols_iter().map(Protocol::into_inner),
                 v,
             ),
             upgrade: up,
@@ -184,7 +184,10 @@ where
     U: OutboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: DialerSelectFuture<C>,
+        future: DialerSelectFuture<
+            C,
+            std::iter::Map<U::Iter, fn(Protocol) -> multistream_select::Protocol>,
+        >,
         upgrade: U,
     },
     Upgrade {

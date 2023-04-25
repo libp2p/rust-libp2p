@@ -516,10 +516,10 @@ where
 
 impl<K, H> ToProtocolsIter for Upgrade<K, H>
 where
-    H: Clone + ToProtocolsIter + 'static,
+    H: Clone + ToProtocolsIter + Send + 'static,
     K: Clone + Send + 'static,
 {
-    type Iter = Box<dyn Iterator<Item = Protocol>>;
+    type Iter = Box<dyn Iterator<Item = Protocol> + Send + 'static>;
 
     fn to_protocols_iter(&self) -> Self::Iter {
         Box::new(

@@ -37,7 +37,8 @@ fn select_proto_basic() {
             let protos = vec![
                 Protocol::from_static("/proto1"),
                 Protocol::from_static("/proto2"),
-            ];
+            ]
+            .into_iter();
             let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
             assert_eq!(proto, Protocol::from_static("/proto2"));
 
@@ -55,7 +56,8 @@ fn select_proto_basic() {
             let protos = vec![
                 Protocol::from_static("/proto3"),
                 Protocol::from_static("/proto2"),
-            ];
+            ]
+            .into_iter();
             let (proto, mut io) = dialer_select_proto(connec, protos, version).await.unwrap();
             assert_eq!(proto, Protocol::from_static("/proto2"));
 
@@ -94,7 +96,7 @@ fn negotiation_failed() {
 
         let server = async_std::task::spawn(async move {
             let connec = listener.accept().await.unwrap().0;
-            let io = match listener_select_proto(connec, listen_protos).await {
+            let io = match listener_select_proto(connec, listen_protos.into_iter()).await {
                 Ok((_, io)) => io,
                 Err(NegotiationError::Failed) => return,
                 Err(NegotiationError::ProtocolError(e)) => {
@@ -109,7 +111,7 @@ fn negotiation_failed() {
 
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let mut io = match dialer_select_proto(connec, dial_protos, version).await {
+            let mut io = match dialer_select_proto(connec, dial_protos.into_iter(), version).await {
                 Err(NegotiationError::Failed) => return,
                 Ok((_, io)) => io,
                 Err(_) => panic!(),
