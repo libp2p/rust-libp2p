@@ -126,8 +126,8 @@ pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
 
-#[derive(Debug, PartialEq, Eq)]
 /// The type of key a `KeyPair` is holding.
+#[derive(Debug, PartialEq, Eq)]
 pub enum KeyType {
     Ed25519,
     RSA,
