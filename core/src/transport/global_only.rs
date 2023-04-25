@@ -32,7 +32,7 @@ use std::{
 
 /// Dropping all dial requests to non-global IP addresses.
 #[derive(Debug, Clone, Default)]
-pub struct GlobalIpOnly<T> {
+pub struct Transport<T> {
     inner: T,
 }
 
