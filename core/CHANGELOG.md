@@ -4,7 +4,10 @@
   If you depend on it, we suggest you vendor it.
   See [PR 3747].
 
+- Add `GlobalOnly` `Transport` implementation. See [PR 3814].
+
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
+[PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
 
 ## 0.39.1
 
