@@ -64,7 +64,7 @@ impl ToProtocolsIter for Config {
     type Iter = iter::Once<Protocol>;
 
     fn to_protocols_iter(&self) -> Self::Iter {
-        iter::once(Protocol::from_static("tls"))
+        iter::once(Protocol::from_static("/tls/1.0.0"))
     }
 }
 
