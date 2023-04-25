@@ -32,7 +32,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{
-    NegotiationError, Protocol, ProtocolError, UpgradeError, ToProtocolsIter,
+    NegotiationError, Protocol, ProtocolError, ToProtocolsIter, UpgradeError,
 };
 use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;

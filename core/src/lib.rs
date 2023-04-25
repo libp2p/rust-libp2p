@@ -128,7 +128,7 @@ pub use translation::address_translation;
 pub use transport::Transport;
 #[allow(deprecated)]
 pub use upgrade::ProtocolName;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, ToProtocolsIter};
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter, UpgradeError};
 
 #[allow(deprecated)]
 pub use upgrade::UpgradeInfo;

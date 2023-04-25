@@ -7,7 +7,7 @@ use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::transport::memory::Channel;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::{
-    upgrade, InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Transport, ToProtocolsIter,
+    upgrade, InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, ToProtocolsIter, Transport,
 };
 use std::future::Future;
 use std::pin::Pin;

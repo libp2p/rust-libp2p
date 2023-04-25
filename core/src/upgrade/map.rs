@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::upgrade::Protocol;
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ToProtocolsIter};
 use futures::prelude::*;
@@ -25,6 +27,7 @@ use std::{pin::Pin, task::Context, task::Poll};
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
+#[deprecated(note = "Deprecated without replacement because it is not used within rust-libp2p.")]
 pub struct MapInboundUpgrade<U, F> {
     upgrade: U,
     fun: F,
@@ -79,6 +82,7 @@ where
 
 /// Wraps around an upgrade and applies a closure to the output.
 #[derive(Debug, Clone)]
+#[deprecated(note = "Deprecated without replacement because it is not used within rust-libp2p.")]
 pub struct MapOutboundUpgrade<U, F> {
     upgrade: U,
     fun: F,
@@ -133,6 +137,7 @@ where
 
 /// Wraps around an upgrade and applies a closure to the error.
 #[derive(Debug, Clone)]
+#[deprecated(note = "Deprecated without replacement because it is not used within rust-libp2p.")]
 pub struct MapInboundUpgradeErr<U, F> {
     upgrade: U,
     fun: F,
@@ -187,6 +192,7 @@ where
 
 /// Wraps around an upgrade and applies a closure to the error.
 #[derive(Debug, Clone)]
+#[deprecated(note = "Deprecated without replacement because it is not used within rust-libp2p.")]
 pub struct MapOutboundUpgradeErr<U, F> {
     upgrade: U,
     fun: F,

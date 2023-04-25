@@ -884,7 +884,7 @@ impl std::fmt::Debug for Config {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::protocol::ProtocolConfig;
+    use crate::protocol_priv::ProtocolConfig;
     use crate::topic::IdentityHash;
     use crate::Topic;
     use libp2p_core::upgrade::Protocol;
@@ -991,7 +991,9 @@ mod test {
         assert_eq!(builder.custom_id_version(), &None);
 
         let protocol_config = ProtocolConfig::new(&builder);
-        let protocol_ids = protocol_config.to_protocols_iter().collect::<Vec<Protocol>>();
+        let protocol_ids = protocol_config
+            .to_protocols_iter()
+            .collect::<Vec<Protocol>>();
 
         assert_eq!(protocol_ids.len(), 2);
 
