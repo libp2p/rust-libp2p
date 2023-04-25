@@ -133,7 +133,7 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.
-#[deprecated(note = "Implement `UpgradeProtocols` instead.")]
+#[deprecated(note = "Implement `ToProtocolsIter` instead.")]
 #[allow(deprecated)]
 pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
