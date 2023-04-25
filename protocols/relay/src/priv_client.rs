@@ -393,7 +393,6 @@ pub struct Connection {
     state: ConnectionState,
 }
 
-#[allow(dead_code)]
 enum ConnectionState {
     InboundAccepting {
         accept: BoxFuture<'static, Result<ConnectionState, Error>>,
