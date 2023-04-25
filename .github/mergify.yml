@@ -41,9 +41,10 @@ pull_request_rules:
         message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
         changes_requested: false
 
-  - name: Approve maintainer PRs
+  - name: Approve trivial maintainer PRs
     conditions:
       - base=master
+      - label=trivial
       - author=@libp2p/rust-libp2p-maintainers
     actions:
       review:
