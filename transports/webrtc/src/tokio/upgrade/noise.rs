@@ -41,12 +41,12 @@ where
         .unwrap();
     let noise = NoiseConfig::xx(dh_keys)
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
-    let protocol = noise.to_protocols_iter().next().unwrap();
+    let info = noise.to_protocols_iter().next().unwrap();
     // Note the roles are reversed because it allows the server (webrtc connection responder) to
     // send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise
         .into_authenticated()
-        .upgrade_outbound(stream, protocol)
+        .upgrade_outbound(stream, info)
         .await?;
 
     channel.close().await?;
@@ -68,12 +68,12 @@ where
         .unwrap();
     let noise = NoiseConfig::xx(dh_keys)
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
-    let protocol = noise.to_protocols_iter().next().unwrap();
+    let info = noise.to_protocols_iter().next().unwrap();
     // Note the roles are reversed because it allows the server (webrtc connection responder) to
     // send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise
         .into_authenticated()
-        .upgrade_inbound(stream, protocol)
+        .upgrade_inbound(stream, info)
         .await?;
 
     channel.close().await?;
