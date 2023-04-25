@@ -390,7 +390,6 @@ pub struct Connection {
     state: ConnectionState,
 }
 
-/// A [`NegotiatedSubstream`] acting as a [`ConnectionState`].
 #[allow(dead_code)]
 enum ConnectionState {
     InboundAccepting {
