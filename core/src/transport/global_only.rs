@@ -32,7 +32,7 @@ use std::{
 
 /// Dropping all dial requests to non-global IP addresses.
 #[derive(Debug, Clone, Default)]
-pub struct Transport<T> {
+pub struct GlobalIpOnly<T> {
     inner: T,
 }
 
@@ -41,12 +41,12 @@ pub struct Ipv6Global;
 
 impl Ipv4Global {
     /// Returns [`true`] if this address part of the `0.0.0.0/8` range.
-    pub const fn is_this_network(a: Ipv4Addr) -> bool {
+    const fn is_this_network(a: Ipv4Addr) -> bool {
         a.octets()[0] == 0
     }
 
     /// Returns [`true`] if this address part of the `0.0.0.0/32` range.
-    pub const fn is_this_host_on_this_network(a: Ipv4Addr) -> bool {
+    const fn is_this_host_on_this_network(a: Ipv4Addr) -> bool {
         a.octets()[0] == 0 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 0
     }
 
@@ -54,7 +54,7 @@ impl Ipv4Global {
     /// [IETF RFC 6598] (`100.64.0.0/10`).
     ///
     /// [IETF RFC 6598]: https://tools.ietf.org/html/rfc6598
-    pub const fn is_shared(a: Ipv4Addr) -> bool {
+    const fn is_shared(a: Ipv4Addr) -> bool {
         a.octets()[0] == 100 && (a.octets()[1] & 0b1100_0000 == 0b0100_0000)
     }
 
@@ -64,7 +64,7 @@ impl Ipv4Global {
     /// it is obviously not reserved for future use.
     ///
     /// [IETF RFC 1112]: https://tools.ietf.org/html/rfc1112
-    pub const fn is_reserved(a: Ipv4Addr) -> bool {
+    const fn is_reserved(a: Ipv4Addr) -> bool {
         a.octets()[0] & 240 == 240 && !a.is_broadcast()
     }
 
@@ -74,12 +74,12 @@ impl Ipv4Global {
     ///
     /// [IETF RFC 2544]: https://tools.ietf.org/html/rfc2544
     /// [errata 423]: https://www.rfc-editor.org/errata/eid423
-    pub const fn is_benchmarking(a: Ipv4Addr) -> bool {
+    const fn is_benchmarking(a: Ipv4Addr) -> bool {
         a.octets()[0] == 198 && (a.octets()[1] & 0xfe) == 18
     }
 
     /// Returns [`true`] if this address part of the `192.0.0.0/29` range.
-    pub const fn is_ipv4_service_continuity_prefix(a: Ipv4Addr) -> bool {
+    const fn is_ipv4_service_continuity_prefix(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192
             && a.octets()[1] == 0
             && a.octets()[2] == 0
@@ -87,22 +87,22 @@ impl Ipv4Global {
     }
 
     /// Returns [`true`] if this address part of the `192.0.0.0/24` range.
-    pub const fn is_ietf_protocol_assignments(a: Ipv4Addr) -> bool {
+    const fn is_ietf_protocol_assignments(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0
     }
 
     /// Returns [`true`] if this address part of the `192.0.0.8/32` range.
-    pub const fn is_ipv4_dummy_address(a: Ipv4Addr) -> bool {
+    const fn is_ipv4_dummy_address(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 8
     }
 
     /// Returns [`true`] if this address part of the `192.0.0.9/32` range.
-    pub const fn is_port_control_protocol_anycast(a: Ipv4Addr) -> bool {
+    const fn is_port_control_protocol_anycast(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 9
     }
 
     /// Returns [`true`] if this address part of the `192.0.0.10/32` range.
-    pub const fn is_traversal_using_relays_around_nat_anycast(a: Ipv4Addr) -> bool {
+    const fn is_traversal_using_relays_around_nat_anycast(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 0 && a.octets()[2] == 0 && a.octets()[3] == 10
     }
 
@@ -110,7 +110,7 @@ impl Ipv4Global {
     ///
     ///  - `192.0.0.170/32`
     ///  - `192.0.0.171/32`
-    pub const fn is_nat64_dns64_discovery(a: Ipv4Addr) -> bool {
+    const fn is_nat64_dns64_discovery(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192
             && a.octets()[1] == 0
             && a.octets()[2] == 0
@@ -118,22 +118,22 @@ impl Ipv4Global {
     }
 
     /// Returns [`true`] if this address part of the `192.31.196.0/24` range.
-    pub const fn is_as112_v4(a: Ipv4Addr) -> bool {
+    const fn is_as112_v4(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 31 && a.octets()[1] == 196
     }
 
     /// Returns [`true`] if this address part of the `192.52.193.0/24` range.
-    pub const fn is_amt(a: Ipv4Addr) -> bool {
+    const fn is_amt(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 52 && a.octets()[2] == 193
     }
 
     /// Returns [`true`] if this address part of the `192.88.99.0/24` range.
-    pub const fn is_deprecated_6to6_relay_anycast(a: Ipv4Addr) -> bool {
+    const fn is_deprecated_6to6_relay_anycast(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 88 && a.octets()[2] == 99
     }
 
     /// Returns [`true`] if this address part of the `192.175.48.0/24` range.
-    pub const fn is_direct_delegation_as112_service(a: Ipv4Addr) -> bool {
+    const fn is_direct_delegation_as112_service(a: Ipv4Addr) -> bool {
         a.octets()[0] == 192 && a.octets()[1] == 175 && a.octets()[2] == 48
     }
 
@@ -176,93 +176,93 @@ impl Ipv4Global {
 
 impl Ipv6Global {
     /// Returns [`true`] if this address is `::ffff:0:0/96`.
-    pub const fn is_ipv4_mapped_address(a: Ipv6Addr) -> bool {
+    const fn is_ipv4_mapped_address(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
     }
 
     /// Returns [`true`] if this address is `64:ff9b::/96` or `64:ff9b:1::/48`.
-    pub const fn is_ipv4_ipv6_translat(a: Ipv6Addr) -> bool {
+    const fn is_ipv4_ipv6_translat(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x64, 0xff9b, 0, 0, 0, 0, _, _])
             || matches!(a.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `100::/64`.
-    pub const fn is_discard_only_address_block(a: Ipv6Addr) -> bool {
+    const fn is_discard_only_address_block(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x100, 0, 0, 0, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2001::/23`.
-    pub const fn is_ietf_protocol_assignments(a: Ipv6Addr) -> bool {
+    const fn is_ietf_protocol_assignments(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, b, _, _, _, _, _, _] if b <= 0x1FF)
     }
 
     /// Returns [`true`] if this address is `2001::/32`.
-    pub const fn is_teredo(a: Ipv6Addr) -> bool {
+    const fn is_teredo(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, 0, _, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2001:1::1/128`.
-    pub const fn is_port_control_protocol_anycast(a: Ipv6Addr) -> bool {
+    const fn is_port_control_protocol_anycast(a: Ipv6Addr) -> bool {
         u128::from_be_bytes(a.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
     }
 
     /// Returns [`true`] if this address is `2001:1::2/128`.
-    pub const fn is_traversal_relays_nat_anycast(a: Ipv6Addr) -> bool {
+    const fn is_traversal_relays_nat_anycast(a: Ipv6Addr) -> bool {
         u128::from_be_bytes(a.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
     }
 
     /// Returns [`true`] if this address is `2001:2::/48`.
-    pub const fn is_benchmarking(a: Ipv6Addr) -> bool {
+    const fn is_benchmarking(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, 2, 0, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2001:3::/32`.
-    pub const fn is_amt(a: Ipv6Addr) -> bool {
+    const fn is_amt(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, 3, _, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2001:4:112::/48`.
-    pub const fn is_as112_v6(a: Ipv6Addr) -> bool {
+    const fn is_as112_v6(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2001:10::/28`.
-    pub const fn is_deprecated_previously_orchid(a: Ipv6Addr) -> bool {
+    const fn is_deprecated_previously_orchid(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x10 && b <= 0x1F)
     }
 
     /// Returns [`true`] if this address is `2001:20::/28`.
-    pub const fn is_orchid_v2(a: Ipv6Addr) -> bool {
+    const fn is_orchid_v2(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x2F)
     }
 
     /// Returns [`true`] if this address is `2001:30::/28`.
-    pub const fn is_drone_remote(a: Ipv6Addr) -> bool {
+    const fn is_drone_remote(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x30 && b <= 0x3F)
     }
 
     /// Returns [`true`] if this address is `2001:db8::/32`.
-    pub const fn is_documentation(a: Ipv6Addr) -> bool {
+    const fn is_documentation(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2001, 0xdb8, _, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2002::/16`.
-    pub const fn is_6to4(a: Ipv6Addr) -> bool {
+    const fn is_6to4(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2002, _, _, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `2620:4f:8000::/48`.
-    pub const fn is_direct_delegation_as112_service(a: Ipv6Addr) -> bool {
+    const fn is_direct_delegation_as112_service(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0x2620, 0x4f, 0x8000, _, _, _, _, _])
     }
 
     /// Returns [`true`] if this address is `fc00::/7`.
-    pub const fn is_unique_local(a: Ipv6Addr) -> bool {
+    const fn is_unique_local(a: Ipv6Addr) -> bool {
         (a.segments()[0] & 0xfe00) == 0xfc00
     }
 
     /// Returns [`true`] if this address is `fe80::/10`.
-    pub const fn is_unicast_link_local(a: Ipv6Addr) -> bool {
+    const fn is_unicast_link_local(a: Ipv6Addr) -> bool {
         (a.segments()[0] & 0xffc0) == 0xfe80
     }
 
