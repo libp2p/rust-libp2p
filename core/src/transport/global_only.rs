@@ -25,7 +25,6 @@ use crate::{
 };
 use log::debug;
 use std::{
-    net::{Ipv4Addr, Ipv6Addr},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -36,10 +35,9 @@ pub struct GlobalIpOnly<T> {
     inner: T,
 }
 
-pub struct Ipv4Global;
-pub struct Ipv6Global;
+mod ipv4_global {
+    use std::net::Ipv4Addr;
 
-impl Ipv4Global {
     /// Returns [`true`] if this address part of the `0.0.0.0/8` range.
     const fn is_this_network(a: Ipv4Addr) -> bool {
         a.octets()[0] == 0
@@ -151,30 +149,32 @@ impl Ipv4Global {
     ///
     /// A boolean value indicating whether the given IPv4 address is a global address or not.
     pub fn is_global(a: Ipv4Addr) -> bool {
-        !(Self::is_this_network(a)
-            || Self::is_this_host_on_this_network(a)
+        !(is_this_network(a)
+            || is_this_host_on_this_network(a)
             || a.is_private()
-            || Self::is_shared(a)
+            || is_shared(a)
             || a.is_loopback()
             || a.is_link_local()
-            || Self::is_ietf_protocol_assignments(a)
-            || Self::is_ipv4_service_continuity_prefix(a)
-            || Self::is_ipv4_dummy_address(a)
-            || Self::is_port_control_protocol_anycast(a)
-            || Self::is_traversal_using_relays_around_nat_anycast(a)
-            || Self::is_nat64_dns64_discovery(a)
+            || is_ietf_protocol_assignments(a)
+            || is_ipv4_service_continuity_prefix(a)
+            || is_ipv4_dummy_address(a)
+            || is_port_control_protocol_anycast(a)
+            || is_traversal_using_relays_around_nat_anycast(a)
+            || is_nat64_dns64_discovery(a)
             || a.is_documentation()
-            || Self::is_as112_v4(a)
-            || Self::is_amt(a)
-            || Self::is_deprecated_6to6_relay_anycast(a)
-            || Self::is_direct_delegation_as112_service(a))
-            || Self::is_benchmarking(a)
-            || Self::is_reserved(a)
+            || is_as112_v4(a)
+            || is_amt(a)
+            || is_deprecated_6to6_relay_anycast(a)
+            || is_direct_delegation_as112_service(a))
+            || is_benchmarking(a)
+            || is_reserved(a)
             || a.is_broadcast()
     }
 }
 
-impl Ipv6Global {
+mod ipv6_global {
+    use std::net::Ipv6Addr;
+
     /// Returns [`true`] if this address is `::ffff:0:0/96`.
     const fn is_ipv4_mapped_address(a: Ipv6Addr) -> bool {
         matches!(a.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
@@ -269,24 +269,24 @@ impl Ipv6Global {
     pub fn is_global(a: Ipv6Addr) -> bool {
         !(a.is_loopback()
             || a.is_unspecified()
-            || Self::is_ipv4_mapped_address(a)
-            || Self::is_ipv4_ipv6_translat(a)
-            || Self::is_discard_only_address_block(a)
-            || Self::is_ietf_protocol_assignments(a)
-            || Self::is_teredo(a)
-            || Self::is_port_control_protocol_anycast(a)
-            || Self::is_traversal_relays_nat_anycast(a)
-            || Self::is_benchmarking(a)
-            || Self::is_amt(a)
-            || Self::is_as112_v6(a)
-            || Self::is_deprecated_previously_orchid(a)
-            || Self::is_orchid_v2(a)
-            || Self::is_drone_remote(a)
-            || Self::is_documentation(a)
-            || Self::is_6to4(a)
-            || Self::is_direct_delegation_as112_service(a)
-            || Self::is_unique_local(a)
-            || Self::is_unicast_link_local(a))
+            || is_ipv4_mapped_address(a)
+            || is_ipv4_ipv6_translat(a)
+            || is_discard_only_address_block(a)
+            || is_ietf_protocol_assignments(a)
+            || is_teredo(a)
+            || is_port_control_protocol_anycast(a)
+            || is_traversal_relays_nat_anycast(a)
+            || is_benchmarking(a)
+            || is_amt(a)
+            || is_as112_v6(a)
+            || is_deprecated_previously_orchid(a)
+            || is_orchid_v2(a)
+            || is_drone_remote(a)
+            || is_documentation(a)
+            || is_6to4(a)
+            || is_direct_delegation_as112_service(a)
+            || is_unique_local(a)
+            || is_unicast_link_local(a))
     }
 }
 
@@ -313,14 +313,14 @@ impl<T: Transport + Unpin> Transport for GlobalIpOnly<T> {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
-                if !Ipv4Global::is_global(a) {
+                if !ipv4_global::is_global(a) {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
                 self.inner.dial(addr)
             }
             Some(Protocol::Ip6(a)) => {
-                if !Ipv6Global::is_global(a) {
+                if !ipv6_global::is_global(a) {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
