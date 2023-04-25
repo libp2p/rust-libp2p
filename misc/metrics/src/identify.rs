@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol_stack;
-use libp2p_core::upgrade::Protocol;
 use libp2p_identity::PeerId;
 use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
@@ -138,7 +137,6 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                     let mut protocols = info
                         .protocols
                         .iter()
-                        .filter_map(|p| Protocol::try_from_owned(p.to_owned()).ok())
                         .filter(|p| {
                             let allowed_protocols = [
                                 libp2p_dcutr::PROTOCOL_NAME,

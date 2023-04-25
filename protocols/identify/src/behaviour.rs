@@ -20,7 +20,7 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{multiaddr, upgrade, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
@@ -488,12 +488,14 @@ pub enum Event {
     },
 }
 
-fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
+fn supported_protocols(params: &impl PollParameters) -> Vec<upgrade::Protocol> {
     // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
     // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
     params
         .supported_protocols()
-        .map(|p| String::from_utf8_lossy(&p).to_string())
+        .filter_map(|p| {
+            upgrade::Protocol::try_from_owned(String::from_utf8_lossy(&p).to_string()).ok()
+        })
         .collect()
 }
 

@@ -27,7 +27,7 @@ use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use libp2p_core::upgrade::SelectUpgrade;
-use libp2p_core::Multiaddr;
+use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
@@ -92,7 +92,7 @@ pub struct InEvent {
     pub listen_addrs: Vec<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<String>,
+    pub supported_protocols: Vec<upgrade::Protocol>,
 
     /// The protocol w.r.t. the information requested.
     pub protocol: Protocol,

@@ -84,7 +84,7 @@ pub struct Info {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub protocols: Vec<String>,
+    pub protocols: Vec<upgrade::Protocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
 }
@@ -175,7 +175,7 @@ where
         publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols,
+        protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -247,7 +247,17 @@ impl TryFrom<proto::Identify> for Info {
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
-            protocols: msg.protocols,
+            protocols: msg
+                .protocols
+                .into_iter()
+                .filter_map(|p| match upgrade::Protocol::try_from_owned(p) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        log::debug!("Unable to parse protocol: {e}");
+                        None
+                    }
+                })
+                .collect(),
             observed_addr,
         };
 
@@ -326,7 +336,10 @@ mod tests {
                         "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
                         "/ip6/::1/udp/1000".parse().unwrap(),
                     ],
-                    protocols: vec!["proto1".to_string(), "proto2".to_string()],
+                    protocols: vec![
+                        upgrade::Protocol::from_static("/proto1"),
+                        upgrade::Protocol::from_static("/proto2"),
+                    ],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
                 },
             )
@@ -357,7 +370,10 @@ mod tests {
             );
             assert_eq!(
                 info.protocols,
-                &["proto1".to_string(), "proto2".to_string()]
+                &[
+                    upgrade::Protocol::from_static("/proto1"),
+                    upgrade::Protocol::from_static("/proto2")
+                ]
             );
 
             bg_task.await;
