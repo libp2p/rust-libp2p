@@ -386,6 +386,9 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
+/// Represents a connection to another peer via a relay.
+///
+/// Internally, this uses a stream to the relay.
 pub struct Connection {
     state: ConnectionState,
 }
