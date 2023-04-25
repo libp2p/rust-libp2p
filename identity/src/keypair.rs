@@ -110,7 +110,6 @@ impl Keypair {
 
     #[cfg(feature = "ed25519")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ed25519` instead."
     )]
     pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
@@ -124,7 +123,6 @@ impl Keypair {
 
     #[cfg(feature = "secp256k1")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_secp256k1` instead."
     )]
     pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
@@ -138,7 +136,6 @@ impl Keypair {
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
     )]
     pub fn into_rsa(self) -> Option<rsa::Keypair> {
@@ -152,7 +149,6 @@ impl Keypair {
 
     #[cfg(feature = "ecdsa")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
     )]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
@@ -396,7 +392,7 @@ pub enum PublicKey {
     #[cfg(feature = "ed25519")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::into_ed25519` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ed25519` instead."
     )]
     Ed25519(ed25519::PublicKey),
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
@@ -404,21 +400,21 @@ pub enum PublicKey {
 
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::into_rsa` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_rsa` instead."
     )]
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::into_secp256k1` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_secp256k1` instead."
     )]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
     #[cfg(feature = "ecdsa")]
     #[deprecated(
         since = "0.1.0",
-        note = "This enum will be made opaque in the future, use `PublicKey::into_ecdsa` instead."
+        note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ecdsa` instead."
     )]
     Ecdsa(ecdsa::PublicKey),
 }
@@ -446,7 +442,6 @@ impl PublicKey {
 
     #[cfg(feature = "ed25519")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ed25519` instead."
     )]
     pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
@@ -460,7 +455,6 @@ impl PublicKey {
 
     #[cfg(feature = "secp256k1")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_secp256k1` instead."
     )]
     pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
@@ -474,7 +468,6 @@ impl PublicKey {
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_rsa` instead."
     )]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
@@ -488,7 +481,6 @@ impl PublicKey {
 
     #[cfg(feature = "ecdsa")]
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ecdsa` instead."
     )]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
@@ -502,7 +494,7 @@ impl PublicKey {
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
-    #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::encode_protobuf`.")]
+    #[deprecated(note = "Renamed to `PublicKey::encode_protobuf`.")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         Self::encode_protobuf(self)
     }
@@ -526,7 +518,6 @@ impl PublicKey {
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
@@ -669,15 +660,49 @@ impl TryInto<rsa::PublicKey> for PublicKey {
     }
 }
 
+#[cfg(feature = "ed25519")]
+impl From<ed25519::PublicKey> for PublicKey {
+    fn from(key: ed25519::PublicKey) -> Self {
+        #[allow(deprecated)] // TODO: Remove when PublicKey::Ed25519 is made opaque
+        PublicKey::Ed25519(key)
+    }
+}
+
+#[cfg(feature = "secp256k1")]
+impl From<secp256k1::PublicKey> for PublicKey {
+    fn from(key: secp256k1::PublicKey) -> Self {
+        #[allow(deprecated)] // TODO: Remove when PublicKey::Secp256k1 is made opaque
+        PublicKey::Secp256k1(key)
+    }
+}
+
+#[cfg(feature = "ecdsa")]
+impl From<ecdsa::PublicKey> for PublicKey {
+    fn from(key: ecdsa::PublicKey) -> Self {
+        #[allow(deprecated)] // TODO: Remove when PublicKey::Ecdsa is made opaque
+        PublicKey::Ecdsa(key)
+    }
+}
+
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+impl From<rsa::PublicKey> for PublicKey {
+    fn from(key: rsa::PublicKey) -> Self {
+        #[allow(deprecated)] // TODO: Remove when PublicKey::Rsa is made opaque
+        PublicKey::Rsa(key)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "peerid")]
     use crate::PeerId;
     use base64::prelude::*;
     use std::str::FromStr;
 
     #[test]
     #[cfg(feature = "ed25519")]
+    #[cfg(feature = "peerid")]
     fn keypair_protobuf_roundtrip() {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();
@@ -691,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "peerid")]
     fn keypair_from_protobuf_encoding() {
         // E.g. retrieved from an IPFS config file.
         let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
@@ -723,5 +749,42 @@ mod tests {
         fn assert_implements_ord<T: Ord>() {}
 
         assert_implements_ord::<PublicKey>();
+    }
+
+    #[test]
+    #[cfg(feature = "ed25519")]
+    fn test_publickey_from_ed25519_public_key() {
+        let pubkey = Keypair::generate_ed25519().public();
+        let ed25519_pubkey = pubkey
+            .clone()
+            .try_into_ed25519()
+            .expect("A ed25519 keypair");
+
+        let converted_pubkey = PublicKey::from(ed25519_pubkey);
+
+        assert_eq!(converted_pubkey, pubkey);
+    }
+
+    #[test]
+    #[cfg(feature = "secp256k1")]
+    fn test_publickey_from_secp256k1_public_key() {
+        let pubkey = Keypair::generate_secp256k1().public();
+        let secp256k1_pubkey = pubkey
+            .clone()
+            .try_into_secp256k1()
+            .expect("A secp256k1 keypair");
+        let converted_pubkey = PublicKey::from(secp256k1_pubkey);
+
+        assert_eq!(converted_pubkey, pubkey);
+    }
+
+    #[test]
+    #[cfg(feature = "ecdsa")]
+    fn test_publickey_from_ecdsa_public_key() {
+        let pubkey = Keypair::generate_ecdsa().public();
+        let ecdsa_pubkey = pubkey.clone().try_into_ecdsa().expect("A ecdsa keypair");
+        let converted_pubkey = PublicKey::from(ecdsa_pubkey);
+
+        assert_eq!(converted_pubkey, pubkey);
     }
 }
