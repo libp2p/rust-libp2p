@@ -66,7 +66,7 @@ impl fmt::Display for PeerId {
 impl PeerId {
     /// Builds a `PeerId` from a public key.
     pub fn from_public_key(key: &crate::keypair::PublicKey) -> PeerId {
-        let key_enc = key.to_protobuf_encoding();
+        let key_enc = key.encode_protobuf();
 
         let multihash = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
             Multihash::wrap(MULTIHASH_IDENTITY_CODE, &key_enc)
@@ -141,7 +141,7 @@ impl PeerId {
 
         let alg = Code::try_from(self.multihash.code())
             .expect("Internal multihash is always a valid `Code`");
-        let enc = public_key.to_protobuf_encoding();
+        let enc = public_key.encode_protobuf();
         Some(alg.digest(&enc) == self.multihash)
     }
 }

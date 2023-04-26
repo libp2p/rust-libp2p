@@ -757,12 +757,15 @@ where
             }
         }
 
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
-        } else {
-            self.keep_alive = KeepAlive::Yes;
-        }
+        let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
+        self.keep_alive = match (no_streams, self.keep_alive) {
+            // No open streams. Preserve the existing idle timeout.
+            (true, k @ KeepAlive::Until(_)) => k,
+            // No open streams. Set idle timeout.
+            (true, _) => KeepAlive::Until(Instant::now() + self.config.idle_timeout),
+            // Keep alive for open streams.
+            (false, _) => KeepAlive::Yes,
+        };
 
         Poll::Pending
     }
