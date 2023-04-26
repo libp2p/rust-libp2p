@@ -1,6 +1,6 @@
 use libp2p_core::multiaddr::Multiaddr;
 
-pub fn as_string(ma: &Multiaddr) -> String {
+pub(crate) fn as_string(ma: &Multiaddr) -> String {
     let len = ma
         .protocol_stack()
         .fold(0, |acc, proto| acc + proto.len() + 1);

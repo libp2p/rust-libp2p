@@ -77,15 +77,17 @@ pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
-    map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
-    optional::OptionalUpgrade,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
+#[allow(deprecated)]
+pub use map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr};
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+#[allow(deprecated)]
+pub use optional::OptionalUpgrade;
 
 /// Types serving as protocol names.
 ///
@@ -164,6 +166,10 @@ pub trait InboundUpgrade<C>: UpgradeInfo {
 
 /// Extension trait for `InboundUpgrade`. Automatically implemented on all types that implement
 /// `InboundUpgrade`.
+#[deprecated(
+    note = "Will be removed without replacement because it is not used within rust-libp2p."
+)]
+#[allow(deprecated)]
 pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_inbound<F, T>(self, f: F) -> MapInboundUpgrade<Self, F>
@@ -184,6 +190,7 @@ pub trait InboundUpgradeExt<C>: InboundUpgrade<C> {
     }
 }
 
+#[allow(deprecated)]
 impl<C, U: InboundUpgrade<C>> InboundUpgradeExt<C> for U {}
 
 /// Possible upgrade on an outbound connection or substream.
@@ -204,6 +211,10 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
 
 /// Extention trait for `OutboundUpgrade`. Automatically implemented on all types that implement
 /// `OutboundUpgrade`.
+#[deprecated(
+    note = "Will be removed without replacement because it is not used within rust-libp2p."
+)]
+#[allow(deprecated)]
 pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     /// Returns a new object that wraps around `Self` and applies a closure to the `Output`.
     fn map_outbound<F, T>(self, f: F) -> MapOutboundUpgrade<Self, F>
@@ -224,4 +235,5 @@ pub trait OutboundUpgradeExt<C>: OutboundUpgrade<C> {
     }
 }
 
+#[allow(deprecated)]
 impl<C, U: OutboundUpgrade<C>> OutboundUpgradeExt<C> for U {}
