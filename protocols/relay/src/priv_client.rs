@@ -400,6 +400,11 @@ enum ConnectionState {
     Operational {
         read_buffer: Bytes,
         substream: NegotiatedSubstream,
+        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
+        ///
+        /// This is flagged as "dead-code" by the compiler because we never read from it here.
+        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
+        #[allow(dead_code)]
         drop_notifier: oneshot::Sender<void::Void>,
     },
 }
