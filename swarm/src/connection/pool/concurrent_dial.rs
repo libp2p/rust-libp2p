@@ -40,7 +40,7 @@ type Dial = BoxFuture<
     ),
 >;
 
-pub struct ConcurrentDial {
+pub(crate) struct ConcurrentDial {
     dials: FuturesUnordered<Dial>,
     pending_dials: Box<dyn Iterator<Item = Dial> + Send>,
     errors: Vec<(Multiaddr, TransportError<std::io::Error>)>,

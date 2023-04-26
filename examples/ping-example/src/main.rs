@@ -41,10 +41,11 @@
 //! and begin pinging each other.
 
 use futures::prelude::*;
+use libp2p::core::upgrade::Version;
 use libp2p::{
-    identity, ping,
+    identity, noise, ping,
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    Multiaddr, PeerId,
+    tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 
@@ -54,7 +55,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let transport = libp2p::development_transport(local_key).await?;
+    let transport = tcp::async_io::Transport::default()
+        .upgrade(Version::V1Lazy)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     let mut swarm =
         SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
