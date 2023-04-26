@@ -893,14 +893,96 @@ mod test {
     use std::hash::{Hash, Hasher};
 
     #[test]
-    fn create_thing() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("/purple")
-            .unwrap()
+    fn create_config_with_message_id_as_plain_function() {
+        let config = ConfigBuilder::default()
+            .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        dbg!(builder);
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_closure() {
+        let config = ConfigBuilder::default()
+            .message_id_fn(|message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push('e');
+                MessageId::from(v)
+            })
+            .build()
+            .unwrap();
+
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_message_id_as_closure_with_variable_capture() {
+        let captured: char = 'e';
+
+        let config = ConfigBuilder::default()
+            .message_id_fn(move |message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push(captured);
+                MessageId::from(v)
+            })
+            .build()
+            .unwrap();
+
+        let result = config.message_id(&get_gossipsub_message());
+
+        assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_protocol_id_prefix() {
+        let protocol_config = ConfigBuilder::default()
+            .protocol_id_prefix("/purple")
+            .unwrap()
+            .build()
+            .unwrap()
+            .protocol_config();
+
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 2);
+
+        assert_eq!(
+            protocol_ids[0].protocol,
+            Protocol::from_static("/purple/1.1.0")
+        );
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
+
+        assert_eq!(
+            protocol_ids[1].protocol,
+            Protocol::from_static("/purple/1.0.0")
+        );
+        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
+    }
+
+    #[test]
+    fn create_config_with_custom_protocol_id() {
+        let protocol_config = ConfigBuilder::default()
+            .protocol_id("/purple", Version::V1_0)
+            .unwrap()
+            .build()
+            .unwrap()
+            .protocol_config();
+
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 1);
+
+        assert_eq!(protocol_ids[0].protocol, "/purple");
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 
     fn get_gossipsub_message() -> Message {
@@ -924,106 +1006,5 @@ mod test {
         let mut v = s.finish().to_string();
         v.push('e');
         MessageId::from(v)
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_plain_function() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("/purple")
-            .unwrap()
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_closure() {
-        let closure = |message: &Message| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push('e');
-            MessageId::from(v)
-        };
-
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("/purple")
-            .unwrap()
-            .message_id_fn(closure)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_message_id_as_closure_with_variable_capture() {
-        let captured: char = 'e';
-        let closure = move |message: &Message| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push(captured);
-            MessageId::from(v)
-        };
-
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("/purple")
-            .unwrap()
-            .message_id_fn(closure)
-            .build()
-            .unwrap();
-
-        let result = builder.message_id(&get_gossipsub_message());
-        assert_eq!(result, get_expected_message_id());
-    }
-
-    #[test]
-    fn create_config_with_protocol_id_prefix() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("/purple")
-            .unwrap()
-            .validation_mode(ValidationMode::Anonymous)
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        let protocol_ids = builder.protocol_config().protocol_info();
-
-        assert_eq!(protocol_ids.len(), 2);
-
-        assert_eq!(
-            protocol_ids[0].protocol,
-            Protocol::from_static("/purple/1.1.0")
-        );
-        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
-
-        assert_eq!(
-            protocol_ids[1].protocol,
-            Protocol::from_static("/purple/1.0.0")
-        );
-        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
-    }
-
-    #[test]
-    fn create_config_with_custom_protocol_id() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id("/purple", Version::V1_0)
-            .unwrap()
-            .validation_mode(ValidationMode::Anonymous)
-            .message_id_fn(message_id_plain_function)
-            .build()
-            .unwrap();
-
-        let protocol_ids = builder.protocol_config().protocol_info();
-
-        assert_eq!(protocol_ids.len(), 1);
-
-        assert_eq!(protocol_ids[0].protocol, "/purple");
-        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }
