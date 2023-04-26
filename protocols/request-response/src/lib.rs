@@ -43,8 +43,8 @@
 //!
 //! A single [`Behaviour`] instance can be used with an entire
 //! protocol family that share the same request and response types.
-//! For that purpose, [`Codec::Protocol`] is typically
-//! instantiated with a sum type.
+//! For that purpose, pass a list of protocols into the constructor
+//! instead of a single one.
 //!
 //! ## Limited Protocol Support
 //!
