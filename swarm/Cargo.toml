@@ -51,6 +51,7 @@ libp2p-swarm-test = { path = "../swarm-test" }
 libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 void = "1"
+once_cell = "1.17.1"
 
 [[test]]
 name = "swarm_derive"
