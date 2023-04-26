@@ -892,29 +892,6 @@ mod test {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    fn get_gossipsub_message() -> Message {
-        Message {
-            source: None,
-            data: vec![12, 34, 56],
-            sequence_number: None,
-            topic: Topic::<IdentityHash>::new("test").hash(),
-        }
-    }
-
-    fn get_expected_message_id() -> MessageId {
-        MessageId::from([
-            49, 55, 56, 51, 56, 52, 49, 51, 52, 51, 52, 55, 51, 51, 53, 52, 54, 54, 52, 49, 101,
-        ])
-    }
-
-    fn message_id_plain_function(message: &Message) -> MessageId {
-        let mut s = DefaultHasher::new();
-        message.data.hash(&mut s);
-        let mut v = s.finish().to_string();
-        v.push('e');
-        MessageId::from(v)
-    }
-
     #[test]
     fn create_config_with_message_id_as_plain_function() {
         let builder: Config = ConfigBuilder::default()
@@ -1003,5 +980,29 @@ mod test {
 
         assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
+    }
+
+
+    fn get_gossipsub_message() -> Message {
+        Message {
+            source: None,
+            data: vec![12, 34, 56],
+            sequence_number: None,
+            topic: Topic::<IdentityHash>::new("test").hash(),
+        }
+    }
+
+    fn get_expected_message_id() -> MessageId {
+        MessageId::from([
+            49, 55, 56, 51, 56, 52, 49, 51, 52, 51, 52, 55, 51, 51, 53, 52, 54, 54, 52, 49, 101,
+        ])
+    }
+
+    fn message_id_plain_function(message: &Message) -> MessageId {
+        let mut s = DefaultHasher::new();
+        message.data.hash(&mut s);
+        let mut v = s.finish().to_string();
+        v.push('e');
+        MessageId::from(v)
     }
 }
