@@ -131,7 +131,7 @@ impl SecretKey {
     }
 
     pub fn encode_pkcs8_der(&self) -> Vec<u8> {
-        self.0.to_pkcs8_der().unwrap().to_bytes().to_vec()
+        self.0.to_pkcs8_der().expect("Encoding to pkcs#8 should succeed").to_bytes().to_vec()
     }
 }
 
