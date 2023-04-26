@@ -337,7 +337,26 @@ impl<T: Transport + Unpin> Transport for GlobalIpOnly<T> {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.dial_as_listener(addr)
+        match addr.iter().next() {
+            Some(Protocol::Ip4(a)) => {
+                if !ipv4_global::is_global(a) {
+                    debug!("Not dialing non global IP address {:?}.", a);
+                    return Err(TransportError::MultiaddrNotSupported(addr));
+                }
+                self.inner.dial_as_listener(addr)
+            }
+            Some(Protocol::Ip6(a)) => {
+                if !ipv6_global::is_global(a) {
+                    debug!("Not dialing non global IP address {:?}.", a);
+                    return Err(TransportError::MultiaddrNotSupported(addr));
+                }
+                self.inner.dial_as_listener(addr)
+            }
+            _ => {
+                debug!("Not dialing unsupported Multiaddress {:?}.", addr);
+                Err(TransportError::MultiaddrNotSupported(addr))
+            }
+        }
     }
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
