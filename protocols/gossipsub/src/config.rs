@@ -1012,13 +1012,13 @@ mod test {
     #[test]
     fn create_config_with_custom_protocol_id() {
         let builder: Config = ConfigBuilder::default()
-            .protocol_id("purple", Version::V1_0)
+            .protocol_id("/purple", Version::V1_0)
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        assert_eq!(builder.protocol_id(), "purple");
+        assert_eq!(builder.protocol_id(), "/purple");
         assert_eq!(builder.custom_id_version(), &Some(Version::V1_0));
 
         let protocol_config = ProtocolConfig::new(&builder);
@@ -1026,7 +1026,7 @@ mod test {
 
         assert_eq!(protocol_ids.len(), 1);
 
-        assert_eq!(protocol_ids[0].protocol, "purple");
+        assert_eq!(protocol_ids[0].protocol, "/purple");
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }
