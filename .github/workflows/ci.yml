@@ -167,7 +167,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.68.0, # current stable
+          1.69.0, # current stable
           beta
         ]
     steps:

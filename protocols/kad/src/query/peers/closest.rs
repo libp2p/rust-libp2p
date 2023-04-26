@@ -27,8 +27,7 @@ use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 
-pub mod disjoint;
-
+pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
 #[derive(Debug, Clone)]

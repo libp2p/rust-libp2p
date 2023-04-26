@@ -31,7 +31,7 @@ use std::task::{Context, Poll};
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
 
-pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
+pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
     let addr = ([127, 0, 0, 1], 0).into();
 
@@ -47,7 +47,7 @@ pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     })
 }
 
-pub struct MetricService {
+pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
 }
 
@@ -102,12 +102,12 @@ impl Service<Request<Body>> for MetricService {
     }
 }
 
-pub struct MakeMetricService {
+pub(crate) struct MakeMetricService {
     reg: SharedRegistry,
 }
 
 impl MakeMetricService {
-    pub fn new(registry: Registry) -> MakeMetricService {
+    pub(crate) fn new(registry: Registry) -> MakeMetricService {
         MakeMetricService {
             reg: Arc::new(Mutex::new(registry)),
         }
