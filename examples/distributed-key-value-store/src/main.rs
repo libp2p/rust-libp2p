@@ -42,15 +42,16 @@
 
 use async_std::io;
 use futures::{prelude::*, select};
+use libp2p::core::upgrade::Version;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
     PutRecordOk, QueryResult, Quorum, Record,
 };
 use libp2p::{
-    development_transport, identity, mdns,
+    identity, mdns, noise,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId, Transport,
 };
 use std::error::Error;
 
@@ -62,8 +63,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = development_transport(local_key).await?;
+    let transport = tcp::async_io::Transport::default()
+        .upgrade(Version::V1Lazy)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
