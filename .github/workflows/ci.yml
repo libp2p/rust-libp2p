@@ -16,7 +16,13 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.crate }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(
+      github.repository == 'libp2p/rust-libp2p' && (
+        (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
+        (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+        '["self-hosted", "linux", "x64", "large"]'
+      ) || '"ubuntu-latest"') }}
+    timeout-minutes: 10
     needs: gather_published_crates
     strategy:
       fail-fast: false
@@ -24,7 +30,9 @@ jobs:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
       - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
+        run: sudo apt-get install -y protobuf-compiler
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/checkout@v3
 
@@ -33,6 +41,7 @@ jobs:
         run: |
           RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
         uses: dtolnay/rust-toolchain@master
