@@ -894,54 +894,51 @@ mod test {
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+        let config = ConfigBuilder::default()
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        let result = builder.message_id(&get_gossipsub_message());
+        let result = config.message_id(&get_gossipsub_message());
+
         assert_eq!(result, get_expected_message_id());
     }
 
     #[test]
     fn create_config_with_message_id_as_closure() {
-        let closure = |message: &Message| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push('e');
-            MessageId::from(v)
-        };
-
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .message_id_fn(closure)
+        let config = ConfigBuilder::default()
+            .message_id_fn(|message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push('e');
+                MessageId::from(v)
+            })
             .build()
             .unwrap();
 
-        let result = builder.message_id(&get_gossipsub_message());
+        let result = config.message_id(&get_gossipsub_message());
+
         assert_eq!(result, get_expected_message_id());
     }
 
     #[test]
     fn create_config_with_message_id_as_closure_with_variable_capture() {
         let captured: char = 'e';
-        let closure = move |message: &Message| {
-            let mut s = DefaultHasher::new();
-            message.data.hash(&mut s);
-            let mut v = s.finish().to_string();
-            v.push(captured);
-            MessageId::from(v)
-        };
 
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .message_id_fn(closure)
+        let config = ConfigBuilder::default()
+            .message_id_fn(move |message: &Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                let mut v = s.finish().to_string();
+                v.push(captured);
+                MessageId::from(v)
+            })
             .build()
             .unwrap();
 
-        let result = builder.message_id(&get_gossipsub_message());
+        let result = config.message_id(&get_gossipsub_message());
+
         assert_eq!(result, get_expected_message_id());
     }
 
@@ -981,7 +978,6 @@ mod test {
         assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
-
 
     fn get_gossipsub_message() -> Message {
         Message {
