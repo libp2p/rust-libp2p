@@ -389,33 +389,6 @@ where
                 match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let new_protocols = gather_supported_protocols(handler);
-
-                        if &new_protocols != supported_protocols {
-                            let mut added_protocols =
-                                new_protocols.difference(supported_protocols).peekable();
-                            let mut removed_protocols =
-                                supported_protocols.difference(&new_protocols).peekable();
-
-                            if added_protocols.peek().is_some() {
-                                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                                    ProtocolsChange::Added(ProtocolsAdded {
-                                        protocols: added_protocols,
-                                    }),
-                                ));
-                            }
-
-                            if removed_protocols.peek().is_some() {
-                                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                                    ProtocolsChange::Removed(ProtocolsRemoved {
-                                        protocols: removed_protocols,
-                                    }),
-                                ));
-                            }
-                        }
-
-                        *supported_protocols = new_protocols;
-
                         let protocol = handler.listen_protocol();
 
                         negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
@@ -424,6 +397,32 @@ where
                     }
                 }
             }
+
+            let new_protocols = gather_supported_protocols(handler);
+
+            if &new_protocols != supported_protocols {
+                let mut added_protocols = new_protocols.difference(supported_protocols).peekable();
+                let mut removed_protocols =
+                    supported_protocols.difference(&new_protocols).peekable();
+
+                if added_protocols.peek().is_some() {
+                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        ProtocolsChange::Added(ProtocolsAdded {
+                            protocols: added_protocols,
+                        }),
+                    ));
+                }
+
+                if removed_protocols.peek().is_some() {
+                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        ProtocolsChange::Removed(ProtocolsRemoved {
+                            protocols: removed_protocols,
+                        }),
+                    ));
+                }
+            }
+
+            *supported_protocols = new_protocols;
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
@@ -750,16 +749,13 @@ mod tests {
     #[test]
     fn propagates_changes_to_supported_inbound_protocols() {
         let mut connection = Connection::new(
-            StreamMuxerBox::new(DummyStreamMuxer {
-                counter: Arc::new(()),
-            }),
+            StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
-            2,
+            0,
         );
         connection.handler.active_protocols = HashSet::from(["/foo"]);
 
-        // DummyStreamMuxer will yield a new stream
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
         assert_eq!(
@@ -773,9 +769,7 @@ mod tests {
         );
 
         connection.handler.active_protocols = HashSet::from(["/foo", "/bar"]);
-        connection.negotiating_in.clear(); // Hack to request more substreams from the muxer.
 
-        // DummyStreamMuxer will yield a new stream
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
 
@@ -790,9 +784,7 @@ mod tests {
         );
 
         connection.handler.active_protocols = HashSet::from(["/bar"]);
-        connection.negotiating_in.clear(); // Hack to request more substreams from the muxer.
 
-        // DummyStreamMuxer will yield a new stream
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
 
