@@ -892,16 +892,6 @@ mod test {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    #[test]
-    fn create_thing() {
-        let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
-            .build()
-            .unwrap();
-
-        dbg!(builder);
-    }
-
     fn get_gossipsub_message() -> Message {
         Message {
             source: None,
