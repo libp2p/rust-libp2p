@@ -51,6 +51,7 @@ pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, U
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
+use once_cell::sync::Lazy;
 use std::collections::hash_map::RandomState;
 use std::collections::hash_set::Difference;
 use std::collections::HashSet;
@@ -295,9 +296,25 @@ pub struct ProtocolsAdded<'a> {
     pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
 }
 
+impl<'a> ProtocolsAdded<'a> {
+    pub(crate) fn from_set(protocols: &'a HashSet<String, RandomState>) -> Self {
+        ProtocolsAdded {
+            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
     pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
+}
+
+impl<'a> ProtocolsRemoved<'a> {
+    pub(crate) fn from_set(protocols: &'a HashSet<String, RandomState>) -> Self {
+        ProtocolsRemoved {
+            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+        }
+    }
 }
 
 impl<'a> Iterator for ProtocolsAdded<'a> {
@@ -668,3 +685,5 @@ impl Ord for KeepAlive {
         }
     }
 }
+
+static EMPTY_HASHSET: Lazy<HashSet<String>> = Lazy::new(HashSet::new);

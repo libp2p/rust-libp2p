@@ -264,9 +264,7 @@ where
                     ProtocolSupport::Added(protocols),
                 )) => {
                     handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        ProtocolsChange::Added(ProtocolsAdded {
-                            protocols: protocols.difference(&HashSet::new()).peekable(), // This is a bit of a hack to use the same type internally in `ProtocolsAdded`.
-                        }),
+                        ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols)),
                     ));
                     continue;
                 }
@@ -274,9 +272,7 @@ where
                     ProtocolSupport::Removed(protocols),
                 )) => {
                     handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        ProtocolsChange::Removed(ProtocolsRemoved {
-                            protocols: protocols.difference(&HashSet::new()).peekable(), // This is a bit of a hack to use the same type internally in `ProtocolsRemoved`.
-                        }),
+                        ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols)),
                     ));
                     continue;
                 }
