@@ -2677,6 +2677,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "futures-timer",
+ "futures_ringbuf",
  "libp2p-core",
  "log",
 ]
