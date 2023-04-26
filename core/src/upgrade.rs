@@ -77,17 +77,17 @@ pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
     error::UpgradeError,
-    optional::OptionalUpgrade,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };
 pub use crate::Negotiated;
-pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
-
 #[allow(deprecated)]
 pub use map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr};
+pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+#[allow(deprecated)]
+pub use optional::OptionalUpgrade;
 
 /// Types serving as protocol names.
 ///
