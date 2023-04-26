@@ -108,6 +108,7 @@ pub enum Event {
 
 impl Handler {
     /// Creates a new `Handler`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         initial_delay: Duration,
         interval: Duration,
@@ -132,7 +133,7 @@ impl Handler {
             observed_addr,
             local_supported_protocols: SupportedProtocols::default(),
             remote_supported_protocols: HashSet::default(),
-            external_addresses: external_addresses,
+            external_addresses,
         }
     }
 
