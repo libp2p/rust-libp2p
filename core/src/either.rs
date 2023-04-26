@@ -115,21 +115,6 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EitherName<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A: AsRef<str>, B: AsRef<str>> AsRef<str> for EitherName<A, B> {
-    fn as_ref(&self) -> &str {
-        match self {
-            EitherName::A(a) => a.as_ref(),
-            EitherName::B(b) => b.as_ref(),
-        }
-    }
-}
-
 impl<A, B> Transport for Either<A, B>
 where
     B: Transport,
