@@ -94,7 +94,7 @@ impl MplexConfig {
     /// ```rust
     /// use libp2p_mplex::MplexConfig;
     /// let mut muxer_config = MplexConfig::new();
-    /// muxer_config.set_protocol_name(b"/mplex/6.7.0");
+    /// muxer_config.set_protocol_name("/mplex/6.7.0");
     /// ```
     pub fn set_protocol_name(&mut self, protocol_name: &'static str) -> &mut Self {
         self.protocol_name = protocol_name;
