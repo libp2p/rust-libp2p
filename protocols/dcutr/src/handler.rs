@@ -18,5 +18,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod direct;
-pub mod relayed;
+pub(crate) mod direct;
+pub(crate) mod relayed;

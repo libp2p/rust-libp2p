@@ -112,7 +112,7 @@ impl Config {
 
 /// Represents the inner configuration for [`quinn_proto`].
 #[derive(Debug, Clone)]
-pub struct QuinnConfig {
+pub(crate) struct QuinnConfig {
     client_config: quinn_proto::ClientConfig,
     server_config: Arc<quinn_proto::ServerConfig>,
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
@@ -169,7 +169,7 @@ impl From<Config> for QuinnConfig {
 
 /// Channel used to send commands to the [`Driver`].
 #[derive(Debug, Clone)]
-pub struct Channel {
+pub(crate) struct Channel {
     /// Channel to the background of the endpoint.
     to_endpoint: mpsc::Sender<ToEndpoint>,
     /// Address that the socket is bound to.
@@ -179,7 +179,7 @@ pub struct Channel {
 
 impl Channel {
     /// Builds a new endpoint that is listening on the [`SocketAddr`].
-    pub fn new_bidirectional<P: Provider>(
+    pub(crate) fn new_bidirectional<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
     ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
@@ -190,7 +190,7 @@ impl Channel {
     }
 
     /// Builds a new endpoint that only supports outbound connections.
-    pub fn new_dialer<P: Provider>(
+    pub(crate) fn new_dialer<P: Provider>(
         quinn_config: QuinnConfig,
         socket_family: SocketFamily,
     ) -> Result<Self, Error> {
@@ -241,7 +241,7 @@ impl Channel {
         Ok(channel)
     }
 
-    pub fn socket_addr(&self) -> &SocketAddr {
+    pub(crate) fn socket_addr(&self) -> &SocketAddr {
         &self.socket_addr
     }
 
@@ -252,7 +252,7 @@ impl Channel {
     /// and the context's waker is registered for wake-up.
     ///
     /// If the background task crashed `Err` is returned.
-    pub fn try_send(
+    pub(crate) fn try_send(
         &mut self,
         to_endpoint: ToEndpoint,
         cx: &mut Context<'_>,
@@ -283,18 +283,17 @@ impl Channel {
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
     /// This should *not* be called for regular messages.
-    pub fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
+    pub(crate) fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
         let _ = self.to_endpoint.clone().try_send(to_endpoint);
     }
 }
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 #[error("Background task disconnected")]
-pub struct Disconnected {}
-
+pub(crate) struct Disconnected {}
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
-pub enum ToEndpoint {
+pub(crate) enum ToEndpoint {
     /// Instruct the [`quinn_proto::Endpoint`] to start connecting to the given address.
     Dial {
         /// UDP address to connect to.
@@ -369,7 +368,7 @@ pub enum ToEndpoint {
 /// The background task shuts down if an [`ToEndpoint::Decoupled`] event was received and the
 /// last active connection has drained.
 #[derive(Debug)]
-pub struct Driver<P: Provider> {
+pub(crate) struct Driver<P: Provider> {
     // The actual QUIC state machine.
     endpoint: quinn_proto::Endpoint,
     // QuinnConfig for client connections.

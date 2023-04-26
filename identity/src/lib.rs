@@ -42,8 +42,9 @@
     feature = "rsa"
 ))]
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::keys_proto::*;
+    pub(crate) use self::keys_proto::*;
 }
 
 #[cfg(feature = "ecdsa")]
