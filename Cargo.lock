@@ -2760,6 +2760,7 @@ dependencies = [
  "bytes",
  "env_logger 0.10.0",
  "futures",
+ "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
  "log",
