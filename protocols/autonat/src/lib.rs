@@ -35,6 +35,7 @@ pub use self::{
 pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::structs::{mod_Message::*, Message};
+    pub(crate) use self::structs::{mod_Message::*, Message};
 }
