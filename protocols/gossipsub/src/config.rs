@@ -22,12 +22,11 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::protocol::FLOODSUB_PROTOCOL;
-use crate::protocol_priv::{ProtocolConfig, ProtocolId};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{InvalidProtocol, Protocol};
-
+use crate::protocol_priv::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
 use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
+
+use libp2p_identity::PeerId;
+use libp2p_swarm::Protocol;
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -382,6 +381,7 @@ impl Default for Config {
 /// The builder struct for constructing a gossipsub configuration.
 pub struct ConfigBuilder {
     config: Config,
+    invalid_protocol: bool, // This is a bit of a hack to only expose one error to the user.
 }
 
 impl Default for ConfigBuilder {
@@ -437,13 +437,17 @@ impl Default for ConfigBuilder {
                 iwant_followup_time: Duration::from_secs(3),
                 published_message_ids_cache_time: Duration::from_secs(10),
             },
+            invalid_protocol: false,
         }
     }
 }
 
 impl From<Config> for ConfigBuilder {
     fn from(config: Config) -> Self {
-        ConfigBuilder { config }
+        ConfigBuilder {
+            config,
+            invalid_protocol: false,
+        }
     }
 }
 
@@ -452,21 +456,31 @@ impl ConfigBuilder {
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
-    ) -> Result<&mut Self, InvalidProtocol> {
+    ) -> &mut Self {
         let cow = protocol_id_prefix.into();
 
-        self.config.protocol.protocol_ids = vec![
-            ProtocolId {
-                protocol: Protocol::try_from_owned(format!("{}/1.1.0", cow))?,
-                kind: PeerKind::Gossipsubv1_1,
-            },
-            ProtocolId {
-                protocol: Protocol::try_from_owned(format!("{}/1.0.0", cow))?,
-                kind: PeerKind::Gossipsub,
-            },
-        ];
+        match (
+            Protocol::try_from_owned(format!("{}/1.1.0", cow)),
+            Protocol::try_from_owned(format!("{}/1.0.0", cow)),
+        ) {
+            (Ok(p1), Ok(p2)) => {
+                self.config.protocol.protocol_ids = vec![
+                    ProtocolId {
+                        protocol: p1,
+                        kind: PeerKind::Gossipsubv1_1,
+                    },
+                    ProtocolId {
+                        protocol: p2,
+                        kind: PeerKind::Gossipsub,
+                    },
+                ]
+            }
+            _ => {
+                self.invalid_protocol = true;
+            }
+        }
 
-        Ok(self)
+        self
     }
 
     /// The full protocol id to negotiate this protocol (does not append `/1.0.0` or `/1.1.0`).
@@ -474,18 +488,25 @@ impl ConfigBuilder {
         &mut self,
         protocol_id: impl Into<Cow<'static, str>>,
         custom_id_version: Version,
-    ) -> Result<&mut Self, InvalidProtocol> {
+    ) -> &mut Self {
         let cow = protocol_id.into();
 
-        self.config.protocol.protocol_ids = vec![ProtocolId {
-            protocol: Protocol::try_from_owned(cow.to_string())?,
-            kind: match custom_id_version {
-                Version::V1_1 => PeerKind::Gossipsubv1_1,
-                Version::V1_0 => PeerKind::Gossipsub,
-            },
-        }];
+        match Protocol::try_from_owned(cow.to_string()) {
+            Ok(protocol) => {
+                self.config.protocol.protocol_ids = vec![ProtocolId {
+                    protocol,
+                    kind: match custom_id_version {
+                        Version::V1_1 => PeerKind::Gossipsubv1_1,
+                        Version::V1_0 => PeerKind::Gossipsub,
+                    },
+                }]
+            }
+            _ => {
+                self.invalid_protocol = true;
+            }
+        }
 
-        Ok(self)
+        self
     }
 
     /// Number of heartbeats to keep in the `memcache` (default is 5).
@@ -837,6 +858,10 @@ impl ConfigBuilder {
             return Err("The unsubscribe_backoff parameter should be positive.");
         }
 
+        if self.invalid_protocol {
+            return Err("The provided protocol is invalid, it must start with a forward-slash");
+        }
+
         Ok(self.config.clone())
     }
 }
@@ -946,7 +971,6 @@ mod test {
     fn create_config_with_protocol_id_prefix() {
         let protocol_config = ConfigBuilder::default()
             .protocol_id_prefix("/purple")
-            .unwrap()
             .build()
             .unwrap()
             .protocol_config();
@@ -972,7 +996,6 @@ mod test {
     fn create_config_with_custom_protocol_id() {
         let protocol_config = ConfigBuilder::default()
             .protocol_id("/purple", Version::V1_0)
-            .unwrap()
             .build()
             .unwrap()
             .protocol_config();
