@@ -19,11 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::EitherFuture;
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade};
 use crate::upgrade::{Protocol, ToProtocolsIter};
-use crate::{
-    either::EitherName,
-    upgrade::{InboundUpgrade, OutboundUpgrade},
-};
 use either::Either;
 use futures::future;
 
@@ -96,34 +93,5 @@ where
         }
 
         panic!("selected protocol is not supported by either upgrade")
-    }
-}
-
-/// Iterator that combines the protocol names of twp upgrades.
-#[derive(Debug, Clone)]
-pub struct InfoIterChain<A, B>(A, B);
-
-impl<A, B> Iterator for InfoIterChain<A, B>
-where
-    A: Iterator,
-    B: Iterator,
-{
-    type Item = EitherName<A::Item, B::Item>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(info) = self.0.next() {
-            return Some(EitherName::A(info));
-        }
-        if let Some(info) = self.1.next() {
-            return Some(EitherName::B(info));
-        }
-        None
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min1, max1) = self.0.size_hint();
-        let (min2, max2) = self.1.size_hint();
-        let max = max1.and_then(move |m1| max2.and_then(move |m2| m1.checked_add(m2)));
-        (min1.saturating_add(min2), max)
     }
 }
