@@ -18,11 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    StreamExt,
-};
-use libp2p_core::{multiaddr::Multiaddr, transport::Transport, upgrade};
+use futures::io::{AsyncReadExt, AsyncWriteExt};
+use libp2p_core::InboundUpgrade;
 use libp2p_identity as identity;
 use libp2p_plaintext::PlainText2Config;
 use log::debug;
@@ -42,54 +39,29 @@ fn variable_msg_length() {
         let client_id = identity::Keypair::generate_ed25519();
         let client_id_public = client_id.public();
 
+        let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
+
         futures::executor::block_on(async {
-            let mut server = libp2p_core::transport::MemoryTransport::new()
-                .and_then(move |output, endpoint| {
-                    upgrade::apply(
-                        output,
-                        PlainText2Config {
-                            local_public_key: server_id_public,
-                        },
-                        endpoint,
-                        libp2p_core::upgrade::Version::V1,
-                    )
-                })
-                .boxed();
+            let (
+                (received_client_id, mut server_channel),
+                (received_server_id, mut client_channel),
+            ) = futures::future::try_join(
+                PlainText2Config {
+                    local_public_key: server_id_public,
+                }
+                .upgrade_inbound(server, b""),
+                PlainText2Config {
+                    local_public_key: client_id_public,
+                }
+                .upgrade_inbound(client, b""),
+            )
+            .await
+            .unwrap();
 
-            let mut client = libp2p_core::transport::MemoryTransport::new()
-                .and_then(move |output, endpoint| {
-                    upgrade::apply(
-                        output,
-                        PlainText2Config {
-                            local_public_key: client_id_public,
-                        },
-                        endpoint,
-                        libp2p_core::upgrade::Version::V1,
-                    )
-                })
-                .boxed();
-
-            let server_address: Multiaddr =
-                format!("/memory/{}", std::cmp::Ord::max(1, rand::random::<u64>()))
-                    .parse()
-                    .unwrap();
-
-            server.listen_on(server_address.clone()).unwrap();
-
-            // Ignore server listen address event.
-            let _ = server
-                .next()
-                .await
-                .expect("some event")
-                .into_new_address()
-                .expect("listen address");
+            assert_eq!(received_server_id, server_id.public().to_peer_id());
+            assert_eq!(received_client_id, client_id.public().to_peer_id());
 
             let client_fut = async {
-                debug!("dialing {:?}", server_address);
-                let (received_server_id, mut client_channel) =
-                    client.dial(server_address).unwrap().await.unwrap();
-                assert_eq!(received_server_id, server_id.public().to_peer_id());
-
                 debug!("Client: writing message.");
                 client_channel
                     .write_all(&msg_to_send)
@@ -100,17 +72,6 @@ fn variable_msg_length() {
             };
 
             let server_fut = async {
-                let mut server_channel = server
-                    .next()
-                    .await
-                    .expect("some event")
-                    .into_incoming()
-                    .expect("no error")
-                    .0
-                    .await
-                    .map(|(_, session)| session)
-                    .expect("no error");
-
                 let mut server_buffer = vec![0; msg_to_receive.len()];
                 debug!("Server: reading message.");
                 server_channel
