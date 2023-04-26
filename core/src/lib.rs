@@ -38,6 +38,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::{
         envelope_proto::*, peer_record_proto::mod_PeerRecord::*, peer_record_proto::PeerRecord,

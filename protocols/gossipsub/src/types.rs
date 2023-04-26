@@ -88,11 +88,11 @@ declare_message_id_type!(MessageId, "MessageId");
 declare_message_id_type!(FastMessageId, "FastMessageId");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PeerConnections {
+pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
-    pub kind: PeerKind,
+    pub(crate) kind: PeerKind,
     /// Its current connections.
-    pub connections: Vec<ConnectionId>,
+    pub(crate) connections: Vec<ConnectionId>,
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.

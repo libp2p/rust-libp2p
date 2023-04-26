@@ -20,9 +20,8 @@
 
 use libp2p_core::upgrade::Protocol;
 
-pub mod inbound;
-pub mod outbound;
-
+pub(crate) mod inbound;
+pub(crate) mod outbound;
 pub const PROTOCOL_NAME: Protocol = Protocol::from_static("/libp2p/dcutr");
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

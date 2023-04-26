@@ -22,11 +22,10 @@ use crate::proto;
 use libp2p_core::upgrade::Protocol;
 use std::time::Duration;
 
-pub mod inbound_hop;
-pub mod inbound_stop;
-pub mod outbound_hop;
-pub mod outbound_stop;
-
+pub(crate) mod inbound_hop;
+pub(crate) mod inbound_stop;
+pub(crate) mod outbound_hop;
+pub(crate) mod outbound_stop;
 pub const HOP_PROTOCOL_NAME: Protocol = Protocol::from_static("/libp2p/circuit/relay/0.2.0/hop");
 pub const STOP_PROTOCOL_NAME: Protocol = Protocol::from_static("/libp2p/circuit/relay/0.2.0/stop");
 

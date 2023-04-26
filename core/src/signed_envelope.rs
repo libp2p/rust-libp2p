@@ -182,7 +182,7 @@ mod tests {
     use super::*;
 
     #[test]
-    pub fn test_roundtrip() {
+    fn test_roundtrip() {
         let kp = Keypair::generate_ed25519();
         let payload = "some payload".as_bytes();
         let domain_separation = "domain separation".to_string();
