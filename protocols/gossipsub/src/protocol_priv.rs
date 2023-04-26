@@ -57,7 +57,7 @@ impl ProtocolConfig {
     ///
     /// Sets the maximum gossip transmission size.
     pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
-        let protocol_ids = match gossipsub_config.custom_id_version() {
+        let mut protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
                 Version::V1_0 => vec![ProtocolId::new(
                     gossipsub_config.protocol_id(),
@@ -71,23 +71,21 @@ impl ProtocolConfig {
                 )],
             },
             None => {
-                let mut protocol_ids = vec![
+                vec![
                     ProtocolId::new(
                         gossipsub_config.protocol_id(),
                         PeerKind::Gossipsubv1_1,
                         true,
                     ),
                     ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
-                ];
-
-                // add floodsub support if enabled.
-                if gossipsub_config.support_floodsub() {
-                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
-                }
-
-                protocol_ids
+                ]
             }
         };
+
+        // add floodsub support if enabled.
+        if gossipsub_config.support_floodsub() {
+            protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
+        }
 
         ProtocolConfig {
             protocol_ids,
