@@ -7,8 +7,12 @@
 - Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
   See [PR 3807].
 
+- Deprecate `OptionalUpgrade` without replacement.
+  See [PR 3806].
+
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
 [PR 3807]: https://github.com/libp2p/rust-libp2p/pull/3807
+[PR 3806]: https://github.com/libp2p/rust-libp2p/pull/3806
 
 ## 0.39.1
 

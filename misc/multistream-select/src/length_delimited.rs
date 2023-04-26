@@ -40,7 +40,7 @@ const DEFAULT_BUFFER_SIZE: usize = 64;
 /// unlikely to be more than 16KiB long.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct LengthDelimited<R> {
+pub(crate) struct LengthDelimited<R> {
     /// The inner I/O resource.
     #[pin]
     inner: R,
@@ -76,7 +76,7 @@ impl Default for ReadState {
 impl<R> LengthDelimited<R> {
     /// Creates a new I/O resource for reading and writing unsigned-varint
     /// length delimited frames.
-    pub fn new(inner: R) -> LengthDelimited<R> {
+    pub(crate) fn new(inner: R) -> LengthDelimited<R> {
         LengthDelimited {
             inner,
             read_state: ReadState::default(),
@@ -93,7 +93,7 @@ impl<R> LengthDelimited<R> {
     /// The read buffer is guaranteed to be empty whenever `Stream::poll` yields
     /// a new `Bytes` frame. The write buffer is guaranteed to be empty after
     /// flushing.
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         assert!(self.read_buffer.is_empty());
         assert!(self.write_buffer.is_empty());
         self.inner
@@ -106,7 +106,7 @@ impl<R> LengthDelimited<R> {
     /// This is typically done if further uvi-framed messages are expected to be
     /// received but no more such messages are written, allowing the writing of
     /// follow-up protocol data to commence.
-    pub fn into_reader(self) -> LengthDelimitedReader<R> {
+    pub(crate) fn into_reader(self) -> LengthDelimitedReader<R> {
         LengthDelimitedReader { inner: self }
     }
 
@@ -115,10 +115,7 @@ impl<R> LengthDelimited<R> {
     ///
     /// After this method returns `Poll::Ready`, the write buffer of frames
     /// submitted to the `Sink` is guaranteed to be empty.
-    pub fn poll_write_buffer(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>>
+    fn poll_write_buffer(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>
     where
         R: AsyncWrite,
     {
@@ -300,7 +297,7 @@ where
 /// frames on an underlying I/O resource combined with direct `AsyncWrite` access.
 #[pin_project::pin_project]
 #[derive(Debug)]
-pub struct LengthDelimitedReader<R> {
+pub(crate) struct LengthDelimitedReader<R> {
     #[pin]
     inner: LengthDelimited<R>,
 }
@@ -318,7 +315,7 @@ impl<R> LengthDelimitedReader<R> {
     /// yield a new `Message`. The write buffer is guaranteed to be empty whenever
     /// [`LengthDelimited::poll_write_buffer`] yields [`Poll::Ready`] or after
     /// the [`Sink`] has been completely flushed via [`Sink::poll_flush`].
-    pub fn into_inner(self) -> R {
+    pub(crate) fn into_inner(self) -> R {
         self.inner.into_inner()
     }
 }

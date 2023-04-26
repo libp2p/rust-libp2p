@@ -21,8 +21,7 @@
 //! Noise protocol I/O.
 
 mod framed;
-pub mod handshake;
-
+pub(crate) mod handshake;
 use bytes::Bytes;
 use framed::{NoiseFramed, MAX_FRAME_LEN};
 use futures::prelude::*;
