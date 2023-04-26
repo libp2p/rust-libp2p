@@ -165,7 +165,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
-        note = "Deprecated, use `rsa::Keypair::try_decode_pkcs8` and promote it into `Keypair` instead."
+        note = "Use `rsa::Keypair::try_decode_pkcs8` and promote it into `Keypair` instead."
     )]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
@@ -178,7 +178,7 @@ impl Keypair {
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
     #[deprecated(
-        note = "Deprecated, use `secp256k1::Keypair::try_from_bytes` and promote it into `Keypair` instead."
+        note = "Use `secp256k1::Keypair::try_from_bytes` and promote it into `Keypair` instead."
     )]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
@@ -192,7 +192,7 @@ impl Keypair {
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[cfg(feature = "ed25519")]
     #[deprecated(
-        note = "Deprecated, use `ed25519::Keypair::try_decode` and promote it into `Keypair` instead."
+        note = "Use `ed25519::Keypair::try_decode` and promote it into `Keypair` instead."
     )]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
