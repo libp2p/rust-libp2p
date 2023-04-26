@@ -889,6 +889,7 @@ mod test {
     use crate::types::PeerKind;
     use crate::Topic;
     use libp2p_core::UpgradeInfo;
+    use libp2p_swarm::Protocol;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -995,10 +996,16 @@ mod test {
 
         assert_eq!(protocol_ids.len(), 2);
 
-        assert_eq!(protocol_ids[0].protocol_id, b"/purple/1.1.0".to_vec());
+        assert_eq!(
+            protocol_ids[0].protocol,
+            Protocol::from_static("/purple/1.1.0")
+        );
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
 
-        assert_eq!(protocol_ids[1].protocol_id, b"/purple/1.0.0".to_vec());
+        assert_eq!(
+            protocol_ids[1].protocol,
+            Protocol::from_static("/purple/1.0.0")
+        );
         assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
     }
 
@@ -1019,7 +1026,7 @@ mod test {
 
         assert_eq!(protocol_ids.len(), 1);
 
-        assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
+        assert_eq!(protocol_ids[0].protocol, "purple");
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }

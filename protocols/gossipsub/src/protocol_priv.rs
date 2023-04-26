@@ -31,8 +31,9 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
+use libp2p_swarm::Protocol;
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
@@ -101,7 +102,7 @@ impl ProtocolConfig {
 #[derive(Clone, Debug)]
 pub struct ProtocolId {
     /// The RPC message type/name.
-    pub protocol_id: Vec<u8>,
+    pub protocol: Protocol,
     /// The type of protocol we support
     pub kind: PeerKind,
 }
@@ -109,28 +110,28 @@ pub struct ProtocolId {
 /// An RPC protocol ID.
 impl ProtocolId {
     pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
-        let protocol_id = match kind {
+        let protocol = match kind {
             PeerKind::Gossipsubv1_1 => match prefix {
-                true => format!("/{}/{}", id, "1.1.0"),
-                false => id.to_string(),
+                true => Protocol::try_from_owned(format!("/{}/1.1.0", id)).expect("starts with /"),
+                false => Protocol::try_from_owned(id.to_string()).expect("TODO fix this mess"),
             },
             PeerKind::Gossipsub => match prefix {
-                true => format!("/{}/{}", id, "1.0.0"),
-                false => id.to_string(),
+                true => Protocol::try_from_owned(format!("/{}/1.0.0", id)).expect("starts with /"),
+                false => Protocol::try_from_owned(id.to_string()).expect("TODO fix this mess"),
             },
-            PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
+            PeerKind::Floodsub => Protocol::try_from_owned(format!("/{}/{}", "floodsub", "1.0.0"))
+                .expect("starts with /"),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
             // advertise this variant.
             PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),
-        }
-        .into_bytes();
-        ProtocolId { protocol_id, kind }
+        };
+        ProtocolId { protocol, kind }
     }
 }
 
-impl ProtocolName for ProtocolId {
-    fn protocol_name(&self) -> &[u8] {
-        &self.protocol_id
+impl AsRef<str> for ProtocolId {
+    fn as_ref(&self) -> &str {
+        self.protocol.as_ref()
     }
 }
 

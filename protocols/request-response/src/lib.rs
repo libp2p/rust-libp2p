@@ -61,7 +61,7 @@
 pub mod codec;
 pub mod handler;
 
-pub use codec::{Codec, ProtocolName};
+pub use codec::Codec;
 
 #[allow(deprecated)]
 pub use codec::RequestResponseCodec;

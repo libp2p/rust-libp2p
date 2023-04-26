@@ -19,6 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::NegotiatedSubstream;
+use either::Either;
+use std::fmt;
+use std::sync::Arc;
 
 use futures::prelude::*;
 use libp2p_core::upgrade;
@@ -30,13 +33,88 @@ use libp2p_core::upgrade;
 /// [`UpgradeInfo`](upgrade::UpgradeInfo).
 pub trait UpgradeInfoSend: Send + 'static {
     /// Equivalent to [`UpgradeInfo::Info`](upgrade::UpgradeInfo::Info).
-    type Info: upgrade::ProtocolName + Clone + Send + 'static;
+    type Info: AsRef<str> + Clone + Send + 'static;
     /// Equivalent to [`UpgradeInfo::InfoIter`](upgrade::UpgradeInfo::InfoIter).
     type InfoIter: Iterator<Item = Self::Info> + Send + 'static;
 
     /// Equivalent to [`UpgradeInfo::protocol_info`](upgrade::UpgradeInfo::protocol_info).
     fn protocol_info(&self) -> Self::InfoIter;
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Protocol {
+    inner: Either<&'static str, Arc<str>>,
+}
+
+impl Protocol {
+    /// Construct a new protocol from a static string slice.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the protocol does not start with a forward slash: `/`.
+    pub const fn from_static(s: &'static str) -> Self {
+        match s.as_bytes() {
+            [b'/', ..] => {}
+            _ => panic!("Protocols should start with a /"),
+        }
+
+        Protocol {
+            inner: Either::Left(s),
+        }
+    }
+
+    /// Attempt to construct a protocol from an owned string.
+    ///
+    /// This function will fail if the protocol does not start with a forward slash: `/`.
+    /// Where possible, you should use [`Protocol::from_static`] instead to avoid allocations.
+    pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
+        if !protocol.starts_with('/') {
+            return Err(InvalidProtocol {});
+        }
+
+        Ok(Protocol {
+            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string/
+        })
+    }
+}
+
+impl AsRef<str> for Protocol {
+    fn as_ref(&self) -> &str {
+        either::for_both!(&self.inner, s => s)
+    }
+}
+
+impl fmt::Display for Protocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
+    }
+}
+
+impl PartialEq<&str> for Protocol {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_ref() == *other
+    }
+}
+
+impl PartialEq<Protocol> for &str {
+    fn eq(&self, other: &Protocol) -> bool {
+        *self == other.as_ref()
+    }
+}
+
+#[derive(Debug)]
+pub struct InvalidProtocol {}
+
+impl fmt::Display for InvalidProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Invalid protocol, does not start with a forward slash: /"
+        )
+    }
+}
+
+impl std::error::Error for InvalidProtocol {}
 
 impl<T> UpgradeInfoSend for T
 where
@@ -72,7 +150,7 @@ pub trait OutboundUpgradeSend: UpgradeInfoSend {
 impl<T, TInfo> OutboundUpgradeSend for T
 where
     T: upgrade::OutboundUpgrade<NegotiatedSubstream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: upgrade::ProtocolName + Clone + Send + 'static,
+    TInfo: AsRef<str> + Clone + Send + 'static,
     T::Output: Send + 'static,
     T::Error: Send + 'static,
     T::Future: Send + 'static,
@@ -106,7 +184,7 @@ pub trait InboundUpgradeSend: UpgradeInfoSend {
 impl<T, TInfo> InboundUpgradeSend for T
 where
     T: upgrade::InboundUpgrade<NegotiatedSubstream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: upgrade::ProtocolName + Clone + Send + 'static,
+    TInfo: AsRef<str> + Clone + Send + 'static,
     T::Output: Send + 'static,
     T::Error: Send + 'static,
     T::Future: Send + 'static,

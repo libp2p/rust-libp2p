@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
@@ -84,6 +84,7 @@ where
     inner: InboundUpgradeApplyState<C, U>,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -130,7 +131,7 @@ where
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_inbound(io, info.clone())),
-                        name: info.protocol_name().to_owned(),
+                        name: info.as_ref().to_owned(),
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future, name } => {
@@ -144,9 +145,7 @@ where
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!(
-                                "Failed to upgrade inbound stream to {name}"
-                            );
+                            debug!("Failed to upgrade inbound stream to {name}");
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -224,15 +223,11 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!(
-                                "Upgraded outbound stream to {name}",
-                            );
+                            log::trace!("Upgraded outbound stream to {name}",);
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!(
-                                "Failed to upgrade outbound stream to {name}",
-                            );
+                            debug!("Failed to upgrade outbound stream to {name}",);
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }

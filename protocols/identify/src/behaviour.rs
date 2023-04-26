@@ -488,12 +488,14 @@ pub enum Event {
     },
 }
 
-fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
+fn supported_protocols(params: &impl PollParameters) -> Vec<libp2p_swarm::Protocol> {
     // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
     // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
     params
         .supported_protocols()
-        .map(|p| String::from_utf8_lossy(&p).to_string())
+        .filter_map(|p| {
+            libp2p_swarm::Protocol::try_from_owned(String::from_utf8_lossy(&p).to_string()).ok()
+        })
         .collect()
 }
 

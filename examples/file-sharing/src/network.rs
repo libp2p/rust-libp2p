@@ -6,7 +6,7 @@ use futures::prelude::*;
 
 use libp2p::{
     core::{
-        upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName},
+        upgrade::{read_length_prefixed, write_length_prefixed},
         Multiaddr,
     },
     identity,
@@ -476,9 +476,10 @@ struct FileExchangeCodec();
 struct FileRequest(String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FileResponse(Vec<u8>);
-impl ProtocolName for FileExchangeProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/file-exchange/1".as_bytes()
+
+impl AsRef<str> for FileExchangeProtocol {
+    fn as_ref(&self) -> &str {
+        "/file-exchange/1"
     }
 }
 

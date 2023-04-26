@@ -231,10 +231,7 @@ where
                                 log::debug!("Listener: confirming protocol: {}", p);
                                 Message::Protocol(p.clone())
                             } else {
-                                log::debug!(
-                                    "Listener: rejecting protocol: {}",
-                                    p.as_ref()
-                                );
+                                log::debug!("Listener: rejecting protocol: {}", p.as_ref());
                                 Message::NotAvailable
                             };
 

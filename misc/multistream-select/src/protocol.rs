@@ -82,7 +82,8 @@ impl TryFrom<Bytes> for Protocol {
         if !value.as_ref().starts_with(b"/") {
             return Err(ProtocolError::InvalidProtocol);
         }
-        let protocol_as_string = String::from_utf8(value.to_vec()).map_err(|_| ProtocolError::InvalidProtocol)?;
+        let protocol_as_string =
+            String::from_utf8(value.to_vec()).map_err(|_| ProtocolError::InvalidProtocol)?;
 
         Ok(Protocol(protocol_as_string))
     }
@@ -100,7 +101,7 @@ impl TryFrom<&str> for Protocol {
     type Error = ProtocolError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if !value.starts_with("/") {
+        if !value.starts_with('/') {
             return Err(ProtocolError::InvalidProtocol);
         }
 

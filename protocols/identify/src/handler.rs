@@ -92,7 +92,7 @@ pub struct InEvent {
     pub listen_addrs: Vec<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<String>,
+    pub supported_protocols: Vec<libp2p_swarm::Protocol>,
 
     /// The protocol w.r.t. the information requested.
     pub protocol: Protocol,

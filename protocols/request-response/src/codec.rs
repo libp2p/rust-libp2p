@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use libp2p_core::ProtocolName;
-
 use async_trait::async_trait;
 use futures::prelude::*;
 use std::io;
@@ -34,7 +32,7 @@ use std::io;
 #[async_trait]
 pub trait RequestResponseCodec {
     /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol: ProtocolName + Send + Clone;
+    type Protocol: AsRef<str> + Send + Clone;
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.
@@ -89,7 +87,7 @@ pub trait RequestResponseCodec {
 #[async_trait]
 pub trait Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol: ProtocolName + Send + Clone;
+    type Protocol: AsRef<str> + Send + Clone;
     /// The type of inbound and outbound requests.
     type Request: Send;
     /// The type of inbound and outbound responses.

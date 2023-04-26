@@ -312,20 +312,20 @@ impl Default for YamuxConfig {
 }
 
 impl UpgradeInfo for YamuxConfig {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+        iter::once("/yamux/1.0.0")
     }
 }
 
 impl UpgradeInfo for YamuxLocalConfig {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+        iter::once("/yamux/1.0.0")
     }
 }
 

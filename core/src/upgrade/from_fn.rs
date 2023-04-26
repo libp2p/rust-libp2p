@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Endpoint,
 };
 
@@ -60,7 +60,7 @@ use std::iter;
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
     // Note: these bounds are there in order to help the compiler infer types
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
@@ -82,7 +82,7 @@ pub struct FromFnUpgrade<P, F> {
 #[allow(deprecated)]
 impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
 {
     type Info = P;
     type InfoIter = iter::Once<P>;
@@ -95,7 +95,7 @@ where
 #[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
@@ -111,7 +111,7 @@ where
 #[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
 where
-    P: ProtocolName + Clone,
+    P: AsRef<str> + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {

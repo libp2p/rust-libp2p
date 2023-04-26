@@ -30,7 +30,7 @@ use thiserror::Error;
 pub struct Upgrade {}
 
 impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
+    type Info = libp2p_swarm::Protocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {

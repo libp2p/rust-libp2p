@@ -31,7 +31,7 @@ use crate::handler::{
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
+use libp2p_core::upgrade::{NegotiationError, ProtocolError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_identity::PeerId;
 use rand::Rng;
@@ -586,7 +586,7 @@ where
     let mut set = HashSet::new();
     for infos in iter {
         for i in infos.protocol_info() {
-            let v = Vec::from(i.protocol_name());
+            let v = Vec::from(i.as_ref());
             if set.contains(&v) {
                 return Err(DuplicateProtonameError(v));
             } else {
