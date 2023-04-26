@@ -251,7 +251,7 @@ impl Keypair {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => proto::PrivateKey {
                 Type: proto::KeyType::Ed25519,
-                Data: data.encode().to_vec(),
+                Data: data.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(data) => proto::PrivateKey {

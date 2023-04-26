@@ -100,7 +100,7 @@ impl From<&PublicKey> for proto::PublicKey {
             #[cfg(feature = "ed25519")]
             PublicKey::Ed25519(key) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
-                Data: key.encode().to_vec(),
+                Data: key.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(key) => proto::PublicKey {
@@ -110,7 +110,7 @@ impl From<&PublicKey> for proto::PublicKey {
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => proto::PublicKey {
                 Type: proto::KeyType::Secp256k1,
-                Data: key.encode().to_vec(),
+                Data: key.to_bytes().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(key) => proto::PublicKey {
