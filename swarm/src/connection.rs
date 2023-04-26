@@ -150,7 +150,8 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    supported_protocols: HashSet<String>,
+    local_supported_protocols: HashSet<String>,
+    remote_supported_protocols: SupportedProtocols,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -196,7 +197,8 @@ where
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
-            supported_protocols: initial_protocols,
+            local_supported_protocols: initial_protocols,
+            remote_supported_protocols: SupportedProtocols::default(),
         }
     }
 
@@ -226,7 +228,7 @@ where
             shutdown,
             max_negotiating_inbound_streams,
             substream_upgrade_protocol_override,
-            supported_protocols,
+            local_supported_protocols: supported_protocols,
         } = self.get_mut();
 
         loop {
@@ -263,17 +265,31 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols)),
-                    ));
+                    let change = ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols));
+
+                    if self
+                        .remote_supported_protocols
+                        .on_protocols_change(change.clone())
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
+                        // TODO: Should we optimise this to be the _actual_ change?
+                    }
+
                     continue;
                 }
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                        ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols)),
-                    ));
+                    let change = ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols));
+
+                    if self
+                        .remote_supported_protocols
+                        .on_protocols_change(change.clone())
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
+                        // TODO: Should we optimise this to be the _actual_ change?
+                    }
+
                     continue;
                 }
             }
