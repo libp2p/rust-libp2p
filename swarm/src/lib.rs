@@ -130,7 +130,7 @@ pub use handler::{
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
-pub use upgrade::Protocol;
+pub use upgrade::{InvalidProtocol, Protocol};
 
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};

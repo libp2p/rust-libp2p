@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{ValidationMode, Version};
+use crate::config::ValidationMode;
 use crate::handler::HandlerEvent;
+use crate::rpc_proto::proto;
 use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
 use crate::ValidationError;
-use crate::{rpc_proto::proto, Config};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -42,91 +42,47 @@ use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
+pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: Protocol::from_static("/meshsub/1.1.0"),
+    kind: PeerKind::Gossipsubv1_1,
+};
+pub(crate) const GOSSIPSUB_1_0_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: Protocol::from_static("/meshsub/1.0.0"),
+    kind: PeerKind::Gossipsub,
+};
+pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: Protocol::from_static("/floodsub/1.0.0"),
+    kind: PeerKind::Floodsub,
+};
+
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Debug, Clone)]
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
-    protocol_ids: Vec<ProtocolId>,
+    pub(crate) protocol_ids: Vec<ProtocolId>,
     /// The maximum transmit size for a packet.
-    max_transmit_size: usize,
+    pub(crate) max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
-    validation_mode: ValidationMode,
+    pub(crate) validation_mode: ValidationMode,
 }
 
-impl ProtocolConfig {
-    /// Builds a new [`ProtocolConfig`].
-    ///
-    /// Sets the maximum gossip transmission size.
-    pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
-        let protocol_ids = match gossipsub_config.custom_id_version() {
-            Some(v) => match v {
-                Version::V1_0 => vec![ProtocolId::new(
-                    gossipsub_config.protocol_id(),
-                    PeerKind::Gossipsub,
-                    false,
-                )],
-                Version::V1_1 => vec![ProtocolId::new(
-                    gossipsub_config.protocol_id(),
-                    PeerKind::Gossipsubv1_1,
-                    false,
-                )],
-            },
-            None => {
-                let mut protocol_ids = vec![
-                    ProtocolId::new(
-                        gossipsub_config.protocol_id(),
-                        PeerKind::Gossipsubv1_1,
-                        true,
-                    ),
-                    ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
-                ];
-
-                // add floodsub support if enabled.
-                if gossipsub_config.support_floodsub() {
-                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
-                }
-
-                protocol_ids
-            }
-        };
-
-        ProtocolConfig {
-            protocol_ids,
-            max_transmit_size: gossipsub_config.max_transmit_size(),
-            validation_mode: gossipsub_config.validation_mode().clone(),
+impl Default for ProtocolConfig {
+    fn default() -> Self {
+        Self {
+            max_transmit_size: 65536,
+            validation_mode: ValidationMode::Strict,
+            protocol_ids: vec![GOSSIPSUB_1_1_0_PROTOCOL, GOSSIPSUB_1_0_0_PROTOCOL],
         }
     }
 }
 
 /// The protocol ID
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProtocolId {
     /// The RPC message type/name.
     pub protocol: Protocol,
     /// The type of protocol we support
     pub kind: PeerKind,
-}
-
-/// An RPC protocol ID.
-impl ProtocolId {
-    pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
-        let protocol = match kind {
-            PeerKind::Gossipsubv1_1 => match prefix {
-                true => Protocol::try_from_owned(format!("/{}/1.1.0", id)).expect("starts with /"),
-                false => Protocol::try_from_owned(id.to_string()).expect("TODO fix this mess"),
-            },
-            PeerKind::Gossipsub => match prefix {
-                true => Protocol::try_from_owned(format!("/{}/1.0.0", id)).expect("starts with /"),
-                false => Protocol::try_from_owned(id.to_string()).expect("TODO fix this mess"),
-            },
-            PeerKind::Floodsub => Protocol::try_from_owned(format!("/{}/{}", "floodsub", "1.0.0"))
-                .expect("starts with /"),
-            // NOTE: This is used for informing the behaviour of unsupported peers. We do not
-            // advertise this variant.
-            PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),
-        };
-        ProtocolId { protocol, kind }
-    }
 }
 
 impl AsRef<str> for ProtocolId {

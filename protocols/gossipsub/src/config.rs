@@ -22,9 +22,12 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::protocol::FLOODSUB_PROTOCOL;
+use crate::protocol_priv::{ProtocolConfig, ProtocolId};
 use libp2p_identity::PeerId;
+use libp2p_swarm::{InvalidProtocol, Protocol};
 
-use crate::types::{FastMessageId, Message, MessageId, RawMessage};
+use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -59,8 +62,7 @@ pub enum Version {
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
 pub struct Config {
-    protocol_id: Cow<'static, str>,
-    custom_id_version: Option<Version>,
+    protocol: ProtocolConfig,
     history_length: usize,
     history_gossip: usize,
     mesh_n: usize,
@@ -73,11 +75,9 @@ pub struct Config {
     heartbeat_interval: Duration,
     fanout_ttl: Duration,
     check_explicit_peers_ticks: u64,
-    max_transmit_size: usize,
     idle_timeout: Duration,
     duplicate_cache_time: Duration,
     validate_messages: bool,
-    validation_mode: ValidationMode,
     message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
     fast_message_id_fn: Option<Arc<dyn Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
@@ -96,27 +96,12 @@ pub struct Config {
     max_ihave_length: usize,
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
-    support_floodsub: bool,
     published_message_ids_cache_time: Duration,
 }
 
 impl Config {
-    // All the getters
-
-    /// The protocol id to negotiate this protocol. By default, the resulting protocol id has the form
-    /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some Version as custom_id_version.
-    /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
-    ///
-    /// Calling [`ConfigBuilder::protocol_id_prefix`] will set a new prefix and retain the prefix logic.
-    /// Calling [`ConfigBuilder::protocol_id`] will set a custom `protocol_id` and disable the prefix logic.
-    ///
-    /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
-    pub fn protocol_id(&self) -> &Cow<'static, str> {
-        &self.protocol_id
-    }
-
-    pub fn custom_id_version(&self) -> &Option<Version> {
-        &self.custom_id_version
+    pub(crate) fn protocol_config(&self) -> ProtocolConfig {
+        self.protocol.clone()
     }
 
     // Overlay network parameters.
@@ -196,7 +181,7 @@ impl Config {
     /// must be large enough to transmit the desired peer information on pruning. It must be at
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
-        self.max_transmit_size
+        self.protocol.max_transmit_size
     }
 
     /// The time a connection is maintained to a peer without being in the mesh and without
@@ -226,7 +211,7 @@ impl Config {
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
     pub fn validation_mode(&self) -> &ValidationMode {
-        &self.validation_mode
+        &self.protocol.validation_mode
     }
 
     /// A user-defined function allowing the user to specify the message id of a gossipsub message.
@@ -379,11 +364,6 @@ impl Config {
         self.iwant_followup_time
     }
 
-    /// Enable support for flooodsub peers. Default false.
-    pub fn support_floodsub(&self) -> bool {
-        self.support_floodsub
-    }
-
     /// Published message ids time cache duration. The default is 10 seconds.
     pub fn published_message_ids_cache_time(&self) -> Duration {
         self.published_message_ids_cache_time
@@ -408,8 +388,7 @@ impl Default for ConfigBuilder {
     fn default() -> Self {
         ConfigBuilder {
             config: Config {
-                protocol_id: Cow::Borrowed("meshsub"),
-                custom_id_version: None,
+                protocol: ProtocolConfig::default(),
                 history_length: 5,
                 history_gossip: 3,
                 mesh_n: 6,
@@ -422,11 +401,9 @@ impl Default for ConfigBuilder {
                 heartbeat_interval: Duration::from_secs(1),
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
-                max_transmit_size: 65536,
                 idle_timeout: Duration::from_secs(120),
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
-                validation_mode: ValidationMode::Strict,
                 message_id_fn: Arc::new(|message| {
                     // default message id is: source + sequence number
                     // NOTE: If either the peer_id or source is not provided, we set to 0;
@@ -458,7 +435,6 @@ impl Default for ConfigBuilder {
                 max_ihave_length: 5000,
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
-                support_floodsub: false,
                 published_message_ids_cache_time: Duration::from_secs(10),
             },
         }
@@ -472,14 +448,25 @@ impl From<Config> for ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.1.0` and `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
         protocol_id_prefix: impl Into<Cow<'static, str>>,
-    ) -> &mut Self {
-        self.config.custom_id_version = None;
-        self.config.protocol_id = protocol_id_prefix.into();
-        self
+    ) -> Result<&mut Self, InvalidProtocol> {
+        let cow = protocol_id_prefix.into();
+
+        self.config.protocol.protocol_ids = vec![
+            ProtocolId {
+                protocol: Protocol::try_from_owned(format!("{}/1.1.0", cow))?,
+                kind: PeerKind::Gossipsubv1_1,
+            },
+            ProtocolId {
+                protocol: Protocol::try_from_owned(format!("{}/1.0.0", cow))?,
+                kind: PeerKind::Gossipsub,
+            },
+        ];
+
+        Ok(self)
     }
 
     /// The full protocol id to negotiate this protocol (does not append `/1.0.0` or `/1.1.0`).
@@ -487,10 +474,18 @@ impl ConfigBuilder {
         &mut self,
         protocol_id: impl Into<Cow<'static, str>>,
         custom_id_version: Version,
-    ) -> &mut Self {
-        self.config.custom_id_version = Some(custom_id_version);
-        self.config.protocol_id = protocol_id.into();
-        self
+    ) -> Result<&mut Self, InvalidProtocol> {
+        let cow = protocol_id.into();
+
+        self.config.protocol.protocol_ids = vec![ProtocolId {
+            protocol: Protocol::try_from_owned(cow.to_string())?,
+            kind: match custom_id_version {
+                Version::V1_1 => PeerKind::Gossipsubv1_1,
+                Version::V1_0 => PeerKind::Gossipsub,
+            },
+        }];
+
+        Ok(self)
     }
 
     /// Number of heartbeats to keep in the `memcache` (default is 5).
@@ -576,7 +571,7 @@ impl ConfigBuilder {
 
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
-        self.config.max_transmit_size = max_transmit_size;
+        self.config.protocol.max_transmit_size = max_transmit_size;
         self
     }
 
@@ -609,7 +604,7 @@ impl ConfigBuilder {
     /// Determines the level of validation used when receiving messages. See [`ValidationMode`]
     /// for the available types. The default is ValidationMode::Strict.
     pub fn validation_mode(&mut self, validation_mode: ValidationMode) -> &mut Self {
-        self.config.validation_mode = validation_mode;
+        self.config.protocol.validation_mode = validation_mode;
         self
     }
 
@@ -787,7 +782,16 @@ impl ConfigBuilder {
 
     /// Enable support for flooodsub peers.
     pub fn support_floodsub(&mut self) -> &mut Self {
-        self.config.support_floodsub = true;
+        if self
+            .config
+            .protocol
+            .protocol_ids
+            .contains(&FLOODSUB_PROTOCOL)
+        {
+            return self;
+        }
+
+        self.config.protocol.protocol_ids.push(FLOODSUB_PROTOCOL);
         self
     }
 
@@ -804,7 +808,7 @@ impl ConfigBuilder {
     pub fn build(&self) -> Result<Config, &'static str> {
         // check all constraints on config
 
-        if self.config.max_transmit_size < 100 {
+        if self.config.protocol.max_transmit_size < 100 {
             return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
         }
 
@@ -840,8 +844,7 @@ impl ConfigBuilder {
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id", &self.protocol_id);
-        let _ = builder.field("custom_id_version", &self.custom_id_version);
+        let _ = builder.field("protocol", &self.protocol);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
@@ -853,11 +856,9 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
-        let _ = builder.field("max_transmit_size", &self.max_transmit_size);
         let _ = builder.field("idle_timeout", &self.idle_timeout);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
-        let _ = builder.field("validation_mode", &self.validation_mode);
         let _ = builder.field("allow_self_origin", &self.allow_self_origin);
         let _ = builder.field("do_px", &self.do_px);
         let _ = builder.field("prune_peers", &self.prune_peers);
@@ -872,7 +873,6 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("max_ihave_length", &self.max_ihave_length);
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
-        let _ = builder.field("support_floodsub", &self.support_floodsub);
         let _ = builder.field(
             "published_message_ids_cache_time",
             &self.published_message_ids_cache_time,
@@ -884,7 +884,6 @@ impl std::fmt::Debug for Config {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::protocol_priv::ProtocolConfig;
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
@@ -896,7 +895,8 @@ mod test {
     #[test]
     fn create_thing() {
         let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+            .protocol_id_prefix("/purple")
+            .unwrap()
             .build()
             .unwrap();
 
@@ -929,7 +929,8 @@ mod test {
     #[test]
     fn create_config_with_message_id_as_plain_function() {
         let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+            .protocol_id_prefix("/purple")
+            .unwrap()
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
@@ -949,7 +950,8 @@ mod test {
         };
 
         let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+            .protocol_id_prefix("/purple")
+            .unwrap()
             .message_id_fn(closure)
             .build()
             .unwrap();
@@ -970,7 +972,8 @@ mod test {
         };
 
         let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+            .protocol_id_prefix("/purple")
+            .unwrap()
             .message_id_fn(closure)
             .build()
             .unwrap();
@@ -982,17 +985,14 @@ mod test {
     #[test]
     fn create_config_with_protocol_id_prefix() {
         let builder: Config = ConfigBuilder::default()
-            .protocol_id_prefix("purple")
+            .protocol_id_prefix("/purple")
+            .unwrap()
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        assert_eq!(builder.protocol_id(), "purple");
-        assert_eq!(builder.custom_id_version(), &None);
-
-        let protocol_config = ProtocolConfig::new(&builder);
-        let protocol_ids = protocol_config.protocol_info();
+        let protocol_ids = builder.protocol_config().protocol_info();
 
         assert_eq!(protocol_ids.len(), 2);
 
@@ -1013,16 +1013,13 @@ mod test {
     fn create_config_with_custom_protocol_id() {
         let builder: Config = ConfigBuilder::default()
             .protocol_id("/purple", Version::V1_0)
+            .unwrap()
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
-        assert_eq!(builder.protocol_id(), "/purple");
-        assert_eq!(builder.custom_id_version(), &Some(Version::V1_0));
-
-        let protocol_config = ProtocolConfig::new(&builder);
-        let protocol_ids = protocol_config.protocol_info();
+        let protocol_ids = builder.protocol_config().protocol_info();
 
         assert_eq!(protocol_ids.len(), 1);
 
