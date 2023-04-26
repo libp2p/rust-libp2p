@@ -28,7 +28,6 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
@@ -40,13 +39,6 @@ const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
 
 pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
-
-/// The type of the Substream protocol.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Protocol {
-    Identify(ConnectionId),
-    Push,
-}
 
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]

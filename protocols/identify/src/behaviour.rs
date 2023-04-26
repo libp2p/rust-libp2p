@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{self, Handler, InEvent};
-use crate::protocol::{Info, Protocol, UpgradeError};
+use crate::protocol::{Info, UpgradeError};
 use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -50,10 +50,6 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Pending requests to be fulfilled, either `Handler` requests for `Behaviour` info
-    /// to address identification requests, or push requests to peers
-    /// with current information about the local peer.
-    requests: Vec<Request>,
     /// Pending events to be emitted when polled.
     events: VecDeque<ToSwarm<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
@@ -61,15 +57,6 @@ pub struct Behaviour {
 
     listen_addresses: ListenAddresses,
     external_addresses: ExternalAddresses,
-}
-
-/// A `Behaviour` request to be fulfilled, either `Handler` requests for `Behaviour` info
-/// to address identification requests, or push requests to peers
-/// with current information about the local peer.
-#[derive(Debug, PartialEq, Eq)]
-struct Request {
-    peer_id: PeerId,
-    protocol: Protocol,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -179,7 +166,6 @@ impl Behaviour {
         Self {
             config,
             connected: HashMap::new(),
-            requests: Vec::new(),
             events: VecDeque::new(),
             discovered_peers,
             listen_addresses: Default::default(),
@@ -193,17 +179,14 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            let request = Request {
+            self.events.push_back(ToSwarm::Dial {
+                opts: DialOpts::peer_id(p).build(),
+            });
+            self.events.push_back(ToSwarm::NotifyHandler {
                 peer_id: p,
-                protocol: Protocol::Push,
-            };
-            if !self.requests.contains(&request) {
-                self.requests.push(request);
-
-                self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
-            }
+                handler: NotifyHandler::Any,
+                event: InEvent::Push,
+            });
         }
     }
 
@@ -233,6 +216,14 @@ impl Behaviour {
             }
         }
     }
+
+    fn all_addresses(&self) -> HashSet<Multiaddr> {
+        self.listen_addresses
+            .iter()
+            .chain(self.external_addresses.iter())
+            .cloned()
+            .collect()
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -254,6 +245,7 @@ impl NetworkBehaviour for Behaviour {
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             remote_addr.clone(),
+            self.all_addresses(),
         ))
     }
 
@@ -272,13 +264,14 @@ impl NetworkBehaviour for Behaviour {
             self.config.protocol_version.clone(),
             self.config.agent_version.clone(),
             addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+            self.all_addresses(),
         ))
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: ConnectionId,
+        _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match event {
@@ -307,12 +300,6 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
             }
-            handler::Event::Identify => {
-                self.requests.push(Request {
-                    peer_id,
-                    protocol: Protocol::Identify(connection_id),
-                });
-            }
             handler::Event::IdentificationError(error) => {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
@@ -329,42 +316,7 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(event);
         }
 
-        // Check for pending requests.
-        match self.requests.pop() {
-            Some(Request {
-                peer_id,
-                protocol: Protocol::Push,
-            }) => Poll::Ready(ToSwarm::NotifyHandler {
-                peer_id,
-                handler: NotifyHandler::Any,
-                event: InEvent {
-                    listen_addrs: self
-                        .listen_addresses
-                        .iter()
-                        .chain(self.external_addresses.iter())
-                        .cloned()
-                        .collect(),
-                    protocol: Protocol::Push,
-                },
-            }),
-            Some(Request {
-                peer_id,
-                protocol: Protocol::Identify(connection_id),
-            }) => Poll::Ready(ToSwarm::NotifyHandler {
-                peer_id,
-                handler: NotifyHandler::One(connection_id),
-                event: InEvent {
-                    listen_addrs: self
-                        .listen_addresses
-                        .iter()
-                        .chain(self.external_addresses.iter())
-                        .cloned()
-                        .collect(),
-                    protocol: Protocol::Identify(connection_id),
-                },
-            }),
-            None => Poll::Pending,
-        }
+        Poll::Pending
     }
 
     fn handle_pending_outbound_connection(
@@ -383,8 +335,35 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
+        let listen_addr_changed = self.listen_addresses.on_swarm_event(&event);
+        let external_addr_changed = self.external_addresses.on_swarm_event(&event);
+
+        if listen_addr_changed || external_addr_changed {
+            // notify all connected handlers about our changed addresses
+            let change_events = self
+                .connected
+                .iter()
+                .flat_map(|(peer, map)| map.keys().map(|id| (*peer, id)))
+                .map(|(peer_id, connection_id)| ToSwarm::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(*connection_id),
+                    event: InEvent::AddressesChanged(self.all_addresses()),
+                })
+                .collect::<Vec<_>>();
+
+            self.events.extend(change_events)
+        }
+
+        if listen_addr_changed && self.config.push_listen_addr_updates {
+            // trigger an identify push for all connected peers
+            let push_events = self.connected.keys().map(|peer| ToSwarm::NotifyHandler {
+                peer_id: *peer,
+                handler: NotifyHandler::Any,
+                event: InEvent::Push,
+            });
+
+            self.events.extend(push_events);
+        }
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
@@ -398,30 +377,11 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 if remaining_established == 0 {
                     self.connected.remove(&peer_id);
-                    self.requests.retain(|request| {
-                        request
-                            != &Request {
-                                peer_id,
-                                protocol: Protocol::Push,
-                            }
-                    });
                 } else if let Some(addrs) = self.connected.get_mut(&peer_id) {
                     addrs.remove(&connection_id);
                 }
             }
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
-                if let Some(peer_id) = peer_id {
-                    if !self.connected.contains_key(&peer_id) {
-                        self.requests.retain(|request| {
-                            request
-                                != &Request {
-                                    peer_id,
-                                    protocol: Protocol::Push,
-                                }
-                        });
-                    }
-                }
-
                 if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
                     if let DialError::Transport(errors) = error {
                         for (addr, _error) in errors {
@@ -430,20 +390,9 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
             }
-            FromSwarm::NewListenAddr(_) | FromSwarm::ExpiredListenAddr(_) => {
-                if self.config.push_listen_addr_updates {
-                    for p in self.connected.keys() {
-                        let request = Request {
-                            peer_id: *p,
-                            protocol: Protocol::Push,
-                        };
-                        if !self.requests.contains(&request) {
-                            self.requests.push(request);
-                        }
-                    }
-                }
-            }
-            FromSwarm::AddressChange(_)
+            FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerError(_)
