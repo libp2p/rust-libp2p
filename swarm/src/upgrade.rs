@@ -74,7 +74,7 @@ impl Protocol {
         }
 
         Ok(Protocol {
-            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string/
+            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
         })
     }
 }
@@ -122,7 +122,7 @@ impl fmt::Display for InvalidProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Invalid protocol, does not start with a forward slash: /"
+            "invalid protocol: string does not start with a forward slash"
         )
     }
 }
