@@ -49,7 +49,7 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::try_decode_pkcs8`.")]
+    #[deprecated(note = "Renamed to `Keypair::try_decode_pkcs8`.")]
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         Self::try_decode_pkcs8(der)
     }
@@ -140,7 +140,6 @@ impl PublicKey {
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
     /// structure. See also `encode_x509`.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_x509` instead."
     )]
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {

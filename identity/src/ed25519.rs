@@ -41,7 +41,7 @@ impl Keypair {
     /// Encode the keypair into a byte array by concatenating the bytes
     /// of the secret scalar and the compressed public point,
     /// an informal standard for encoding Ed25519 keypairs.
-    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::to_bytes`")]
+    #[deprecated(note = "Renamed to `Keypair::to_bytes`")]
     pub fn encode(&self) -> [u8; 64] {
         self.to_bytes()
     }
@@ -58,7 +58,6 @@ impl Keypair {
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_from_bytes` instead."
     )]
     pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
@@ -184,10 +183,7 @@ impl PublicKey {
 
     /// Encode the public key into a byte array in compressed form, i.e.
     /// where one coordinate is represented by a single bit.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Renamed to `PublicKey::to_bytes` to reflect actual behaviour."
-    )]
+    #[deprecated(note = "Renamed to `PublicKey::to_bytes` to reflect actual behaviour.")]
     pub fn encode(&self) -> [u8; 32] {
         self.to_bytes()
     }
@@ -200,7 +196,6 @@ impl PublicKey {
 
     /// Decode a public key from a byte array as produced by `to_bytes`.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
@@ -255,7 +250,6 @@ impl SecretKey {
     /// If the bytes do not constitute a valid Ed25519 secret key, an error is
     /// returned.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
     #[allow(unused_mut)]

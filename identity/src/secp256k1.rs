@@ -105,7 +105,6 @@ impl SecretKey {
     ///
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
     )]
     #[allow(unused_mut)]
@@ -131,7 +130,6 @@ impl SecretKey {
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `SecretKey::try_decode_der` instead."
     )]
     pub fn from_der(der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
@@ -236,7 +234,7 @@ impl PublicKey {
 
     /// Encode the public key in compressed form, i.e. with one coordinate
     /// represented by a single bit.
-    #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::to_bytes`.")]
+    #[deprecated(note = "Renamed to `PublicKey::to_bytes`.")]
     pub fn encode(&self) -> [u8; 33] {
         self.to_bytes()
     }
@@ -248,10 +246,7 @@ impl PublicKey {
     }
 
     /// Encode the public key in uncompressed form.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Renamed to `PublicKey::to_bytes_uncompressed`."
-    )]
+    #[deprecated(note = "Renamed to `PublicKey::to_bytes_uncompressed`.")]
     pub fn encode_uncompressed(&self) -> [u8; 65] {
         self.to_bytes_uncompressed()
     }
@@ -264,7 +259,6 @@ impl PublicKey {
     /// Decode a public key from a byte slice in the the format produced
     /// by `encode`.
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
     )]
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {

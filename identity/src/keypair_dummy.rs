@@ -32,7 +32,7 @@ impl Keypair {
         unreachable!("Can never construct empty enum")
     }
 
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
+    #[deprecated(note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         unreachable!("Can never encode empty enum")
     }
@@ -42,7 +42,6 @@ impl Keypair {
     }
 
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
@@ -65,7 +64,7 @@ impl PublicKey {
         unreachable!("Can never construct empty enum")
     }
 
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
+    #[deprecated(note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         unreachable!("Can never encode empty enum")
     }
@@ -75,7 +74,6 @@ impl PublicKey {
     }
 
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {

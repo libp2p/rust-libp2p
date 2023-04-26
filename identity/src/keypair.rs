@@ -165,7 +165,6 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
-        since = "0.2.0",
         note = "Deprecated, use `rsa::Keypair::try_decode_pkcs8` and promote it into `Keypair` instead."
     )]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
@@ -179,7 +178,6 @@ impl Keypair {
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
     #[deprecated(
-        since = "0.2.0",
         note = "Deprecated, use `secp256k1::Keypair::try_from_bytes` and promote it into `Keypair` instead."
     )]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
@@ -194,7 +192,6 @@ impl Keypair {
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     #[cfg(feature = "ed25519")]
     #[deprecated(
-        since = "0.2.0",
         note = "Deprecated, use `ed25519::Keypair::try_decode` and promote it into `Keypair` instead."
     )]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
@@ -238,7 +235,7 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[deprecated(since = "0.2.0", note = "Renamed to `encode_protobuf`")]
+    #[deprecated(note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         Ok(self.encode_protobuf())
     }
@@ -282,7 +279,6 @@ impl Keypair {
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     #[deprecated(
-        since = "0.2.0",
         note = "This method name does not follow Rust naming conventions, use `Keypair::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
