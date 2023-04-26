@@ -256,7 +256,7 @@ impl Keypair {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(data) => proto::PrivateKey {
                 Type: proto::KeyType::RSA,
-                Data: data.to_raw_bytes(),
+                Data: data.encode_pkcs8_der(),
             },
             #[cfg(feature = "secp256k1")]
             Self::Secp256k1(data) => proto::PrivateKey {

@@ -33,7 +33,7 @@ use zeroize::Zeroize;
 #[derive(Clone)]
 pub struct Keypair {
     inner: Arc<RsaKeyPair>,
-    raw_key: Vec<u8>,
+    key: Vec<u8>,
 }
 
 impl std::fmt::Debug for Keypair {
@@ -63,7 +63,7 @@ impl Keypair {
             .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
         let kp = Keypair {
             inner: Arc::new(kp),
-            raw_key: bytes.to_vec(),
+            key: bytes.to_vec(),
         };
         bytes.zeroize();
         Ok(kp)
@@ -88,14 +88,14 @@ impl Keypair {
     }
 
     /// Get the byte array used to parse the keypair from.
-    pub(crate) fn to_raw_bytes(&self) -> Vec<u8> {
-        self.raw_key.clone()
+    pub(crate) fn encode_pkcs8_der(&self) -> Vec<u8> {
+        self.key.clone()
     }
 }
 
 impl Drop for Keypair {
     fn drop(&mut self) {
-        self.raw_key.zeroize()
+        self.key.zeroize()
     }
 }
 
