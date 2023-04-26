@@ -47,11 +47,10 @@ const MAX_PACKET_SIZE: usize = 9000 - 68;
 const MAX_RECORDS_PER_PACKET: usize = (MAX_PACKET_SIZE - 100) / MAX_TXT_RECORD_SIZE;
 
 /// An encoded MDNS packet.
-pub type MdnsPacket = Vec<u8>;
-
+pub(crate) type MdnsPacket = Vec<u8>;
 /// Decodes a `<character-string>` (as defined by RFC1035) into a `Vec` of ASCII characters.
 // TODO: better error type?
-pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
+pub(crate) fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
     if from.is_empty() {
         return Ok(Cow::Owned(Vec::new()));
     }
@@ -70,7 +69,7 @@ pub fn decode_character_string(mut from: &[u8]) -> Result<Cow<'_, [u8]>, ()> {
 }
 
 /// Builds the binary representation of a DNS query to send on the network.
-pub fn build_query() -> MdnsPacket {
+pub(crate) fn build_query() -> MdnsPacket {
     let mut out = Vec::with_capacity(33);
 
     // Program-generated transaction ID; unused by our implementation.
@@ -104,7 +103,7 @@ pub fn build_query() -> MdnsPacket {
 /// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
-pub fn build_query_response<'a>(
+pub(crate) fn build_query_response<'a>(
     id: u16,
     peer_id: PeerId,
     addresses: impl ExactSizeIterator<Item = &'a Multiaddr>,
@@ -166,7 +165,7 @@ pub fn build_query_response<'a>(
 }
 
 /// Builds the response to a service discovery DNS query.
-pub fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
+pub(crate) fn build_service_discovery_response(id: u16, ttl: Duration) -> MdnsPacket {
     // Convert the TTL into seconds.
     let ttl = duration_to_secs(ttl);
 
