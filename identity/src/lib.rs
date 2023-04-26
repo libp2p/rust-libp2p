@@ -33,9 +33,18 @@
 //! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
 //! All key types have functions to enable conversion to/from their binary representations.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::keys_proto::*;
+    pub(crate) use self::keys_proto::*;
 }
 
 #[cfg(feature = "ecdsa")]
@@ -115,7 +124,27 @@ impl From<&PublicKey> for proto::PublicKey {
     }
 }
 
-pub use error::{DecodingError, SigningError};
+pub use error::{DecodingError, OtherVariantError, SigningError};
 pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
+
+#[derive(Debug, PartialEq, Eq)]
+/// The type of key a `KeyPair` is holding.
+pub enum KeyType {
+    Ed25519,
+    RSA,
+    Secp256k1,
+    Ecdsa,
+}
+
+impl std::fmt::Display for KeyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KeyType::Ed25519 => f.write_str("Ed25519"),
+            KeyType::RSA => f.write_str("RSA"),
+            KeyType::Secp256k1 => f.write_str("Secp256k1"),
+            KeyType::Ecdsa => f.write_str("Ecdsa"),
+        }
+    }
+}

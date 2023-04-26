@@ -25,7 +25,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     connections_incoming: Family<AddressLabels, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
@@ -45,7 +45,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("swarm");
 
         let connections_incoming = Family::default();

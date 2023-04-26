@@ -25,7 +25,7 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{mem, pin::Pin, task::Context, task::Poll};
 
-pub use multistream_select::Version;
+pub(crate) use multistream_select::Version;
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.

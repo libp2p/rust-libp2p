@@ -16,7 +16,13 @@ env:
 jobs:
   test:
     name: Test ${{ matrix.crate }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(
+      github.repository == 'libp2p/rust-libp2p' && (
+        (contains(fromJSON('["libp2p-webrtc", "libp2p"]'), matrix.crate) && '["self-hosted", "linux", "x64", "2xlarge"]') ||
+        (contains(fromJSON('["libp2p-quic", "libp2p-perf"]'), matrix.crate) && '["self-hosted", "linux", "x64", "xlarge"]') ||
+        '["self-hosted", "linux", "x64", "large"]'
+      ) || '"ubuntu-latest"') }}
+    timeout-minutes: 10
     needs: gather_published_crates
     strategy:
       fail-fast: false
@@ -24,7 +30,9 @@ jobs:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
       - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
+        run: sudo apt-get install -y protobuf-compiler
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/checkout@v3
 
@@ -33,6 +41,7 @@ jobs:
         run: |
           RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
         uses: dtolnay/rust-toolchain@master
@@ -61,6 +70,8 @@ jobs:
 
       - name: Check if we compile without any features activated
         run: cargo build --package ${{ matrix.crate }} --no-default-features
+
+      - run: cargo clean
 
       - name: Check if crate has been released
         id: check-released
@@ -156,7 +167,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.68.0, # current stable
+          1.69.0, # current stable
           beta
         ]
     steps:
@@ -192,6 +203,28 @@ jobs:
 
       - name: Run ipfs-kad example
         run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
+
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+        with:
+          shared-key: stable-cache
+          save-if: false
+
+      - name: Compile all examples
+        run: |
+          set -e;
+
+          for toml in examples/**/Cargo.toml; do
+            cargo check --manifest-path "$toml";
+          done
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -237,7 +270,7 @@ jobs:
 
       - id: cargo-metadata
         run: |
-          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
+          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(select(.publish == null) | .name)')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
 
   check-proto-files:
@@ -251,7 +284,7 @@ jobs:
       - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
-        uses: tj-actions/glob@v16
+        uses: tj-actions/glob@v17
         id: glob
         with:
           files: |
