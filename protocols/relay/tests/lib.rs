@@ -210,12 +210,16 @@ fn connect() {
     src.dial(dst_addr).unwrap();
 
     pool.run_until(futures::future::join(
-        connection_established_to(src, relay_peer_id, dst_peer_id),
-        connection_established_to(dst, relay_peer_id, src_peer_id),
+        connection_established_to(&mut src, relay_peer_id, dst_peer_id),
+        connection_established_to(&mut dst, relay_peer_id, src_peer_id),
     ));
 }
 
-async fn connection_established_to(mut swarm: Swarm<Client>, relay_peer_id: PeerId, other: PeerId) {
+async fn connection_established_to(
+    swarm: &mut Swarm<Client>,
+    relay_peer_id: PeerId,
+    other: PeerId,
+) {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}

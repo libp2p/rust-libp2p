@@ -1,4 +1,4 @@
-## 0.15.2 - unreleased
+## 0.15.2
 
 - Export `rate-limiter` module. See [PR 3742].
 

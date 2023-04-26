@@ -1,3 +1,15 @@
+## 0.39.2 - unreleased
+
+- Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.
+  If you depend on it, we suggest you vendor it.
+  See [PR 3747].
+
+- Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
+  See [PR 3807].
+
+[PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
+[PR 3807]: https://github.com/libp2p/rust-libp2p/pull/3807
+
 ## 0.39.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
