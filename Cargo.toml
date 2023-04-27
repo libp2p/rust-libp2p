@@ -53,5 +53,16 @@ members = [
     "transports/wasm-ext",
     "transports/webrtc",
     "transports/websocket",
+    "transports/websys-webtransport",
 ]
 resolver = "2"
+
+[patch.crates-io]
+multiaddr = { git = "https://github.com/multiformats/rust-multiaddr"} 
+
+js-sys = { git = "https://github.com/rustwasm/wasm-bindgen" }
+web-sys = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen-shared = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen-macro = { git = "https://github.com/rustwasm/wasm-bindgen" }
+wasm-bindgen-macro-support = { git = "https://github.com/rustwasm/wasm-bindgen" }

@@ -1,0 +1,4 @@
+# WebTransport is a working draft! Remove when web-sys moves the interface out of unstable.
+[build]
+rustflags = ["--cfg=web_sys_unstable_apis"]
+rustdocflags = ["--cfg=web_sys_unstable_apis"]
