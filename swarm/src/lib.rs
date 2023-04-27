@@ -56,6 +56,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod connection;
+mod executor;
+mod protocol;
 mod registry;
 #[cfg(test)]
 mod test;
@@ -64,7 +66,6 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
-mod executor;
 pub mod handler;
 pub mod keep_alive;
 
@@ -129,8 +130,8 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
+pub use protocol::{InvalidProtocol, Protocol};
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
-pub use upgrade::{InvalidProtocol, Protocol};
 
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
