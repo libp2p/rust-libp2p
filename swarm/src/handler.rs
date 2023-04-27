@@ -215,7 +215,7 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
-    /// The local [`ConnectionHandler`] now supports a different set of protocols.
+    /// The local [`ConnectionHandler`] added or removed support for one or more protocols.
     LocalProtocolsChange(ProtocolsChange<'a>),
     /// The remote [`ConnectionHandler`] now supports a different set of protocols.
     RemoteProtocolsChange(ProtocolsChange<'a>),
