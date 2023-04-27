@@ -16,7 +16,6 @@ use libp2p::{
     multiaddr::Protocol,
     noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm,
     swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
