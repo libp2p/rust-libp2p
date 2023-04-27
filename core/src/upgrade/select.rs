@@ -56,12 +56,12 @@ where
             .0
             .protocol_info()
             .into_iter()
-            .map(Either::Left as fn(A::Info) -> Self::Info);
+            .map(Either::Left as fn(A::Info) -> _);
         let b = self
             .1
             .protocol_info()
             .into_iter()
-            .map(Either::Right as fn(B::Info) -> Self::Info);
+            .map(Either::Right as fn(B::Info) -> _);
 
         a.chain(b)
     }
