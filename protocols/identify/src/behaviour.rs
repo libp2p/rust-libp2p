@@ -179,9 +179,11 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            self.events.push_back(ToSwarm::Dial {
-                opts: DialOpts::peer_id(p).build(),
-            });
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             self.events.push_back(ToSwarm::NotifyHandler {
                 peer_id: p,
                 handler: NotifyHandler::Any,
