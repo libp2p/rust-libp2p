@@ -3,9 +3,9 @@
 - Do not implicitly dial a peer upon `identify::Behaviour::push`.
   Previously, we would dial each peer in the provided list.
   Now, we skip peers that we are not connected to.
-  See [PR XXXX].
+  See [PR 3843].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3843]: https://github.com/libp2p/rust-libp2p/pull/3843
 
 ## 0.42.1
 
