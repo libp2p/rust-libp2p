@@ -193,16 +193,17 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             let request = Request {
                 peer_id: p,
                 protocol: Protocol::Push,
             };
             if !self.requests.contains(&request) {
                 self.requests.push(request);
-
-                self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
             }
         }
     }
