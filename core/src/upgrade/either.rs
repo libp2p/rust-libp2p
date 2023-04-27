@@ -24,6 +24,7 @@ use crate::{
 };
 use either::Either;
 use futures::future;
+use std::iter::Map;
 
 impl<A, B> UpgradeInfo for Either<A, B>
 where
@@ -31,15 +32,15 @@ where
     B: UpgradeInfo,
 {
     type Info = EitherName<A::Info, B::Info>;
-    type InfoIter = EitherIter<
-        <A::InfoIter as IntoIterator>::IntoIter,
-        <B::InfoIter as IntoIterator>::IntoIter,
+    type InfoIter = Either<
+        Map<<A::InfoIter as IntoIterator>::IntoIter, fn(A::Info) -> Self::Info>,
+        Map<<B::InfoIter as IntoIterator>::IntoIter, fn(B::Info) -> Self::Info>,
     >;
 
     fn protocol_info(&self) -> Self::InfoIter {
         match self {
-            Either::Left(a) => EitherIter::A(a.protocol_info().into_iter()),
-            Either::Right(b) => EitherIter::B(b.protocol_info().into_iter()),
+            Either::Left(a) => Either::Left(a.protocol_info().into_iter().map(EitherName::A)),
+            Either::Right(b) => Either::Right(b.protocol_info().into_iter().map(EitherName::B)),
         }
     }
 }
@@ -84,35 +85,6 @@ where
                 EitherFuture::Second(b.upgrade_outbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),
-        }
-    }
-}
-
-/// A type to represent two possible `Iterator` types.
-#[derive(Debug, Clone)]
-pub enum EitherIter<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A, B> Iterator for EitherIter<A, B>
-where
-    A: Iterator,
-    B: Iterator,
-{
-    type Item = EitherName<A::Item, B::Item>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            EitherIter::A(a) => a.next().map(EitherName::A),
-            EitherIter::B(b) => b.next().map(EitherName::B),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        match self {
-            EitherIter::A(a) => a.size_hint(),
-            EitherIter::B(b) => b.size_hint(),
         }
     }
 }
