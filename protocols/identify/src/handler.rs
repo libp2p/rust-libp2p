@@ -268,7 +268,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        match dbg!(event) {
+        match event {
             InEvent::AddressesChanged(addresses) => {
                 self.external_addresses = addresses;
             }
