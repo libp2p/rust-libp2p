@@ -58,9 +58,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-// pub mod codec;
-// pub mod handler;
-
 mod codec_priv;
 #[deprecated(
     note = "The `codec` module will be made private in the future and should not be depended on."
