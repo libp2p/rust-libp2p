@@ -19,7 +19,15 @@ thiserror = "1.0.38"
 
 wasm-bindgen = { version = "0.2.84" }
 js-sys = { version = "0.3.61" }
-web-sys = { version = "0.3.61", features = [ "WebTransport"]}
+web-sys = { version = "0.3.61", features = [ 
+    "WebTransport",
+    "WebTransportOptions",
+    "WebTransportBidirectionalStream", 
+    "WebTransportSendStream", 
+    "WebTransportReceiveStream", 
+    "ReadableStream", 
+    "ReadableStream"
+]}
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

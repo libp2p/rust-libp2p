@@ -1315,7 +1315,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
+ "multiaddr 0.17.1",
 ]
 
 [[package]]
@@ -1497,7 +1497,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
+ "multiaddr 0.17.1",
 ]
 
 [[package]]
@@ -2119,7 +2119,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
+ "multiaddr 0.17.1",
 ]
 
 [[package]]
@@ -2258,7 +2258,7 @@ dependencies = [
  "libp2p-webrtc",
  "libp2p-websocket",
  "libp2p-yamux",
- "multiaddr",
+ "multiaddr 0.17.1",
  "pin-project",
  "tokio",
 ]
@@ -2327,8 +2327,9 @@ dependencies = [
  "libp2p-mplex",
  "libp2p-noise",
  "log",
- "multiaddr",
- "multihash",
+ "multiaddr 0.18.0",
+ "multihash 0.17.0",
+ "multihash 0.18.1",
  "multistream-select",
  "once_cell",
  "parking_lot 0.12.1",
@@ -2500,8 +2501,8 @@ dependencies = [
  "ed25519-dalek",
  "libsecp256k1",
  "log",
- "multiaddr",
- "multihash",
+ "multiaddr 0.17.1",
+ "multihash 0.17.0",
  "p256 0.12.0",
  "quick-protobuf",
  "quickcheck-ext",
@@ -2977,7 +2978,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-swarm",
  "log",
- "multihash",
+ "multihash 0.17.0",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck",
@@ -3249,7 +3250,24 @@ dependencies = [
  "data-encoding",
  "log",
  "multibase",
- "multihash",
+ "multihash 0.17.0",
+ "percent-encoding",
+ "serde",
+ "static_assertions",
+ "unsigned-varint",
+ "url",
+]
+
+[[package]]
+name = "multiaddr"
+version = "0.18.0"
+source = "git+https://github.com/multiformats/rust-multiaddr#13a1e9e7da1e26a3aecdec695dc8e5cb0994d4b9"
+dependencies = [
+ "arrayref",
+ "byteorder",
+ "data-encoding",
+ "multibase",
+ "multihash 0.18.1",
  "percent-encoding",
  "serde",
  "static_assertions",
@@ -3279,6 +3297,19 @@ dependencies = [
  "multihash-derive",
  "quickcheck",
  "rand 0.8.5",
+ "serde",
+ "serde-big-array",
+ "unsigned-varint",
+]
+
+[[package]]
+name = "multihash"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfd8a792c1694c6da4f68db0a9d707c72bd260994da179e6030a5dcee00bb815"
+dependencies = [
+ "core2",
+ "multihash-derive",
  "serde",
  "serde-big-array",
  "unsigned-varint",
@@ -3677,7 +3708,7 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
- "multiaddr",
+ "multiaddr 0.17.1",
 ]
 
 [[package]]
@@ -5881,8 +5912,3 @@ dependencies = [
  "quote",
  "syn 2.0.15",
 ]
-
-[[patch.unused]]
-name = "multiaddr"
-version = "0.18.0"
-source = "git+https://github.com/multiformats/rust-multiaddr#13a1e9e7da1e26a3aecdec695dc8e5cb0994d4b9"
