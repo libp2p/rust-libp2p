@@ -58,8 +58,24 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod codec;
-pub mod handler;
+// pub mod codec;
+// pub mod handler;
+
+mod codec_priv;
+#[deprecated(
+    note = "The `codec` module will be made private in the future and should not be depended on."
+)]
+pub mod codec {
+    pub use super::codec_priv::*;
+}
+
+mod handler_priv;
+#[deprecated(
+    note = "The `handler` module will be made private in the future and should not be depended on."
+)]
+pub mod handler {
+    pub use super::handler_priv::*;
+}
 
 pub use codec::{Codec, ProtocolName};
 

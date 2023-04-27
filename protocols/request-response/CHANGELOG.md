@@ -1,3 +1,8 @@
+## 0.24.1 - unreleased
+
+- Deprecate `handler`, `codec` modules to make them private.
+
+
 ## 0.24.0
 
 - Update to `libp2p-core` `v0.39.0`.
