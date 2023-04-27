@@ -513,8 +513,8 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::IdentTopic as Topic;
     use crate::{Behaviour, ConfigBuilder};
+    use crate::{IdentTopic as Topic, Version};
     use libp2p_core::identity::Keypair;
     use quickcheck_ext::*;
 
@@ -613,21 +613,14 @@ mod tests {
 
     #[test]
     fn support_floodsub_with_custom_protocol() {
-        let gossipsub_config = ConfigBuilder::default()
+        let protocol_config = ConfigBuilder::default()
             .protocol_id("/foosub", Version::V1_1)
             .support_floodsub()
             .build()
-            .unwrap();
+            .unwrap()
+            .protocol_config();
 
-        let protocol_config = ProtocolConfig::new(&gossipsub_config);
-
-        assert_eq!(
-            String::from_utf8_lossy(&protocol_config.protocol_ids[0].protocol_id),
-            "/foosub"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&protocol_config.protocol_ids[1].protocol_id),
-            "/floodsub/1.0.0"
-        );
+        assert_eq!(protocol_config.protocol_ids[0].protocol, "/foosub");
+        assert_eq!(protocol_config.protocol_ids[1].protocol, "/floodsub/1.0.0");
     }
 }
