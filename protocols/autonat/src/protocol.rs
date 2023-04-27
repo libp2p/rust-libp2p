@@ -24,23 +24,24 @@ use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response};
-use libp2p_swarm::Protocol;
+use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{BytesReader, Writer};
 use std::{convert::TryFrom, io};
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTOCOL_NAME: Protocol = Protocol::from_static("/libp2p/autonat/1.0.0");
+pub const DEFAULT_PROTOCOL_NAME: StreamProtocol =
+    StreamProtocol::from_static("/libp2p/autonat/1.0.0");
 
 #[derive(Clone)]
 pub struct AutoNatCodec;
 
 #[async_trait]
 impl request_response::Codec for AutoNatCodec {
-    type Protocol = Protocol;
+    type Protocol = StreamProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
 
-    async fn read_request<T>(&mut self, _: &Protocol, io: &mut T) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Send + Unpin,
     {
@@ -49,7 +50,11 @@ impl request_response::Codec for AutoNatCodec {
         Ok(request)
     }
 
-    async fn read_response<T>(&mut self, _: &Protocol, io: &mut T) -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        _: &StreamProtocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Send + Unpin,
     {
@@ -60,7 +65,7 @@ impl request_response::Codec for AutoNatCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Request,
     ) -> io::Result<()>
@@ -73,7 +78,7 @@ impl request_response::Codec for AutoNatCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Response,
     ) -> io::Result<()>

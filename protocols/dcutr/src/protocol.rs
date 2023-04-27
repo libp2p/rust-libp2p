@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_swarm::Protocol;
+use libp2p_swarm::StreamProtocol;
 
 pub(crate) mod inbound;
 pub(crate) mod outbound;
-pub const PROTOCOL_NAME: Protocol = Protocol::from_static("/libp2p/dcutr");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/libp2p/dcutr");
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

@@ -20,10 +20,10 @@
 
 use crate::codec;
 use crate::codec::Message;
-use libp2p_swarm::Protocol;
+use libp2p_swarm::StreamProtocol;
 use void::Void;
 
-const PROTOCOL_IDENT: Protocol = Protocol::from_static("/rendezvous/1.0.0");
+const PROTOCOL_IDENT: StreamProtocol = StreamProtocol::from_static("/rendezvous/1.0.0");
 
 pub(crate) mod inbound;
 pub(crate) mod outbound;

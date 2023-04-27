@@ -26,7 +26,7 @@ use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::{Protocol, Swarm, SwarmEvent};
+use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
 use std::{io, iter};
@@ -38,7 +38,7 @@ async fn is_response_outbound() {
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((
-        Protocol::from_static("/ping/1"),
+        StreamProtocol::from_static("/ping/1"),
         request_response::ProtocolSupport::Full,
     ));
     let cfg = request_response::Config::default();
@@ -83,7 +83,10 @@ async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
-    let protocols = iter::once((Protocol::from_static("/ping/1"), ProtocolSupport::Full));
+    let protocols = iter::once((
+        StreamProtocol::from_static("/ping/1"),
+        ProtocolSupport::Full,
+    ));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -174,7 +177,10 @@ async fn ping_protocol() {
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((Protocol::from_static("/ping/1"), ProtocolSupport::Full));
+    let protocols = iter::once((
+        StreamProtocol::from_static("/ping/1"),
+        ProtocolSupport::Full,
+    ));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -237,7 +243,10 @@ async fn emits_inbound_connection_closed_failure() {
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((Protocol::from_static("/ping/1"), ProtocolSupport::Full));
+    let protocols = iter::once((
+        StreamProtocol::from_static("/ping/1"),
+        ProtocolSupport::Full,
+    ));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -295,11 +304,11 @@ struct Pong(Vec<u8>);
 
 #[async_trait]
 impl libp2p_request_response::Codec for PingCodec {
-    type Protocol = Protocol;
+    type Protocol = StreamProtocol;
     type Request = Ping;
     type Response = Pong;
 
-    async fn read_request<T>(&mut self, _: &Protocol, io: &mut T) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -312,7 +321,11 @@ impl libp2p_request_response::Codec for PingCodec {
         Ok(Ping(vec))
     }
 
-    async fn read_response<T>(&mut self, _: &Protocol, io: &mut T) -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        _: &StreamProtocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -327,7 +340,7 @@ impl libp2p_request_response::Codec for PingCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         Ping(data): Ping,
     ) -> io::Result<()>
@@ -342,7 +355,7 @@ impl libp2p_request_response::Codec for PingCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         Pong(data): Pong,
     ) -> io::Result<()>

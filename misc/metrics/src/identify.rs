@@ -20,7 +20,7 @@
 
 use crate::protocol_stack;
 use libp2p_identity::PeerId;
-use libp2p_swarm::Protocol;
+use libp2p_swarm::StreamProtocol;
 use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -139,7 +139,7 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                         .protocols
                         .iter()
                         .filter(|p| {
-                            let allowed_protocols: &[Protocol] = &[
+                            let allowed_protocols: &[StreamProtocol] = &[
                                 #[cfg(feature = "dcutr")]
                                 libp2p_dcutr::PROTOCOL_NAME,
                                 // #[cfg(feature = "gossipsub")]

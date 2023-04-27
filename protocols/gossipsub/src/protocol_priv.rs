@@ -33,7 +33,7 @@ use futures::future;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
-use libp2p_swarm::Protocol;
+use libp2p_swarm::StreamProtocol;
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
@@ -43,15 +43,15 @@ use void::Void;
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
 pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: Protocol::from_static("/meshsub/1.1.0"),
+    protocol: StreamProtocol::from_static("/meshsub/1.1.0"),
     kind: PeerKind::Gossipsubv1_1,
 };
 pub(crate) const GOSSIPSUB_1_0_0_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: Protocol::from_static("/meshsub/1.0.0"),
+    protocol: StreamProtocol::from_static("/meshsub/1.0.0"),
     kind: PeerKind::Gossipsub,
 };
 pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: Protocol::from_static("/floodsub/1.0.0"),
+    protocol: StreamProtocol::from_static("/floodsub/1.0.0"),
     kind: PeerKind::Floodsub,
 };
 
@@ -80,7 +80,7 @@ impl Default for ProtocolConfig {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProtocolId {
     /// The RPC message type/name.
-    pub protocol: Protocol,
+    pub protocol: StreamProtocol,
     /// The type of protocol we support
     pub kind: PeerKind,
 }

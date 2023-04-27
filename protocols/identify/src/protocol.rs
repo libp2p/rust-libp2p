@@ -28,7 +28,7 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::ConnectionId;
+use libp2p_swarm::{ConnectionId, StreamProtocol};
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
@@ -37,11 +37,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: libp2p_swarm::Protocol =
-    libp2p_swarm::Protocol::from_static("/ipfs/id/1.0.0");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/id/1.0.0");
 
-pub const PUSH_PROTOCOL_NAME: libp2p_swarm::Protocol =
-    libp2p_swarm::Protocol::from_static("/ipfs/id/push/1.0.0");
+pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/id/push/1.0.0");
 
 /// The type of the Substream protocol.
 #[derive(Debug, PartialEq, Eq)]
@@ -86,13 +84,13 @@ pub struct Info {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub protocols: Vec<libp2p_swarm::Protocol>,
+    pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
 }
 
 impl UpgradeInfo for Identify {
-    type Info = libp2p_swarm::Protocol;
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -124,7 +122,7 @@ where
 }
 
 impl<T> UpgradeInfo for Push<T> {
-    type Info = libp2p_swarm::Protocol;
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -254,7 +252,7 @@ impl TryFrom<proto::Identify> for Info {
             protocols: msg
                 .protocols
                 .into_iter()
-                .filter_map(|p| match libp2p_swarm::Protocol::try_from_owned(p) {
+                .filter_map(|p| match StreamProtocol::try_from_owned(p) {
                     Ok(p) => Some(p),
                     Err(e) => {
                         debug!("Received invalid protocol from peer: {e}");
@@ -341,8 +339,8 @@ mod tests {
                         "/ip6/::1/udp/1000".parse().unwrap(),
                     ],
                     protocols: vec![
-                        libp2p_swarm::Protocol::from_static("/proto1"),
-                        libp2p_swarm::Protocol::from_static("/proto2"),
+                        StreamProtocol::from_static("/proto1"),
+                        StreamProtocol::from_static("/proto2"),
                     ],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
                 },

@@ -3,12 +3,16 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// Identifies a protocol for a stream.
+///
+/// libp2p nodes use stream protocols to negotiate what to do with a newly opened stream.
+/// Stream protocols are string-based and must start with a forward slash: `/`.
 #[derive(Debug, Clone, Eq)]
-pub struct Protocol {
+pub struct StreamProtocol {
     inner: Either<&'static str, Arc<str>>,
 }
 
-impl Protocol {
+impl StreamProtocol {
     /// Construct a new protocol from a static string slice.
     ///
     /// # Panics
@@ -20,7 +24,7 @@ impl Protocol {
             _ => panic!("Protocols should start with a /"),
         }
 
-        Protocol {
+        StreamProtocol {
             inner: Either::Left(s),
         }
     }
@@ -28,49 +32,49 @@ impl Protocol {
     /// Attempt to construct a protocol from an owned string.
     ///
     /// This function will fail if the protocol does not start with a forward slash: `/`.
-    /// Where possible, you should use [`Protocol::from_static`] instead to avoid allocations.
+    /// Where possible, you should use [`StreamProtocol::from_static`] instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
         if !protocol.starts_with('/') {
             return Err(InvalidProtocol {});
         }
 
-        Ok(Protocol {
+        Ok(StreamProtocol {
             inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
         })
     }
 }
 
-impl AsRef<str> for Protocol {
+impl AsRef<str> for StreamProtocol {
     fn as_ref(&self) -> &str {
         either::for_both!(&self.inner, s => s)
     }
 }
 
-impl fmt::Display for Protocol {
+impl fmt::Display for StreamProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
     }
 }
 
-impl PartialEq<&str> for Protocol {
+impl PartialEq<&str> for StreamProtocol {
     fn eq(&self, other: &&str) -> bool {
         self.as_ref() == *other
     }
 }
 
-impl PartialEq<Protocol> for &str {
-    fn eq(&self, other: &Protocol) -> bool {
+impl PartialEq<StreamProtocol> for &str {
+    fn eq(&self, other: &StreamProtocol) -> bool {
         *self == other.as_ref()
     }
 }
 
-impl PartialEq for Protocol {
+impl PartialEq for StreamProtocol {
     fn eq(&self, other: &Self) -> bool {
         self.as_ref() == other.as_ref()
     }
 }
 
-impl Hash for Protocol {
+impl Hash for StreamProtocol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ref().hash(state)
     }

@@ -22,6 +22,7 @@ use libp2p::{
 };
 
 use libp2p::core::upgrade::Version;
+use libp2p::StreamProtocol;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
 use std::iter;
@@ -63,7 +64,7 @@ pub(crate) async fn new(
             request_response: request_response::Behaviour::new(
                 FileExchangeCodec(),
                 iter::once((
-                    swarm::Protocol::from_static("/file-exchange/1"),
+                    StreamProtocol::from_static("/file-exchange/1"),
                     ProtocolSupport::Full,
                 )),
                 Default::default(),
@@ -481,15 +482,11 @@ pub(crate) struct FileResponse(Vec<u8>);
 
 #[async_trait]
 impl request_response::Codec for FileExchangeCodec {
-    type Protocol = swarm::Protocol;
+    type Protocol = StreamProtocol;
     type Request = FileRequest;
     type Response = FileResponse;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &swarm::Protocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -504,7 +501,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn read_response<T>(
         &mut self,
-        _: &swarm::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -521,7 +518,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &swarm::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         FileRequest(data): FileRequest,
     ) -> io::Result<()>
@@ -536,7 +533,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &swarm::Protocol,
+        _: &StreamProtocol,
         io: &mut T,
         FileResponse(data): FileResponse,
     ) -> io::Result<()>

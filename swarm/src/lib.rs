@@ -57,8 +57,8 @@
 
 mod connection;
 mod executor;
-mod protocol;
 mod registry;
+mod stream_protocol;
 #[cfg(test)]
 mod test;
 mod upgrade;
@@ -130,8 +130,8 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
-pub use protocol::{InvalidProtocol, Protocol};
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
+pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};

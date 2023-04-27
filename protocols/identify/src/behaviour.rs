@@ -27,7 +27,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailu
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
     ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
-    THandlerInEvent, ToSwarm,
+    StreamProtocol, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -488,13 +488,13 @@ pub enum Event {
     },
 }
 
-fn supported_protocols(params: &impl PollParameters) -> Vec<libp2p_swarm::Protocol> {
+fn supported_protocols(params: &impl PollParameters) -> Vec<StreamProtocol> {
     // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
     // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
     params
         .supported_protocols()
         .filter_map(|p| {
-            libp2p_swarm::Protocol::try_from_owned(String::from_utf8_lossy(&p).to_string()).ok()
+            StreamProtocol::try_from_owned(String::from_utf8_lossy(&p).to_string()).ok()
         })
         .collect()
 }
@@ -561,10 +561,7 @@ mod tests {
     use libp2p_tcp as tcp;
     use std::time::Duration;
 
-    fn transport() -> (
-        identity::PublicKey,
-        transport::Boxed<(PeerId, StreamMuxerBox)>,
-    ) {
+    fn transport() -> (PublicKey, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         let id_keys = identity::Keypair::generate_ed25519();
         let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
             .into_authentic(&id_keys)
