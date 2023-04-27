@@ -229,6 +229,7 @@ where
             max_negotiating_inbound_streams,
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
+            remote_supported_protocols,
         } = self.get_mut();
 
         loop {
@@ -267,10 +268,7 @@ where
                 )) => {
                     let change = ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols));
 
-                    if self
-                        .remote_supported_protocols
-                        .on_protocols_change(change.clone())
-                    {
+                    if remote_supported_protocols.on_protocols_change(change.clone()) {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
                         // TODO: Should we optimise this to be the _actual_ change?
                     }
@@ -282,10 +280,7 @@ where
                 )) => {
                     let change = ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols));
 
-                    if self
-                        .remote_supported_protocols
-                        .on_protocols_change(change.clone())
-                    {
+                    if remote_supported_protocols.on_protocols_change(change.clone()) {
                         handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
                         // TODO: Should we optimise this to be the _actual_ change?
                     }
