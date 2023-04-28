@@ -35,6 +35,7 @@ use std::iter;
 /// # use libp2p_core::{upgrade, Negotiated};
 /// # use std::io;
 /// # use futures::AsyncWriteExt;
+/// # #[allow(deprecated)]
 /// let _transport = MemoryTransport::default()
 ///     .and_then(move |out, cp| {
 ///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock: Negotiated<Channel<Vec<u8>>>, endpoint| async move {
@@ -52,6 +53,10 @@ use std::iter;
 ///     });
 /// ```
 ///
+#[deprecated(
+    note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`."
+)]
+#[allow(deprecated)]
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
     // Note: these bounds are there in order to help the compiler infer types
@@ -66,11 +71,15 @@ where
 ///
 /// The upgrade consists in calling the function passed when creating this struct.
 #[derive(Debug, Clone)]
+#[deprecated(
+    note = "`from_fn` upgrade will be removed without replacement as it is not used within `rust-libp2p`."
+)]
 pub struct FromFnUpgrade<P, F> {
     protocol_name: P,
     fun: F,
 }
 
+#[allow(deprecated)]
 impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
@@ -83,6 +92,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,
@@ -98,6 +108,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
 where
     P: ProtocolName + Clone,

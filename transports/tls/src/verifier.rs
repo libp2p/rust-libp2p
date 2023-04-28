@@ -42,12 +42,11 @@ use rustls::{
 ///
 /// > The libp2p handshake uses TLS 1.3 (and higher).
 /// > Endpoints MUST NOT negotiate lower TLS versions.
-pub static PROTOCOL_VERSIONS: &[&SupportedProtocolVersion] = &[&rustls::version::TLS13];
-
+pub(crate) static PROTOCOL_VERSIONS: &[&SupportedProtocolVersion] = &[&rustls::version::TLS13];
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both
 // TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
-pub static CIPHERSUITES: &[SupportedCipherSuite] = &[
+pub(crate) static CIPHERSUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
     TLS13_CHACHA20_POLY1305_SHA256,
     TLS13_AES_256_GCM_SHA384,
@@ -57,7 +56,7 @@ pub static CIPHERSUITES: &[SupportedCipherSuite] = &[
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub struct Libp2pCertificateVerifier {
+pub(crate) struct Libp2pCertificateVerifier {
     /// The peer ID we intend to connect to
     remote_peer_id: Option<PeerId>,
 }
@@ -69,12 +68,12 @@ pub struct Libp2pCertificateVerifier {
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
 impl Libp2pCertificateVerifier {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             remote_peer_id: None,
         }
     }
-    pub fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
+    pub(crate) fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
         Self { remote_peer_id }
     }
 

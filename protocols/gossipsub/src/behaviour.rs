@@ -50,11 +50,11 @@ use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
-use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
+use crate::metrics_priv::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::{DuplicateCache, TimeCache};
+use crate::protocol_priv::{ProtocolConfig, SIGNING_PREFIX};
+use crate::subscription_filter_priv::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
+use crate::time_cache_priv::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
@@ -64,6 +64,7 @@ use crate::types::{
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
+use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -149,22 +150,46 @@ pub enum Event {
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
         author: PeerId,
         inline_key: Option<Vec<u8>>,
-        last_seq_no: u64, // This starts from a random number and increases then overflows (if
-                          // required)
+        last_seq_no: SequenceNumber,
     },
     Author(PeerId),
     RandomAuthor,
     Anonymous,
 }
 
+/// A strictly linearly increasing sequence number.
+///
+/// We start from the current time as unix timestamp in milliseconds.
+#[derive(Debug)]
+struct SequenceNumber(u64);
+
+impl SequenceNumber {
+    fn new() -> Self {
+        let unix_timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time to be linear")
+            .as_nanos();
+
+        Self(unix_timestamp as u64)
+    }
+
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .checked_add(1)
+            .expect("to not exhaust u64 space for sequence numbers");
+
+        self.0
+    }
+}
+
 impl PublishConfig {
-    pub fn get_own_id(&self) -> Option<&PeerId> {
+    pub(crate) fn get_own_id(&self) -> Option<&PeerId> {
         match self {
             Self::Signing { author, .. } => Some(author),
             Self::Author(author) => Some(author),
@@ -178,7 +203,7 @@ impl From<MessageAuthenticity> for PublishConfig {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
                 let public_key = keypair.public();
-                let key_enc = public_key.to_protobuf_encoding();
+                let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::proto::Message::key`] field.
@@ -192,7 +217,7 @@ impl From<MessageAuthenticity> for PublishConfig {
                     keypair,
                     author: public_key.to_peer_id(),
                     inline_key: key,
-                    last_seq_no: rand::random(),
+                    last_seq_no: SequenceNumber::new(),
                 }
             }
             MessageAuthenticity::Author(peer_id) => PublishConfig::Author(peer_id),
@@ -2757,12 +2782,9 @@ where
                 ref keypair,
                 author,
                 inline_key,
-                mut last_seq_no,
+                last_seq_no,
             } => {
-                // Increment the last sequence number
-                last_seq_no = last_seq_no.wrapping_add(1);
-
-                let sequence_number = last_seq_no;
+                let sequence_number = last_seq_no.next();
 
                 let signature = {
                     let message = proto::Message {
@@ -3802,7 +3824,7 @@ mod local_test {
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol_priv::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs
