@@ -7,7 +7,9 @@ use libp2p_identity::PeerId;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm_test::SwarmExt;
 use libp2p_tcp as tcp;
+use std::iter;
 use std::time::Duration;
 
 fn transport() -> (
@@ -107,81 +109,37 @@ fn periodic_identify() {
     })
 }
 
-#[test]
-fn identify_push() {
+#[async_std::test]
+async fn identify_push() {
     let _ = env_logger::try_init();
 
-    let (mut swarm1, pubkey1) = {
-        let (pubkey, transport) = transport();
-        let protocol =
-            identify::Behaviour::new(identify::Config::new("a".to_string(), pubkey.clone()));
-        let swarm =
-            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build();
-        (swarm, pubkey)
-    };
-
-    let (mut swarm2, pubkey2) = {
-        let (pubkey, transport) = transport();
-        let protocol = identify::Behaviour::new(
-            identify::Config::new("a".to_string(), pubkey.clone())
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
-        );
-        let swarm =
-            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build();
-        (swarm, pubkey)
-    };
-
-    Swarm::listen_on(&mut swarm1, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
-
-    let listen_addr = async_std::task::block_on(async {
-        loop {
-            let swarm1_fut = swarm1.select_next_some();
-            pin_mut!(swarm1_fut);
-            if let SwarmEvent::NewListenAddr { address, .. } = swarm1_fut.await {
-                return address;
-            }
-        }
+        )
     });
 
-    swarm2.dial(listen_addr).unwrap();
+    swarm1.listen().await;
+    swarm2.connect(&mut swarm1).await;
 
-    async_std::task::block_on(async move {
-        loop {
-            let swarm1_fut = swarm1.select_next_some();
-            let swarm2_fut = swarm2.select_next_some();
+    swarm2
+        .behaviour_mut()
+        .push(iter::once(*swarm1.local_peer_id()));
 
-            {
-                pin_mut!(swarm1_fut);
-                pin_mut!(swarm2_fut);
-                match future::select(swarm1_fut, swarm2_fut)
-                    .await
-                    .factor_second()
-                    .0
-                {
-                    future::Either::Left(SwarmEvent::Behaviour(identify::Event::Received {
-                        info,
-                        ..
-                    })) => {
-                        assert_eq!(info.public_key, pubkey2);
-                        assert_eq!(info.protocol_version, "a");
-                        assert_eq!(info.agent_version, "b");
-                        assert!(!info.protocols.is_empty());
-                        assert!(info.listen_addrs.is_empty());
-                        return;
-                    }
-                    future::Either::Right(SwarmEvent::ConnectionEstablished { .. }) => {
-                        // Once a connection is established, we can initiate an
-                        // active push below.
-                    }
-                    _ => continue,
-                }
-            }
-
-            swarm2
-                .behaviour_mut()
-                .push(std::iter::once(pubkey1.to_peer_id()));
+    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+        ([identify::Event::Received { info, .. }], [identify::Event::Pushed { .. }]) => {
+            assert_eq!(info.public_key.to_peer_id(), *swarm2.local_peer_id());
+            assert_eq!(info.protocol_version, "a");
+            assert_eq!(info.agent_version, "b");
+            assert!(!info.protocols.is_empty());
+            assert!(info.listen_addrs.is_empty());
         }
-    })
+        other => panic!("Unexpected events: {other:?}"),
+    }
 }
 
 #[test]
