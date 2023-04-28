@@ -46,7 +46,7 @@ async fn main() {
             libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
                 .upgrade(upgrade::Version::V1Lazy)
                 .authenticate(
-                    libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                    libp2p_noise::Config::new(&local_key)
                         .expect("Signing libp2p-noise static DH keypair failed."),
                 )
                 .multiplex(libp2p_yamux::YamuxConfig::default());

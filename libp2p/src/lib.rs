@@ -167,9 +167,11 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
+#[allow(deprecated)]
+pub use self::core::upgrade::{InboundUpgradeExt, OutboundUpgradeExt};
 pub use self::core::{
     transport::TransportError,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
+    upgrade::{InboundUpgrade, OutboundUpgrade},
     Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
@@ -229,7 +231,7 @@ pub async fn development_transport(
 
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             #[allow(deprecated)]
@@ -286,7 +288,7 @@ pub fn tokio_development_transport(
 
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             #[allow(deprecated)]

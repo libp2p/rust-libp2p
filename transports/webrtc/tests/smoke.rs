@@ -297,7 +297,7 @@ struct ListenUpgrade<'a> {
 }
 
 impl<'a> ListenUpgrade<'a> {
-    pub fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
+    pub(crate) fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
         Self {
             listener,
             listener_upgrade_task: None,

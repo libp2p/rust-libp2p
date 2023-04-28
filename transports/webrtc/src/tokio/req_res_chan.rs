@@ -28,7 +28,7 @@ use std::{
     task::{Context, Poll},
 };
 
-pub fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
+pub(crate) fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
     let (sender, receiver) = mpsc::channel(capacity);
 
     (
@@ -39,12 +39,12 @@ pub fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) 
     )
 }
 
-pub struct Sender<Req, Res> {
+pub(crate) struct Sender<Req, Res> {
     inner: futures::lock::Mutex<mpsc::Sender<(Req, oneshot::Sender<Res>)>>,
 }
 
 impl<Req, Res> Sender<Req, Res> {
-    pub async fn send(&self, req: Req) -> io::Result<Res> {
+    pub(crate) async fn send(&self, req: Req) -> io::Result<Res> {
         let (sender, receiver) = oneshot::channel();
 
         self.inner
@@ -61,12 +61,12 @@ impl<Req, Res> Sender<Req, Res> {
     }
 }
 
-pub struct Receiver<Req, Res> {
+pub(crate) struct Receiver<Req, Res> {
     inner: mpsc::Receiver<(Req, oneshot::Sender<Res>)>,
 }
 
 impl<Req, Res> Receiver<Req, Res> {
-    pub fn poll_next_unpin(
+    pub(crate) fn poll_next_unpin(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<(Req, oneshot::Sender<Res>)>> {
