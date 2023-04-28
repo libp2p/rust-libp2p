@@ -1,7 +1,7 @@
 ## 0.32.0
 
 - Fix `NetworkBehaviour` Derive macro for generic types when `out_event` was not provided. Previously the enum generated
-  didn't have the `NetworkBehaviour` impl constraints whilst using the generics for `<Generic>::ToBehaviour `.
+  didn't have the `NetworkBehaviour` impl constraints whilst using the generics for `<Generic>::OutEvent`.
   See [PR 3393].
 
 - Replace `NetworkBehaviour` Derive macro deprecated `inject_*` method implementations
@@ -48,7 +48,7 @@
 
 ## 0.29.0
 
-- Generate `NetworkBehaviour::ToBehaviour ` if not provided through `#[behaviour(out_event =
+- Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
   "MyOutEvent")]` and event processing is disabled (default).
 
 ## 0.28.0

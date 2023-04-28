@@ -525,17 +525,17 @@ fn custom_out_event_no_type_parameters() {
     }
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "ToBehaviour ", prelude = "libp2p_swarm::derive_prelude")]
+    #[behaviour(out_event = "OutEvent", prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour<T: 'static + Send> {
         custom: TemplatedBehaviour<T>,
     }
 
     #[derive(Debug)]
-    enum ToBehaviour {
+    enum OutEvent {
         None,
     }
 
-    impl From<void::Void> for ToBehaviour {
+    impl From<void::Void> for OutEvent {
         fn from(_e: void::Void) -> Self {
             Self::None
         }

@@ -108,7 +108,7 @@ pub trait SwarmExt {
 /// This function utilizes the [`TryIntoOutput`] trait.
 /// Similar as to the number of expected events, the type of event is inferred based on your usage.
 /// If you match against a [`SwarmEvent`], the first [`SwarmEvent`] will be returned.
-/// If you match against your [`NetworkBehaviour::ToBehaviour `] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
+/// If you match against your [`NetworkBehaviour::ToBehaviour`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
 ///
 /// You can implement the [`TryIntoOutput`] for any other type to further customize this behaviour.
 ///

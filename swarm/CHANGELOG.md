@@ -1,12 +1,11 @@
-## 0.43.0 - unreleased
-
-- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromSwarm`, `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToBehaviour`.
-
 ## 0.42.2 - unreleased
 
 - Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
 
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromSwarm`, `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToBehaviour`. See [PR 3848].
+
 [PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3625
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 
 ## 0.42.1
 
@@ -70,15 +69,15 @@
        &mut self,
        _: &mut Context<'_>,
        _: &mut impl PollParameters,
-  -    ) -> Poll<NetworkBehaviourAction<Self::ToBehaviour , Self::ConnectionHandler>> {
-  +    ) -> Poll<NetworkBehaviourAction<Self::ToBehaviour , THandlerInEvent<Self>>> {
+  -    ) -> Poll<NetworkBehaviourAction<Self::OutEvent , Self::ConnectionHandler>> {
+  +    ) -> Poll<NetworkBehaviourAction<Self::OutEvent , THandlerInEvent<Self>>> {
   ```
 
   In other words:
 
   |Search|Replace|
     |---|---|
-  |`NetworkBehaviourAction<Self::ToBehaviour , Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::ToBehaviour , THandlerInEvent<Self>>`|
+  |`NetworkBehaviourAction<Self::OutEvent , Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent , THandlerInEvent<Self>>`|
 
   If you reference `NetworkBehaviourAction` somewhere else as well,
   you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
@@ -285,7 +284,7 @@
 ## 0.38.0
 
 - Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
-  should either bring their own `ToBehaviour ` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
+  should either bring their own `OutEvent ` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
   when not specified, have the derive macro generate one for the user.
 
   See [`NetworkBehaviour`
@@ -353,8 +352,8 @@
   ```
 
 - When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
-  `ToBehaviour ` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
-  `#[behaviour(event_process = true)]`, then the derive macro generates an `ToBehaviour ` definition for
+  `OutEvent ` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
+  `#[behaviour(event_process = true)]`, then the derive macro generates an `OutEvent ` definition for
   the user.
 
   See [`NetworkBehaviour`
@@ -531,7 +530,7 @@
   trait parameters on `Swarm` (previously `ExpandedSwarm`), deriving parameters
   through associated types on `TBehaviour`. See [PR 2182].
 
-- Require `ProtocolsHandler::{InEvent,ToBehaviour ,Error}` to implement `Debug` (see
+- Require `ProtocolsHandler::{InEvent,OutEvent ,Error}` to implement `Debug` (see
   [PR 2183]).
 
 - Implement `ProtocolsHandler` on `either::Either`representing either of two
@@ -555,9 +554,9 @@
   false. To emulate the previous behaviour, return early within
   `inject_dial_failure` on `DialError::DialPeerConditionFalse`. See [PR 2191].
 
-- Make `NetworkBehaviourAction` generic over `NetworkBehaviour::ToBehaviour ` and
+- Make `NetworkBehaviourAction` generic over `NetworkBehaviour::OutEvent ` and
   `NetworkBehaviour::ProtocolsHandler`. In most cases, change your generic type
-  parameters to `NetworkBehaviourAction<Self::ToBehaviour ,
+  parameters to `NetworkBehaviourAction<Self::OutEvent ,
   Self::ProtocolsHandler>`. See [PR 2191].
 
 - Return `bool` instead of `Result<(), ()>` for `Swarm::remove_listener`(see
