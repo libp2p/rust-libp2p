@@ -318,7 +318,7 @@ where
         self.add_external_address(memory_multiaddr.clone(), AddressScore::Infinite);
 
         let tcp_addr_listener_id = self
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
 
         let tcp_multiaddr = self
