@@ -57,7 +57,7 @@ impl ProtocolConfig {
     ///
     /// Sets the maximum gossip transmission size.
     pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
-        let protocol_ids = match gossipsub_config.custom_id_version() {
+        let mut protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
                 Version::V1_0 => vec![ProtocolId::new(
                     gossipsub_config.protocol_id(),
@@ -71,23 +71,21 @@ impl ProtocolConfig {
                 )],
             },
             None => {
-                let mut protocol_ids = vec![
+                vec![
                     ProtocolId::new(
                         gossipsub_config.protocol_id(),
                         PeerKind::Gossipsubv1_1,
                         true,
                     ),
                     ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
-                ];
-
-                // add floodsub support if enabled.
-                if gossipsub_config.support_floodsub() {
-                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
-                }
-
-                protocol_ids
+                ]
             }
         };
+
+        // add floodsub support if enabled.
+        if gossipsub_config.support_floodsub() {
+            protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
+        }
 
         ProtocolConfig {
             protocol_ids,
@@ -556,8 +554,8 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::Behaviour;
     use crate::IdentTopic as Topic;
+    use crate::{Behaviour, ConfigBuilder};
     use libp2p_core::identity::Keypair;
     use quickcheck_ext::*;
 
@@ -652,5 +650,25 @@ mod tests {
         }
 
         QuickCheck::new().quickcheck(prop as fn(_) -> _)
+    }
+
+    #[test]
+    fn support_floodsub_with_custom_protocol() {
+        let gossipsub_config = ConfigBuilder::default()
+            .protocol_id("/foosub", Version::V1_1)
+            .support_floodsub()
+            .build()
+            .unwrap();
+
+        let protocol_config = ProtocolConfig::new(&gossipsub_config);
+
+        assert_eq!(
+            String::from_utf8_lossy(&protocol_config.protocol_ids[0].protocol_id),
+            "/foosub"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&protocol_config.protocol_ids[1].protocol_id),
+            "/floodsub/1.0.0"
+        );
     }
 }

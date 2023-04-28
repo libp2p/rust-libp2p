@@ -20,9 +20,8 @@
 
 //! Components of a Noise protocol.
 
-pub mod x25519;
-pub mod x25519_spec;
-
+pub(crate) mod x25519;
+pub(crate) mod x25519_spec;
 use crate::NoiseError;
 use libp2p_identity as identity;
 use rand::SeedableRng;

@@ -83,26 +83,21 @@ pub enum OutboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a client role.
-pub struct AsClient<'a> {
-    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
-    pub local_peer_id: PeerId,
-    pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub servers: &'a HashSet<PeerId>,
-    pub throttled_servers: &'a mut Vec<(PeerId, Instant)>,
-
-    pub nat_status: &'a mut NatStatus,
-    pub confidence: &'a mut usize,
-
-    pub ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
-
-    pub last_probe: &'a mut Option<Instant>,
-    pub schedule_probe: &'a mut Delay,
-
-    pub listen_addresses: &'a ListenAddresses,
-    pub external_addresses: &'a ExternalAddresses,
+pub(crate) struct AsClient<'a> {
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) local_peer_id: PeerId,
+    pub(crate) config: &'a Config,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) servers: &'a HashSet<PeerId>,
+    pub(crate) throttled_servers: &'a mut Vec<(PeerId, Instant)>,
+    pub(crate) nat_status: &'a mut NatStatus,
+    pub(crate) confidence: &'a mut usize,
+    pub(crate) ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
+    pub(crate) last_probe: &'a mut Option<Instant>,
+    pub(crate) schedule_probe: &'a mut Delay,
+    pub(crate) listen_addresses: &'a ListenAddresses,
+    pub(crate) external_addresses: &'a ExternalAddresses,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
@@ -200,7 +195,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 }
 
 impl<'a> AsClient<'a> {
-    pub fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
+    pub(crate) fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {
                 self.schedule_probe.reset(self.config.retry_interval);
@@ -231,7 +226,7 @@ impl<'a> AsClient<'a> {
     }
 
     // An inbound connection can indicate that we are public; adjust the delay to the next probe.
-    pub fn on_inbound_connection(&mut self) {
+    pub(crate) fn on_inbound_connection(&mut self) {
         if *self.confidence == self.config.confidence_max {
             if self.nat_status.is_public() {
                 self.schedule_next_probe(self.config.refresh_interval * 2);
@@ -241,7 +236,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_new_address(&mut self) {
+    pub(crate) fn on_new_address(&mut self) {
         if !self.nat_status.is_public() {
             // New address could be publicly reachable, trigger retry.
             if *self.confidence > 0 {
@@ -251,7 +246,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_expired_address(&mut self, addr: &Multiaddr) {
+    pub(crate) fn on_expired_address(&mut self, addr: &Multiaddr) {
         if let NatStatus::Public(public_address) = self.nat_status {
             if public_address == addr {
                 *self.confidence = 0;
