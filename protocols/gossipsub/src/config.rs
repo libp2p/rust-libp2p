@@ -363,6 +363,11 @@ impl Config {
         self.iwant_followup_time
     }
 
+    /// Enable support for flooodsub peers. Default false.
+    pub fn support_floodsub(&self) -> bool {
+        self.protocol.protocol_ids.contains(&FLOODSUB_PROTOCOL)
+    }
+
     /// Published message ids time cache duration. The default is 10 seconds.
     pub fn published_message_ids_cache_time(&self) -> Duration {
         self.published_message_ids_cache_time
