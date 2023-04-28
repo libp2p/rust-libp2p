@@ -186,7 +186,7 @@ where
     }
 
     /// Notifies the connection handler of an event.
-    pub(crate) fn on_behaviour_event(&mut self, event: THandler::InEvent) {
+    pub(crate) fn on_behaviour_event(&mut self, event: THandler::FromSwarm) {
         self.handler.on_behaviour_event(event);
     }
 
@@ -791,7 +791,7 @@ mod tests {
     }
 
     impl ConnectionHandler for MockConnectionHandler {
-        type InEvent = Void;
+        type FromSwarm = Void;
         type OutEvent = Void;
         type Error = Void;
         type InboundProtocol = DeniedUpgrade;
@@ -830,7 +830,7 @@ mod tests {
             }
         }
 
-        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
             void::unreachable(event)
         }
 

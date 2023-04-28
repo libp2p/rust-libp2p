@@ -95,7 +95,7 @@ where
 
     /// The managed connections of each peer that are currently considered established.
     established:
-        FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<THandler::InEvent>>>,
+        FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<THandler::FromSwarm>>>,
 
     /// The pending connections that are currently being negotiated.
     pending: HashMap<ConnectionId, PendingConnection>,
@@ -343,7 +343,7 @@ where
     pub(crate) fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<&mut EstablishedConnection<THandler::InEvent>> {
+    ) -> Option<&mut EstablishedConnection<THandler::FromSwarm>> {
         self.established
             .values_mut()
             .find_map(|connections| connections.get_mut(&id))

@@ -598,7 +598,7 @@ enum ReservationRequestFuture {
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
 impl ConnectionHandler for Handler {
-    type InEvent = In;
+    type FromSwarm = In;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
         Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
@@ -619,7 +619,7 @@ impl ConnectionHandler for Handler {
         )
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         match event {
             In::AcceptReservationReq {
                 inbound_reservation_req,

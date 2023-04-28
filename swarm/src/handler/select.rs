@@ -339,7 +339,7 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = Either<TProto1::InEvent, TProto2::InEvent>;
+    type FromSwarm = Either<TProto1::FromSwarm, TProto2::FromSwarm>;
     type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
@@ -361,7 +361,7 @@ where
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         match event {
             Either::Left(event) => self.proto1.on_behaviour_event(event),
             Either::Right(event) => self.proto2.on_behaviour_event(event),

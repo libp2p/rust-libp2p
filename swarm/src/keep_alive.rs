@@ -84,7 +84,7 @@ impl NetworkBehaviour for Behaviour {
 pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
-    type InEvent = Void;
+    type FromSwarm = Void;
     type OutEvent = Void;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
@@ -96,7 +96,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromSwarm) {
         void::unreachable(v)
     }
 

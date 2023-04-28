@@ -273,7 +273,7 @@ impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
 {
-    type InEvent = TInner::InEvent;
+    type FromSwarm = TInner::FromSwarm;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
@@ -292,7 +292,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         self.inner
             .as_mut()
             .expect("Can't receive events if disabled; QED")

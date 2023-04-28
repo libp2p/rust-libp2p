@@ -94,7 +94,7 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 /// continue reading data until the remote closes its side of the connection.
 pub trait ConnectionHandler: Send + 'static {
     /// Custom event that can be received from the outside.
-    type InEvent: fmt::Debug + Send + 'static;
+    type FromSwarm: fmt::Debug + Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
     type OutEvent: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
@@ -156,7 +156,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where
         Self: Sized,
-        TMap: Fn(&TNewIn) -> Option<&Self::InEvent>,
+        TMap: Fn(&TNewIn) -> Option<&Self::FromSwarm>,
     {
         MapInEvent::new(self, map)
     }
@@ -184,7 +184,7 @@ pub trait ConnectionHandler: Send + 'static {
     }
 
     /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
-    fn on_behaviour_event(&mut self, _event: Self::InEvent);
+    fn on_behaviour_event(&mut self, _event: Self::FromSwarm);
 
     fn on_connection_event(
         &mut self,

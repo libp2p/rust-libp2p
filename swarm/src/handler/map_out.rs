@@ -44,7 +44,7 @@ where
     TNewOut: Debug + Send + 'static,
     TMap: Send + 'static,
 {
-    type InEvent = TConnectionHandler::InEvent;
+    type FromSwarm = TConnectionHandler::FromSwarm;
     type OutEvent = TNewOut;
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
@@ -56,7 +56,7 @@ where
         self.inner.listen_protocol()
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         self.inner.on_behaviour_event(event)
     }
 

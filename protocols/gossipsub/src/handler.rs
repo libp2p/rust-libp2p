@@ -392,7 +392,7 @@ impl EnabledHandler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = HandlerIn;
+    type FromSwarm = HandlerIn;
     type OutEvent = HandlerEvent;
     type Error = Void;
     type InboundOpenInfo = ();

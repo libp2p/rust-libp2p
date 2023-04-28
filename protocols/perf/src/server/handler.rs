@@ -64,7 +64,7 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Void;
+    type FromSwarm = Void;
     type OutEvent = Event;
     type Error = Void;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
@@ -76,7 +76,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromSwarm) {
         void::unreachable(v)
     }
 

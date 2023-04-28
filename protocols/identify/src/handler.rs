@@ -222,7 +222,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = InEvent;
+    type FromSwarm = InEvent;
     type OutEvent = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
@@ -240,7 +240,7 @@ impl ConnectionHandler for Handler {
             listen_addrs,
             supported_protocols,
             protocol,
-        }: Self::InEvent,
+        }: Self::FromSwarm,
     ) {
         let info = Info {
             public_key: self.public_key.clone(),

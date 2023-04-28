@@ -45,11 +45,11 @@ impl<TConnectionHandler, TMap, TNewIn> ConnectionHandler
     for MapInEvent<TConnectionHandler, TNewIn, TMap>
 where
     TConnectionHandler: ConnectionHandler,
-    TMap: Fn(TNewIn) -> Option<TConnectionHandler::InEvent>,
+    TMap: Fn(TNewIn) -> Option<TConnectionHandler::FromSwarm>,
     TNewIn: Debug + Send + 'static,
     TMap: Send + 'static,
 {
-    type InEvent = TNewIn;
+    type FromSwarm = TNewIn;
     type OutEvent = TConnectionHandler::OutEvent;
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;

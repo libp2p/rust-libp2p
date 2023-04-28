@@ -462,7 +462,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = In;
+    type FromSwarm = In;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
         Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
@@ -476,7 +476,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         match event {
             In::Reserve { to_listener } => {
                 self.queued_events

@@ -40,7 +40,7 @@ pub struct Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = void::Void;
+    type FromSwarm = void::Void;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
@@ -52,7 +52,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _: Self::FromSwarm) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No

@@ -354,7 +354,7 @@ where
     TInboundSubstreamHandler: Send + 'static,
     TOutboundSubstreamHandler: Send + 'static,
 {
-    type InEvent = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
+    type FromSwarm = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
     type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
     type Error = Void;
     type InboundProtocol = PassthroughProtocol;
@@ -400,7 +400,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
         match event {
             InEvent::NewSubstream { open_info } => self.new_substreams.push_back(open_info),
             InEvent::NotifyInboundSubstream { id, message } => {
