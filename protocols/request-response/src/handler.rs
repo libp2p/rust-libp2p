@@ -282,7 +282,7 @@ impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: Codec + Send + Clone + 'static,
 {
-    type FromSwarm = RequestProtocol<TCodec>;
+    type FromBehaviour = RequestProtocol<TCodec>;
     type ToBehaviour = Event<TCodec>;
     type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
@@ -324,7 +324,7 @@ where
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
-    fn on_behaviour_event(&mut self, request: Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
         self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
     }

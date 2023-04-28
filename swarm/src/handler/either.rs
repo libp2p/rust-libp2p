@@ -192,7 +192,7 @@ where
     L: ConnectionHandler,
     R: ConnectionHandler,
 {
-    type FromSwarm = Either<L::FromSwarm, R::FromSwarm>;
+    type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
     type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
     type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
@@ -214,7 +214,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match (self, event) {
             (Either::Left(handler), Either::Left(event)) => handler.on_behaviour_event(event),
             (Either::Right(handler), Either::Right(event)) => handler.on_behaviour_event(event),

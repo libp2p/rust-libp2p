@@ -121,7 +121,7 @@ where
     SubstreamProtocol<TInbound, ()>: Clone,
     TEvent: Debug + Send + 'static,
 {
-    type FromSwarm = TOutbound;
+    type FromBehaviour = TOutbound;
     type ToBehaviour = TEvent;
     type Error = ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInbound;
@@ -133,7 +133,7 @@ where
         self.listen_protocol.clone()
     }
 
-    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         self.send_request(event);
     }
 

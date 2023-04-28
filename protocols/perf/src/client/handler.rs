@@ -83,7 +83,7 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromSwarm = Command;
+    type FromBehaviour = Command;
     type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
@@ -95,7 +95,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, command: Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, command: Self::FromBehaviour) {
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), command),

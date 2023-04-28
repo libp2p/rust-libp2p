@@ -177,7 +177,7 @@ pub type THandler<TBehaviour> =
 
 /// Custom event that can be received by the [`ConnectionHandler`] of the
 /// [`NetworkBehaviour`].
-pub type THandlerInEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::FromSwarm;
+pub type THandlerInEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::FromBehaviour;
 
 /// Custom event that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
 pub type THandlerOutEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::ToBehaviour;
@@ -1426,7 +1426,7 @@ fn notify_any<THandler, TBehaviour>(
 where
     TBehaviour: NetworkBehaviour,
     THandler: ConnectionHandler<
-        FromSwarm = THandlerInEvent<TBehaviour>,
+        FromBehaviour = THandlerInEvent<TBehaviour>,
         ToBehaviour = THandlerOutEvent<TBehaviour>,
     >,
 {

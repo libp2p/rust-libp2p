@@ -223,7 +223,7 @@ where
     H::InboundProtocol: InboundUpgradeSend,
     H::OutboundProtocol: OutboundUpgradeSend,
 {
-    type FromSwarm = (K, <H as ConnectionHandler>::FromSwarm);
+    type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
     type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
     type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
@@ -321,7 +321,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, (key, event): Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, (key, event): Self::FromBehaviour) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.on_behaviour_event(event)
         } else {

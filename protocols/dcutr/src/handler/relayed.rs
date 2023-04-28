@@ -294,7 +294,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromSwarm = Command;
+    type FromBehaviour = Command;
     type ToBehaviour = Event;
     type Error = ConnectionHandlerUpgrErr<
         Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
@@ -320,7 +320,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::FromSwarm) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             Command::Connect { obs_addrs, attempt } => {
                 self.queued_events

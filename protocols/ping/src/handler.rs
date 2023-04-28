@@ -254,7 +254,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromSwarm = Void;
+    type FromBehaviour = Void;
     type ToBehaviour = crate::Result;
     type Error = Failure;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
