@@ -1,3 +1,10 @@
+## 0.2.0 - unreleased
+
+- Remove `identity::secp256k1::SecretKey::sign_hash` and make `identity::secp256k1::SecretKey::sign` infallible.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.1.2 - unreleased
 
 - Add `impl From<ed25519::PublicKey> for PublicKey` so that `PublicKey::from(ed25519::PublicKey)` works.

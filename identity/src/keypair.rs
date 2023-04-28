@@ -200,7 +200,7 @@ impl Keypair {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(ref pair) => pair.secret().sign(msg),
+            Secp256k1(ref pair) => Ok(pair.secret().sign(msg)),
             #[cfg(feature = "ecdsa")]
             Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
         }
