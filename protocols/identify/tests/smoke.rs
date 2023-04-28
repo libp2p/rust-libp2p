@@ -37,7 +37,9 @@ async fn periodic_identify() {
             .factor_second()
             .0
         {
-            future::Either::Left(identify::Event::Received { info, .. }) => {
+            future::Either::Left(identify::Event::Received { mut info, .. }) => {
+                info.listen_addrs.sort();
+
                 assert_eq!(info.public_key.to_peer_id(), swarm2_peer_id);
                 assert_eq!(info.protocol_version, "c");
                 assert_eq!(info.agent_version, "d");
@@ -48,11 +50,13 @@ async fn periodic_identify() {
                 );
                 assert_eq!(
                     info.listen_addrs,
-                    vec![swarm2_memory_listen, swarm2_tcp_listen_addr]
+                    vec![swarm2_tcp_listen_addr, swarm2_memory_listen]
                 );
                 return;
             }
-            future::Either::Right(identify::Event::Received { info, .. }) => {
+            future::Either::Right(identify::Event::Received { mut info, .. }) => {
+                info.listen_addrs.sort();
+
                 assert_eq!(info.public_key.to_peer_id(), swarm1_peer_id);
                 assert_eq!(info.protocol_version, "a");
                 assert_eq!(info.agent_version, "b");
@@ -63,7 +67,7 @@ async fn periodic_identify() {
                 );
                 assert_eq!(
                     info.listen_addrs,
-                    vec![swarm1_memory_listen, swarm1_tcp_listen_addr]
+                    vec![swarm1_tcp_listen_addr, swarm1_memory_listen]
                 );
                 return;
             }
