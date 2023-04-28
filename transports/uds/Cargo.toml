@@ -15,7 +15,7 @@ async-std = { version = "1.6.2", optional = true }
 libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.28"
-tokio = { version = "1.27", default-features = false, features = ["net"], optional = true }
+tokio = { version = "1.28", default-features = false, features = ["net"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.5"
