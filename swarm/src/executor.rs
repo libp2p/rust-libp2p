@@ -31,8 +31,7 @@ impl Executor for ThreadPool {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub struct TokioExecutor;
-
+pub(crate) struct TokioExecutor;
 #[cfg(all(
     feature = "tokio",
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
@@ -48,8 +47,7 @@ impl Executor for TokioExecutor {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub struct AsyncStdExecutor;
-
+pub(crate) struct AsyncStdExecutor;
 #[cfg(all(
     feature = "async-std",
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
@@ -62,8 +60,7 @@ impl Executor for AsyncStdExecutor {
 
 #[cfg(feature = "wasm-bindgen")]
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct WasmBindgenExecutor;
-
+pub(crate) struct WasmBindgenExecutor;
 #[cfg(feature = "wasm-bindgen")]
 impl Executor for WasmBindgenExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {

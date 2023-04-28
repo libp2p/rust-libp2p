@@ -84,7 +84,7 @@ impl ExecSwitch {
 }
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler>
+pub(crate) struct Pool<THandler>
 where
     THandler: ConnectionHandler,
 {
@@ -140,7 +140,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct EstablishedConnection<TInEvent> {
+pub(crate) struct EstablishedConnection<TInEvent> {
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
@@ -157,7 +157,7 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     /// `poll_ready_notify_handler` without another intervening execution
     /// of `notify_handler`, it only fails if the connection is now about
     /// to close.
-    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
+    pub(crate) fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
         let cmd = task::Command::NotifyHandler(event);
         self.sender.try_send(cmd).map_err(|e| match e.into_inner() {
             task::Command::NotifyHandler(event) => event,
@@ -171,14 +171,17 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     ///
     /// Returns `Err(())` if the background task associated with the connection
     /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
+    pub(crate) fn poll_ready_notify_handler(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), ()>> {
         self.sender.poll_ready(cx).map_err(|_| ())
     }
 
     /// Initiates a graceful close of the connection.
     ///
     /// Has no effect if the connection is already closing.
-    pub fn start_close(&mut self) {
+    pub(crate) fn start_close(&mut self) {
         // Clone the sender so that we are guaranteed to have
         // capacity for the close command (every sender gets a slot).
         match self.sender.clone().try_send(task::Command::Close) {
@@ -221,7 +224,7 @@ impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub enum PoolEvent<THandler: ConnectionHandler> {
+pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
     /// A new connection has been established.
     ConnectionEstablished {
         id: ConnectionId,
@@ -306,7 +309,7 @@ where
 {
     /// Creates a new empty `Pool`.
     #[allow(deprecated)]
-    pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
+    pub(crate) fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
         let executor = match config.executor {
             Some(exec) => ExecSwitch::Executor(exec),
@@ -332,12 +335,12 @@ where
     }
 
     /// Gets the dedicated connection counters.
-    pub fn counters(&self) -> &ConnectionCounters {
+    pub(crate) fn counters(&self) -> &ConnectionCounters {
         &self.counters
     }
 
     /// Gets an established connection from the pool by ID.
-    pub fn get_established(
+    pub(crate) fn get_established(
         &mut self,
         id: ConnectionId,
     ) -> Option<&mut EstablishedConnection<THandler::InEvent>> {
@@ -349,13 +352,13 @@ where
     /// Returns true if we are connected to the given peer.
     ///
     /// This will return true only after a `NodeReached` event has been produced by `poll()`.
-    pub fn is_connected(&self, id: PeerId) -> bool {
+    pub(crate) fn is_connected(&self, id: PeerId) -> bool {
         self.established.contains_key(&id)
     }
 
     /// Returns the number of connected peers, i.e. those with at least one
     /// established connection in the pool.
-    pub fn num_peers(&self) -> usize {
+    pub(crate) fn num_peers(&self) -> usize {
         self.established.len()
     }
 
@@ -364,7 +367,7 @@ where
     /// All connections to the peer, whether pending or established are
     /// closed asap and no more events from these connections are emitted
     /// by the pool effective immediately.
-    pub fn disconnect(&mut self, peer: PeerId) {
+    pub(crate) fn disconnect(&mut self, peer: PeerId) {
         if let Some(conns) = self.established.get_mut(&peer) {
             for (_, conn) in conns.iter_mut() {
                 conn.start_close();
@@ -381,7 +384,7 @@ where
     }
 
     /// Returns an iterator over all established connections of `peer`.
-    pub fn iter_established_connections_of_peer(
+    pub(crate) fn iter_established_connections_of_peer(
         &mut self,
         peer: &PeerId,
     ) -> impl Iterator<Item = ConnectionId> + '_ {
@@ -392,7 +395,7 @@ where
     }
 
     /// Checks whether we are currently dialing the given peer.
-    pub fn is_dialing(&self, peer: PeerId) -> bool {
+    pub(crate) fn is_dialing(&self, peer: PeerId) -> bool {
         self.pending.iter().any(|(_, info)| {
             matches!(info.endpoint, PendingPoint::Dialer { .. }) && info.is_for_same_remote_as(peer)
         })
@@ -400,7 +403,7 @@ where
 
     /// Returns an iterator over all connected peers, i.e. those that have
     /// at least one established connection in the pool.
-    pub fn iter_connected(&self) -> impl Iterator<Item = &PeerId> {
+    pub(crate) fn iter_connected(&self) -> impl Iterator<Item = &PeerId> {
         self.established.keys()
     }
 
@@ -410,7 +413,7 @@ where
     /// Returns an error if the limit of pending outgoing connections
     /// has been reached.
     #[allow(deprecated)]
-    pub fn add_outgoing(
+    pub(crate) fn add_outgoing(
         &mut self,
         dials: Vec<
             BoxFuture<
@@ -465,7 +468,7 @@ where
     /// Returns an error if the limit of pending incoming connections
     /// has been reached.
     #[allow(deprecated)]
-    pub fn add_incoming<TFut>(
+    pub(crate) fn add_incoming<TFut>(
         &mut self,
         future: TFut,
         info: IncomingInfo<'_>,
@@ -503,7 +506,7 @@ where
     }
 
     #[allow(deprecated)]
-    pub fn spawn_connection(
+    pub(crate) fn spawn_connection(
         &mut self,
         id: ConnectionId,
         obtained_peer_id: PeerId,
@@ -548,7 +551,7 @@ where
     }
 
     /// Polls the connection pool for events.
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
+    pub(crate) fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where
         THandler: ConnectionHandler + 'static,
         <THandler as ConnectionHandler>::OutboundOpenInfo: Send,
@@ -832,7 +835,7 @@ where
 ///
 /// On drop, this type send the connection back to the [`Pool`] where it will be gracefully closed.
 #[derive(Debug)]
-pub struct NewConnection {
+pub(crate) struct NewConnection {
     connection: Option<StreamMuxerBox>,
     drop_sender: Option<oneshot::Sender<StreamMuxerBox>>,
 }
@@ -1101,20 +1104,16 @@ impl ConnectionLimits {
 ///
 /// The default configuration specifies no dedicated task executor, a
 /// task event buffer size of 32, and a task command buffer size of 7.
-pub struct PoolConfig {
+pub(crate) struct PoolConfig {
     /// Executor to use to spawn tasks.
-    pub executor: Option<Box<dyn Executor + Send>>,
-
+    pub(crate) executor: Option<Box<dyn Executor + Send>>,
     /// Size of the task command buffer (per task).
-    pub task_command_buffer_size: usize,
-
+    pub(crate) task_command_buffer_size: usize,
     /// Size of the pending connection task event buffer and the established connection task event
     /// buffer.
-    pub per_connection_event_buffer_size: usize,
-
+    pub(crate) per_connection_event_buffer_size: usize,
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub dial_concurrency_factor: NonZeroU8,
-
+    pub(crate) dial_concurrency_factor: NonZeroU8,
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
@@ -1125,7 +1124,7 @@ pub struct PoolConfig {
 }
 
 impl PoolConfig {
-    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
+    pub(crate) fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         Self {
             executor,
             task_command_buffer_size: 32,
@@ -1143,7 +1142,7 @@ impl PoolConfig {
     /// When the buffer for a particular connection is full, `notify_handler` will no
     /// longer be able to deliver events to the associated [`Connection`](super::Connection),
     /// thus exerting back-pressure on the connection and peer API.
-    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+    pub(crate) fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.task_command_buffer_size = n.get() - 1;
         self
     }
@@ -1154,19 +1153,19 @@ impl PoolConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
+    pub(crate) fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.per_connection_event_buffer_size = n;
         self
     }
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+    pub(crate) fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
         self
     }
 
     /// Configures an override for the substream upgrade protocol to use.
-    pub fn with_substream_upgrade_protocol_override(
+    pub(crate) fn with_substream_upgrade_protocol_override(
         mut self,
         v: libp2p_core::upgrade::Version,
     ) -> Self {
@@ -1177,7 +1176,7 @@ impl PoolConfig {
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
-    pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+    pub(crate) fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.max_negotiating_inbound_streams = v;
         self
     }

@@ -31,12 +31,12 @@ use crate::proto::{Flag, Message};
 use crate::tokio::substream::framed_dc::FramedDc;
 
 #[must_use]
-pub struct DropListener {
+pub(crate) struct DropListener {
     state: State,
 }
 
 impl DropListener {
-    pub fn new(stream: FramedDc, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
+    pub(crate) fn new(stream: FramedDc, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
         let substream_id = stream.get_ref().stream_identifier();
 
         Self {
@@ -127,4 +127,4 @@ impl Future for DropListener {
 }
 
 /// Indicates that our substream got gracefully closed.
-pub struct GracefullyClosed {}
+pub(crate) struct GracefullyClosed {}

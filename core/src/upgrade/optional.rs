@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![allow(deprecated)]
+
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Upgrade that can be disabled at runtime.
@@ -25,6 +27,9 @@ use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 /// Wraps around an `Option<T>` and makes it available or not depending on whether it contains or
 /// not an upgrade.
 #[derive(Debug, Clone)]
+#[deprecated(
+    note = "Will be removed without replacement because it is not used within rust-libp2p."
+)]
 pub struct OptionalUpgrade<T>(Option<T>);
 
 impl<T> OptionalUpgrade<T> {
