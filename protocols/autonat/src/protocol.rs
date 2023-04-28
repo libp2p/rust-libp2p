@@ -29,8 +29,7 @@ use quick_protobuf::{BytesReader, Writer};
 use std::{convert::TryFrom, io};
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTOCOL_NAME: StreamProtocol =
-    StreamProtocol::from_static("/libp2p/autonat/1.0.0");
+pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");
 
 #[derive(Clone)]
 pub struct AutoNatCodec;

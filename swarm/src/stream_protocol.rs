@@ -18,7 +18,7 @@ impl StreamProtocol {
     /// # Panics
     ///
     /// This function panics if the protocol does not start with a forward slash: `/`.
-    pub const fn from_static(s: &'static str) -> Self {
+    pub const fn new(s: &'static str) -> Self {
         match s.as_bytes() {
             [b'/', ..] => {}
             _ => panic!("Protocols should start with a /"),
@@ -32,10 +32,10 @@ impl StreamProtocol {
     /// Attempt to construct a protocol from an owned string.
     ///
     /// This function will fail if the protocol does not start with a forward slash: `/`.
-    /// Where possible, you should use [`StreamProtocol::from_static`] instead to avoid allocations.
+    /// Where possible, you should use [`StreamProtocol::new`] instead to avoid allocations.
     pub fn try_from_owned(protocol: String) -> Result<Self, InvalidProtocol> {
         if !protocol.starts_with('/') {
-            return Err(InvalidProtocol {});
+            return Err(InvalidProtocol::missing_forward_slash());
         }
 
         Ok(StreamProtocol {
@@ -81,7 +81,16 @@ impl Hash for StreamProtocol {
 }
 
 #[derive(Debug)]
-pub struct InvalidProtocol {}
+pub struct InvalidProtocol {
+    // private field to prevent construction outside of this module
+    _private: (),
+}
+
+impl InvalidProtocol {
+    pub(crate) fn missing_forward_slash() -> Self {
+        InvalidProtocol { _private: () }
+    }
+}
 
 impl fmt::Display for InvalidProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

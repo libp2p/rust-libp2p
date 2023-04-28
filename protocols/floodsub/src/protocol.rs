@@ -33,7 +33,7 @@ use std::{io, iter, pin::Pin};
 
 const MAX_MESSAGE_LEN_BYTES: usize = 2048;
 
-const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/floodsub/1.0.0");
+const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/floodsub/1.0.0");
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]

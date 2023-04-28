@@ -43,7 +43,7 @@ use std::{io, iter};
 use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/kad/1.0.0");
+pub const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 
 /// The default maximum size for a varint length-delimited packet.
 pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;

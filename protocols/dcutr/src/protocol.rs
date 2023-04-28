@@ -22,6 +22,6 @@ use libp2p_swarm::StreamProtocol;
 
 pub(crate) mod inbound;
 pub(crate) mod outbound;
-pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/libp2p/dcutr");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/dcutr");
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

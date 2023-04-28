@@ -24,7 +24,7 @@ use libp2p_swarm::StreamProtocol;
 use rand::{distributions, prelude::*};
 use std::{io, time::Duration};
 
-pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/ping/1.0.0");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0");
 
 /// The `Ping` protocol upgrade.
 ///

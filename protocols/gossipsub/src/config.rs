@@ -986,13 +986,13 @@ mod test {
 
         assert_eq!(
             protocol_ids[0].protocol,
-            StreamProtocol::from_static("/purple/1.1.0")
+            StreamProtocol::new("/purple/1.1.0")
         );
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
 
         assert_eq!(
             protocol_ids[1].protocol,
-            StreamProtocol::from_static("/purple/1.0.0")
+            StreamProtocol::new("/purple/1.0.0")
         );
         assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
     }

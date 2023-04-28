@@ -27,9 +27,9 @@ pub(crate) mod inbound_stop;
 pub(crate) mod outbound_hop;
 pub(crate) mod outbound_stop;
 pub const HOP_PROTOCOL_NAME: StreamProtocol =
-    StreamProtocol::from_static("/libp2p/circuit/relay/0.2.0/hop");
+    StreamProtocol::new("/libp2p/circuit/relay/0.2.0/hop");
 pub const STOP_PROTOCOL_NAME: StreamProtocol =
-    StreamProtocol::from_static("/libp2p/circuit/relay/0.2.0/stop");
+    StreamProtocol::new("/libp2p/circuit/relay/0.2.0/stop");
 
 const MAX_MESSAGE_SIZE: usize = 4096;
 

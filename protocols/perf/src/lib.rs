@@ -30,4 +30,4 @@ pub mod client;
 mod protocol;
 pub mod server;
 
-pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/perf/1.0.0");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");

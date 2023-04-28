@@ -63,7 +63,7 @@ pub(crate) async fn new(
             request_response: request_response::Behaviour::new(
                 FileExchangeCodec(),
                 iter::once((
-                    StreamProtocol::from_static("/file-exchange/1"),
+                    StreamProtocol::new("/file-exchange/1"),
                     ProtocolSupport::Full,
                 )),
                 Default::default(),

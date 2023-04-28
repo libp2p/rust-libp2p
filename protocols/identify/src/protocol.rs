@@ -37,9 +37,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/id/1.0.0");
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
 
-pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::from_static("/ipfs/id/push/1.0.0");
+pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/push/1.0.0");
 
 /// The type of the Substream protocol.
 #[derive(Debug, PartialEq, Eq)]
@@ -339,8 +339,8 @@ mod tests {
                         "/ip6/::1/udp/1000".parse().unwrap(),
                     ],
                     protocols: vec![
-                        StreamProtocol::from_static("/proto1"),
-                        StreamProtocol::from_static("/proto2"),
+                        StreamProtocol::new("/proto1"),
+                        StreamProtocol::new("/proto2"),
                     ],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
                 },

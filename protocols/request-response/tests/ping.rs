@@ -38,7 +38,7 @@ async fn is_response_outbound() {
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((
-        StreamProtocol::from_static("/ping/1"),
+        StreamProtocol::new("/ping/1"),
         request_response::ProtocolSupport::Full,
     ));
     let cfg = request_response::Config::default();
@@ -83,10 +83,7 @@ async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
-    let protocols = iter::once((
-        StreamProtocol::from_static("/ping/1"),
-        ProtocolSupport::Full,
-    ));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -177,10 +174,7 @@ async fn ping_protocol() {
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((
-        StreamProtocol::from_static("/ping/1"),
-        ProtocolSupport::Full,
-    ));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -243,10 +237,7 @@ async fn emits_inbound_connection_closed_failure() {
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((
-        StreamProtocol::from_static("/ping/1"),
-        ProtocolSupport::Full,
-    ));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {

@@ -43,15 +43,15 @@ use void::Void;
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
 pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: StreamProtocol::from_static("/meshsub/1.1.0"),
+    protocol: StreamProtocol::new("/meshsub/1.1.0"),
     kind: PeerKind::Gossipsubv1_1,
 };
 pub(crate) const GOSSIPSUB_1_0_0_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: StreamProtocol::from_static("/meshsub/1.0.0"),
+    protocol: StreamProtocol::new("/meshsub/1.0.0"),
     kind: PeerKind::Gossipsub,
 };
 pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
-    protocol: StreamProtocol::from_static("/floodsub/1.0.0"),
+    protocol: StreamProtocol::new("/floodsub/1.0.0"),
     kind: PeerKind::Floodsub,
 };
 
