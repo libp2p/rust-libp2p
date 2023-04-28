@@ -96,13 +96,13 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let stream = ready!(self.connection.poll_new_outbound(cx)?);
+        let stream = ready!(self.connection.poll_new_outbound(cx).map_err(YamuxError)?);
 
         Poll::Ready(Ok(Stream(stream)))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        ready!(self.connection.poll_close(cx)?);
+        ready!(self.connection.poll_close(cx).map_err(YamuxError)?);
 
         Poll::Ready(Ok(()))
     }
@@ -137,7 +137,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, YamuxError>> {
-        let stream = ready!(self.connection.poll_next_inbound(cx))
+        let stream = ready!(self.connection.poll_next_inbound(cx).map_err(YamuxError))
             .transpose()?
             .ok_or(YamuxError(ConnectionError::Closed))?;
 
@@ -335,4 +335,4 @@ where
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error(transparent)]
-pub struct YamuxError(#[from] ConnectionError);
+pub struct YamuxError(ConnectionError);
