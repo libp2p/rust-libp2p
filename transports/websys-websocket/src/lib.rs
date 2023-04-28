@@ -56,7 +56,9 @@ use std::{
 /// ```
 ///
 #[derive(Default)]
-pub struct Transport {}
+pub struct Transport {
+    _private: ()
+}
 
 impl libp2p_core::Transport for Transport {
     type Output = Connection;
