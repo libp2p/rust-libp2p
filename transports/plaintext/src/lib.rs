@@ -43,8 +43,9 @@ use void::Void;
 mod error;
 mod handshake;
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::structs::Exchange;
+    pub(crate) use self::structs::Exchange;
 }
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
