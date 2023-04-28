@@ -1,3 +1,11 @@
+## 0.43.0 - unreleased
+
+- Introduce `StreamProtocol` type.
+  This type enforces invariants on protocol names, such as leading forward slashes and correct UTF8 encoding.
+  See [PR 3746].
+
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+
 ## 0.42.2 - unreleased
 
 - Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].

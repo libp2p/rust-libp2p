@@ -1,3 +1,12 @@
+## 0.40.0 - unreleased
+
+- Enforce protocol names to be valid UTF8 strings as required by the [spec].
+  We delete the `ProtocolName` trait and replace it with a requirement for `AsRef<str>`.
+  See [PR 3746]
+
+[spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+
 ## 0.39.2 - unreleased
 
 - Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.
