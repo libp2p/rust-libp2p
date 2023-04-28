@@ -45,12 +45,11 @@ pub const PROTOCOL_NAME: &[u8] = b"/ipfs/ping/1.0.0";
 /// >           which can affect latencies especially on otherwise low-volume
 /// >           connections.
 #[derive(Default, Debug, Copy, Clone)]
-pub struct Ping;
-
+pub(crate) struct Ping;
 const PING_SIZE: usize = 32;
 
 /// Sends a ping and waits for the pong.
-pub async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
+pub(crate) async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
@@ -71,7 +70,7 @@ where
 }
 
 /// Waits for a ping and sends a pong.
-pub async fn recv_ping<S>(mut stream: S) -> io::Result<S>
+pub(crate) async fn recv_ping<S>(mut stream: S) -> io::Result<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {

@@ -1,3 +1,9 @@
+## 0.42.2 - unreleased
+
+- Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
+
+[PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3625
+
 ## 0.42.1
 
 - Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.

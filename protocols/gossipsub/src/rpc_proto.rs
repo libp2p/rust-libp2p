@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod proto {
+pub(crate) mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::gossipsub::pb::{mod_RPC::SubOpts, *};
 }
