@@ -1,3 +1,11 @@
+## 0.43.1 - unreleased
+
+- Drop `Yamux` prefix from all types.
+  Users are encouraged to import the `yamux` module and refer to types via `yamux::Muxer`, `yamux::Config` etc.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
