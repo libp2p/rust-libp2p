@@ -23,6 +23,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::KeyType;
+
 /// An error during decoding of key material.
 #[derive(Debug)]
 pub struct DecodingError {
@@ -156,3 +158,26 @@ impl Error for SigningError {
         self.source.as_ref().map(|s| &**s as &dyn Error)
     }
 }
+
+/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more concrete keypair.
+#[derive(Debug)]
+pub struct OtherVariantError {
+    actual: KeyType,
+}
+
+impl OtherVariantError {
+    pub(crate) fn new(actual: KeyType) -> OtherVariantError {
+        OtherVariantError { actual }
+    }
+}
+
+impl fmt::Display for OtherVariantError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!(
+            "Cannot convert to the given type, the actual key type inside is {}",
+            self.actual
+        ))
+    }
+}
+
+impl Error for OtherVariantError {}

@@ -12,7 +12,7 @@ exclude = ["src/test_assets"]
 futures = { version = "0.3.28", default-features = false }
 futures-rustls = "0.22.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-identity = { version = "0.1.2", path = "../../identity" }
 rcgen = "0.10.0"
 ring = "0.16.20"
 thiserror = "1.0.40"
