@@ -1,4 +1,5 @@
 use futures::prelude::*;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
@@ -22,7 +23,8 @@ async fn periodic_identify() {
     });
     let swarm2_peer_id = *swarm2.local_peer_id();
 
-    swarm1.listen().await;
+    let (swarm1_memory_listen, swarm1_tcp_listen_addr) = swarm1.listen().await;
+    let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
     // nb. Either swarm may receive the `Identified` event first, upon which
@@ -40,7 +42,14 @@ async fn periodic_identify() {
                 assert_eq!(info.protocol_version, "c");
                 assert_eq!(info.agent_version, "d");
                 assert!(!info.protocols.is_empty());
-                assert!(info.listen_addrs.is_empty());
+                assert_eq!(
+                    info.observed_addr,
+                    swarm1_memory_listen.with(Protocol::P2p(swarm1_peer_id.into()))
+                );
+                assert_eq!(
+                    info.listen_addrs,
+                    vec![swarm2_memory_listen, swarm2_tcp_listen_addr]
+                );
                 return;
             }
             future::Either::Right(identify::Event::Received { info, .. }) => {
@@ -48,7 +57,14 @@ async fn periodic_identify() {
                 assert_eq!(info.protocol_version, "a");
                 assert_eq!(info.agent_version, "b");
                 assert!(!info.protocols.is_empty());
-                assert_eq!(info.listen_addrs.len(), 1);
+                assert_eq!(
+                    info.observed_addr,
+                    swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))
+                );
+                assert_eq!(
+                    info.listen_addrs,
+                    vec![swarm1_memory_listen, swarm1_tcp_listen_addr]
+                );
                 return;
             }
             _ => {}
