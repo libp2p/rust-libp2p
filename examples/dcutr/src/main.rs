@@ -100,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .authenticate(
         noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
     )
-    .multiplex(yamux::YamuxConfig::default())
+    .multiplex(yamux::Config::default())
     .boxed();
 
     #[derive(NetworkBehaviour)]
