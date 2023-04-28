@@ -233,14 +233,7 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let quic_transport = quic::async_std::Transport::new(config);
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default())
         .upgrade(upgrade::Version::V1)
-        .authenticate(
-            noise::NoiseConfig::xx(
-                noise::Keypair::<noise::X25519Spec>::new()
-                    .into_authentic(&keypair)
-                    .unwrap(),
-            )
-            .into_authenticated(),
-        )
+        .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(yamux::YamuxConfig::default());
 
     let transport = OrTransport::new(quic_transport, tcp_transport)

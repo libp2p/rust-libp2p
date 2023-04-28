@@ -61,10 +61,7 @@ async fn main() -> Result<()> {
         (Transport::Tcp, Ok(SecProtocol::Noise)) => (
             tcp::tokio::Transport::new(tcp::Config::new())
                 .upgrade(Version::V1Lazy)
-                .authenticate(
-                    noise::NoiseAuthenticated::xx(&local_key)
-                        .context("failed to intialise noise")?,
-                )
+                .authenticate(noise::Config::new(&local_key).context("failed to intialise noise")?)
                 .multiplex(muxer_protocol_from_env()?)
                 .timeout(Duration::from_secs(5))
                 .boxed(),
@@ -82,10 +79,7 @@ async fn main() -> Result<()> {
         (Transport::Ws, Ok(SecProtocol::Noise)) => (
             WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                 .upgrade(Version::V1Lazy)
-                .authenticate(
-                    noise::NoiseAuthenticated::xx(&local_key)
-                        .context("failed to intialise noise")?,
-                )
+                .authenticate(noise::Config::new(&local_key).context("failed to intialise noise")?)
                 .multiplex(muxer_protocol_from_env()?)
                 .timeout(Duration::from_secs(5))
                 .boxed(),

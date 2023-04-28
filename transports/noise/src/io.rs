@@ -37,7 +37,7 @@ use std::{
 /// A noise session to a remote.
 ///
 /// `T` is the type of the underlying I/O resource.
-pub struct NoiseOutput<T> {
+pub struct Output<T> {
     io: NoiseFramed<T, snow::TransportState>,
     recv_buffer: Bytes,
     recv_offset: usize,
@@ -45,15 +45,15 @@ pub struct NoiseOutput<T> {
     send_offset: usize,
 }
 
-impl<T> fmt::Debug for NoiseOutput<T> {
+impl<T> fmt::Debug for Output<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NoiseOutput").field("io", &self.io).finish()
     }
 }
 
-impl<T> NoiseOutput<T> {
+impl<T> Output<T> {
     fn new(io: NoiseFramed<T, snow::TransportState>) -> Self {
-        NoiseOutput {
+        Output {
             io,
             recv_buffer: Bytes::new(),
             recv_offset: 0,
@@ -63,7 +63,7 @@ impl<T> NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
+impl<T: AsyncRead + Unpin> AsyncRead for Output<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -99,7 +99,7 @@ impl<T: AsyncRead + Unpin> AsyncRead for NoiseOutput<T> {
     }
 }
 
-impl<T: AsyncWrite + Unpin> AsyncWrite for NoiseOutput<T> {
+impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
