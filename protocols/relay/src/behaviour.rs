@@ -21,8 +21,7 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **relay**.
 
 mod handler;
-pub mod rate_limiter;
-
+pub(crate) mod rate_limiter;
 use crate::behaviour::handler::Handler;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::proto;
@@ -520,7 +519,6 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::NegotiateOutboundConnect {
                             circuit_id,
                             inbound_circuit_req,
-                            relay_peer_id: self.local_peer_id,
                             src_peer_id: event_source,
                             src_connection_id: connection,
                         }),

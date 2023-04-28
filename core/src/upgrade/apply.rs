@@ -25,7 +25,7 @@ use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
-pub use multistream_select::Version;
+pub(crate) use multistream_select::Version;
 use smallvec::SmallVec;
 use std::fmt;
 
@@ -275,7 +275,7 @@ impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
 }
 
 /// Wrapper for printing a [`ProtocolName`] that is expected to be mostly ASCII
-pub(crate) struct DisplayProtocolName<N>(pub N);
+pub(crate) struct DisplayProtocolName<N>(pub(crate) N);
 
 impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

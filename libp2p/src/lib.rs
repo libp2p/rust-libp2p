@@ -167,9 +167,11 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
+#[allow(deprecated)]
+pub use self::core::upgrade::{InboundUpgradeExt, OutboundUpgradeExt};
 pub use self::core::{
     transport::TransportError,
-    upgrade::{InboundUpgrade, InboundUpgradeExt, OutboundUpgrade, OutboundUpgradeExt},
+    upgrade::{InboundUpgrade, OutboundUpgrade},
     Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
