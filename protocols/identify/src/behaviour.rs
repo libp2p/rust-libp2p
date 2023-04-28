@@ -25,7 +25,7 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
+     AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
     ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
     StreamProtocol, THandlerInEvent, ToSwarm,
 };
@@ -193,16 +193,17 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             let request = Request {
                 peer_id: p,
                 protocol: Protocol::Push,
             };
             if !self.requests.contains(&request) {
                 self.requests.push(request);
-
-                self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
             }
         }
     }
@@ -563,13 +564,10 @@ mod tests {
 
     fn transport() -> (PublicKey, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         let id_keys = identity::Keypair::generate_ed25519();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
         let pubkey = id_keys.public();
         let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .authenticate(noise::Config::new(&id_keys).unwrap())
             .multiplex(MplexConfig::new())
             .boxed();
         (pubkey, transport)

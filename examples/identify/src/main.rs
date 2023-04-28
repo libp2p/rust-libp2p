@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
+        .authenticate(noise::Config::new(&local_key).unwrap())
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
