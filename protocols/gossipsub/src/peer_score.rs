@@ -95,7 +95,7 @@ impl Default for PeerStats {
 impl PeerStats {
     /// Returns a mutable reference to topic stats if they exist, otherwise if the supplied parameters score the
     /// topic, inserts the default stats and returns a reference to those. If neither apply, returns None.
-    pub fn stats_or_default_mut(
+    pub(crate) fn stats_or_default_mut(
         &mut self,
         topic_hash: TopicHash,
         params: &PeerScoreParams,
@@ -125,7 +125,7 @@ struct TopicStats {
 
 impl TopicStats {
     /// Returns true if the peer is in the `mesh`.
-    pub fn in_mesh(&self) -> bool {
+    pub(crate) fn in_mesh(&self) -> bool {
         matches!(self.mesh_status, MeshStatus::Active { .. })
     }
 }
@@ -143,7 +143,7 @@ enum MeshStatus {
 
 impl MeshStatus {
     /// Initialises a new [`MeshStatus::Active`] mesh status.
-    pub fn new_active() -> Self {
+    pub(crate) fn new_active() -> Self {
         MeshStatus::Active {
             graft_time: Instant::now(),
             mesh_time: Duration::from_secs(0),
@@ -196,11 +196,11 @@ impl Default for DeliveryRecord {
 impl PeerScore {
     /// Creates a new [`PeerScore`] using a given set of peer scoring parameters.
     #[allow(dead_code)]
-    pub fn new(params: PeerScoreParams) -> Self {
+    pub(crate) fn new(params: PeerScoreParams) -> Self {
         Self::new_with_message_delivery_time_callback(params, None)
     }
 
-    pub fn new_with_message_delivery_time_callback(
+    pub(crate) fn new_with_message_delivery_time_callback(
         params: PeerScoreParams,
         callback: Option<fn(&PeerId, &TopicHash, f64)>,
     ) -> Self {
@@ -214,13 +214,13 @@ impl PeerScore {
     }
 
     /// Returns the score for a peer
-    pub fn score(&self, peer_id: &PeerId) -> f64 {
+    pub(crate) fn score(&self, peer_id: &PeerId) -> f64 {
         self.metric_score(peer_id, None)
     }
 
     /// Returns the score for a peer, logging metrics. This is called from the heartbeat and
     /// increments the metric counts for penalties.
-    pub fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
+    pub(crate) fn metric_score(&self, peer_id: &PeerId, mut metrics: Option<&mut Metrics>) -> f64 {
         let peer_stats = match self.peer_stats.get(peer_id) {
             Some(v) => v,
             None => return 0.0,
@@ -345,7 +345,7 @@ impl PeerScore {
         score
     }
 
-    pub fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
+    pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             debug!(
                 "[Penalty] Behavioral penalty for peer {}, count = {}.",
@@ -367,7 +367,7 @@ impl PeerScore {
         }
     }
 
-    pub fn refresh_scores(&mut self) {
+    pub(crate) fn refresh_scores(&mut self) {
         let now = Instant::now();
         let params_ref = &self.params;
         let peer_ips_ref = &mut self.peer_ips;
@@ -436,7 +436,7 @@ impl PeerScore {
 
     /// Adds a connected peer to [`PeerScore`], initialising with empty ips (ips get added later
     /// through add_ip.
-    pub fn add_peer(&mut self, peer_id: PeerId) {
+    pub(crate) fn add_peer(&mut self, peer_id: PeerId) {
         let peer_stats = self.peer_stats.entry(peer_id).or_default();
 
         // mark the peer as connected
@@ -444,7 +444,7 @@ impl PeerScore {
     }
 
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
-    pub fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
+    pub(crate) fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
         trace!("Add ip for peer {}, ip: {}", peer_id, ip);
         let peer_stats = self.peer_stats.entry(*peer_id).or_default();
 
@@ -461,7 +461,7 @@ impl PeerScore {
     }
 
     /// Removes an ip from a peer
-    pub fn remove_ip(&mut self, peer_id: &PeerId, ip: &IpAddr) {
+    pub(crate) fn remove_ip(&mut self, peer_id: &PeerId, ip: &IpAddr) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.known_ips.remove(ip);
             if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
@@ -485,7 +485,7 @@ impl PeerScore {
 
     /// Removes a peer from the score table. This retains peer statistics if their score is
     /// non-positive.
-    pub fn remove_peer(&mut self, peer_id: &PeerId) {
+    pub(crate) fn remove_peer(&mut self, peer_id: &PeerId) {
         // we only retain non-positive scores of peers
         if self.score(peer_id) > 0f64 {
             if let hash_map::Entry::Occupied(entry) = self.peer_stats.entry(*peer_id) {
@@ -527,7 +527,7 @@ impl PeerScore {
     }
 
     /// Handles scoring functionality as a peer GRAFTs to a topic.
-    pub fn graft(&mut self, peer_id: &PeerId, topic: impl Into<TopicHash>) {
+    pub(crate) fn graft(&mut self, peer_id: &PeerId, topic: impl Into<TopicHash>) {
         let topic = topic.into();
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             // if we are scoring the topic, update the mesh status.
@@ -539,7 +539,7 @@ impl PeerScore {
     }
 
     /// Handles scoring functionality as a peer PRUNEs from a topic.
-    pub fn prune(&mut self, peer_id: &PeerId, topic: TopicHash) {
+    pub(crate) fn prune(&mut self, peer_id: &PeerId, topic: TopicHash) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             // if we are scoring the topic, update the mesh status.
             if let Some(topic_stats) = peer_stats.stats_or_default_mut(topic.clone(), &self.params)
@@ -563,7 +563,12 @@ impl PeerScore {
         }
     }
 
-    pub fn validate_message(&mut self, from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
+    pub(crate) fn validate_message(
+        &mut self,
+        from: &PeerId,
+        msg_id: &MessageId,
+        topic_hash: &TopicHash,
+    ) {
         // adds an empty record with the message id
         self.deliveries
             .entry(msg_id.clone())
@@ -582,7 +587,12 @@ impl PeerScore {
         }
     }
 
-    pub fn deliver_message(&mut self, from: &PeerId, msg_id: &MessageId, topic_hash: &TopicHash) {
+    pub(crate) fn deliver_message(
+        &mut self,
+        from: &PeerId,
+        msg_id: &MessageId,
+        topic_hash: &TopicHash,
+    ) {
         self.mark_first_message_delivery(from, topic_hash);
 
         let record = self
@@ -608,7 +618,7 @@ impl PeerScore {
     }
 
     /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
-    pub fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
+    pub(crate) fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         debug!(
             "[Penalty] Message from {} rejected because of ValidationError or SelfOrigin",
             from
@@ -618,7 +628,7 @@ impl PeerScore {
     }
 
     // Reject a message.
-    pub fn reject_message(
+    pub(crate) fn reject_message(
         &mut self,
         from: &PeerId,
         msg_id: &MessageId,
@@ -670,7 +680,7 @@ impl PeerScore {
         }
     }
 
-    pub fn duplicated_message(
+    pub(crate) fn duplicated_message(
         &mut self,
         from: &PeerId,
         msg_id: &MessageId,
@@ -726,7 +736,7 @@ impl PeerScore {
 
     /// Sets the application specific score for a peer. Returns true if the peer is the peer is
     /// connected or if the score of the peer is not yet expired and false otherwise.
-    pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
+    pub(crate) fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.application_score = new_score;
             true
@@ -736,7 +746,7 @@ impl PeerScore {
     }
 
     /// Sets scoring parameters for a topic.
-    pub fn set_topic_params(&mut self, topic_hash: TopicHash, params: TopicScoreParams) {
+    pub(crate) fn set_topic_params(&mut self, topic_hash: TopicHash, params: TopicScoreParams) {
         use hash_map::Entry::*;
         match self.params.topics.entry(topic_hash.clone()) {
             Occupied(mut entry) => {
