@@ -1,9 +1,9 @@
 ## 0.2.0 - unreleased
 
 - Remove `identity::secp256k1::SecretKey::sign_hash` and make `identity::secp256k1::SecretKey::sign` infallible.
-  See [PR XXXX].
+  See [PR 3850].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3850]: https://github.com/libp2p/rust-libp2p/pull/3850
 
 ## 0.1.2 - unreleased
 
