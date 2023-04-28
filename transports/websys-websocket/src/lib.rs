@@ -57,7 +57,7 @@ use std::{
 ///
 #[derive(Default)]
 pub struct Transport {
-    _private: ()
+    _private: (),
 }
 
 impl libp2p_core::Transport for Transport {
