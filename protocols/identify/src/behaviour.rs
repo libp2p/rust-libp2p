@@ -25,9 +25,9 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-     AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
-    StreamProtocol, THandlerInEvent, ToSwarm,
+    AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol,
+    THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
