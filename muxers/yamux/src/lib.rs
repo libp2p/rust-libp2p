@@ -82,7 +82,7 @@ where
 
         Self {
             incoming: Incoming {
-                stream: yamux::into_stream(conn).err_into().boxed(),
+                stream: yamux::into_stream(conn).map_err(Error).boxed(),
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
@@ -103,7 +103,7 @@ where
 
         Self {
             incoming: LocalIncoming {
-                stream: yamux::into_stream(conn).err_into().boxed_local(),
+                stream: yamux::into_stream(conn).map_err(Error).boxed_local(),
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
@@ -401,8 +401,8 @@ pub type YamuxError = Error;
 
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
-#[error("yamux error: {0}")]
-pub struct Error(#[from] yamux::ConnectionError);
+#[error(transparent)]
+pub struct Error(yamux::ConnectionError);
 
 impl From<Error> for io::Error {
     fn from(err: Error) -> Self {
