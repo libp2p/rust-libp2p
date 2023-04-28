@@ -2,57 +2,42 @@ use crate::future::{BoxFuture, Either, FutureExt};
 use futures::{future, AsyncRead, AsyncWrite};
 use futures::{AsyncReadExt, Stream};
 use futures::{AsyncWriteExt, StreamExt};
-use libp2p_core::multiaddr::Protocol;
 use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::transport::memory::Channel;
-use libp2p_core::transport::MemoryTransport;
-use libp2p_core::{
-    upgrade, InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, Transport, UpgradeInfo,
-};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, StreamMuxer, UpgradeInfo};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use std::{fmt, mem};
 
-pub async fn connected_muxers_on_memory_transport<MC, M, E>() -> (M, M)
+pub async fn connected_muxers_on_memory_ring_buffer<MC, M, E>() -> (M, M)
 where
-    MC: InboundUpgrade<Negotiated<Channel<Vec<u8>>>, Error = E, Output = M>
-        + OutboundUpgrade<Negotiated<Channel<Vec<u8>>>, Error = E, Output = M>
+    MC: InboundUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
+        + OutboundUpgrade<futures_ringbuf::Endpoint, Error = E, Output = M>
         + Send
         + 'static
         + Default,
     <MC as UpgradeInfo>::Info: Send,
     <<MC as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-    <MC as InboundUpgrade<Negotiated<Channel<Vec<u8>>>>>::Future: Send,
-    <MC as OutboundUpgrade<Negotiated<Channel<Vec<u8>>>>>::Future: Send,
+    <MC as InboundUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
+    <MC as OutboundUpgrade<futures_ringbuf::Endpoint>>::Future: Send,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let mut alice = MemoryTransport::default()
-        .and_then(move |c, e| upgrade::apply(c, MC::default(), e, upgrade::Version::V1))
-        .boxed();
-    let mut bob = MemoryTransport::default()
-        .and_then(move |c, e| upgrade::apply(c, MC::default(), e, upgrade::Version::V1))
-        .boxed();
+    let (alice, bob) = futures_ringbuf::Endpoint::pair(100, 100);
 
-    alice.listen_on(Protocol::Memory(0).into()).unwrap();
-    let listen_address = alice.next().await.unwrap().into_new_address().unwrap();
+    let alice_upgrade = MC::default().upgrade_inbound(
+        alice,
+        MC::default().protocol_info().into_iter().next().unwrap(),
+    );
 
-    futures::future::join(
-        async {
-            alice
-                .next()
-                .await
-                .unwrap()
-                .into_incoming()
-                .unwrap()
-                .0
-                .await
-                .unwrap()
-        },
-        async { bob.dial(listen_address).unwrap().await.unwrap() },
-    )
-    .await
+    let bob_upgrade = MC::default().upgrade_outbound(
+        bob,
+        MC::default().protocol_info().into_iter().next().unwrap(),
+    );
+
+    futures::future::try_join(alice_upgrade, bob_upgrade)
+        .await
+        .unwrap()
 }
 
 /// Verifies that Alice can send a message and immediately close the stream afterwards and Bob can use `read_to_end` to read the entire message.

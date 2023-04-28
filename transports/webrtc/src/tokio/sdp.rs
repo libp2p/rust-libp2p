@@ -27,7 +27,7 @@ use std::net::{IpAddr, SocketAddr};
 use crate::tokio::fingerprint::Fingerprint;
 
 /// Creates the SDP answer used by the client.
-pub fn answer(
+pub(crate) fn answer(
     addr: SocketAddr,
     server_fingerprint: &Fingerprint,
     client_ufrag: &str,
@@ -44,7 +44,7 @@ pub fn answer(
 /// Creates the SDP offer used by the server.
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
+pub(crate) fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
     RTCSessionDescription::offer(render_description(
         CLIENT_SESSION_DESCRIPTION,
         addr,
@@ -213,13 +213,13 @@ enum IpVersion {
 /// `{IP_VERSION}`) with real values.
 #[derive(Serialize)]
 struct DescriptionContext {
-    pub ip_version: IpVersion,
-    pub target_ip: IpAddr,
-    pub target_port: u16,
-    pub fingerprint_algorithm: String,
-    pub fingerprint_value: String,
-    pub ufrag: String,
-    pub pwd: String,
+    pub(crate) ip_version: IpVersion,
+    pub(crate) target_ip: IpAddr,
+    pub(crate) target_port: u16,
+    pub(crate) fingerprint_algorithm: String,
+    pub(crate) fingerprint_value: String,
+    pub(crate) ufrag: String,
+    pub(crate) pwd: String,
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.

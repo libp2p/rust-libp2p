@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
-        .upgrade(upgrade::Version::V1)
+        .upgrade(upgrade::Version::V1Lazy)
         .authenticate(
             noise::NoiseAuthenticated::xx(&id_keys).expect("signing libp2p-noise static keypair"),
         )
