@@ -243,7 +243,7 @@
   superflucious. Both are removed in favor of a derivation through `THandler`
   (see [PR 2183]).
 
-- Require `ConnectionHandler::{InEvent,ToBehaviour ,Error}` to implement `Debug`
+- Require `ConnectionHandler::{InEvent,OutEvent,Error}` to implement `Debug`
   (see [PR 2183]).
 
 - Remove `DisconnectedPeer::set_connected` and `Pool::add` (see [PR 2195]).
