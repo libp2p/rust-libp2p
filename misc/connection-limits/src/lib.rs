@@ -201,7 +201,7 @@ impl ConnectionLimits {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -355,7 +355,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }

@@ -208,7 +208,7 @@ pub struct Behaviour {
 
     last_probe: Option<Instant>,
 
-    pending_actions: VecDeque<ToSwarm<<Self as NetworkBehaviour>::OutEvent, THandlerInEvent<Self>>>,
+    pending_actions: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
 
     probe_id: ProbeId,
 
@@ -426,7 +426,7 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
         loop {
@@ -593,7 +593,7 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-type Action = ToSwarm<<Behaviour as NetworkBehaviour>::OutEvent, THandlerInEvent<Behaviour>>;
+type Action = ToSwarm<<Behaviour as NetworkBehaviour>::ToSwarm, THandlerInEvent<Behaviour>>;
 
 // Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {

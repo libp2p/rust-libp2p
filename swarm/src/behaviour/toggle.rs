@@ -71,7 +71,7 @@ where
     TBehaviour: NetworkBehaviour,
 {
     type ConnectionHandler = ToggleConnectionHandler<THandler<TBehaviour>>;
-    type OutEvent = TBehaviour::OutEvent;
+    type ToSwarm = TBehaviour::ToSwarm;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -182,7 +182,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params)
         } else {

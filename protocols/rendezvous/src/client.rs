@@ -163,7 +163,7 @@ pub enum Event {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -244,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

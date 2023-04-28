@@ -502,7 +502,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _ctx: &mut Context,
             _: &mut impl PollParameters,
-        ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+        ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
         }
 

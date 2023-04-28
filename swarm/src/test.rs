@@ -114,7 +114,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
@@ -581,7 +581,7 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

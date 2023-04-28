@@ -19,7 +19,7 @@ pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -54,7 +54,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 
