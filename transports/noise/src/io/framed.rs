@@ -21,8 +21,8 @@
 //! This module provides a `Sink` and `Stream` for length-delimited
 //! Noise protocol messages in form of [`NoiseFramed`].
 
-use crate::io::NoiseOutput;
-use crate::{NoiseError, Protocol, PublicKey};
+use crate::io::Output;
+use crate::{Error, Protocol, PublicKey};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;
@@ -89,9 +89,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport<C>(
-        self,
-    ) -> Result<(Option<PublicKey<C>>, NoiseOutput<T>), NoiseError>
+    pub(crate) fn into_transport<C>(self) -> Result<(Option<PublicKey<C>>, Output<T>), Error>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {
@@ -111,7 +109,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             decrypt_buffer: self.decrypt_buffer,
         };
 
-        Ok((dh_remote_pubkey, NoiseOutput::new(io)))
+        Ok((dh_remote_pubkey, Output::new(io)))
     }
 }
 

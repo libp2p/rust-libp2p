@@ -22,7 +22,7 @@ use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p_noise as noise;
 
 use crate::tokio::fingerprint::Fingerprint;
 use crate::tokio::Error;
@@ -36,18 +36,13 @@ pub(crate) async fn inbound<T>(
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
-    let noise = NoiseConfig::xx(dh_keys)
+    let noise = noise::Config::new(&id_keys)
+        .unwrap()
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     // Note the roles are reversed because it allows the server (webrtc connection responder) to
     // send application data 0.5 RTT earlier.
-    let (peer_id, mut channel) = noise
-        .into_authenticated()
-        .upgrade_outbound(stream, info)
-        .await?;
+    let (peer_id, mut channel) = noise.upgrade_outbound(stream, info).await?;
 
     channel.close().await?;
 
@@ -63,18 +58,13 @@ pub(crate) async fn outbound<T>(
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
-    let noise = NoiseConfig::xx(dh_keys)
+    let noise = noise::Config::new(&id_keys)
+        .unwrap()
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     // Note the roles are reversed because it allows the server (webrtc connection responder) to
     // send application data 0.5 RTT earlier.
-    let (peer_id, mut channel) = noise
-        .into_authenticated()
-        .upgrade_inbound(stream, info)
-        .await?;
+    let (peer_id, mut channel) = noise.upgrade_inbound(stream, info).await?;
 
     channel.close().await?;
 
