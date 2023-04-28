@@ -10,7 +10,6 @@ use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use libp2p_tcp as tcp;
 use std::iter;
-use std::time::Duration;
 
 fn transport() -> (
     identity::PublicKey,
@@ -142,94 +141,53 @@ async fn identify_push() {
     }
 }
 
-#[test]
-fn discover_peer_after_disconnect() {
+#[async_std::test]
+async fn discover_peer_after_disconnect() {
     let _ = env_logger::try_init();
 
-    let mut swarm1 = {
-        let (pubkey, transport) = transport();
-        let protocol = identify::Behaviour::new(
-            identify::Config::new("a".to_string(), pubkey.clone())
-                // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
-                // closes the connection. At this point in time `swarm2` might not yet have
-                // identified `swarm1`. To give `swarm2` enough time, set an initial delay on
-                // `swarm1`.
-                .with_initial_delay(Duration::from_secs(10)),
-        );
-
-        SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
-    };
-
-    let mut swarm2 = {
-        let (pubkey, transport) = transport();
-        let protocol = identify::Behaviour::new(
-            identify::Config::new("a".to_string(), pubkey.clone())
+    let mut swarm1 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+    });
+    let mut swarm2 = Swarm::new_ephemeral(|identity| {
+        identify::Behaviour::new(
+            identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
-        );
+        )
+    });
 
-        SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
-    };
+    swarm1.listen().await;
+    swarm2.connect(&mut swarm1).await;
 
     let swarm1_peer_id = *swarm1.local_peer_id();
-
-    let listener = swarm1
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
-
-    let listen_addr = async_std::task::block_on(async {
-        loop {
-            match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } if listener_id == listener => return address,
-                _ => {}
-            }
-        }
-    });
-
-    async_std::task::spawn(async move {
-        loop {
-            swarm1.next().await;
-        }
-    });
-
-    swarm2.dial(listen_addr).unwrap();
+    async_std::task::spawn(swarm1.loop_on_next());
 
     // Wait until we identified.
-    async_std::task::block_on(async {
-        loop {
-            if let SwarmEvent::Behaviour(identify::Event::Received { .. }) =
-                swarm2.select_next_some().await
-            {
-                break;
-            }
-        }
-    });
+    swarm2
+        .wait(|event| {
+            matches!(
+                event,
+                SwarmEvent::Behaviour(identify::Event::Received { .. })
+            )
+            .then_some(())
+        })
+        .await;
 
     swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
 
     // Wait for connection to close.
-    async_std::task::block_on(async {
-        loop {
-            if let SwarmEvent::ConnectionClosed { peer_id, .. } = swarm2.select_next_some().await {
-                break peer_id;
-            }
-        }
-    });
+    swarm2
+        .wait(|event| matches!(event, SwarmEvent::ConnectionClosed { .. }).then_some(()))
+        .await;
 
     // We should still be able to dial now!
     swarm2.dial(swarm1_peer_id).unwrap();
 
-    let connected_peer = async_std::task::block_on(async {
-        loop {
-            if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
-                swarm2.select_next_some().await
-            {
-                break peer_id;
-            }
-        }
-    });
+    let connected_peer = swarm2
+        .wait(|event| match event {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => Some(peer_id),
+            _ => None,
+        })
+        .await;
 
     assert_eq!(connected_peer, swarm1_peer_id);
 }
