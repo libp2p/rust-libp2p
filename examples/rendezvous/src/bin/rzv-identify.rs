@@ -40,7 +40,7 @@ async fn main() {
     let mut swarm = SwarmBuilder::with_tokio_executor(
         tcp::tokio::Transport::default()
             .upgrade(Version::V1Lazy)
-            .authenticate(noise::NoiseAuthenticated::xx(&key_pair).unwrap())
+            .authenticate(noise::Config::new(&key_pair).unwrap())
             .multiplex(yamux::YamuxConfig::default())
             .boxed(),
         MyBehaviour {

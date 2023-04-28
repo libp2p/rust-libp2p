@@ -31,3 +31,6 @@ runs:
       shell: bash
       env:
         CARGO_TERM_VERBOSE: "true"
+        # debugging https://github.com/libp2p/rust-libp2p/pull/3782#issuecomment-1523346255
+        CARGO_HTTP_DEBUG: "true"
+        CARGO_LOG: "cargo::ops::registry=debug"
