@@ -1,9 +1,8 @@
 ## 0.51.3
 
 - Deprecate the `mplex` feature.
-The recommended baseline stream multiplexer is `yamux`.
-See [PR 3689].
-
+  The recommended baseline stream multiplexer is `yamux`.
+  See [PR 3689].
 
 - Introduce `libp2p::websys_websocket` module behind `websys-websocket` feature flag.
   This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
