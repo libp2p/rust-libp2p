@@ -139,10 +139,42 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod error;
-pub mod metrics;
-pub mod protocol;
-pub mod subscription_filter;
-pub mod time_cache;
+
+mod metrics_priv;
+#[deprecated(
+    note = "The `metrics` module will be made private in the future and should not be depended on."
+)]
+pub mod metrics {
+    pub use super::metrics_priv::*;
+}
+
+mod protocol_priv;
+#[deprecated(
+    note = "The `protocol` module will be made private in the future and should not be depended on."
+)]
+pub mod protocol {
+    pub use super::protocol_priv::*;
+}
+
+mod subscription_filter_priv;
+#[deprecated(
+    note = "The `subscription_filter` module will be made private in the future, import the types from the crate root instead."
+)]
+pub mod subscription_filter {
+    pub use super::subscription_filter_priv::*;
+
+    pub mod regex {
+        pub use crate::subscription_filter_priv::RegexSubscriptionFilter;
+    }
+}
+
+mod time_cache_priv;
+#[deprecated(
+    note = "The `time_cache` module will be made private in the future and should not be depended on."
+)]
+pub mod time_cache {
+    pub use super::time_cache_priv::*;
+}
 
 mod backoff;
 mod behaviour;
@@ -164,9 +196,15 @@ pub type HandlerError = error_priv::HandlerError;
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
 pub use self::error_priv::{PublishError, SubscriptionError, ValidationError};
+pub use self::metrics_priv::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
+};
+pub use self::subscription_filter_priv::{
+    AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
+    MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
+    WhitelistSubscriptionFilter,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
