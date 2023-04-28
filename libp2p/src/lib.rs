@@ -231,7 +231,7 @@ pub async fn development_transport(
 
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             #[allow(deprecated)]
@@ -288,7 +288,7 @@ pub fn tokio_development_transport(
 
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .authenticate(noise::Config::new(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             #[allow(deprecated)]

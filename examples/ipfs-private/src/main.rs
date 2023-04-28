@@ -52,7 +52,7 @@ pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
+    let noise_config = noise::Config::new(&key_pair).unwrap();
     let yamux_config = YamuxConfig::default();
 
     let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));

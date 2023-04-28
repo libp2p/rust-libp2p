@@ -49,7 +49,7 @@ pub(crate) async fn new(
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
-        .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
+        .authenticate(noise::Config::new(&id_keys)?)
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
