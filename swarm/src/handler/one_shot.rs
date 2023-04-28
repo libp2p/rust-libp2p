@@ -122,7 +122,7 @@ where
     TEvent: Debug + Send + 'static,
 {
     type FromSwarm = TOutbound;
-    type OutEvent = TEvent;
+    type ToBehaviour = TEvent;
     type Error = ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
@@ -148,7 +148,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

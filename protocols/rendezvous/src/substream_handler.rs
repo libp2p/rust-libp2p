@@ -355,7 +355,7 @@ where
     TOutboundSubstreamHandler: Send + 'static,
 {
     type FromSwarm = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
-    type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
+    type ToBehaviour = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
     type Error = Void;
     type InboundProtocol = PassthroughProtocol;
     type OutboundProtocol = PassthroughProtocol;
@@ -454,7 +454,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

@@ -224,7 +224,7 @@ where
     H::OutboundProtocol: OutboundUpgradeSend,
 {
     type FromSwarm = (K, <H as ConnectionHandler>::FromSwarm);
-    type OutEvent = (K, <H as ConnectionHandler>::OutEvent);
+    type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
     type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
@@ -344,7 +344,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

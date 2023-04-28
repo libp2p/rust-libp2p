@@ -193,7 +193,7 @@ where
     R: ConnectionHandler,
 {
     type FromSwarm = Either<L::FromSwarm, R::FromSwarm>;
-    type OutEvent = Either<L::OutEvent, R::OutEvent>;
+    type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
     type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
@@ -236,7 +236,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

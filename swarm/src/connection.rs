@@ -201,7 +201,7 @@ where
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
         let Self {
             requested_substreams,
             muxing,
@@ -792,7 +792,7 @@ mod tests {
 
     impl ConnectionHandler for MockConnectionHandler {
         type FromSwarm = Void;
-        type OutEvent = Void;
+        type ToBehaviour = Void;
         type Error = Void;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
@@ -845,7 +845,7 @@ mod tests {
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                Self::OutEvent,
+                Self::ToBehaviour,
                 Self::Error,
             >,
         > {

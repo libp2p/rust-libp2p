@@ -82,7 +82,7 @@ pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
     type FromSwarm = Void;
-    type OutEvent = Void;
+    type ToBehaviour = Void;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -108,7 +108,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

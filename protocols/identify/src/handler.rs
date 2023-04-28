@@ -223,7 +223,7 @@ impl Handler {
 
 impl ConnectionHandler for Handler {
     type FromSwarm = InEvent;
-    type OutEvent = Event;
+    type ToBehaviour = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
     type OutboundProtocol = Either<Identify, Push<OutboundPush>>;

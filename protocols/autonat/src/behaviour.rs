@@ -159,7 +159,7 @@ pub enum Event {
 /// The status is retried in a frequency of [`Config::retry_interval`] or [`Config::retry_interval`], depending on whether
 /// enough confidence in the assumed NAT status was reached or not.
 /// The confidence increases each time a probe confirms the assumed status, and decreases if a different status is reported.
-/// If the confidence is 0, the status is flipped and the Behaviour will report the new status in an `OutEvent`.
+/// If the confidence is 0, the status is flipped and the Behaviour will report the new status in an `ToBehaviour `.
 pub struct Behaviour {
     // Local peer id
     local_peer_id: PeerId,

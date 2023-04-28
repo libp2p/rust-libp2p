@@ -283,7 +283,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type FromSwarm = RequestProtocol<TCodec>;
-    type OutEvent = Event<TCodec>;
+    type ToBehaviour = Event<TCodec>;
     type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
@@ -336,8 +336,9 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
-    {
+    ) -> Poll<
+        ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::ToBehaviour, Self::Error>,
+    > {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.

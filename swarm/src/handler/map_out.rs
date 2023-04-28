@@ -40,12 +40,12 @@ impl<TConnectionHandler, TMap> MapOutEvent<TConnectionHandler, TMap> {
 impl<TConnectionHandler, TMap, TNewOut> ConnectionHandler for MapOutEvent<TConnectionHandler, TMap>
 where
     TConnectionHandler: ConnectionHandler,
-    TMap: FnMut(TConnectionHandler::OutEvent) -> TNewOut,
+    TMap: FnMut(TConnectionHandler::ToBehaviour) -> TNewOut,
     TNewOut: Debug + Send + 'static,
     TMap: Send + 'static,
 {
     type FromSwarm = TConnectionHandler::FromSwarm;
-    type OutEvent = TNewOut;
+    type ToBehaviour = TNewOut;
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
@@ -71,7 +71,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

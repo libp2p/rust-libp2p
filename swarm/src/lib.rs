@@ -180,7 +180,7 @@ pub type THandler<TBehaviour> =
 pub type THandlerInEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::FromSwarm;
 
 /// Custom event that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
-pub type THandlerOutEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::OutEvent;
+pub type THandlerOutEvent<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::ToBehaviour;
 
 /// Custom error that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
 pub type THandlerErr<TBehaviour> = <THandler<TBehaviour> as ConnectionHandler>::Error;
@@ -1427,7 +1427,7 @@ where
     TBehaviour: NetworkBehaviour,
     THandler: ConnectionHandler<
         FromSwarm = THandlerInEvent<TBehaviour>,
-        OutEvent = THandlerOutEvent<TBehaviour>,
+        ToBehaviour = THandlerOutEvent<TBehaviour>,
     >,
 {
     let mut pending = SmallVec::new();
@@ -2057,7 +2057,7 @@ mod tests {
     ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<T, O>>>
     where
         T: ConnectionHandler + Clone,
-        T::OutEvent: Clone,
+        T::ToBehaviour: Clone,
         O: Send + 'static,
     {
         let id_keys = identity::Keypair::generate_ed25519();

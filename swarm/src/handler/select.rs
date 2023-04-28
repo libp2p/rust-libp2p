@@ -340,7 +340,7 @@ where
     TProto2: ConnectionHandler,
 {
     type FromSwarm = Either<TProto1::FromSwarm, TProto2::FromSwarm>;
-    type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
+    type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -382,7 +382,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

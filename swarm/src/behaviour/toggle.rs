@@ -274,7 +274,7 @@ where
     TInner: ConnectionHandler,
 {
     type FromSwarm = TInner::FromSwarm;
-    type OutEvent = TInner::OutEvent;
+    type ToBehaviour = TInner::ToBehaviour;
     type Error = TInner::Error;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
@@ -313,7 +313,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

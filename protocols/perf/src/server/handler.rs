@@ -65,7 +65,7 @@ impl Default for Handler {
 
 impl ConnectionHandler for Handler {
     type FromSwarm = Void;
-    type OutEvent = Event;
+    type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundProtocol = DeniedUpgrade;
@@ -129,7 +129,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

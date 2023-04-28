@@ -96,7 +96,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// Custom event that can be received from the outside.
     type FromSwarm: fmt::Debug + Send + 'static;
     /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent: fmt::Debug + Send + 'static;
+    type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
@@ -147,7 +147,7 @@ pub trait ConnectionHandler: Send + 'static {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour ,
             Self::Error,
         >,
     >;
@@ -165,7 +165,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn map_out_event<TMap, TNewOut>(self, map: TMap) -> MapOutEvent<Self, TMap>
     where
         Self: Sized,
-        TMap: FnMut(Self::OutEvent) -> TNewOut,
+        TMap: FnMut(Self::ToBehaviour ) -> TNewOut,
     {
         MapOutEvent::new(self, map)
     }

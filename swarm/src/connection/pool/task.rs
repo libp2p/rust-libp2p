@@ -77,7 +77,7 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     Notify {
         id: ConnectionId,
         peer_id: PeerId,
-        event: THandler::OutEvent,
+        event: THandler::ToBehaviour,
     },
     /// A connection closed, possibly due to an error.
     ///

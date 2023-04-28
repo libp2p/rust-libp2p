@@ -56,7 +56,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -84,7 +84,7 @@ impl Default for Handler {
 
 impl ConnectionHandler for Handler {
     type FromSwarm = Command;
-    type OutEvent = Event;
+    type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
@@ -161,7 +161,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

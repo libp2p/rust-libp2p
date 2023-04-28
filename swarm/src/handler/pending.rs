@@ -41,7 +41,7 @@ impl PendingConnectionHandler {
 
 impl ConnectionHandler for PendingConnectionHandler {
     type FromSwarm = Void;
-    type OutEvent = Void;
+    type ToBehaviour = Void;
     type Error = Void;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
@@ -67,7 +67,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

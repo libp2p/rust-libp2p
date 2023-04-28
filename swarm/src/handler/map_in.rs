@@ -50,7 +50,7 @@ where
     TMap: Send + 'static,
 {
     type FromSwarm = TNewIn;
-    type OutEvent = TConnectionHandler::OutEvent;
+    type ToBehaviour = TConnectionHandler::ToBehaviour;
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
@@ -78,7 +78,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

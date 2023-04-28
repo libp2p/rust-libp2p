@@ -56,7 +56,7 @@ fn one_field() {
         clippy::used_underscore_binding
     )]
     fn foo() {
-        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        let _out_event: <Foo as NetworkBehaviour>::ToBehaviour = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
         }
@@ -80,7 +80,7 @@ fn two_fields() {
         clippy::used_underscore_binding
     )]
     fn foo() {
-        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        let _out_event: <Foo as NetworkBehaviour>::ToBehaviour = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
@@ -108,7 +108,7 @@ fn three_fields() {
         clippy::used_underscore_binding
     )]
     fn foo() {
-        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        let _out_event: <Foo as NetworkBehaviour>::ToBehaviour = unimplemented!();
         match _out_event {
             FooEvent::Ping(ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
@@ -196,7 +196,7 @@ fn bound() {
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Foo<T: Copy + NetworkBehaviour>
     where
-        <T as NetworkBehaviour>::OutEvent: Debug,
+        <T as NetworkBehaviour>::ToBehaviour: Debug,
     {
         ping: ping::Behaviour,
         bar: T,
@@ -211,7 +211,7 @@ fn where_clause() {
     struct Foo<T>
     where
         T: Copy + NetworkBehaviour,
-        <T as NetworkBehaviour>::OutEvent: Debug,
+        <T as NetworkBehaviour>::ToBehaviour: Debug,
     {
         ping: ping::Behaviour,
         bar: T,
@@ -241,7 +241,7 @@ fn nested_derives_with_import() {
         clippy::used_underscore_binding
     )]
     fn foo() {
-        let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
+        let _out_event: <Bar as NetworkBehaviour>::ToBehaviour = unimplemented!();
         match _out_event {
             BarEvent::Foo(FooEvent::Ping(ping::Event { .. })) => {}
         }
@@ -426,7 +426,7 @@ fn generated_out_event_derive_debug() {
     fn require_debug<T>()
     where
         T: NetworkBehaviour,
-        <T as NetworkBehaviour>::OutEvent: Debug,
+        <T as NetworkBehaviour>::ToBehaviour: Debug,
     {
     }
 
@@ -467,7 +467,7 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type OutEvent = void::Void;
+        type ToBehaviour = void::Void;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -525,17 +525,17 @@ fn custom_out_event_no_type_parameters() {
     }
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "OutEvent", prelude = "libp2p_swarm::derive_prelude")]
+    #[behaviour(out_event = "ToBehaviour ", prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour<T: 'static + Send> {
         custom: TemplatedBehaviour<T>,
     }
 
     #[derive(Debug)]
-    enum OutEvent {
+    enum ToBehaviour {
         None,
     }
 
-    impl From<void::Void> for OutEvent {
+    impl From<void::Void> for ToBehaviour {
         fn from(_e: void::Void) -> Self {
             Self::None
         }

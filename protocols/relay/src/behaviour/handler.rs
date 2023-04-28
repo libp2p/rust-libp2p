@@ -348,7 +348,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -599,7 +599,7 @@ type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
 impl ConnectionHandler for Handler {
     type FromSwarm = In;
-    type OutEvent = Event;
+    type ToBehaviour = Event;
     type Error = ConnectionHandlerUpgrErr<
         Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
     >;
@@ -723,7 +723,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

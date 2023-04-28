@@ -289,7 +289,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandler::OutEvent,
+        event: THandler::ToBehaviour,
     },
 
     /// The connection to a node has changed its address.

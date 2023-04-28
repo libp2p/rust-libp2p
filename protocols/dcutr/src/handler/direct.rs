@@ -41,7 +41,7 @@ pub struct Handler {
 
 impl ConnectionHandler for Handler {
     type FromSwarm = void::Void;
-    type OutEvent = Event;
+    type ToBehaviour = Event;
     type Error = ConnectionHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -65,7 +65,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
