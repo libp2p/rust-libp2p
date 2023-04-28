@@ -89,9 +89,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport<C>(
-        self,
-    ) -> Result<(Option<PublicKey<C>>, Output<T>), Error>
+    pub(crate) fn into_transport<C>(self) -> Result<(Option<PublicKey<C>>, Output<T>), Error>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {
