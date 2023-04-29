@@ -144,6 +144,7 @@ impl Transport for WebTransportTransport {
 
             let socket = WebTransport::new_with_options(&url, &options).map_err(|e| Error::JsError(format!("{e:?}")))?;
 
+            // TODO: auth connection
             Ok(Connection::new(socket))
         }.boxed())
     }

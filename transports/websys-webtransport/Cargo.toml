@@ -33,5 +33,5 @@ web-sys = { version = "0.3.61", features = [
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs", "web_sys_unstable_apis"]
+rustc-args = ["--cfg", "docsrs", "web_sys_unstable_apis"]
