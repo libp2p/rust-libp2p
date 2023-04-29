@@ -23,7 +23,7 @@ use std::{
     task::{Context, Poll},
 };
 
-pub struct WebTransportTransport;
+pub struct Transport;
 
 #[derive(Default, Debug)]
 struct WebTransportAddress {
@@ -108,12 +108,12 @@ fn certhashes_to_jsvalue(certhashes: Vec<Vec<u8>>) -> Array {
     arr
 }    
 
-impl WebTransportTransport {
+impl Transport {
     
 }
 
 
-impl Transport for WebTransportTransport {
+impl Transport for Transport {
     type Output = Connection;
 
     type Error = Error;
