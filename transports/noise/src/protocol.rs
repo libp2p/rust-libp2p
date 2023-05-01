@@ -101,6 +101,24 @@ impl Keypair {
             identity,
         })
     }
+
+    /// An "empty" keypair as a starting state for DH computations in `snow`,
+    /// which get manipulated through the `snow::types::Dh` interface.
+    pub(crate) fn empty() -> Self {
+        Keypair {
+            secret: SecretKey([0u8; 32]),
+            public: PublicKey([0u8; 32]),
+        }
+    }
+
+    /// Create a new X25519 keypair.
+    pub(crate) fn new() -> Keypair {
+        let mut sk_bytes = [0u8; 32];
+        rand::thread_rng().fill(&mut sk_bytes);
+        let sk = SecretKey(sk_bytes); // Copy
+        sk_bytes.zeroize();
+        Self::from(sk)
+    }
 }
 
 /// DH secret key.
@@ -213,26 +231,6 @@ impl rand::RngCore for Rng {
 impl rand::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
-
-impl Keypair {
-    /// An "empty" keypair as a starting state for DH computations in `snow`,
-    /// which get manipulated through the `snow::types::Dh` interface.
-    pub(crate) fn empty() -> Self {
-        Keypair {
-            secret: SecretKey([0u8; 32]),
-            public: PublicKey([0u8; 32]),
-        }
-    }
-
-    /// Create a new X25519 keypair.
-    pub(crate) fn new() -> Keypair {
-        let mut sk_bytes = [0u8; 32];
-        rand::thread_rng().fill(&mut sk_bytes);
-        let sk = SecretKey(sk_bytes); // Copy
-        sk_bytes.zeroize();
-        Self::from(sk)
-    }
-}
 
 impl Default for Keypair {
     fn default() -> Self {
