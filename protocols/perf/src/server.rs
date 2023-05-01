@@ -41,7 +41,10 @@ impl Default for Behaviour {
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Inbound,
                 )),
-                Default::default(),
+                request_response::Config {
+                    request_timeout: Duration::from_secs(60 * 5),
+                    connection_keep_alive: Duration::from_secs(60 * 5),
+                },
             ),
         }
     }
