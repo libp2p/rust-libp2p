@@ -1,4 +1,4 @@
-## 0.42.2 - unreleased
+## 0.42.2
 
 - Deprecate all noise handshakes apart from XX.
   This deprecates `NoiseConfig` and `NoiseAuthenticated` in favor of a new `libp2p_noise::Config` struct.

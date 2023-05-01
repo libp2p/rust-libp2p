@@ -1,4 +1,4 @@
-## 0.44.4 - unreleased
+## 0.44.4
 
 - Deprecate `metrics`, `protocol`, `subscription_filter`, `time_cache` modules to make them private. See [PR 3777].
 - Honor the `gossipsub::Config::support_floodsub` in all cases.
