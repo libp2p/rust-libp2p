@@ -291,6 +291,7 @@ impl snow::types::Random for Rng {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::protocol::x25519_spec::PARAMS_XX;
     use crate::X25519Spec;
     use once_cell::sync::Lazy;
 
@@ -317,7 +318,9 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        X25519Spec::params_xx().into_builder(prologue, TEST_KEY.secret(), None)
+        PARAMS_XX
+            .clone()
+            .into_builder(prologue, TEST_KEY.secret(), None)
     }
 
     // Hack to work around borrow-checker.

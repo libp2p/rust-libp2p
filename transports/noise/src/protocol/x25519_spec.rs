@@ -32,7 +32,7 @@ use zeroize::Zeroize;
 use super::*;
 
 /// Prefix of static key signatures for domain separation.
-const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
+pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
 pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
     "Noise_XX_25519_ChaChaPoly_SHA256"

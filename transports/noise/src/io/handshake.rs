@@ -27,8 +27,9 @@ mod proto {
 }
 
 use crate::io::{framed::NoiseFramed, Output};
-use crate::protocol::{KeypairIdentity, Protocol};
-use crate::{Error, X25519Spec};
+use crate::protocol::x25519_spec::STATIC_KEY_DOMAIN;
+use crate::protocol::KeypairIdentity;
+use crate::Error;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
@@ -83,7 +84,11 @@ impl<T> State<T> {
             .id_remote_pubkey
             .ok_or_else(|| Error::AuthenticationFailed)?;
 
-        if !X25519Spec::verify(&id_pk, &pubkey, &self.dh_remote_pubkey_sig) {
+        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().map_or(false, |s| {
+            id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), pubkey.as_ref()].concat(), s)
+        });
+
+        if !is_valid_signature {
             return Err(Error::BadSignature);
         }
 
