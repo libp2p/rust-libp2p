@@ -1,3 +1,18 @@
+## 0.43.3
+
+- Preserve existing `KeepAlive::Until` timeout instead of continuously setting new `KeepAlive::Until(Instant::now() + self.config.idle_timeout)`.
+  See [PR 3801].
+
+[PR 3801]: https://github.com/libp2p/rust-libp2p/pull/3801
+
+## 0.43.2
+
+- Export pub enum `RoutingUpdate`. See [PR 3739].
+- Deprecate `handler`, `kbucket`, `protocol`, `record` modules to make them private. See [PR 3738].
+
+[PR 3739]: https://github.com/libp2p/rust-libp2p/pull/3739
+[PR 3738]: https://github.com/libp2p/rust-libp2p/pull/3738
+
 ## 0.43.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

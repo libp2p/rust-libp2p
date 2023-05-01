@@ -20,15 +20,14 @@
 
 use super::*;
 
-use crate::kbucket::{Distance, Key, KeyBytes};
+use crate::kbucket_priv::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
 use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 
-pub mod disjoint;
-
+pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
 #[derive(Debug, Clone)]
