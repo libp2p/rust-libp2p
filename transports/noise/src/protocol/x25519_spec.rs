@@ -35,18 +35,6 @@ use super::*;
 /// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
-static PARAMS_IK: Lazy<ProtocolParams> = Lazy::new(|| {
-    "Noise_IK_25519_ChaChaPoly_SHA256"
-        .parse()
-        .map(ProtocolParams)
-        .expect("Invalid protocol name")
-});
-static PARAMS_IX: Lazy<ProtocolParams> = Lazy::new(|| {
-    "Noise_IX_25519_ChaChaPoly_SHA256"
-        .parse()
-        .map(ProtocolParams)
-        .expect("Invalid protocol name")
-});
 static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
     "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
@@ -113,41 +101,11 @@ impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
     }
 }
 
-/// **Note**: This is not currentlyy a standardised upgrade.
-
-impl UpgradeInfo for NoiseConfig<IX, X25519Spec> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
-    }
-}
-
-/// **Note**: This is not currently a standardised upgrade.
-
-impl UpgradeInfo for NoiseConfig<IK, X25519Spec> {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
-    }
-}
-
 /// Noise protocols for X25519 with libp2p-spec compliant signatures.
 ///
 /// **Note**: Only the XX handshake pattern is currently guaranteed to be
 /// interoperable with other libp2p implementations.
 impl Protocol<X25519Spec> for X25519Spec {
-    fn params_ik() -> ProtocolParams {
-        PARAMS_IK.clone()
-    }
-
-    fn params_ix() -> ProtocolParams {
-        PARAMS_IX.clone()
-    }
-
     fn params_xx() -> ProtocolParams {
         PARAMS_XX.clone()
     }

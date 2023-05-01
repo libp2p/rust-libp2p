@@ -63,7 +63,7 @@ pub use io::handshake::RemoteIdentity;
 pub use io::Output;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+pub use protocol::{Protocol, ProtocolParams, XX};
 
 use crate::handshake::State;
 use crate::io::handshake;

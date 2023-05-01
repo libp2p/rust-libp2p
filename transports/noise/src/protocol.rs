@@ -54,14 +54,6 @@ impl ProtocolParams {
     }
 }
 
-/// Type tag for the IK handshake pattern.
-#[derive(Debug, Clone)]
-pub enum IK {}
-
-/// Type tag for the IX handshake pattern.
-#[derive(Debug, Clone)]
-pub enum IX {}
-
 /// Type tag for the XX handshake pattern.
 #[derive(Debug, Clone)]
 pub enum XX {}
@@ -72,11 +64,6 @@ pub enum XX {}
     note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
 )]
 pub trait Protocol<C> {
-    /// The protocol parameters for the IK handshake pattern.
-    fn params_ik() -> ProtocolParams;
-    /// The protocol parameters for the IX handshake pattern.
-    fn params_ix() -> ProtocolParams;
-    /// The protocol parameters for the XX handshake pattern.
     fn params_xx() -> ProtocolParams;
 
     /// Construct a DH public key from a byte slice.
