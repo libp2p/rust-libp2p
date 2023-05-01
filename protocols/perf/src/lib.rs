@@ -29,3 +29,13 @@ mod protocol;
 pub mod server;
 
 pub const PROTOCOL_NAME: &[u8; 11] = b"/perf/1.0.0";
+
+/// Parameters for a single run, i.e. one stream, sending and receiving data.
+///
+/// Property names are from the perspective of the actor. E.g. `to_send` is the amount of data to
+/// send, both as the client and the server.
+#[derive(Debug, Clone, Copy)]
+pub struct RunParams {
+    pub to_send: usize,
+    pub to_receive: usize,
+}

@@ -11,7 +11,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-tokio = { version = "1.27.0", features = ["full"] }
 anyhow = "1"
 async-trait = "0.1"
 clap = { version = "4.2.1", features = ["derive"] }
@@ -24,14 +23,16 @@ libp2p-dns = { version = "0.39.0", path = "../../transports/dns", features = ["t
 libp2p-identity = { version = "0.1.0", path = "../../identity" }
 libp2p-noise = { version = "0.42.0", path = "../../transports/noise" }
 libp2p-quic = { version = "0.7.0-alpha.2", path = "../../transports/quic", features = ["tokio"] }
+libp2p-request-response = { version = "0.24.0", path = "../request-response" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm", features = ["macros", "tokio"] }
 libp2p-tcp = { version = "0.39.0", path = "../../transports/tcp", features = ["tokio"] }
 libp2p-yamux = { version = "0.43.0", path = "../../muxers/yamux" }
 log = "0.4"
+schemafy = "0.6.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-schemafy = "0.6.0"
 thiserror = "1.0"
+tokio = { version = "1.27.0", features = ["full"] }
 void = "1"
 
 [dev-dependencies]
