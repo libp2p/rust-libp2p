@@ -75,23 +75,6 @@ pub struct AuthenticKeypair {
     pub(crate) identity: KeypairIdentity,
 }
 
-impl AuthenticKeypair {
-    /// Returns the public DH key of this keypair.
-    pub fn public_dh_key(&self) -> &PublicKey {
-        &self.keypair.public
-    }
-
-    /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
-    /// dropping the DH `Keypair`.
-    #[deprecated(
-        since = "0.40.0",
-        note = "This function was only used internally and will be removed in the future unless more usecases come up."
-    )]
-    pub fn into_identity(self) -> KeypairIdentity {
-        self.identity
-    }
-}
-
 /// The associated public identity of a DH keypair.
 #[derive(Clone)]
 pub struct KeypairIdentity {
