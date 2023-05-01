@@ -65,7 +65,7 @@ pub use protocol::{ProtocolParams, XX};
 
 use crate::handshake::State;
 use crate::io::handshake;
-use crate::protocol::x25519_spec::PARAMS_XX;
+use crate::protocol::PARAMS_XX;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;

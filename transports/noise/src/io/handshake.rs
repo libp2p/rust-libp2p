@@ -27,8 +27,7 @@ mod proto {
 }
 
 use crate::io::{framed::NoiseFramed, Output};
-use crate::protocol::x25519_spec::STATIC_KEY_DOMAIN;
-use crate::protocol::KeypairIdentity;
+use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
 use crate::Error;
 use bytes::Bytes;
 use futures::prelude::*;

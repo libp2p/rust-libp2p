@@ -20,17 +20,27 @@
 
 //! Components of a Noise protocol.
 
-pub(crate) mod x25519_spec;
-
 use crate::Error;
 use libp2p_identity as identity;
-use rand::SeedableRng;
+use once_cell::sync::Lazy;
+use rand::{Rng as _, SeedableRng};
+use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
 
 /// The parameters of a Noise protocol, consisting of a choice
 /// for a handshake pattern as well as DH, cipher and hash functions.
 #[derive(Clone)]
 pub struct ProtocolParams(snow::params::NoiseParams);
+
+/// Prefix of static key signatures for domain separation.
+pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
+
+pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_XX_25519_ChaChaPoly_SHA256"
+        .parse()
+        .map(ProtocolParams)
+        .expect("Invalid protocol name")
+});
 
 impl ProtocolParams {
     pub(crate) fn into_builder<'b>(
@@ -234,10 +244,87 @@ impl rand::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
 
+impl Keypair {
+    /// An "empty" keypair as a starting state for DH computations in `snow`,
+    /// which get manipulated through the `snow::types::Dh` interface.
+    pub(crate) fn empty() -> Self {
+        Keypair {
+            secret: SecretKey([0u8; 32]),
+            public: PublicKey([0u8; 32]),
+        }
+    }
+
+    /// Create a new X25519 keypair.
+    pub fn new() -> Keypair {
+        let mut sk_bytes = [0u8; 32];
+        rand::thread_rng().fill(&mut sk_bytes);
+        let sk = SecretKey(sk_bytes); // Copy
+        sk_bytes.zeroize();
+        Self::from(sk)
+    }
+}
+
+impl Default for Keypair {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Promote a X25519 secret key into a keypair.
+impl From<SecretKey> for Keypair {
+    fn from(secret: SecretKey) -> Keypair {
+        let public = PublicKey(x25519(secret.0, X25519_BASEPOINT_BYTES));
+        Keypair { secret, public }
+    }
+}
+
+#[doc(hidden)]
+impl snow::types::Dh for Keypair {
+    fn name(&self) -> &'static str {
+        "25519"
+    }
+    fn pub_len(&self) -> usize {
+        32
+    }
+    fn priv_len(&self) -> usize {
+        32
+    }
+    fn pubkey(&self) -> &[u8] {
+        self.public.as_ref()
+    }
+    fn privkey(&self) -> &[u8] {
+        self.secret.as_ref()
+    }
+
+    fn set(&mut self, sk: &[u8]) {
+        let mut secret = [0u8; 32];
+        secret.copy_from_slice(sk);
+        self.secret = SecretKey(secret); // Copy
+        self.public = PublicKey(x25519(secret, X25519_BASEPOINT_BYTES));
+        secret.zeroize();
+    }
+
+    fn generate(&mut self, rng: &mut dyn snow::types::Random) {
+        let mut secret = [0u8; 32];
+        rng.fill_bytes(&mut secret);
+        self.secret = SecretKey(secret); // Copy
+        self.public = PublicKey(x25519(secret, X25519_BASEPOINT_BYTES));
+        secret.zeroize();
+    }
+
+    fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), snow::Error> {
+        let mut p = [0; 32];
+        p.copy_from_slice(&pk[..32]);
+        let ss = x25519(self.secret.0, p);
+        shared_secret[..32].copy_from_slice(&ss[..]);
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::x25519_spec::PARAMS_XX;
+    use crate::protocol::PARAMS_XX;
     use once_cell::sync::Lazy;
 
     #[test]
