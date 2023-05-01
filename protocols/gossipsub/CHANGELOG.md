@@ -1,3 +1,13 @@
+## 0.44.4
+
+- Deprecate `metrics`, `protocol`, `subscription_filter`, `time_cache` modules to make them private. See [PR 3777].
+- Honor the `gossipsub::Config::support_floodsub` in all cases.
+  Previously, it was ignored when a custom protocol id was set via `gossipsub::Config::protocol_id`.
+  See [PR 3837].
+
+[PR 3777]: https://github.com/libp2p/rust-libp2p/pull/3777
+[PR 3837]: https://github.com/libp2p/rust-libp2p/pull/3837
+
 ## 0.44.3
 
 - Fix erroneously duplicate message IDs. See [PR 3716].

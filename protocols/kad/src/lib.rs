@@ -76,6 +76,7 @@ mod jobs;
 mod query;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::dht::pb::{
         mod_Message::{ConnectionType, MessageType, Peer},

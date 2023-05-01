@@ -36,7 +36,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-pub struct CopyFuture<S, D> {
+pub(crate) struct CopyFuture<S, D> {
     src: BufReader<S>,
     dst: BufReader<D>,
 
@@ -46,7 +46,12 @@ pub struct CopyFuture<S, D> {
 }
 
 impl<S: AsyncRead, D: AsyncRead> CopyFuture<S, D> {
-    pub fn new(src: S, dst: D, max_circuit_duration: Duration, max_circuit_bytes: u64) -> Self {
+    pub(crate) fn new(
+        src: S,
+        dst: D,
+        max_circuit_duration: Duration,
+        max_circuit_bytes: u64,
+    ) -> Self {
         CopyFuture {
             src: BufReader::new(src),
             dst: BufReader::new(dst),

@@ -2067,7 +2067,7 @@ mod tests {
             .authenticate(plaintext::PlainText2Config {
                 local_public_key: local_public_key.clone(),
             })
-            .multiplex(yamux::YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         match ThreadPool::new().ok() {

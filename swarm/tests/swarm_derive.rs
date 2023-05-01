@@ -461,7 +461,7 @@ fn custom_out_event_no_type_parameters() {
     use std::task::Context;
     use std::task::Poll;
 
-    pub struct TemplatedBehaviour<T: 'static> {
+    pub(crate) struct TemplatedBehaviour<T: 'static> {
         _data: T,
     }
 
