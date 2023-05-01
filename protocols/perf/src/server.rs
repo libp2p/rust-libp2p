@@ -20,6 +20,7 @@
 
 use std::task::{Context, Poll};
 
+use instant::Duration;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
@@ -34,6 +35,10 @@ pub struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
+        let mut req_resp_config = request_response::Config::default();
+        req_resp_config.set_connection_keep_alive(Duration::from_secs(60 * 5));
+        req_resp_config.set_request_timeout(Duration::from_secs(60 * 5));
+
         Self {
             request_response: request_response::Behaviour::new(
                 crate::protocol::Codec {},
@@ -41,10 +46,7 @@ impl Default for Behaviour {
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Inbound,
                 )),
-                request_response::Config {
-                    request_timeout: Duration::from_secs(60 * 5),
-                    connection_keep_alive: Duration::from_secs(60 * 5),
-                },
+                req_resp_config,
             ),
         }
     }

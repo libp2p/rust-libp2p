@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use instant::Instant;
+use instant::{Duration, Instant};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -67,6 +67,9 @@ pub struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
+        let mut req_resp_config = request_response::Config::default();
+        req_resp_config.set_connection_keep_alive(Duration::from_secs(60 * 5));
+        req_resp_config.set_request_timeout(Duration::from_secs(60 * 5));
         Self {
             connected: Default::default(),
             in_progress_runs: Default::default(),
@@ -76,10 +79,7 @@ impl Default for Behaviour {
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Outbound,
                 )),
-                request_response::Config {
-                    request_timeout: Duration::from_secs(60 * 5),
-                    connection_keep_alive: Duration::from_secs(60 * 5),
-                },
+                req_resp_config,
             ),
         }
     }
