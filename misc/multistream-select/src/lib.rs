@@ -102,6 +102,7 @@ pub use self::protocol::ProtocolError;
 
 /// Supported multistream-select versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub enum Version {
     /// Version 1 of the multistream-select protocol. See [1] and [2].
     ///
