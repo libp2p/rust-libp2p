@@ -22,7 +22,7 @@
 //! Noise protocol messages in form of [`NoiseFramed`].
 
 use crate::io::Output;
-use crate::{Error, Protocol, PublicKey};
+use crate::{Error, Protocol, PublicKey, X25519Spec};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;
@@ -89,10 +89,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport<C>(self) -> Result<(PublicKey<C>, Output<T>), Error>
-    where
-        C: Protocol<C> + AsRef<[u8]>,
-    {
+    pub(crate) fn into_transport(self) -> Result<(PublicKey<X25519Spec>, Output<T>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(
                 io::ErrorKind::Other,
@@ -100,7 +97,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             ))
         })?;
 
-        let dh_remote_pubkey = C::public_from_bytes(dh_remote_pubkey)?;
+        let dh_remote_pubkey = X25519Spec::public_from_bytes(dh_remote_pubkey)?;
 
         let io = NoiseFramed {
             session: self.session.into_transport_mode()?,
