@@ -63,7 +63,7 @@ pub use io::Output;
 
 use crate::handshake::State;
 use crate::io::handshake;
-use crate::protocol::{AuthenticKeypair, Keypair, ProtocolParams, PARAMS_XX};
+use crate::protocol::{AuthenticKeypair, Keypair, noise_params_into_builder, PARAMS_XX};
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
@@ -71,12 +71,13 @@ use libp2p_identity::PeerId;
 use std::fmt;
 use std::fmt::Formatter;
 use std::pin::Pin;
+use snow::params::NoiseParams;
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
 pub struct Config {
     dh_keys: AuthenticKeypair,
-    params: ProtocolParams,
+    params: NoiseParams,
 
     /// Prologue to use in the noise handshake.
     ///
@@ -107,9 +108,7 @@ impl Config {
     }
 
     fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
-        let session = self
-            .params
-            .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
+        let session = noise_params_into_builder(self.params, &self.prologue, self.dh_keys.keypair.secret(), None)
             .build_responder()?;
 
         let state = State::new(socket, session, self.dh_keys.identity, None);
@@ -118,9 +117,7 @@ impl Config {
     }
 
     fn into_initiator<S>(self, socket: S) -> Result<State<S>, Error> {
-        let session = self
-            .params
-            .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
+        let session = noise_params_into_builder(self.params, &self.prologue, self.dh_keys.keypair.secret(), None)
             .build_initiator()?;
 
         let state = State::new(socket, session, self.dh_keys.identity, None);

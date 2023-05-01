@@ -24,41 +24,34 @@ use crate::Error;
 use libp2p_identity as identity;
 use once_cell::sync::Lazy;
 use rand::{Rng as _, SeedableRng};
+use snow::params::NoiseParams;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
-
-/// The parameters of a Noise protocol, consisting of a choice
-/// for a handshake pattern as well as DH, cipher and hash functions.
-#[derive(Clone)]
-pub(crate) struct ProtocolParams(snow::params::NoiseParams);
 
 /// Prefix of static key signatures for domain separation.
 pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
-pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+pub(crate) static PARAMS_XX: Lazy<NoiseParams> = Lazy::new(|| {
     "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
-        .map(ProtocolParams)
         .expect("Invalid protocol name")
 });
 
-impl ProtocolParams {
-    pub(crate) fn into_builder<'b>(
-        self,
-        prologue: &'b [u8],
-        private_key: &'b SecretKey,
-        remote_public_key: Option<&'b PublicKey>,
-    ) -> snow::Builder<'b> {
-        let mut builder = snow::Builder::with_resolver(self.0, Box::new(Resolver))
-            .prologue(prologue.as_ref())
-            .local_private_key(private_key.as_ref());
+pub(crate) fn noise_params_into_builder<'b>(
+    params: NoiseParams,
+    prologue: &'b [u8],
+    private_key: &'b SecretKey,
+    remote_public_key: Option<&'b PublicKey>,
+) -> snow::Builder<'b> {
+    let mut builder = snow::Builder::with_resolver(params, Box::new(Resolver))
+        .prologue(prologue.as_ref())
+        .local_private_key(private_key.as_ref());
 
-        if let Some(remote_public_key) = remote_public_key {
-            builder = builder.remote_public_key(remote_public_key.as_ref());
-        }
-
-        builder
+    if let Some(remote_public_key) = remote_public_key {
+        builder = builder.remote_public_key(remote_public_key.as_ref());
     }
+
+    builder
 }
 
 /// DH keypair.
@@ -327,9 +320,7 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        PARAMS_XX
-            .clone()
-            .into_builder(prologue, TEST_KEY.secret(), None)
+        noise_params_into_builder(PARAMS_XX.clone(), prologue, TEST_KEY.secret(), None)
     }
 
     // Hack to work around borrow-checker.
