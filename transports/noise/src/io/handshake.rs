@@ -27,37 +27,13 @@ mod proto {
 }
 
 use crate::io::{framed::NoiseFramed, Output};
-use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
+use crate::protocol::{KeypairIdentity, Protocol};
 use crate::{Error, X25519Spec};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
-
-/// The identity of the remote established during a handshake.
-#[deprecated(
-    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
-)]
-pub enum RemoteIdentity<C> {
-    /// The remote provided a static DH public key.
-    ///
-    /// The static DH public key is authentic in the sense that a successful
-    /// handshake implies that the remote possesses a corresponding secret key.
-    ///
-    /// > **Note**: To rule out active attacks like a MITM, trust in the public key must
-    /// > still be established, e.g. by comparing the key against an expected or
-    /// > otherwise known public key.
-    StaticDhKey(PublicKey<C>),
-
-    /// The remote provided a public identity key in addition to a static DH
-    /// public key and the latter is authentic w.r.t. the former.
-    ///
-    /// > **Note**: To rule out active attacks like a MITM, trust in the public key must
-    /// > still be established, e.g. by comparing the key against an expected or
-    /// > otherwise known public key.
-    IdentityKey(identity::PublicKey),
-}
 
 //////////////////////////////////////////////////////////////////////////////
 // Internal
@@ -100,20 +76,18 @@ impl<T> State<T> {
 impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
-    pub(crate) fn finish(self) -> Result<(RemoteIdentity<X25519Spec>, Output<T>), Error> {
+    pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
         let (pubkey, io) = self.io.into_transport()?;
 
-        let remote = match self.id_remote_pubkey {
-            None => RemoteIdentity::StaticDhKey(pubkey),
-            Some(id_pk) => {
-                if X25519Spec::verify(&id_pk, &pubkey, &self.dh_remote_pubkey_sig) {
-                    RemoteIdentity::IdentityKey(id_pk)
-                } else {
-                    return Err(Error::BadSignature);
-                }
-            }
-        };
-        Ok((remote, io))
+        let id_pk = self
+            .id_remote_pubkey
+            .ok_or_else(|| Error::AuthenticationFailed)?;
+
+        if !X25519Spec::verify(&id_pk, &pubkey, &self.dh_remote_pubkey_sig) {
+            return Err(Error::BadSignature);
+        }
+
+        Ok((id_pk, io))
     }
 }
 

@@ -59,7 +59,6 @@
 mod io;
 mod protocol;
 
-pub use io::handshake::RemoteIdentity;
 pub use io::Output;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
@@ -160,12 +159,7 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
 
-            let (remote, io) = state.finish()?;
-
-            let pk = match remote {
-                RemoteIdentity::IdentityKey(pk) => pk,
-                _ => return Err(Error::AuthenticationFailed),
-            };
+            let (pk, io) = state.finish()?;
 
             Ok((pk.to_peer_id(), io))
         }
@@ -189,12 +183,7 @@ where
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
 
-            let (remote, io) = state.finish()?;
-
-            let pk = match remote {
-                RemoteIdentity::IdentityKey(pk) => pk,
-                _ => return Err(Error::AuthenticationFailed),
-            };
+            let (pk, io) = state.finish()?;
 
             Ok((pk.to_peer_id(), io))
         }
