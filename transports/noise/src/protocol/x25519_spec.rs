@@ -22,8 +22,7 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
-use crate::{Error, NoiseConfig, Protocol, ProtocolParams};
-use libp2p_core::UpgradeInfo;
+use crate::{Error, Protocol, ProtocolParams};
 use libp2p_identity as identity;
 use once_cell::sync::Lazy;
 use rand::Rng;
@@ -89,15 +88,6 @@ impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
     fn from(secret: SecretKey<X25519Spec>) -> Keypair<X25519Spec> {
         let public = PublicKey(X25519Spec(x25519((secret.0).0, X25519_BASEPOINT_BYTES)));
         Keypair { secret, public }
-    }
-}
-
-impl UpgradeInfo for NoiseConfig {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise")
     }
 }
 

@@ -28,7 +28,7 @@ mod proto {
 
 use crate::io::{framed::NoiseFramed, Output};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
-use crate::Error;
+use crate::{Error, X25519Spec};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
@@ -106,16 +106,13 @@ impl<T> State<T> {
 impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
-    pub(crate) fn finish<C>(self) -> Result<(RemoteIdentity<C>, Output<T>), Error>
-    where
-        C: Protocol<C> + AsRef<[u8]>,
-    {
+    pub(crate) fn finish(self) -> Result<(RemoteIdentity<X25519Spec>, Output<T>), Error> {
         let (pubkey, io) = self.io.into_transport()?;
         let remote = match (self.id_remote_pubkey, pubkey) {
             (_, None) => RemoteIdentity::Unknown,
             (None, Some(dh_pk)) => RemoteIdentity::StaticDhKey(dh_pk),
             (Some(id_pk), Some(dh_pk)) => {
-                if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
+                if X25519Spec::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
                     RemoteIdentity::IdentityKey(id_pk)
                 } else {
                     return Err(Error::BadSignature);

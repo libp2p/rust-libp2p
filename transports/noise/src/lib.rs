@@ -68,7 +68,6 @@ pub use protocol::{Protocol, ProtocolParams, XX};
 use crate::handshake::State;
 use crate::io::handshake;
 use crate::protocol::x25519_spec::PARAMS_XX;
-use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
@@ -80,68 +79,6 @@ use std::pin::Pin;
 /// The configuration for the noise handshake.
 #[derive(Clone)]
 pub struct Config {
-    inner: NoiseAuthenticated,
-}
-
-impl Config {
-    /// Construct a new configuration for the noise handshake using the XX handshake pattern.
-
-    pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
-        Ok(Config {
-            inner: NoiseAuthenticated::xx(identity)?,
-        })
-    }
-
-    /// Set the noise prologue.
-
-    pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
-        self.inner.config.prologue = prologue;
-
-        self
-    }
-}
-
-impl UpgradeInfo for Config {
-    type Info = &'static [u8];
-    type InfoIter = std::iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise")
-    }
-}
-
-impl<T> InboundUpgrade<T> for Config
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = (PeerId, Output<T>);
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
-        self.inner.upgrade_inbound(socket, info)
-    }
-}
-
-impl<T> OutboundUpgrade<T> for Config
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = (PeerId, Output<T>);
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
-        self.inner.upgrade_outbound(socket, info)
-    }
-}
-
-/// The protocol upgrade configuration.
-#[deprecated(
-    note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
-)]
-#[derive(Clone)]
-pub struct NoiseConfig {
     dh_keys: AuthenticKeypair<X25519Spec>,
     params: ProtocolParams,
 
@@ -154,24 +91,27 @@ pub struct NoiseConfig {
     prologue: Vec<u8>,
 }
 
-impl NoiseConfig {
-    /// Turn the `NoiseConfig` into an authenticated upgrade for use
-    /// with a `Swarm`.
-    pub fn into_authenticated(self) -> NoiseAuthenticated {
-        NoiseAuthenticated { config: self }
+impl Config {
+    /// Construct a new configuration for the noise handshake using the XX handshake pattern.
+
+    pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
+        let noise_keys = Keypair::<X25519Spec>::new().into_authentic(identity)?;
+
+        Ok(Self {
+            dh_keys: noise_keys,
+            params: PARAMS_XX.clone(),
+            prologue: vec![],
+        })
     }
 
     /// Set the noise prologue.
-    pub fn with_prologue(self, prologue: Vec<u8>) -> Self {
-        Self { prologue, ..self }
+
+    pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
+        self.prologue = prologue;
+
+        self
     }
-}
 
-/// Implement `into_responder` and `into_initiator` for all configs where `R = ()`.
-///
-/// This allows us to ignore the `remote` field.
-
-impl NoiseConfig {
     fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
         let session = self
             .params
@@ -195,14 +135,70 @@ impl NoiseConfig {
     }
 }
 
-impl NoiseConfig {
-    /// Create a new `NoiseConfig` for the `XX` handshake pattern.
-    pub fn xx(dh_keys: AuthenticKeypair<X25519Spec>) -> Self {
-        NoiseConfig {
-            dh_keys,
-            params: PARAMS_XX.clone(),
-            prologue: Vec::default(),
+impl UpgradeInfo for Config {
+    type Info = &'static [u8];
+    type InfoIter = std::iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        std::iter::once(b"/noise")
+    }
+}
+
+impl<T> InboundUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = (PeerId, Output<T>);
+    type Error = Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
+        async move {
+            let mut state = self.into_responder(socket)?;
+
+            handshake::recv_empty(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+
+            let (remote, io) = state.finish()?;
+
+            let pk = match remote {
+                RemoteIdentity::IdentityKey(pk) => pk,
+                _ => return Err(Error::AuthenticationFailed),
+            };
+
+            Ok((pk.to_peer_id(), io))
         }
+        .boxed()
+    }
+}
+
+impl<T> OutboundUpgrade<T> for Config
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = (PeerId, Output<T>);
+    type Error = Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
+        async move {
+            let mut state = self.into_initiator(socket)?;
+
+            handshake::send_empty(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+
+            let (remote, io) = state.finish()?;
+
+            let pk = match remote {
+                RemoteIdentity::IdentityKey(pk) => pk,
+                _ => return Err(Error::AuthenticationFailed),
+            };
+
+            Ok((pk.to_peer_id(), io))
+        }
+        .boxed()
     }
 }
 
@@ -248,167 +244,6 @@ impl From<quick_protobuf::Error> for DecodeError {
 impl From<quick_protobuf::Error> for Error {
     fn from(e: quick_protobuf::Error) -> Self {
         Error::InvalidPayload(e.into())
-    }
-}
-
-/// Implements the responder part of the `XX` noise handshake pattern.
-///
-/// `XX` is a 1.5 round-trip (3 messages) handshake.
-/// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
-/// is empty and thus does not leak any information. The identities are then exchanged in the second
-/// and third message.
-///
-/// ```raw
-/// initiator --{}--> responder
-/// initiator <-{id}- responder
-/// initiator -{id}-> responder
-/// ```
-
-impl<T> InboundUpgrade<T> for NoiseConfig
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = (RemoteIdentity<X25519Spec>, Output<T>);
-    type Error = Error;
-    type Future = BoxFuture<'static, Result<(RemoteIdentity<X25519Spec>, Output<T>), Error>>;
-
-    fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        async move {
-            let mut state = self.into_responder(socket)?;
-
-            handshake::recv_empty(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
-            handshake::recv_identity(&mut state).await?;
-
-            state.finish()
-        }
-        .boxed()
-    }
-}
-
-/// Implements the initiator part of the `XX` noise handshake pattern.
-///
-/// `XX` is a 1.5 round-trip (3 messages) handshake.
-/// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
-/// is empty and thus does not leak any information. The identities are then exchanged in the second
-/// and third message.
-///
-/// ```raw
-/// initiator --{}--> responder
-/// initiator <-{id}- responder
-/// initiator -{id}-> responder
-/// ```
-
-impl<T> OutboundUpgrade<T> for NoiseConfig
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = (RemoteIdentity<X25519Spec>, Output<T>);
-    type Error = Error;
-    type Future = BoxFuture<'static, Result<(RemoteIdentity<X25519Spec>, Output<T>), Error>>;
-
-    fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        async move {
-            let mut state = self.into_initiator(socket)?;
-
-            handshake::send_empty(&mut state).await?;
-            handshake::recv_identity(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
-
-            state.finish()
-        }
-        .boxed()
-    }
-}
-
-// Authenticated Upgrades /////////////////////////////////////////////////////
-
-/// A `NoiseAuthenticated` transport upgrade that wraps around any
-/// `NoiseConfig` handshake and verifies that the remote identified with a
-/// [`RemoteIdentity::IdentityKey`], aborting otherwise.
-///
-/// See [`NoiseConfig::into_authenticated`].
-///
-/// On success, the upgrade yields the [`PeerId`] obtained from the
-/// `RemoteIdentity`. The output of this upgrade is thus directly suitable
-/// for creating an [`authenticated`](libp2p_core::transport::upgrade::Authenticate)
-/// transport for use with a `Swarm`.
-#[derive(Clone)]
-#[deprecated(
-    note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
-)]
-pub struct NoiseAuthenticated {
-    config: NoiseConfig,
-}
-
-impl NoiseAuthenticated {
-    /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
-    ///
-    /// For now, this is the only combination that is guaranteed to be compatible with other libp2p implementations.
-    #[deprecated(note = "Use `libp2p_noise::Config::new` instead.")]
-    pub fn xx(id_keys: &identity::Keypair) -> Result<Self, Error> {
-        let dh_keys = Keypair::<X25519Spec>::new();
-        let noise_keys = dh_keys.into_authentic(id_keys)?;
-        let config = NoiseConfig::xx(noise_keys);
-
-        Ok(config.into_authenticated())
-    }
-}
-
-impl UpgradeInfo for NoiseAuthenticated {
-    type Info = <NoiseConfig as UpgradeInfo>::Info;
-    type InfoIter = <NoiseConfig as UpgradeInfo>::InfoIter;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        self.config.protocol_info()
-    }
-}
-
-impl<T> InboundUpgrade<T> for NoiseAuthenticated
-where
-    NoiseConfig: UpgradeInfo
-        + InboundUpgrade<T, Output = (RemoteIdentity<X25519Spec>, Output<T>), Error = Error>
-        + 'static,
-    <NoiseConfig as InboundUpgrade<T>>::Future: Send,
-    T: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type Output = (PeerId, Output<T>);
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
-        Box::pin(
-            self.config
-                .upgrade_inbound(socket, info)
-                .and_then(|(remote, io)| match remote {
-                    RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-                    _ => future::err(Error::AuthenticationFailed),
-                }),
-        )
-    }
-}
-
-impl<T> OutboundUpgrade<T> for NoiseAuthenticated
-where
-    NoiseConfig: UpgradeInfo
-        + OutboundUpgrade<T, Output = (RemoteIdentity<X25519Spec>, Output<T>), Error = Error>
-        + 'static,
-    <NoiseConfig as OutboundUpgrade<T>>::Future: Send,
-    T: AsyncRead + AsyncWrite + Send + 'static,
-{
-    type Output = (PeerId, Output<T>);
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
-        Box::pin(
-            self.config
-                .upgrade_outbound(socket, info)
-                .and_then(|(remote, io)| match remote {
-                    RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-                    _ => future::err(Error::AuthenticationFailed),
-                }),
-        )
     }
 }
 
