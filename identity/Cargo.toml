@@ -3,7 +3,7 @@ name = "libp2p-identity"
 version = "0.1.2"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
-rust-version = "1.64.0"
+rust-version = { workspace = true }
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking", "cryptography"]

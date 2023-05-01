@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-perf"
 edition = "2021"
-rust-version = "1.64.0"
+rust-version = { workspace = true }
 description = "libp2p perf protocol implementation"
 version = "0.1.0"
 authors = ["Max Inden <mail@max-inden.de>"]

@@ -56,6 +56,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+rust-version = "1.64.0"
+
 [workspace.dependencies]
 libp2p-allow-block-list = { version = "0.1.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.10.1", path = "protocols/autonat" }
