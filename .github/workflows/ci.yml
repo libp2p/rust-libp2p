@@ -116,8 +116,8 @@ jobs:
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
   msrv:
-    name: Check the MSRV
-    runs-on: ${{ matrix.os }}
+    name: Compile with MSRV
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
