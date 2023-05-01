@@ -34,7 +34,7 @@ libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
 libp2p-yamux = { workspace = true }
-quickcheck = { package = "quickcheck-ext", workspace = true }
+quickcheck = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

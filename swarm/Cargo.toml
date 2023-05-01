@@ -49,7 +49,7 @@ libp2p-plaintext = { workspace = true }
 libp2p-swarm-derive = { workspace = true }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
-quickcheck = { package = "quickcheck-ext", workspace = true }
+quickcheck = { workspace = true }
 void = "1"
 
 [[test]]

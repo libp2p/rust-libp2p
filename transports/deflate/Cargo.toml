@@ -18,7 +18,7 @@ flate2 = "1.0"
 [dev-dependencies]
 async-std = "1.6.2"
 libp2p-tcp = { workspace = true, features = ["async-io"] }
-quickcheck = { package = "quickcheck-ext", workspace = true }
+quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.3.1"
 

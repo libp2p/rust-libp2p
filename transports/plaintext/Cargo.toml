@@ -24,7 +24,7 @@ void = "1.0.2"
 [dev-dependencies]
 env_logger = "0.10.0"
 libp2p-identity = { workspace = true, features = ["ed25519"] }
-quickcheck = { package = "quickcheck-ext", workspace = true }
+quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.3.1"
 

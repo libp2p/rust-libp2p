@@ -31,7 +31,7 @@ futures = "0.3"
 libp2p-muxer-test-harness = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
-quickcheck = { package = "quickcheck-ext", workspace = true }
+quickcheck = { workspace = true }
 
 [[bench]]
 name = "split_send_size"
