@@ -161,11 +161,7 @@ where
     Ok(())
 }
 
-/// A future for receiving a Noise handshake message with a payload
-/// identifying the remote.
-///
-/// In case `expected_key` is passed, this function will fail if the received key does not match the expected key.
-/// In case the remote does not send us a key, the expected key is assumed to be the remote's key.
+/// A future for receiving a Noise handshake message with a payload identifying the remote.
 pub(crate) async fn recv_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
@@ -174,15 +170,7 @@ where
     let mut reader = BytesReader::from_bytes(&msg[..]);
     let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..])?;
 
-    if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::try_decode_protobuf(&pb.identity_key)?;
-        if let Some(ref k) = state.id_remote_pubkey {
-            if k != &pk {
-                return Err(Error::UnexpectedKey);
-            }
-        }
-        state.id_remote_pubkey = Some(pk);
-    }
+    state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
     if !pb.identity_sig.is_empty() {
         state.dh_remote_pubkey_sig = Some(pb.identity_sig);
