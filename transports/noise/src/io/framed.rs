@@ -89,15 +89,18 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport<C>(self) -> Result<(Option<PublicKey<C>>, Output<T>), Error>
+    pub(crate) fn into_transport<C>(self) -> Result<(PublicKey<C>, Output<T>), Error>
     where
         C: Protocol<C> + AsRef<[u8]>,
     {
-        let dh_remote_pubkey = self
-            .session
-            .get_remote_static()
-            .map(C::public_from_bytes)
-            .transpose()?;
+        let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "expect key to always be present at end of XX session",
+            ))
+        })?;
+
+        let dh_remote_pubkey = C::public_from_bytes(dh_remote_pubkey)?;
 
         let io = NoiseFramed {
             session: self.session.into_transport_mode()?,
