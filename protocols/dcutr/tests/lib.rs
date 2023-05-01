@@ -121,7 +121,7 @@ fn build_client() -> Swarm<Client> {
         .or_transport(libp2p_tcp::async_io::Transport::default())
         .upgrade(Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
     SwarmBuilder::without_executor(

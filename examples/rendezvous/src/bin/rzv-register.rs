@@ -41,7 +41,7 @@ async fn main() {
         tcp::tokio::Transport::default()
             .upgrade(Version::V1Lazy)
             .authenticate(noise::Config::new(&key_pair).unwrap())
-            .multiplex(yamux::YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .boxed(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),

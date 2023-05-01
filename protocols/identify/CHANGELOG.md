@@ -1,4 +1,4 @@
-## 0.42.2 - unreleased
+## 0.42.2
 
 - Do not implicitly dial a peer upon `identify::Behaviour::push`.
   Previously, we would dial each peer in the provided list.
