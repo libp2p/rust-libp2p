@@ -91,7 +91,6 @@ pub struct Config {
 
 impl Config {
     /// Construct a new configuration for the noise handshake using the XX handshake pattern.
-
     pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
         let noise_keys = Keypair::new().into_authentic(identity)?;
 
@@ -103,7 +102,6 @@ impl Config {
     }
 
     /// Set the noise prologue.
-
     pub fn with_prologue(mut self, prologue: Vec<u8>) -> Self {
         self.prologue = prologue;
 
