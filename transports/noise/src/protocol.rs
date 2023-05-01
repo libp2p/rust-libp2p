@@ -22,7 +22,7 @@
 
 pub(crate) mod x25519_spec;
 
-use crate::Error;
+use crate::{Error, X25519Spec};
 use libp2p_identity as identity;
 use rand::SeedableRng;
 use zeroize::Zeroize;
@@ -33,15 +33,12 @@ use zeroize::Zeroize;
 pub struct ProtocolParams(snow::params::NoiseParams);
 
 impl ProtocolParams {
-    pub(crate) fn into_builder<'b, C>(
+    pub(crate) fn into_builder<'b>(
         self,
         prologue: &'b [u8],
-        private_key: &'b SecretKey<C>,
-        remote_public_key: Option<&'b PublicKey<C>>,
-    ) -> snow::Builder<'b>
-    where
-        C: Zeroize + AsRef<[u8]> + Protocol<C>,
-    {
+        private_key: &'b SecretKey<X25519Spec>,
+        remote_public_key: Option<&'b PublicKey<X25519Spec>>,
+    ) -> snow::Builder<'b> {
         let mut builder = snow::Builder::with_resolver(self.0, Box::new(Resolver))
             .prologue(prologue.as_ref())
             .local_private_key(private_key.as_ref());

@@ -67,6 +67,7 @@ pub use protocol::{Protocol, ProtocolParams, XX};
 
 use crate::handshake::State;
 use crate::io::handshake;
+use crate::protocol::x25519_spec::PARAMS_XX;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
@@ -75,12 +76,11 @@ use libp2p_identity::PeerId;
 use std::fmt;
 use std::fmt::Formatter;
 use std::pin::Pin;
-use zeroize::Zeroize;
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
 pub struct Config {
-    inner: NoiseAuthenticated<XX, X25519Spec>,
+    inner: NoiseAuthenticated,
 }
 
 impl Config {
@@ -141,10 +141,9 @@ where
     note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
 )]
 #[derive(Clone)]
-pub struct NoiseConfig<P, C: Zeroize> {
-    dh_keys: AuthenticKeypair<C>,
+pub struct NoiseConfig {
+    dh_keys: AuthenticKeypair<X25519Spec>,
     params: ProtocolParams,
-    _marker: std::marker::PhantomData<P>,
 
     /// Prologue to use in the noise handshake.
     ///
@@ -155,10 +154,10 @@ pub struct NoiseConfig<P, C: Zeroize> {
     prologue: Vec<u8>,
 }
 
-impl<H, C: Zeroize> NoiseConfig<H, C> {
+impl NoiseConfig {
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
     /// with a `Swarm`.
-    pub fn into_authenticated(self) -> NoiseAuthenticated<H, C> {
+    pub fn into_authenticated(self) -> NoiseAuthenticated {
         NoiseAuthenticated { config: self }
     }
 
@@ -172,10 +171,7 @@ impl<H, C: Zeroize> NoiseConfig<H, C> {
 ///
 /// This allows us to ignore the `remote` field.
 
-impl<H, C> NoiseConfig<H, C>
-where
-    C: Zeroize + Protocol<C> + AsRef<[u8]>,
-{
+impl NoiseConfig {
     fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
         let session = self
             .params
@@ -199,16 +195,12 @@ where
     }
 }
 
-impl<C> NoiseConfig<XX, C>
-where
-    C: Protocol<C> + Zeroize,
-{
+impl NoiseConfig {
     /// Create a new `NoiseConfig` for the `XX` handshake pattern.
-    pub fn xx(dh_keys: AuthenticKeypair<C>) -> Self {
+    pub fn xx(dh_keys: AuthenticKeypair<X25519Spec>) -> Self {
         NoiseConfig {
             dh_keys,
-            params: C::params_xx(),
-            _marker: std::marker::PhantomData,
+            params: PARAMS_XX.clone(),
             prologue: Vec::default(),
         }
     }
@@ -272,15 +264,13 @@ impl From<quick_protobuf::Error> for Error {
 /// initiator -{id}-> responder
 /// ```
 
-impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
+impl<T> InboundUpgrade<T> for NoiseConfig
 where
-    NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
-    type Output = (RemoteIdentity<C>, Output<T>);
+    type Output = (RemoteIdentity<X25519Spec>, Output<T>);
     type Error = Error;
-    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, Output<T>), Error>>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<X25519Spec>, Output<T>), Error>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
@@ -309,15 +299,13 @@ where
 /// initiator -{id}-> responder
 /// ```
 
-impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
+impl<T> OutboundUpgrade<T> for NoiseConfig
 where
-    NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
-    type Output = (RemoteIdentity<C>, Output<T>);
+    type Output = (RemoteIdentity<X25519Spec>, Output<T>);
     type Error = Error;
-    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, Output<T>), Error>>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<X25519Spec>, Output<T>), Error>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
@@ -349,11 +337,11 @@ where
 #[deprecated(
     note = "Use `libp2p_noise::Config` instead. All other handshake patterns are deprecated and will be removed."
 )]
-pub struct NoiseAuthenticated<P, C: Zeroize> {
-    config: NoiseConfig<P, C>,
+pub struct NoiseAuthenticated {
+    config: NoiseConfig,
 }
 
-impl NoiseAuthenticated<XX, X25519Spec> {
+impl NoiseAuthenticated {
     /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
     ///
     /// For now, this is the only combination that is guaranteed to be compatible with other libp2p implementations.
@@ -367,26 +355,22 @@ impl NoiseAuthenticated<XX, X25519Spec> {
     }
 }
 
-impl<P, C: Zeroize> UpgradeInfo for NoiseAuthenticated<P, C>
-where
-    NoiseConfig<P, C>: UpgradeInfo,
-{
-    type Info = <NoiseConfig<P, C> as UpgradeInfo>::Info;
-    type InfoIter = <NoiseConfig<P, C> as UpgradeInfo>::InfoIter;
+impl UpgradeInfo for NoiseAuthenticated {
+    type Info = <NoiseConfig as UpgradeInfo>::Info;
+    type InfoIter = <NoiseConfig as UpgradeInfo>::InfoIter;
 
     fn protocol_info(&self) -> Self::InfoIter {
         self.config.protocol_info()
     }
 }
 
-impl<T, P, C> InboundUpgrade<T> for NoiseAuthenticated<P, C>
+impl<T> InboundUpgrade<T> for NoiseAuthenticated
 where
-    NoiseConfig<P, C>: UpgradeInfo
-        + InboundUpgrade<T, Output = (RemoteIdentity<C>, Output<T>), Error = Error>
+    NoiseConfig: UpgradeInfo
+        + InboundUpgrade<T, Output = (RemoteIdentity<X25519Spec>, Output<T>), Error = Error>
         + 'static,
-    <NoiseConfig<P, C> as InboundUpgrade<T>>::Future: Send,
+    <NoiseConfig as InboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (PeerId, Output<T>);
     type Error = Error;
@@ -404,14 +388,13 @@ where
     }
 }
 
-impl<T, P, C> OutboundUpgrade<T> for NoiseAuthenticated<P, C>
+impl<T> OutboundUpgrade<T> for NoiseAuthenticated
 where
-    NoiseConfig<P, C>: UpgradeInfo
-        + OutboundUpgrade<T, Output = (RemoteIdentity<C>, Output<T>), Error = Error>
+    NoiseConfig: UpgradeInfo
+        + OutboundUpgrade<T, Output = (RemoteIdentity<X25519Spec>, Output<T>), Error = Error>
         + 'static,
-    <NoiseConfig<P, C> as OutboundUpgrade<T>>::Future: Send,
+    <NoiseConfig as OutboundUpgrade<T>>::Future: Send,
     T: AsyncRead + AsyncWrite + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
     type Output = (PeerId, Output<T>);
     type Error = Error;

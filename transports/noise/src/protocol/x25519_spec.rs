@@ -35,7 +35,7 @@ use super::*;
 /// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
 
-static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
     "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
@@ -92,7 +92,7 @@ impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
     }
 }
 
-impl UpgradeInfo for NoiseConfig<XX, X25519Spec> {
+impl UpgradeInfo for NoiseConfig {
     type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
 
