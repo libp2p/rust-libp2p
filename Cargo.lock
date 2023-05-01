@@ -2438,10 +2438,12 @@ dependencies = [
 name = "libp2p-deflate"
 version = "0.39.0"
 dependencies = [
+ "async-std",
  "flate2",
  "futures",
  "futures_ringbuf",
  "libp2p-core",
+ "libp2p-tcp",
  "quickcheck-ext",
  "rand 0.8.5",
 ]
