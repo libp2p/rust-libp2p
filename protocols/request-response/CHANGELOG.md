@@ -1,4 +1,4 @@
-## 0.24.1 - unreleased
+## 0.24.1
 
 - Deprecate `handler`, `codec` modules to make them private. See [PR 3847].
 
