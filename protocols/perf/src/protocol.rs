@@ -121,8 +121,6 @@ impl request_response::Codec for Codec {
             sent += io.write(buf).await?;
         }
 
-        io.close().await?;
-
         Ok(())
     }
 
@@ -144,8 +142,6 @@ impl request_response::Codec for Codec {
 
             sent += io.write(buf).await?;
         }
-
-        io.close().await?;
 
         Ok(())
     }
