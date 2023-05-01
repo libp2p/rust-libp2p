@@ -22,8 +22,7 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
-use crate::{Error, Protocol, ProtocolParams};
-use libp2p_identity as identity;
+use crate::ProtocolParams;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
@@ -57,7 +56,7 @@ impl Zeroize for X25519Spec {
     }
 }
 
-impl Keypair<X25519Spec> {
+impl Keypair {
     /// An "empty" keypair as a starting state for DH computations in `snow`,
     /// which get manipulated through the `snow::types::Dh` interface.
     pub(super) fn default() -> Self {
@@ -68,7 +67,7 @@ impl Keypair<X25519Spec> {
     }
 
     /// Create a new X25519 keypair.
-    pub fn new() -> Keypair<X25519Spec> {
+    pub fn new() -> Keypair {
         let mut sk_bytes = [0u8; 32];
         rand::thread_rng().fill(&mut sk_bytes);
         let sk = SecretKey(X25519Spec(sk_bytes)); // Copy
@@ -77,55 +76,22 @@ impl Keypair<X25519Spec> {
     }
 }
 
-impl Default for Keypair<X25519Spec> {
+impl Default for Keypair {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Promote a X25519 secret key into a keypair.
-impl From<SecretKey<X25519Spec>> for Keypair<X25519Spec> {
-    fn from(secret: SecretKey<X25519Spec>) -> Keypair<X25519Spec> {
+impl From<SecretKey> for Keypair {
+    fn from(secret: SecretKey) -> Keypair {
         let public = PublicKey(X25519Spec(x25519((secret.0).0, X25519_BASEPOINT_BYTES)));
         Keypair { secret, public }
     }
 }
 
-/// Noise protocols for X25519 with libp2p-spec compliant signatures.
-///
-/// **Note**: Only the XX handshake pattern is currently guaranteed to be
-/// interoperable with other libp2p implementations.
-impl Protocol<X25519Spec> for X25519Spec {
-    fn params_xx() -> ProtocolParams {
-        PARAMS_XX.clone()
-    }
-
-    fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, Error> {
-        if bytes.len() != 32 {
-            return Err(Error::InvalidLength);
-        }
-        let mut pk = [0u8; 32];
-        pk.copy_from_slice(bytes);
-        Ok(PublicKey(X25519Spec(pk)))
-    }
-
-    fn verify(
-        id_pk: &identity::PublicKey,
-        dh_pk: &PublicKey<X25519Spec>,
-        sig: &Option<Vec<u8>>,
-    ) -> bool {
-        sig.as_ref().map_or(false, |s| {
-            id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), dh_pk.as_ref()].concat(), s)
-        })
-    }
-
-    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<X25519Spec>) -> Result<Vec<u8>, Error> {
-        Ok(id_keys.sign(&[STATIC_KEY_DOMAIN.as_bytes(), dh_pk.as_ref()].concat())?)
-    }
-}
-
 #[doc(hidden)]
-impl snow::types::Dh for Keypair<X25519Spec> {
+impl snow::types::Dh for Keypair {
     fn name(&self) -> &'static str {
         "25519"
     }

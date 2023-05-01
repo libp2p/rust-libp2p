@@ -89,7 +89,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport(self) -> Result<(PublicKey<X25519Spec>, Output<T>), Error> {
+    pub(crate) fn into_transport(self) -> Result<(PublicKey, Output<T>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(
                 io::ErrorKind::Other,

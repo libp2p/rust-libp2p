@@ -36,8 +36,8 @@ impl ProtocolParams {
     pub(crate) fn into_builder<'b>(
         self,
         prologue: &'b [u8],
-        private_key: &'b SecretKey<X25519Spec>,
-        remote_public_key: Option<&'b PublicKey<X25519Spec>>,
+        private_key: &'b SecretKey,
+        remote_public_key: Option<&'b PublicKey>,
     ) -> snow::Builder<'b> {
         let mut builder = snow::Builder::with_resolver(self.0, Box::new(Resolver))
             .prologue(prologue.as_ref())
@@ -55,77 +55,23 @@ impl ProtocolParams {
 #[derive(Debug, Clone)]
 pub enum XX {}
 
-/// A Noise protocol over DH keys of type `C`. The choice of `C` determines the
-/// protocol parameters for each handshake pattern.
-#[deprecated(
-    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
-)]
-pub trait Protocol<C> {
-    fn params_xx() -> ProtocolParams;
-
-    /// Construct a DH public key from a byte slice.
-    fn public_from_bytes(s: &[u8]) -> Result<PublicKey<C>, Error>;
-
-    /// Determines whether the authenticity of the given DH static public key
-    /// and public identity key is linked, i.e. that proof of ownership of a
-    /// secret key for the static DH public key implies that the key is
-    /// authentic w.r.t. the given public identity key.
-    ///
-    /// The trivial case is when the keys are byte for byte identical.
-    #[allow(unused_variables)]
-    #[deprecated]
-    fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>) -> bool {
-        false
-    }
-
-    /// Verifies that a given static DH public key is authentic w.r.t. a
-    /// given public identity key in the context of an optional signature.
-    ///
-    /// The given static DH public key is assumed to already be authentic
-    /// in the sense that possession of a corresponding secret key has been
-    /// established, as is the case at the end of a Noise handshake involving
-    /// static DH keys.
-    ///
-    /// If the public keys are [`linked`](Protocol::linked), verification succeeds
-    /// without a signature, otherwise a signature over the static DH public key
-    /// must be given and is verified with the public identity key, establishing
-    /// the authenticity of the static DH public key w.r.t. the public identity key.
-
-    fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
-    where
-        C: AsRef<[u8]>,
-    {
-        Self::linked(id_pk, dh_pk)
-            || sig
-                .as_ref()
-                .map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
-    }
-
-    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>) -> Result<Vec<u8>, Error>
-    where
-        C: AsRef<[u8]>,
-    {
-        Ok(id_keys.sign(dh_pk.as_ref())?)
-    }
-}
-
 /// DH keypair.
 #[derive(Clone)]
-pub struct Keypair<T: Zeroize> {
-    secret: SecretKey<T>,
-    public: PublicKey<T>,
+pub struct Keypair {
+    secret: SecretKey,
+    public: PublicKey,
 }
 
 /// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
 #[derive(Clone)]
-pub struct AuthenticKeypair<T: Zeroize> {
-    pub(crate) keypair: Keypair<T>,
+pub struct AuthenticKeypair {
+    pub(crate) keypair: Keypair,
     pub(crate) identity: KeypairIdentity,
 }
 
-impl<T: Zeroize> AuthenticKeypair<T> {
+impl AuthenticKeypair {
     /// Returns the public DH key of this keypair.
-    pub fn public_dh_key(&self) -> &PublicKey<T> {
+    pub fn public_dh_key(&self) -> &PublicKey {
         &self.keypair.public
     }
 
@@ -149,25 +95,21 @@ pub struct KeypairIdentity {
     pub signature: Option<Vec<u8>>,
 }
 
-impl<T: Zeroize> Keypair<T> {
+impl Keypair {
     /// The public key of the DH keypair.
-    pub fn public(&self) -> &PublicKey<T> {
+    pub fn public(&self) -> &PublicKey {
         &self.public
     }
 
     /// The secret key of the DH keypair.
-    pub fn secret(&self) -> &SecretKey<T> {
+    pub fn secret(&self) -> &SecretKey {
         &self.secret
     }
 
     /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
-    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, Error>
-    where
-        T: AsRef<[u8]>,
-        T: Protocol<T>,
-    {
-        let sig = T::sign(id_keys, &self.public)?;
+    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair, Error> {
+        let sig = id_keys.sign(self.public.as_ref())?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
@@ -183,15 +125,15 @@ impl<T: Zeroize> Keypair<T> {
 
 /// DH secret key.
 #[derive(Clone)]
-pub struct SecretKey<T: Zeroize>(T);
+pub struct SecretKey(X25519Spec);
 
-impl<T: Zeroize> Drop for SecretKey<T> {
+impl Drop for SecretKey {
     fn drop(&mut self) {
         self.0.zeroize()
     }
 }
 
-impl<T: AsRef<[u8]> + Zeroize> AsRef<[u8]> for SecretKey<T> {
+impl AsRef<[u8]> for SecretKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
@@ -199,17 +141,15 @@ impl<T: AsRef<[u8]> + Zeroize> AsRef<[u8]> for SecretKey<T> {
 
 /// DH public key.
 #[derive(Clone)]
-pub struct PublicKey<T>(pub(crate) T);
+pub struct PublicKey(pub(crate) X25519Spec);
 
-impl<T: AsRef<[u8]>> PartialEq for PublicKey<T> {
-    fn eq(&self, other: &PublicKey<T>) -> bool {
+impl PartialEq for PublicKey {
+    fn eq(&self, other: &PublicKey) -> bool {
         self.as_ref() == other.as_ref()
     }
 }
 
-impl<T: AsRef<[u8]>> Eq for PublicKey<T> {}
-
-impl<T: AsRef<[u8]>> AsRef<[u8]> for PublicKey<T> {
+impl AsRef<[u8]> for PublicKey {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
@@ -228,7 +168,7 @@ impl snow::resolvers::CryptoResolver for Resolver {
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
         if let snow::params::DHChoice::Curve25519 = choice {
-            Some(Box::new(Keypair::<x25519_spec::X25519Spec>::default()))
+            Some(Box::new(Keypair::default()))
         } else {
             None
         }
@@ -292,7 +232,6 @@ impl snow::types::Random for Rng {}
 mod tests {
     use super::*;
     use crate::protocol::x25519_spec::PARAMS_XX;
-    use crate::X25519Spec;
     use once_cell::sync::Lazy;
 
     #[test]
@@ -324,5 +263,5 @@ mod tests {
     }
 
     // Hack to work around borrow-checker.
-    static TEST_KEY: Lazy<Keypair<X25519Spec>> = Lazy::new(Keypair::<X25519Spec>::new);
+    static TEST_KEY: Lazy<Keypair> = Lazy::new(Keypair::new);
 }

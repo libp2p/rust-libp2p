@@ -62,7 +62,7 @@ mod protocol;
 pub use io::Output;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{Protocol, ProtocolParams, XX};
+pub use protocol::{ProtocolParams, XX};
 
 use crate::handshake::State;
 use crate::io::handshake;
@@ -78,7 +78,7 @@ use std::pin::Pin;
 /// The configuration for the noise handshake.
 #[derive(Clone)]
 pub struct Config {
-    dh_keys: AuthenticKeypair<X25519Spec>,
+    dh_keys: AuthenticKeypair,
     params: ProtocolParams,
 
     /// Prologue to use in the noise handshake.
@@ -94,7 +94,7 @@ impl Config {
     /// Construct a new configuration for the noise handshake using the XX handshake pattern.
 
     pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
-        let noise_keys = Keypair::<X25519Spec>::new().into_authentic(identity)?;
+        let noise_keys = Keypair::new().into_authentic(identity)?;
 
         Ok(Self {
             dh_keys: noise_keys,
