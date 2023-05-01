@@ -199,7 +199,7 @@ impl<T: AsRef<[u8]> + Zeroize> AsRef<[u8]> for SecretKey<T> {
 
 /// DH public key.
 #[derive(Clone)]
-pub struct PublicKey<T>(T);
+pub struct PublicKey<T>(pub(crate) T);
 
 impl<T: AsRef<[u8]>> PartialEq for PublicKey<T> {
     fn eq(&self, other: &PublicKey<T>) -> bool {

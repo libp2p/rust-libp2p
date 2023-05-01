@@ -43,7 +43,7 @@ pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
 
 /// A X25519 key.
 #[derive(Clone)]
-pub struct X25519Spec([u8; 32]);
+pub struct X25519Spec(pub(crate) [u8; 32]);
 
 impl AsRef<[u8]> for X25519Spec {
     fn as_ref(&self) -> &[u8] {

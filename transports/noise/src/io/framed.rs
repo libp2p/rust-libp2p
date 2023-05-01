@@ -22,7 +22,7 @@
 //! Noise protocol messages in form of [`NoiseFramed`].
 
 use crate::io::Output;
-use crate::{Error, Protocol, PublicKey, X25519Spec};
+use crate::{Error, PublicKey, X25519Spec};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;
@@ -97,7 +97,13 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             ))
         })?;
 
-        let dh_remote_pubkey = X25519Spec::public_from_bytes(dh_remote_pubkey)?;
+        if dh_remote_pubkey.len() != 32 {
+            return Err(Error::InvalidLength);
+        }
+        let mut pk = [0u8; 32];
+        pk.copy_from_slice(dh_remote_pubkey);
+
+        let dh_remote_pubkey = PublicKey(X25519Spec(pk));
 
         let io = NoiseFramed {
             session: self.session.into_transport_mode()?,
