@@ -6,7 +6,7 @@
 
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 
-## 0.42.2 - unreleased
+## 0.42.2
 
 - Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
 

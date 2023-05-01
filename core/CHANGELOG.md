@@ -7,7 +7,7 @@
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 
-## 0.39.2 - unreleased
+## 0.39.2
 
 - Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.
   If you depend on it, we suggest you vendor it.

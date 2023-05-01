@@ -55,7 +55,7 @@ async fn main() {
         tcp::tokio::Transport::default()
             .upgrade(Version::V1Lazy)
             .authenticate(noise::Config::new(&key_pair).unwrap())
-            .multiplex(yamux::YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .boxed(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(

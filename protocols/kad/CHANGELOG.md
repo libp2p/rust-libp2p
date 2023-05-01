@@ -1,4 +1,4 @@
-## 0.43.3 - unreleased
+## 0.43.3
 
 - Preserve existing `KeepAlive::Until` timeout instead of continuously setting new `KeepAlive::Until(Instant::now() + self.config.idle_timeout)`.
   See [PR 3801].
