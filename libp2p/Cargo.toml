@@ -117,6 +117,7 @@ libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
+
 multiaddr = { version = "0.17.0" }
 pin-project = "1.0.0"
 

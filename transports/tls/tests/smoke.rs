@@ -61,7 +61,7 @@ fn make_swarm() -> Swarm<keep_alive::Behaviour> {
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_tls::Config::new(&identity).unwrap())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
     SwarmBuilder::without_executor(

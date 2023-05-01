@@ -1,4 +1,4 @@
-## 0.1.2 - unreleased
+## 0.1.2
 
 - Add `impl From<ed25519::PublicKey> for PublicKey` so that `PublicKey::from(ed25519::PublicKey)` works.
   See [PR 3805].
