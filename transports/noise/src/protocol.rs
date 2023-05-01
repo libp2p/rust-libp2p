@@ -30,7 +30,7 @@ use zeroize::Zeroize;
 /// The parameters of a Noise protocol, consisting of a choice
 /// for a handshake pattern as well as DH, cipher and hash functions.
 #[derive(Clone)]
-pub struct ProtocolParams(snow::params::NoiseParams);
+pub(crate) struct ProtocolParams(snow::params::NoiseParams);
 
 /// Prefix of static key signatures for domain separation.
 pub(crate) const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
@@ -63,41 +63,39 @@ impl ProtocolParams {
 
 /// DH keypair.
 #[derive(Clone)]
-pub struct Keypair {
+pub(crate) struct Keypair {
     secret: SecretKey,
     public: PublicKey,
 }
 
 /// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
 #[derive(Clone)]
-pub struct AuthenticKeypair {
+pub(crate) struct AuthenticKeypair {
     pub(crate) keypair: Keypair,
     pub(crate) identity: KeypairIdentity,
 }
 
 /// The associated public identity of a DH keypair.
 #[derive(Clone)]
-pub struct KeypairIdentity {
+pub(crate) struct KeypairIdentity {
     /// The public identity key.
-    pub public: identity::PublicKey,
+    pub(crate) public: identity::PublicKey,
     /// The signature over the public DH key.
-    pub signature: Option<Vec<u8>>,
+    pub(crate) signature: Option<Vec<u8>>,
 }
 
 impl Keypair {
-    /// The public key of the DH keypair.
-    pub fn public(&self) -> &PublicKey {
-        &self.public
-    }
-
     /// The secret key of the DH keypair.
-    pub fn secret(&self) -> &SecretKey {
+    pub(crate) fn secret(&self) -> &SecretKey {
         &self.secret
     }
 
     /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
-    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair, Error> {
+    pub(crate) fn into_authentic(
+        self,
+        id_keys: &identity::Keypair,
+    ) -> Result<AuthenticKeypair, Error> {
         let sig = id_keys.sign(self.public.as_ref())?;
 
         let identity = KeypairIdentity {
@@ -114,7 +112,7 @@ impl Keypair {
 
 /// DH secret key.
 #[derive(Clone, Default)]
-pub struct SecretKey([u8; 32]);
+pub(crate) struct SecretKey([u8; 32]);
 
 impl Drop for SecretKey {
     fn drop(&mut self) {
@@ -130,7 +128,7 @@ impl AsRef<[u8]> for SecretKey {
 
 /// DH public key.
 #[derive(Clone, PartialEq, Default)]
-pub struct PublicKey([u8; 32]);
+pub(crate) struct PublicKey([u8; 32]);
 
 impl PublicKey {
     pub(crate) fn from_slice(slice: &[u8]) -> Result<Self, Error> {
@@ -234,7 +232,7 @@ impl Keypair {
     }
 
     /// Create a new X25519 keypair.
-    pub fn new() -> Keypair {
+    pub(crate) fn new() -> Keypair {
         let mut sk_bytes = [0u8; 32];
         rand::thread_rng().fill(&mut sk_bytes);
         let sk = SecretKey(sk_bytes); // Copy

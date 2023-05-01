@@ -22,7 +22,7 @@
 //! Noise protocol messages in form of [`NoiseFramed`].
 
 use crate::io::Output;
-use crate::{Error, PublicKey};
+use crate::{protocol::PublicKey, Error};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;

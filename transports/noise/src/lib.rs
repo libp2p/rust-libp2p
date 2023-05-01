@@ -60,12 +60,10 @@ mod io;
 mod protocol;
 
 pub use io::Output;
-pub use protocol::ProtocolParams;
-pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 
 use crate::handshake::State;
 use crate::io::handshake;
-use crate::protocol::PARAMS_XX;
+use crate::protocol::{AuthenticKeypair, Keypair, ProtocolParams, PARAMS_XX};
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
