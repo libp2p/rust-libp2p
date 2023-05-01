@@ -61,10 +61,6 @@ impl ProtocolParams {
     }
 }
 
-/// Type tag for the XX handshake pattern.
-#[derive(Debug, Clone)]
-pub enum XX {}
-
 /// DH keypair.
 #[derive(Clone)]
 pub struct Keypair {

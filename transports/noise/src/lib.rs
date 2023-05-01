@@ -60,8 +60,8 @@ mod io;
 mod protocol;
 
 pub use io::Output;
+pub use protocol::ProtocolParams;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
-pub use protocol::{ProtocolParams, XX};
 
 use crate::handshake::State;
 use crate::io::handshake;
