@@ -63,15 +63,15 @@ pub use io::Output;
 
 use crate::handshake::State;
 use crate::io::handshake;
-use crate::protocol::{AuthenticKeypair, Keypair, noise_params_into_builder, PARAMS_XX};
+use crate::protocol::{noise_params_into_builder, AuthenticKeypair, Keypair, PARAMS_XX};
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
+use snow::params::NoiseParams;
 use std::fmt;
 use std::fmt::Formatter;
 use std::pin::Pin;
-use snow::params::NoiseParams;
 
 /// The configuration for the noise handshake.
 #[derive(Clone)]
@@ -108,8 +108,13 @@ impl Config {
     }
 
     fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
-        let session = noise_params_into_builder(self.params, &self.prologue, self.dh_keys.keypair.secret(), None)
-            .build_responder()?;
+        let session = noise_params_into_builder(
+            self.params,
+            &self.prologue,
+            self.dh_keys.keypair.secret(),
+            None,
+        )
+        .build_responder()?;
 
         let state = State::new(socket, session, self.dh_keys.identity, None);
 
@@ -117,8 +122,13 @@ impl Config {
     }
 
     fn into_initiator<S>(self, socket: S) -> Result<State<S>, Error> {
-        let session = noise_params_into_builder(self.params, &self.prologue, self.dh_keys.keypair.secret(), None)
-            .build_initiator()?;
+        let session = noise_params_into_builder(
+            self.params,
+            &self.prologue,
+            self.dh_keys.keypair.secret(),
+            None,
+        )
+        .build_initiator()?;
 
         let state = State::new(socket, session, self.dh_keys.identity, None);
 
@@ -226,23 +236,4 @@ impl From<quick_protobuf::Error> for Error {
     fn from(e: quick_protobuf::Error) -> Self {
         Error::InvalidPayload(e.into())
     }
-}
-
-/// Legacy configuration options.
-#[derive(Clone, Copy, Default)]
-#[deprecated(
-    since = "0.42.0",
-    note = "`LegacyConfig` will be removed without replacement."
-)]
-pub struct LegacyConfig {
-    /// Whether to continue sending legacy handshake payloads,
-    /// i.e. length-prefixed protobuf payloads inside a length-prefixed
-    /// noise frame. These payloads are not interoperable with other
-    /// libp2p implementations.
-    pub send_legacy_handshake: bool,
-    /// Whether to support receiving legacy handshake payloads,
-    /// i.e. length-prefixed protobuf payloads inside a length-prefixed
-    /// noise frame. These payloads are not interoperable with other
-    /// libp2p implementations.
-    pub recv_legacy_handshake: bool,
 }

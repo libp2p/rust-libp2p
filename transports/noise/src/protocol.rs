@@ -74,7 +74,7 @@ pub(crate) struct KeypairIdentity {
     /// The public identity key.
     pub(crate) public: identity::PublicKey,
     /// The signature over the public DH key.
-    pub(crate) signature: Option<Vec<u8>>,
+    pub(crate) signature: Vec<u8>,
 }
 
 impl Keypair {
@@ -93,7 +93,7 @@ impl Keypair {
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
-            signature: Some(sig),
+            signature: sig,
         };
 
         Ok(AuthenticKeypair {

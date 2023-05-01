@@ -161,9 +161,7 @@ where
         ..Default::default()
     };
 
-    if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
-    }
+    pb.identity_sig = state.identity.signature.clone();
 
     let mut msg = Vec::with_capacity(pb.get_size());
 
