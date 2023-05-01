@@ -44,7 +44,6 @@ use std::time::Duration;
 pub enum Command {
     Connect {
         obs_addrs: Vec<Multiaddr>,
-        attempt: u8,
     },
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
@@ -59,10 +58,9 @@ pub enum Command {
 impl fmt::Debug for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Command::Connect { obs_addrs, attempt } => f
+            Command::Connect { obs_addrs } => f
                 .debug_struct("Command::Connect")
                 .field("obs_addrs", obs_addrs)
-                .field("attempt", attempt)
                 .finish(),
             Command::AcceptInboundConnect {
                 obs_addrs,
@@ -268,7 +266,7 @@ impl ConnectionHandler for Handler {
     >;
     type InboundProtocol = Either<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
-    type OutboundOpenInfo = u8; // Number of upgrade attempts.
+    type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -289,12 +287,12 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            Command::Connect { obs_addrs, attempt } => {
+            Command::Connect { obs_addrs } => {
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             protocol::outbound::Upgrade::new(obs_addrs),
-                            attempt,
+                            (),
                         ),
                     });
             }

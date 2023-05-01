@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{GossipsubCodec, ProtocolConfig};
+use crate::protocol_priv::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
 use crate::ValidationError;

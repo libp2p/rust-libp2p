@@ -6,6 +6,12 @@
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 
+## 0.24.1
+
+- Deprecate `handler`, `codec` modules to make them private. See [PR 3847].
+
+[PR 3847]: https://github.com/libp2p/rust-libp2p/pull/3847
+
 ## 0.24.0
 
 - Update to `libp2p-core` `v0.39.0`.

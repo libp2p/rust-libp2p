@@ -34,7 +34,7 @@ use trust_dns_proto::{
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
-pub enum MdnsPacket {
+pub(crate) enum MdnsPacket {
     /// A query made by a remote.
     Query(MdnsQuery),
     /// A response sent by a remote in response to one of our queries.
@@ -44,7 +44,7 @@ pub enum MdnsPacket {
 }
 
 impl MdnsPacket {
-    pub fn new_from_bytes(
+    pub(crate) fn new_from_bytes(
         buf: &[u8],
         from: SocketAddr,
     ) -> Result<Option<MdnsPacket>, trust_dns_proto::error::ProtoError> {
@@ -82,7 +82,7 @@ impl MdnsPacket {
 }
 
 /// A received mDNS query.
-pub struct MdnsQuery {
+pub(crate) struct MdnsQuery {
     /// Sender of the address.
     from: SocketAddr,
     /// Id of the received DNS query. We need to pass this ID back in the results.
@@ -91,12 +91,12 @@ pub struct MdnsQuery {
 
 impl MdnsQuery {
     /// Source address of the packet.
-    pub fn remote_addr(&self) -> &SocketAddr {
+    pub(crate) fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
 
     /// Query id of the packet.
-    pub fn query_id(&self) -> u16 {
+    pub(crate) fn query_id(&self) -> u16 {
         self.query_id
     }
 }
@@ -111,7 +111,7 @@ impl fmt::Debug for MdnsQuery {
 }
 
 /// A received mDNS service discovery query.
-pub struct MdnsServiceDiscovery {
+pub(crate) struct MdnsServiceDiscovery {
     /// Sender of the address.
     from: SocketAddr,
     /// Id of the received DNS query. We need to pass this ID back in the results.
@@ -120,12 +120,12 @@ pub struct MdnsServiceDiscovery {
 
 impl MdnsServiceDiscovery {
     /// Source address of the packet.
-    pub fn remote_addr(&self) -> &SocketAddr {
+    pub(crate) fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
 
     /// Query id of the packet.
-    pub fn query_id(&self) -> u16 {
+    pub(crate) fn query_id(&self) -> u16 {
         self.query_id
     }
 }
@@ -140,14 +140,14 @@ impl fmt::Debug for MdnsServiceDiscovery {
 }
 
 /// A received mDNS response.
-pub struct MdnsResponse {
+pub(crate) struct MdnsResponse {
     peers: Vec<MdnsPeer>,
     from: SocketAddr,
 }
 
 impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
-    pub fn new(packet: &Message, from: SocketAddr) -> MdnsResponse {
+    pub(crate) fn new(packet: &Message, from: SocketAddr) -> MdnsResponse {
         let peers = packet
             .answers()
             .iter()
@@ -168,7 +168,7 @@ impl MdnsResponse {
         MdnsResponse { peers, from }
     }
 
-    pub fn extract_discovered(
+    pub(crate) fn extract_discovered(
         &self,
         now: Instant,
         local_peer_id: PeerId,
@@ -188,7 +188,7 @@ impl MdnsResponse {
     }
 
     /// Source address of the packet.
-    pub fn remote_addr(&self) -> &SocketAddr {
+    pub(crate) fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
 
@@ -218,7 +218,7 @@ impl fmt::Debug for MdnsResponse {
 }
 
 /// A peer discovered by the service.
-pub struct MdnsPeer {
+pub(crate) struct MdnsPeer {
     addrs: Vec<Multiaddr>,
     /// Id of the peer.
     peer_id: PeerId,
@@ -228,7 +228,7 @@ pub struct MdnsPeer {
 
 impl MdnsPeer {
     /// Creates a new `MdnsPeer` based on the provided `Packet`.
-    pub fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
+    pub(crate) fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
             .additionals()
@@ -291,20 +291,20 @@ impl MdnsPeer {
 
     /// Returns the id of the peer.
     #[inline]
-    pub fn id(&self) -> &PeerId {
+    pub(crate) fn id(&self) -> &PeerId {
         &self.peer_id
     }
 
     /// Returns the requested time-to-live for the record.
     #[inline]
-    pub fn ttl(&self) -> Duration {
+    pub(crate) fn ttl(&self) -> Duration {
         Duration::from_secs(u64::from(self.ttl))
     }
 
     /// Returns the list of addresses the peer says it is listening on.
     ///
     /// Filters out invalid addresses.
-    pub fn addresses(&self) -> &Vec<Multiaddr> {
+    pub(crate) fn addresses(&self) -> &Vec<Multiaddr> {
         &self.addrs
     }
 }
