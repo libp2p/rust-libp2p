@@ -29,9 +29,6 @@ jobs:
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/checkout@v3
