@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
                     libp2p_noise::Config::new(&local_key)
                         .expect("Signing libp2p-noise static DH keypair failed."),
                 )
-                .multiplex(libp2p_yamux::YamuxConfig::default());
+                .multiplex(libp2p_yamux::Config::default());
 
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);

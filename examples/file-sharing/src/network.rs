@@ -50,7 +50,7 @@ pub(crate) async fn new(
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys)?)
-        .multiplex(yamux::YamuxConfig::default())
+        .multiplex(yamux::Config::default())
         .boxed();
 
     // Build the Swarm, connecting the lower layer transport logic with the

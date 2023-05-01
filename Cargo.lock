@@ -3078,7 +3078,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-yamux"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "async-std",
  "futures",

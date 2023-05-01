@@ -116,7 +116,7 @@ libp2p-rendezvous = { version = "0.12.0", path = "../protocols/rendezvous", opti
 libp2p-request-response = { version = "0.24.0", path = "../protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.42.0", path = "../swarm" }
 libp2p-wasm-ext = { version = "0.39.0", path = "../transports/wasm-ext", optional = true }
-libp2p-yamux = { version = "0.43.0", path = "../muxers/yamux", optional = true }
+libp2p-yamux = { version = "0.43.1", path = "../muxers/yamux", optional = true }
 multiaddr = { version = "0.17.0" }
 pin-project = "1.0.0"
 

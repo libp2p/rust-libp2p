@@ -181,9 +181,9 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexConfig>> {
+fn muxer_protocol_from_env() -> Result<Either<yamux::Config, mplex::MplexConfig>> {
     Ok(match from_env("muxer")? {
-        Muxer::Yamux => Either::Left(yamux::YamuxConfig::default()),
+        Muxer::Yamux => Either::Left(yamux::Config::default()),
         Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
     })
 }
