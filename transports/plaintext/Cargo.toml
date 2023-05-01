@@ -26,6 +26,7 @@ env_logger = "0.10.0"
 libp2p-identity = { path = "../../identity", features = ["ed25519"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
+futures_ringbuf = "0.3.1"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
