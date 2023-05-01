@@ -168,7 +168,7 @@ impl snow::resolvers::CryptoResolver for Resolver {
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
         if let snow::params::DHChoice::Curve25519 = choice {
-            Some(Box::new(Keypair::default()))
+            Some(Box::new(Keypair::empty()))
         } else {
             None
         }

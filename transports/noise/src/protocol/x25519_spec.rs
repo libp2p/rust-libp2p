@@ -59,7 +59,7 @@ impl Zeroize for X25519Spec {
 impl Keypair {
     /// An "empty" keypair as a starting state for DH computations in `snow`,
     /// which get manipulated through the `snow::types::Dh` interface.
-    pub(super) fn default() -> Self {
+    pub(crate) fn empty() -> Self {
         Keypair {
             secret: SecretKey(X25519Spec([0u8; 32])),
             public: PublicKey(X25519Spec([0u8; 32])),
