@@ -40,29 +40,13 @@ pub(crate) static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
         .expect("Invalid protocol name")
 });
 
-/// A X25519 key.
-#[derive(Clone)]
-pub struct X25519Spec(pub(crate) [u8; 32]);
-
-impl AsRef<[u8]> for X25519Spec {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-impl Zeroize for X25519Spec {
-    fn zeroize(&mut self) {
-        self.0.zeroize()
-    }
-}
-
 impl Keypair {
     /// An "empty" keypair as a starting state for DH computations in `snow`,
     /// which get manipulated through the `snow::types::Dh` interface.
     pub(crate) fn empty() -> Self {
         Keypair {
-            secret: SecretKey(X25519Spec([0u8; 32])),
-            public: PublicKey(X25519Spec([0u8; 32])),
+            secret: SecretKey([0u8; 32]),
+            public: PublicKey([0u8; 32]),
         }
     }
 
@@ -70,7 +54,7 @@ impl Keypair {
     pub fn new() -> Keypair {
         let mut sk_bytes = [0u8; 32];
         rand::thread_rng().fill(&mut sk_bytes);
-        let sk = SecretKey(X25519Spec(sk_bytes)); // Copy
+        let sk = SecretKey(sk_bytes); // Copy
         sk_bytes.zeroize();
         Self::from(sk)
     }
@@ -85,7 +69,7 @@ impl Default for Keypair {
 /// Promote a X25519 secret key into a keypair.
 impl From<SecretKey> for Keypair {
     fn from(secret: SecretKey) -> Keypair {
-        let public = PublicKey(X25519Spec(x25519((secret.0).0, X25519_BASEPOINT_BYTES)));
+        let public = PublicKey(x25519(secret.0, X25519_BASEPOINT_BYTES));
         Keypair { secret, public }
     }
 }
@@ -111,23 +95,23 @@ impl snow::types::Dh for Keypair {
     fn set(&mut self, sk: &[u8]) {
         let mut secret = [0u8; 32];
         secret.copy_from_slice(sk);
-        self.secret = SecretKey(X25519Spec(secret)); // Copy
-        self.public = PublicKey(X25519Spec(x25519(secret, X25519_BASEPOINT_BYTES)));
+        self.secret = SecretKey(secret); // Copy
+        self.public = PublicKey(x25519(secret, X25519_BASEPOINT_BYTES));
         secret.zeroize();
     }
 
     fn generate(&mut self, rng: &mut dyn snow::types::Random) {
         let mut secret = [0u8; 32];
         rng.fill_bytes(&mut secret);
-        self.secret = SecretKey(X25519Spec(secret)); // Copy
-        self.public = PublicKey(X25519Spec(x25519(secret, X25519_BASEPOINT_BYTES)));
+        self.secret = SecretKey(secret); // Copy
+        self.public = PublicKey(x25519(secret, X25519_BASEPOINT_BYTES));
         secret.zeroize();
     }
 
     fn dh(&self, pk: &[u8], shared_secret: &mut [u8]) -> Result<(), snow::Error> {
         let mut p = [0; 32];
         p.copy_from_slice(&pk[..32]);
-        let ss = x25519((self.secret.0).0, p);
+        let ss = x25519(self.secret.0, p);
         shared_secret[..32].copy_from_slice(&ss[..]);
         Ok(())
     }

@@ -22,7 +22,7 @@
 
 pub(crate) mod x25519_spec;
 
-use crate::{Error, X25519Spec};
+use crate::Error;
 use libp2p_identity as identity;
 use rand::SeedableRng;
 use zeroize::Zeroize;
@@ -124,8 +124,8 @@ impl Keypair {
 }
 
 /// DH secret key.
-#[derive(Clone)]
-pub struct SecretKey(X25519Spec);
+#[derive(Clone, Default)]
+pub struct SecretKey([u8; 32]);
 
 impl Drop for SecretKey {
     fn drop(&mut self) {
@@ -140,12 +140,18 @@ impl AsRef<[u8]> for SecretKey {
 }
 
 /// DH public key.
-#[derive(Clone)]
-pub struct PublicKey(pub(crate) X25519Spec);
+#[derive(Clone, PartialEq, Default)]
+pub struct PublicKey([u8; 32]);
 
-impl PartialEq for PublicKey {
-    fn eq(&self, other: &PublicKey) -> bool {
-        self.as_ref() == other.as_ref()
+impl PublicKey {
+    pub(crate) fn from_slice(slice: &[u8]) -> Result<Self, Error> {
+        if slice.len() != 32 {
+            return Err(Error::InvalidLength);
+        }
+
+        let mut key = [0u8; 32];
+        key.copy_from_slice(slice);
+        Ok(PublicKey(key))
     }
 }
 

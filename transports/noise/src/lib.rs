@@ -60,7 +60,6 @@ mod io;
 mod protocol;
 
 pub use io::Output;
-pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{ProtocolParams, XX};
 
