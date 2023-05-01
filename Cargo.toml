@@ -57,7 +57,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.64.0"
+rust-version = "1.65.0"
 
 [workspace.dependencies]
 libp2p-allow-block-list = { version = "0.1.1", path = "misc/allow-block-list" }
