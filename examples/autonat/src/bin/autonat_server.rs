@@ -53,8 +53,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
-        .multiplex(yamux::YamuxConfig::default())
+        .authenticate(noise::Config::new(&local_key)?)
+        .multiplex(yamux::Config::default())
         .boxed();
 
     let behaviour = Behaviour::new(local_key.public());
