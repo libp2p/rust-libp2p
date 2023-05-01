@@ -1,4 +1,4 @@
-## 0.43.1 - unreleased
+## 0.43.1
 
 - Drop `Yamux` prefix from all types.
   Users are encouraged to import the `yamux` module and refer to types via `yamux::Muxer`, `yamux::Config` etc.
