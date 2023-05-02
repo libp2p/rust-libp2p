@@ -855,9 +855,6 @@ struct BehaviourAttributes {
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
 fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
-    let mut logger_builder = env_logger::Builder::new();
-    logger_builder.init(); // Initialize the logger only once.
-
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
@@ -901,9 +898,8 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
                 if meta.path().is_ident("out_event") {
-                    log::warn!("The 'out_event' key is deprecated, use 'to_swarm' instead",);
+                    println!("The 'out_event' key is deprecated, use 'to_swarm' instead",);
                 }
-
                 match meta {
                     Meta::Path(_) => unimplemented!(),
                     Meta::List(_) => unimplemented!(),
@@ -921,7 +917,7 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
                     Meta::NameValue(name_value) => {
                         return Err(syn::Error::new_spanned(
                             name_value.value,
-                            "`out_event` value must be a quoted type",
+                            "`to_swarm` value must be a quoted type",
                         )
                         .to_compile_error()
                         .into());

@@ -426,7 +426,7 @@ fn generated_out_event_derive_debug() {
     fn require_debug<T>()
     where
         T: NetworkBehaviour,
-        <T as NetworkBehaviour>::ToBehaviour: Debug,
+        <T as NetworkBehaviour>::ToSwarm: Debug,
     {
     }
 

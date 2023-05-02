@@ -2930,9 +2930,7 @@ dependencies = [
 name = "libp2p-swarm-derive"
 version = "0.33.0"
 dependencies = [
- "env_logger 0.10.0",
  "heck",
- "log",
  "quote",
  "syn 2.0.15",
 ]
