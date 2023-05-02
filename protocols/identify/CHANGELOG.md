@@ -1,6 +1,6 @@
 ## 0.43.0 - unreleased
 
-- Remove deprecated `Identify` prefixed Items. See [PR 3698].
+- Remove deprecated `Identify` prefixed symbols. See [PR 3698].
 - Raise MSRV to 1.65.
   See [PR 3715].
 
