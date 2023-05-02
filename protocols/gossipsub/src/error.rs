@@ -1,4 +1,4 @@
-// Copyright 2023 Protocol Labs.
+// Copyright 2020 Sigma Prime Pty Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,26 +18,105 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `libp2p::gossipsub::PublishError` instead, as the `error` module will become crate-private in the future."
-)]
-pub type PublishError = crate::error_priv::PublishError;
+//! Error types that can result from gossipsub.
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `libp2p::gossipsub::SubscriptionError` instead, as the `error` module will become crate-private in the future."
-)]
-pub type SubscriptionError = crate::error_priv::SubscriptionError;
+use libp2p_core::identity::error::SigningError;
 
-#[deprecated(note = "This error will no longer be emitted")]
-pub type GossipsubHandlerError = crate::error_priv::HandlerError;
+/// Error associated with publishing a gossipsub message.
+#[derive(Debug)]
+pub enum PublishError {
+    /// This message has already been published.
+    Duplicate,
+    /// An error occurred whilst signing the message.
+    SigningError(SigningError),
+    /// There were no peers to send this message to.
+    InsufficientPeers,
+    /// The overall message was too large. This could be due to excessive topics or an excessive
+    /// message size.
+    MessageTooLarge,
+    /// The compression algorithm failed.
+    TransformFailed(std::io::Error),
+}
 
-#[deprecated(note = "This error will no longer be emitted")]
-pub type HandlerError = crate::error_priv::HandlerError;
+impl std::fmt::Display for PublishError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
 
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `libp2p::gossipsub::ValidationError` instead, as the `error` module will become crate-private in the future."
-)]
-pub type ValidationError = crate::error_priv::ValidationError;
+impl std::error::Error for PublishError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::SigningError(err) => Some(err),
+            Self::TransformFailed(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+/// Error associated with subscribing to a topic.
+#[derive(Debug)]
+pub enum SubscriptionError {
+    /// Couldn't publish our subscription
+    PublishError(PublishError),
+    /// We are not allowed to subscribe to this topic by the subscription filter
+    NotAllowed,
+}
+
+impl std::fmt::Display for SubscriptionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for SubscriptionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::PublishError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<SigningError> for PublishError {
+    fn from(error: SigningError) -> Self {
+        PublishError::SigningError(error)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ValidationError {
+    /// The message has an invalid signature,
+    InvalidSignature,
+    /// The sequence number was empty, expected a value.
+    EmptySequenceNumber,
+    /// The sequence number was the incorrect size
+    InvalidSequenceNumber,
+    /// The PeerId was invalid
+    InvalidPeerId,
+    /// Signature existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    SignaturePresent,
+    /// Sequence number existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    SequenceNumberPresent,
+    /// Message source existed when validation has been sent to
+    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
+    MessageSourcePresent,
+    /// The data transformation failed.
+    TransformFailed,
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
+impl From<std::io::Error> for PublishError {
+    fn from(error: std::io::Error) -> PublishError {
+        PublishError::TransformFailed(error)
+    }
+}
