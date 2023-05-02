@@ -3,7 +3,11 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Hide internals of `Connection` and expose only `AsyncRead` and `AsyncWrite`.
+  See [PR 3829].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3829]: https://github.com/libp2p/rust-libp2p/pull/3829
 
 ## 0.15.2
 
