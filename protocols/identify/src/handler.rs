@@ -180,38 +180,12 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(remote_info) => {
-                let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
-
-                let remote_added_protocols = new_remote_protocols
-                    .difference(&self.remote_supported_protocols)
-                    .cloned()
-                    .collect::<HashSet<_>>();
-                let remote_removed_protocols = self
-                    .remote_supported_protocols
-                    .difference(&new_remote_protocols)
-                    .cloned()
-                    .collect::<HashSet<_>>();
-
-                if !remote_added_protocols.is_empty() {
-                    self.events
-                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(
-                            ProtocolSupport::Added(remote_added_protocols),
-                        ));
-                }
-
-                if !remote_removed_protocols.is_empty() {
-                    self.events
-                        .push(ConnectionHandlerEvent::ReportRemoteProtocols(
-                            ProtocolSupport::Removed(remote_removed_protocols),
-                        ));
-                }
-
-                self.remote_supported_protocols = new_remote_protocols;
-
+                self.update_supported_protocols_for_remote(&remote_info);
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
+
                 self.keep_alive = KeepAlive::No;
             }
             future::Either::Right(()) => self
@@ -251,6 +225,36 @@ impl Handler {
             protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
             observed_addr: self.observed_addr.clone(),
         }
+    }
+
+    fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
+        let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
+
+        let remote_added_protocols = new_remote_protocols
+            .difference(&self.remote_supported_protocols)
+            .cloned()
+            .collect::<HashSet<_>>();
+        let remote_removed_protocols = self
+            .remote_supported_protocols
+            .difference(&new_remote_protocols)
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        if !remote_added_protocols.is_empty() {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(remote_added_protocols),
+                ));
+        }
+
+        if !remote_removed_protocols.is_empty() {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(remote_removed_protocols),
+                ));
+        }
+
+        self.remote_supported_protocols = new_remote_protocols;
     }
 }
 
@@ -316,11 +320,7 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(info) = res {
-                // TODO: report new protocols
-                // self.events
-                //     .push(ConnectionHandlerEvent::ReportRemoteProtocols {
-                //         protocols: info.protocols.clone(),
-                //     });
+                self.update_supported_protocols_for_remote(&info);
                 return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
             }
         }
