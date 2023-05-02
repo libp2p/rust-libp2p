@@ -22,7 +22,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::protocol_priv::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
+use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
 use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
 
 use libp2p_identity::PeerId;

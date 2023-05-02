@@ -22,7 +22,7 @@
 
 use super::*;
 use crate::protocol_priv::ProtocolConfig;
-use crate::subscription_filter_priv::WhitelistSubscriptionFilter;
+use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
 use crate::ValidationError;

@@ -130,9 +130,6 @@ pub enum UpgradeError {
     StreamClosed,
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
-    #[deprecated(since = "0.8.1", note = "Error is no longer constructed.")]
-    #[error("Invalid addresses.")]
-    InvalidAddrs,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Unexpected message type 'connect'")]
