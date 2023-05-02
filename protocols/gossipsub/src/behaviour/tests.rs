@@ -21,7 +21,7 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::protocol_priv::ProtocolConfig;
+use crate::protocol::ProtocolConfig;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
