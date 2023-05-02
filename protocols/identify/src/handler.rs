@@ -358,11 +358,12 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::LocalProtocolsChange(change) => {
                 self.local_supported_protocols.on_protocols_change(change);
             }
-            ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
