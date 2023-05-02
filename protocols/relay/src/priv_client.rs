@@ -45,7 +45,6 @@ use libp2p_swarm::{
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
-use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use transport::Transport;
@@ -387,32 +386,43 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-/// A [`NegotiatedSubstream`] acting as a [`Connection`].
-pub enum Connection {
+/// Represents a connection to another peer via a relay.
+///
+/// Internally, this uses a stream to the relay.
+pub struct Connection {
+    state: ConnectionState,
+}
+
+enum ConnectionState {
     InboundAccepting {
-        accept: BoxFuture<'static, Result<Connection, Error>>,
+        accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },
     Operational {
         read_buffer: Bytes,
         substream: NegotiatedSubstream,
+        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
+        ///
+        /// This is flagged as "dead-code" by the compiler because we never read from it here.
+        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
+        #[allow(dead_code)]
         drop_notifier: oneshot::Sender<void::Void>,
     },
 }
 
-impl Unpin for Connection {}
+impl Unpin for ConnectionState {}
 
-impl Connection {
+impl ConnectionState {
     pub(crate) fn new_inbound(
         circuit: inbound_stop::Circuit,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        Connection::InboundAccepting {
+        ConnectionState::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
                     .accept()
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e))?;
-                Ok(Connection::Operational {
+                Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
                     drop_notifier,
@@ -427,7 +437,7 @@ impl Connection {
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        Connection::Operational {
+        ConnectionState::Operational {
             substream,
             read_buffer,
             drop_notifier,
@@ -442,11 +452,13 @@ impl AsyncWrite for Connection {
         buf: &[u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write(cx, buf);
                 }
             }
@@ -454,11 +466,13 @@ impl AsyncWrite for Connection {
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_flush(cx);
                 }
             }
@@ -466,11 +480,13 @@ impl AsyncWrite for Connection {
     }
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_close(cx);
                 }
             }
@@ -483,11 +499,13 @@ impl AsyncWrite for Connection {
         bufs: &[IoSlice],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write_vectored(cx, bufs);
                 }
             }
@@ -502,11 +520,13 @@ impl AsyncRead for Connection {
         buf: &mut [u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational {
+                ConnectionState::Operational {
                     read_buffer,
                     substream,
                     ..
