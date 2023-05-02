@@ -81,7 +81,7 @@ use std::{task::Context, task::Poll};
 /// it will delegate to each `struct` member and return a concatenated array of all addresses
 /// returned by the struct members.
 ///
-/// Events ([`NetworkBehaviour::ToBehaviour`]) returned by each `struct` member are wrapped in a new
+/// Events ([`NetworkBehaviour::ToSwarm`]) returned by each `struct` member are wrapped in a new
 /// `enum` event, with an `enum` variant for each `struct` member. Users can define this event
 /// `enum` themselves and provide the name to the derive macro via `#[behaviour(to_swarm =
 /// "MyCustomOutEvent")]`. If the user does not specify an `to_swarm`, the derive macro generates
