@@ -1,3 +1,18 @@
+## 0.44.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.43.1
+
+- Drop `Yamux` prefix from all types.
+  Users are encouraged to import the `yamux` module and refer to types via `yamux::Muxer`, `yamux::Config` etc.
+  See [PR 3852].
+
+[PR 3852]: https://github.com/libp2p/rust-libp2p/pull/3852
+
 ## 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.

@@ -1,4 +1,11 @@
-## 0.24.1 - unreleased
+## 0.25.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.24.1
 
 - Deprecate `handler`, `codec` modules to make them private. See [PR 3847].
 

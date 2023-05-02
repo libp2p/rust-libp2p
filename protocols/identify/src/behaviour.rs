@@ -25,9 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
-    THandlerInEvent, ToSwarm,
+    AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -193,16 +192,17 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             let request = Request {
                 peer_id: p,
                 protocol: Protocol::Push,
             };
             if !self.requests.contains(&request) {
                 self.requests.push(request);
-
-                self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
             }
         }
     }

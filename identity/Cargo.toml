@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-identity"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking", "cryptography"]
@@ -40,7 +40,7 @@ ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:quick-protobuf"
 peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
 
 [dev-dependencies]
-quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+quickcheck = { workspace = true }
 base64 = "0.21.0"
 serde_json = "1.0"
 rmp-serde = "1.0"

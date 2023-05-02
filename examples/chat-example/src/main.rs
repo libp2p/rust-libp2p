@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
-        .multiplex(yamux::YamuxConfig::default())
+        .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
     let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));

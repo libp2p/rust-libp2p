@@ -32,31 +32,9 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install -y protobuf-compiler
 
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: actions/checkout@v3
 
-      - name: Get MSRV for ${{ matrix.crate }}
-        id: parse-msrv
-        run: |
-          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
-          echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ steps.parse-msrv.outputs.version }}
-
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
-
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
-        with:
-          shared-key: msrv-cache
-          save-if: false
-
-      - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -90,6 +68,21 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
 
+      - uses: taiki-e/cache-cargo-install-action@7dd0cff2732612ac642812bcec4ada5a279239ed # v1
+        with:
+          tool: tomlq
+
+      - name: Enforce version in `workspace.dependencies` matches latest version
+        if: matrix.crate != 'libp2p'
+        run: |
+          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .version')
+          SPECIFIED_VERSION=$(tomlq 'workspace.dependencies.${{ matrix.crate }}.version' --file ./Cargo.toml)
+          
+          echo "Package version: $PACKAGE_VERSION";
+          echo "Specified version: $SPECIFIED_VERSION";
+
+          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
   cross:
     name: Compile on ${{ matrix.target }}
     strategy:
@@ -121,6 +114,30 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
+
+  msrv:
+    name: Compile with MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract MSRV from workspace manifest
+        shell: bash
+        run: |
+          MSRV=$(grep -oP 'rust-version\s*=\s*"\K[^"]+' Cargo.toml)
+          echo "MSRV=$MSRV" >> $GITHUB_ENV
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+
+      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+
+      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - run: cargo +$MSRV check --workspace --all-features
 
   feature_matrix: # Test various feature combinations work correctly
     name: Compile with select features (${{ matrix.features }})
