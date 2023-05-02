@@ -30,7 +30,7 @@ use std::{fmt, pin::Pin};
 
 /// A writer that encrypts and forwards to an inner writer
 #[pin_project]
-pub struct CryptWriter<W> {
+pub(crate) struct CryptWriter<W> {
     #[pin]
     inner: W,
     buf: Vec<u8>,
@@ -39,7 +39,7 @@ pub struct CryptWriter<W> {
 
 impl<W: AsyncWrite> CryptWriter<W> {
     /// Creates a new `CryptWriter` with the specified buffer capacity.
-    pub fn with_capacity(capacity: usize, inner: W, cipher: XSalsa20) -> CryptWriter<W> {
+    pub(crate) fn with_capacity(capacity: usize, inner: W, cipher: XSalsa20) -> CryptWriter<W> {
         CryptWriter {
             inner,
             buf: Vec::with_capacity(capacity),
@@ -50,7 +50,7 @@ impl<W: AsyncWrite> CryptWriter<W> {
     /// Gets a pinned mutable reference to the inner writer.
     ///
     /// It is inadvisable to directly write to the inner writer.
-    pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut W> {
+    pub(crate) fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut W> {
         self.project().inner
     }
 }

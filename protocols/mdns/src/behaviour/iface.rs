@@ -41,7 +41,7 @@ use std::{
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
 /// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
-pub struct InterfaceState<U, T> {
+pub(crate) struct InterfaceState<U, T> {
     /// Address this instance is bound to.
     addr: IpAddr,
     /// Receive socket.
@@ -77,7 +77,7 @@ where
     T: Builder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
-    pub fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
+    pub(crate) fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
@@ -141,15 +141,15 @@ where
         })
     }
 
-    pub fn reset_timer(&mut self) {
+    pub(crate) fn reset_timer(&mut self) {
         self.timeout = T::interval(self.query_interval);
     }
 
-    pub fn fire_timer(&mut self) {
+    pub(crate) fn fire_timer(&mut self) {
         self.timeout = T::interval_at(Instant::now(), self.query_interval);
     }
 
-    pub fn poll(
+    pub(crate) fn poll(
         &mut self,
         cx: &mut Context,
         listen_addresses: &ListenAddresses,

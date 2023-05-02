@@ -31,12 +31,11 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
 use libp2p_swarm::{
-    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviourAction,
-    PollParameters,
+    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm,
 };
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     task::{Context, Poll},
     time::Duration,
 };
@@ -84,26 +83,21 @@ pub enum OutboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a client role.
-pub struct AsClient<'a> {
-    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
-    pub local_peer_id: PeerId,
-    pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub servers: &'a Vec<PeerId>,
-    pub throttled_servers: &'a mut Vec<(PeerId, Instant)>,
-
-    pub nat_status: &'a mut NatStatus,
-    pub confidence: &'a mut usize,
-
-    pub ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
-
-    pub last_probe: &'a mut Option<Instant>,
-    pub schedule_probe: &'a mut Delay,
-
-    pub listen_addresses: &'a ListenAddresses,
-    pub external_addresses: &'a ExternalAddresses,
+pub(crate) struct AsClient<'a> {
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) local_peer_id: PeerId,
+    pub(crate) config: &'a Config,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) servers: &'a HashSet<PeerId>,
+    pub(crate) throttled_servers: &'a mut Vec<(PeerId, Instant)>,
+    pub(crate) nat_status: &'a mut NatStatus,
+    pub(crate) confidence: &'a mut usize,
+    pub(crate) ongoing_outbound: &'a mut HashMap<RequestId, ProbeId>,
+    pub(crate) last_probe: &'a mut Option<Instant>,
+    pub(crate) schedule_probe: &'a mut Delay,
+    pub(crate) listen_addresses: &'a ListenAddresses,
+    pub(crate) external_addresses: &'a ExternalAddresses,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
@@ -143,17 +137,13 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 
                 let mut actions = VecDeque::with_capacity(3);
 
-                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
-                    event,
-                )));
+                actions.push_back(ToSwarm::GenerateEvent(Event::OutboundProbe(event)));
 
                 if let Some(old) = self.handle_reported_status(response.result.clone().into()) {
-                    actions.push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::StatusChanged {
-                            old,
-                            new: self.nat_status.clone(),
-                        },
-                    ));
+                    actions.push_back(ToSwarm::GenerateEvent(Event::StatusChanged {
+                        old,
+                        new: self.nat_status.clone(),
+                    }));
                 }
 
                 if let Ok(address) = response.result {
@@ -165,7 +155,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         .find_map(|r| (r.addr == address).then_some(r.score))
                         .unwrap_or(AddressScore::Finite(0));
                     if let AddressScore::Finite(finite_score) = score {
-                        actions.push_back(NetworkBehaviourAction::ReportObservedAddr {
+                        actions.push_back(ToSwarm::ReportObservedAddr {
                             address,
                             score: AddressScore::Finite(finite_score + 1),
                         });
@@ -191,7 +181,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 
                 self.schedule_probe.reset(Duration::ZERO);
 
-                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                VecDeque::from([ToSwarm::GenerateEvent(Event::OutboundProbe(
                     OutboundProbeEvent::Error {
                         probe_id,
                         peer: Some(peer),
@@ -205,7 +195,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 }
 
 impl<'a> AsClient<'a> {
-    pub fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
+    pub(crate) fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {
                 self.schedule_probe.reset(self.config.retry_interval);
@@ -236,7 +226,7 @@ impl<'a> AsClient<'a> {
     }
 
     // An inbound connection can indicate that we are public; adjust the delay to the next probe.
-    pub fn on_inbound_connection(&mut self) {
+    pub(crate) fn on_inbound_connection(&mut self) {
         if *self.confidence == self.config.confidence_max {
             if self.nat_status.is_public() {
                 self.schedule_next_probe(self.config.refresh_interval * 2);
@@ -246,7 +236,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_new_address(&mut self) {
+    pub(crate) fn on_new_address(&mut self) {
         if !self.nat_status.is_public() {
             // New address could be publicly reachable, trigger retry.
             if *self.confidence > 0 {
@@ -256,7 +246,7 @@ impl<'a> AsClient<'a> {
         }
     }
 
-    pub fn on_expired_address(&mut self, addr: &Multiaddr) {
+    pub(crate) fn on_expired_address(&mut self, addr: &Multiaddr) {
         if let NatStatus::Public(public_address) = self.nat_status {
             if public_address == addr {
                 *self.confidence = 0;
