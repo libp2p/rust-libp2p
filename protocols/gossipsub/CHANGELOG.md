@@ -2,8 +2,10 @@
 
 - Raise MSRV to 1.65.
   See [PR 3715].
+- Remove deprecated items. See [PR 3862].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3862]: https://github.com/libp2p/rust-libp2p/pull/3862
 
 ## 0.44.4
 
