@@ -36,56 +36,6 @@ use crate::secp256k1;
 #[cfg(feature = "ecdsa")]
 use crate::ecdsa;
 
-// /// Identity keypair of a node.
-// ///
-// /// # Example: Generating RSA keys with OpenSSL
-// ///
-// /// ```text
-// /// openssl genrsa -out private.pem 2048
-// /// openssl pkcs8 -in private.pem -inform PEM -topk8 -out private.pk8 -outform DER -nocrypt
-// /// rm private.pem      # optional
-// /// ```
-// ///
-// /// Loading the keys:
-// ///
-// /// ```text
-// /// let mut bytes = std::fs::read("private.pk8").unwrap();
-// /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
-// /// ```
-// ///
-// #[derive(Debug, Clone)]
-// #[allow(clippy::large_enum_variant)]
-// pub enum Keypair {
-//     /// An Ed25519 keypair.
-//     #[cfg(feature = "ed25519")]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `Keypair::try_into_ed25519` instead."
-//     )]
-//     Ed25519(ed25519::Keypair),
-//     /// An RSA keypair.
-//     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `Keypair::try_into_rsa` instead."
-//     )]
-//     Rsa(rsa::Keypair),
-//     /// A Secp256k1 keypair.
-//     #[cfg(feature = "secp256k1")]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `Keypair::try_into_secp256k1` instead."
-//     )]
-//     Secp256k1(secp256k1::Keypair),
-//     /// An ECDSA keypair.
-//     #[cfg(feature = "ecdsa")]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `Keypair::try_into_ecdsa` instead."
-//     )]
-//     Ecdsa(ecdsa::Keypair),
-// }
-
 /// Identity keypair of a node.
 ///
 /// # Example: Generating RSA keys with OpenSSL
@@ -129,9 +79,6 @@ impl Keypair {
     /// Generate a new Ed25519 keypair.
     #[cfg(feature = "ed25519")]
     pub fn generate_ed25519() -> Keypair {
-        // #[allow(deprecated)]
-        // KeypairType::Ed25519(ed25519::Keypair::generate())
-
         #[allow(deprecated)]
         Keypair {
             keypair: KeypairType::Ed25519(ed25519::Keypair::generate()),
@@ -210,9 +157,6 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        // #[allow(deprecated)]
-        // rsa::Keypair::from_pkcs8(pkcs8_der).map(KeypairType::Rsa)
-
         #[allow(deprecated)]
         Ok(rsa::Keypair::from_pkcs8(pkcs8_der).map(|kp| Keypair {
             keypair: KeypairType::Rsa(kp),
@@ -320,17 +264,9 @@ impl Keypair {
 
         match private_key.Type {
             #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 => {
+            proto::KeyType::Ed25519 =>
+            {
                 #[allow(deprecated)]
-                // ed25519::Keypair::decode(&mut private_key.Data).map(Keypair {
-                //     keypair: KeypairType::Ed25519,
-                // })
-                // #[allow(deprecated)]
-                // ed25519::Keypair::decode(&mut private_key.Data).map(KeypairType::Ed25519)
-                // let keypair =
-                //     ed25519::Keypair::decode(&mut private_key.Data).map(|kp| Keypair {
-                //         keypair: KeypairType::Ed25519(kp),
-                //     })?;
                 Ok(
                     ed25519::Keypair::decode(&mut private_key.Data).map(|kp| Keypair {
                         keypair: KeypairType::Ed25519(kp),
@@ -358,7 +294,6 @@ impl From<ecdsa::Keypair> for Keypair {
 impl From<ed25519::Keypair> for Keypair {
     fn from(kp: ed25519::Keypair) -> Self {
         #[allow(deprecated)]
-        // KeypairType::Ed25519(kp)
         Keypair {
             keypair: KeypairType::Ed25519(kp),
         }
@@ -377,7 +312,6 @@ impl From<secp256k1::Keypair> for Keypair {
 impl From<rsa::Keypair> for Keypair {
     fn from(kp: rsa::Keypair) -> Self {
         #[allow(deprecated)]
-        // KeypairType::Rsa(kp)
         Keypair {
             keypair: KeypairType::Rsa(kp),
         }
