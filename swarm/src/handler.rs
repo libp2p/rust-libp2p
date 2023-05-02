@@ -95,7 +95,7 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 pub trait ConnectionHandler: Send + 'static {
     /// A type representing the message(s) a [`NetworkBehaviour`] can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`]
     type FromBehaviour: fmt::Debug + Send + 'static;
-    /// `ToBehaviour` event that can be produced by the handler and that will be returned to the outside.
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`] via [`ConnectionHandlerEvent::Custom`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
