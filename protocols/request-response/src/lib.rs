@@ -62,11 +62,11 @@ mod codec;
 mod handler;
 
 pub use codec::{Codec, ProtocolName};
-
 pub use handler::ProtocolSupport;
 
+use crate::handler::protocol::RequestProtocol;
 use futures::channel::oneshot;
-use handler::{Handler, RequestProtocol};
+use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{

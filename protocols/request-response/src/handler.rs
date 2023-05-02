@@ -18,20 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod protocol;
+pub(crate) mod protocol;
+
+pub use protocol::ProtocolSupport;
 
 use crate::codec::Codec;
+use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
-
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
-pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError,
+};
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
     SubstreamProtocol,
