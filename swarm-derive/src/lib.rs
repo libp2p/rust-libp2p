@@ -898,7 +898,7 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
                 if meta.path().is_ident("out_event") {
-                    println!("The 'out_event' key is deprecated, use 'to_swarm' instead",);
+                    println!("The 'out_event' key is deprecated, use 'to_swarm' instead");
                 }
                 match meta {
                     Meta::Path(_) => unimplemented!(),
