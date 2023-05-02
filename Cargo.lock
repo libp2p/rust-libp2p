@@ -2688,14 +2688,13 @@ dependencies = [
 name = "libp2p-noise"
 version = "0.43.0"
 dependencies = [
- "async-io",
  "bytes",
  "curve25519-dalek 3.2.0",
  "env_logger 0.10.0",
  "futures",
+ "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "libp2p-tcp",
  "log",
  "once_cell",
  "quick-protobuf",
