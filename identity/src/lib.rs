@@ -126,6 +126,9 @@ impl From<&PublicKey> for proto::PublicKey {
 
 pub use error::{DecodingError, OtherVariantError, SigningError};
 pub use keypair::{Keypair, PublicKey};
+// use keypair::Keypair;
+// pub use keypair::PublicKey;
+
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
 
