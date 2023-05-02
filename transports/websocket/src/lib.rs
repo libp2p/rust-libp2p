@@ -52,6 +52,10 @@ use std::{
 ///
 /// If you don't need Secure Websocket's support, use a plain TCP transport as an inner transport.
 ///
+/// # Dependencies
+///
+/// This transport requires the `zlib` shared library to be installed on the system.
+///
 /// # Examples
 ///
 /// Secure Websocket transport:
