@@ -28,9 +28,8 @@ use std::sync::Arc;
 use super::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
 use crate::proto::Message;
 
-pub type FramedDc = Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>;
-
-pub fn new(data_channel: Arc<DataChannel>) -> FramedDc {
+pub(crate) type FramedDc = Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>;
+pub(crate) fn new(data_channel: Arc<DataChannel>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
     inner.set_read_buf_capacity(MAX_MSG_LEN);
 

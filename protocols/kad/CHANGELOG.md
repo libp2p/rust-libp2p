@@ -1,3 +1,17 @@
+## 0.44.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.43.3
+
+- Preserve existing `KeepAlive::Until` timeout instead of continuously setting new `KeepAlive::Until(Instant::now() + self.config.idle_timeout)`.
+  See [PR 3801].
+
+[PR 3801]: https://github.com/libp2p/rust-libp2p/pull/3801
+
 ## 0.43.2
 
 - Export pub enum `RoutingUpdate`. See [PR 3739].

@@ -49,14 +49,14 @@ const RECEIVE_MTU: usize = 8192;
 
 /// A previously unseen address of a remote which has sent us an ICE binding request.
 #[derive(Debug)]
-pub struct NewAddr {
-    pub addr: SocketAddr,
-    pub ufrag: String,
+pub(crate) struct NewAddr {
+    pub(crate) addr: SocketAddr,
+    pub(crate) ufrag: String,
 }
 
 /// An event emitted by [`UDPMuxNewAddr`] when it's polled.
 #[derive(Debug)]
-pub enum UDPMuxEvent {
+pub(crate) enum UDPMuxEvent {
     /// Connection error. UDP mux should be stopped.
     Error(std::io::Error),
     /// Got a [`NewAddr`] from the socket.
@@ -67,7 +67,7 @@ pub enum UDPMuxEvent {
 ///
 /// - It has been rewritten to work without locks and channels instead.
 /// - It reports previously unseen addresses instead of ignoring them.
-pub struct UDPMuxNewAddr {
+pub(crate) struct UDPMuxNewAddr {
     udp_sock: UdpSocket,
 
     listen_addr: SocketAddr,
@@ -100,7 +100,7 @@ pub struct UDPMuxNewAddr {
 }
 
 impl UDPMuxNewAddr {
-    pub fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
+    pub(crate) fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
         let std_sock = std::net::UdpSocket::bind(addr)?;
         std_sock.set_nonblocking(true)?;
 
@@ -131,11 +131,11 @@ impl UDPMuxNewAddr {
         })
     }
 
-    pub fn listen_addr(&self) -> SocketAddr {
+    pub(crate) fn listen_addr(&self) -> SocketAddr {
         self.listen_addr
     }
 
-    pub fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
+    pub(crate) fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
         self.udp_mux_handle.clone()
     }
 
@@ -183,7 +183,7 @@ impl UDPMuxNewAddr {
 
     /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
     /// muxed connection.
-    pub fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
+    pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
         let mut recv_buf = [0u8; RECEIVE_MTU];
 
         loop {
@@ -419,7 +419,7 @@ impl UDPMuxNewAddr {
 
 /// Handle which utilizes [`req_res_chan`] to transmit commands (e.g. remove connection) from the
 /// WebRTC ICE agent to [`UDPMuxNewAddr::poll`].
-pub struct UdpMuxHandle {
+pub(crate) struct UdpMuxHandle {
     close_sender: req_res_chan::Sender<(), Result<(), Error>>,
     get_conn_sender: req_res_chan::Sender<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
     remove_sender: req_res_chan::Sender<String, ()>,
@@ -427,7 +427,7 @@ pub struct UdpMuxHandle {
 
 impl UdpMuxHandle {
     /// Returns a new `UdpMuxHandle` and `close`, `get_conn` and `remove` receivers.
-    pub fn new() -> (
+    pub(crate) fn new() -> (
         Self,
         req_res_chan::Receiver<(), Result<(), Error>>,
         req_res_chan::Receiver<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
@@ -477,7 +477,7 @@ impl UDPMux for UdpMuxHandle {
 
 /// Handle which utilizes [`req_res_chan`] to transmit commands from [`UDPMuxConn`] connections to
 /// [`UDPMuxNewAddr::poll`].
-pub struct UdpMuxWriterHandle {
+pub(crate) struct UdpMuxWriterHandle {
     registration_channel: req_res_chan::Sender<(UDPMuxConn, SocketAddr), ()>,
     send_channel: req_res_chan::Sender<(Vec<u8>, SocketAddr), Result<usize, Error>>,
 }

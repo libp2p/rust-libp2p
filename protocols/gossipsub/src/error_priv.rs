@@ -134,12 +134,6 @@ impl std::fmt::Display for ValidationError {
 
 impl std::error::Error for ValidationError {}
 
-impl From<std::io::Error> for HandlerError {
-    fn from(error: std::io::Error) -> HandlerError {
-        HandlerError::Codec(quick_protobuf_codec::Error::from(error))
-    }
-}
-
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
