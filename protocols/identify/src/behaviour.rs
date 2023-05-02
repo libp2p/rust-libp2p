@@ -122,6 +122,7 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
+    #[allow(deprecated)]
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,
@@ -147,6 +148,7 @@ impl Config {
                 completely removed since a remote should be able to instantly
                 answer to an identify request thus also this setter will be removed"
     )]
+    #[allow(deprecated)]
     pub fn with_initial_delay(mut self, d: Duration) -> Self {
         self.initial_delay = d;
         self
@@ -249,6 +251,7 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -267,6 +270,7 @@ impl NetworkBehaviour for Behaviour {
         ))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
