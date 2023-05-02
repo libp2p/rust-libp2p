@@ -2516,7 +2516,6 @@ dependencies = [
  "serde",
  "sha2 0.10.6",
  "smallvec",
- "thiserror",
  "unsigned-varint",
  "void",
  "wasm-timer",
