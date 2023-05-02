@@ -41,9 +41,7 @@ use libp2p::{
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp,
-    yamux::YamuxConfig,
-    Multiaddr, PeerId, Transport,
+    tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
@@ -53,7 +51,7 @@ pub fn build_transport(
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
     let noise_config = noise::Config::new(&key_pair).unwrap();
-    let yamux_config = YamuxConfig::default();
+    let yamux_config = yamux::Config::default();
 
     let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
