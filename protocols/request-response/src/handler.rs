@@ -20,7 +20,7 @@
 
 mod protocol;
 
-use crate::codec::Codec;
+use crate::codec_priv::Codec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{

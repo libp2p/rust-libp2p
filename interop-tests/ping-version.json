@@ -5,7 +5,7 @@
     "ws",
     "tcp",
     "quic-v1",
-    "webrtc"
+    "webrtc-direct"
   ],
   "secureChannels": [
     "tls",

@@ -1,9 +1,20 @@
+======
 ## 0.25.0 - unreleased
 
+- Raise MSRV to 1.65.
+  See [PR 3715].
 - Remove deprecated `RequestResponse` prefixed items. See [PR 3702].
 
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
 
+## 0.24.1
+
+- Deprecate `handler`, `codec` modules to make them private. See [PR 3847].
+
+[PR 3847]: https://github.com/libp2p/rust-libp2p/pull/3847
+
+>>>>>>> master
 ## 0.24.0
 
 - Update to `libp2p-core` `v0.39.0`.

@@ -50,7 +50,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
 #[derive(Copy, Clone, Eq, Debug)]
-pub struct LocalStreamId {
+pub(crate) struct LocalStreamId {
     num: u64,
     role: Endpoint,
 }
@@ -91,13 +91,13 @@ impl nohash_hasher::IsEnabled for LocalStreamId {}
 /// and mapped by the receiver to `LocalStreamId`s via
 /// [`RemoteStreamId::into_local()`].
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub struct RemoteStreamId {
+pub(crate) struct RemoteStreamId {
     num: u64,
     role: Endpoint,
 }
 
 impl LocalStreamId {
-    pub fn dialer(num: u64) -> Self {
+    pub(crate) fn dialer(num: u64) -> Self {
         Self {
             num,
             role: Endpoint::Dialer,
@@ -105,14 +105,14 @@ impl LocalStreamId {
     }
 
     #[cfg(test)]
-    pub fn listener(num: u64) -> Self {
+    pub(crate) fn listener(num: u64) -> Self {
         Self {
             num,
             role: Endpoint::Listener,
         }
     }
 
-    pub fn next(self) -> Self {
+    pub(crate) fn next(self) -> Self {
         Self {
             num: self
                 .num
@@ -123,7 +123,7 @@ impl LocalStreamId {
     }
 
     #[cfg(test)]
-    pub fn into_remote(self) -> RemoteStreamId {
+    pub(crate) fn into_remote(self) -> RemoteStreamId {
         RemoteStreamId {
             num: self.num,
             role: !self.role,
@@ -148,7 +148,7 @@ impl RemoteStreamId {
 
     /// Converts this `RemoteStreamId` into the corresponding `LocalStreamId`
     /// that identifies the same substream.
-    pub fn into_local(self) -> LocalStreamId {
+    pub(crate) fn into_local(self) -> LocalStreamId {
         LocalStreamId {
             num: self.num,
             role: !self.role,
@@ -158,7 +158,7 @@ impl RemoteStreamId {
 
 /// An Mplex protocol frame.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Frame<T> {
+pub(crate) enum Frame<T> {
     Open { stream_id: T },
     Data { stream_id: T, data: Bytes },
     Close { stream_id: T },
@@ -166,7 +166,7 @@ pub enum Frame<T> {
 }
 
 impl Frame<RemoteStreamId> {
-    pub fn remote_id(&self) -> RemoteStreamId {
+    pub(crate) fn remote_id(&self) -> RemoteStreamId {
         match *self {
             Frame::Open { stream_id } => stream_id,
             Frame::Data { stream_id, .. } => stream_id,
@@ -176,7 +176,7 @@ impl Frame<RemoteStreamId> {
     }
 }
 
-pub struct Codec {
+pub(crate) struct Codec {
     varint_decoder: codec::Uvi<u64>,
     decoder_state: CodecDecodeState,
 }
@@ -190,7 +190,7 @@ enum CodecDecodeState {
 }
 
 impl Codec {
-    pub fn new() -> Codec {
+    pub(crate) fn new() -> Codec {
         Codec {
             varint_decoder: codec::Uvi::default(),
             decoder_state: CodecDecodeState::Begin,
