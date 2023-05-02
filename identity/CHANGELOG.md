@@ -2,8 +2,11 @@
 
 - Raise MSRV to 1.65.
   See [PR 3715].
+- Add PKCS#8 encoding/decoding support for ECDSA keys.
+  See [PR 3863].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3863]: https://github.com/libp2p/rust-libp2p/pull/3863
 
 ## 0.1.2
 
