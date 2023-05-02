@@ -2272,7 +2272,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.51.3"
+version = "0.52.0"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2323,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-allow-block-list"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2336,7 +2336,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-autonat"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2356,7 +2356,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -2373,7 +2373,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-core"
-version = "0.39.2"
+version = "0.40.0"
 dependencies = [
  "async-std",
  "either",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dcutr"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2436,19 +2436,21 @@ dependencies = [
 
 [[package]]
 name = "libp2p-deflate"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
+ "async-std",
  "flate2",
  "futures",
  "futures_ringbuf",
  "libp2p-core",
+ "libp2p-tcp",
  "quickcheck-ext",
  "rand 0.8.5",
 ]
 
 [[package]]
 name = "libp2p-dns"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-std",
  "async-std-resolver",
@@ -2465,7 +2467,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-floodsub"
-version = "0.42.1"
+version = "0.43.0"
 dependencies = [
  "asynchronous-codec",
  "cuckoofilter",
@@ -2484,7 +2486,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.44.4"
+version = "0.45.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2522,7 +2524,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.42.2"
+version = "0.43.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2548,7 +2550,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "asn1_der",
  "base64 0.21.0",
@@ -2576,7 +2578,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.43.3"
+version = "0.44.0"
 dependencies = [
  "arrayvec",
  "asynchronous-codec",
@@ -2607,7 +2609,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mdns"
-version = "0.43.1"
+version = "0.44.0"
 dependencies = [
  "async-io",
  "async-std",
@@ -2633,7 +2635,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "libp2p-core",
  "libp2p-dcutr",
@@ -2649,7 +2651,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-mplex"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2684,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.42.2"
+version = "0.43.0"
 dependencies = [
  "async-io",
  "bytes",
@@ -2709,7 +2711,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-std",
@@ -2734,7 +2736,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.42.0"
+version = "0.43.0"
 dependencies = [
  "async-std",
  "either",
@@ -2754,7 +2756,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.39.1"
+version = "0.40.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2773,7 +2775,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-pnet"
-version = "0.22.3"
+version = "0.23.0"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -2794,7 +2796,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.7.0-alpha.3"
+version = "0.8.0-alpha"
 dependencies = [
  "async-std",
  "bytes",
@@ -2821,7 +2823,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.15.2"
+version = "0.16.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2848,7 +2850,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-rendezvous"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "async-trait",
  "asynchronous-codec",
@@ -2878,7 +2880,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.24.1"
+version = "0.25.0"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2898,7 +2900,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.2"
+version = "0.43.0"
 dependencies = [
  "async-std",
  "either",
@@ -2928,7 +2930,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.32.0"
+version = "0.33.0"
 dependencies = [
  "heck",
  "quote",
@@ -2937,7 +2939,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-test"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2954,7 +2956,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tcp"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-io",
  "async-std",
@@ -2972,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "futures-rustls",
@@ -2994,7 +2996,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-uds"
-version = "0.38.0"
+version = "0.39.0"
 dependencies = [
  "async-std",
  "futures",
@@ -3006,7 +3008,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-wasm-ext"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "futures",
  "js-sys",
@@ -3018,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc"
-version = "0.4.0-alpha.4"
+version = "0.5.0-alpha"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3056,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "async-std",
  "either",
@@ -3078,7 +3080,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-yamux"
-version = "0.43.1"
+version = "0.44.0"
 dependencies = [
  "async-std",
  "futures",
@@ -3357,7 +3359,7 @@ dependencies = [
 
 [[package]]
 name = "multistream-select"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "async-std",
  "bytes",
@@ -3933,7 +3935,7 @@ dependencies = [
 
 [[package]]
 name = "quick-protobuf-codec"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -4388,7 +4390,7 @@ dependencies = [
 
 [[package]]
 name = "rw-stream-sink"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-std",
  "futures",

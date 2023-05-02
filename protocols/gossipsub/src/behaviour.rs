@@ -3709,7 +3709,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {
