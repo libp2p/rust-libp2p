@@ -323,17 +323,17 @@ impl ConnectionHandler for Handler {
         }
 
         // Check for pending replies to send.
-        match self.pending_replies.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::Identification(peer_id),
-            )),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+        if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
+            let event = result.map(Event::Identification).unwrap_or_else(|err| {
                 Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                    libp2p_core::upgrade::UpgradeError::Apply(err),
-                )),
-            )),
-            Poll::Ready(None) | Poll::Pending => Poll::Pending,
+                    libp2p_core::UpgradeError::Apply(err),
+                ))
+            });
+
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }
+
+        Poll::Pending
     }
 
     fn on_connection_event(
