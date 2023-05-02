@@ -11,8 +11,8 @@ either = "1.8.0"
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../libp2p", features = ["websocket", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros"] }
-libp2p-quic = { path = "../transports/quic", features = ["tokio"] }
-libp2p-webrtc = { path = "../transports/webrtc", features = ["tokio"] }
+libp2p-quic = { workspace = true, features = ["tokio"] }
+libp2p-webrtc = { workspace = true, features = ["tokio"] }
 libp2p-mplex = { path = "../muxers/mplex" }
 log = "0.4"
 rand = "0.8.5"

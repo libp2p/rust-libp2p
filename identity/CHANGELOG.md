@@ -1,10 +1,14 @@
 ## 0.2.0 - unreleased
 
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
 - Remove `PeerId::try_from_multiaddr`.
   `multiaddr::Protocol::P2p` is now type-safe and contains a `PeerId` directly, rendering this function obsolete.
   See [PR 3656].
 
 [PR 3656]: https://github.com/libp2p/rust-libp2p/pull/3656
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.1.2
 
