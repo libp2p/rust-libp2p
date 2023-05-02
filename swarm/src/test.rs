@@ -34,7 +34,7 @@ use std::task::{Context, Poll};
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
 /// the instrumentation of return values, without keeping
 /// any further state.
-pub struct MockBehaviour<THandler, TOutEvent>
+pub(crate) struct MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
     THandler::OutEvent: Clone,
@@ -42,13 +42,13 @@ where
 {
     /// The prototype protocols handler that is cloned for every
     /// invocation of `new_handler`.
-    pub handler_proto: THandler,
+    pub(crate) handler_proto: THandler,
     /// The addresses to return from `addresses_of_peer`.
-    pub addresses: HashMap<PeerId, Vec<Multiaddr>>,
+    pub(crate) addresses: HashMap<PeerId, Vec<Multiaddr>>,
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<ToSwarm<TOutEvent, THandler::InEvent>>,
+    pub(crate) next_action: Option<ToSwarm<TOutEvent, THandler::InEvent>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
@@ -57,7 +57,7 @@ where
     THandler::OutEvent: Clone,
     TOutEvent: Send + 'static,
 {
-    pub fn new(handler_proto: THandler) -> Self {
+    pub(crate) fn new(handler_proto: THandler) -> Self {
         MockBehaviour {
             handler_proto,
             addresses: HashMap::new(),
@@ -147,29 +147,31 @@ where
 /// A `CallTraceBehaviour` is a `NetworkBehaviour` that tracks
 /// invocations of callback methods and their arguments, wrapping
 /// around an inner behaviour. It ensures certain invariants are met.
-pub struct CallTraceBehaviour<TInner>
+pub(crate) struct CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
 {
     inner: TInner,
 
-    pub handle_pending_inbound_connection: Vec<(ConnectionId, Multiaddr, Multiaddr)>,
-    pub handle_pending_outbound_connection:
+    pub(crate) handle_pending_inbound_connection: Vec<(ConnectionId, Multiaddr, Multiaddr)>,
+    pub(crate) handle_pending_outbound_connection:
         Vec<(Option<PeerId>, Vec<Multiaddr>, Endpoint, ConnectionId)>,
-    pub handle_established_inbound_connection: Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
-    pub handle_established_outbound_connection: Vec<(PeerId, Multiaddr, Endpoint, ConnectionId)>,
-    pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
-    pub on_dial_failure: Vec<Option<PeerId>>,
-    pub on_new_listener: Vec<ListenerId>,
-    pub on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
-    pub on_new_external_addr: Vec<Multiaddr>,
-    pub on_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
-    pub on_expired_external_addr: Vec<Multiaddr>,
-    pub on_listener_error: Vec<ListenerId>,
-    pub on_listener_closed: Vec<(ListenerId, bool)>,
-    pub poll: usize,
+    pub(crate) handle_established_inbound_connection:
+        Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
+    pub(crate) handle_established_outbound_connection:
+        Vec<(PeerId, Multiaddr, Endpoint, ConnectionId)>,
+    pub(crate) on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub(crate) on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub(crate) on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
+    pub(crate) on_dial_failure: Vec<Option<PeerId>>,
+    pub(crate) on_new_listener: Vec<ListenerId>,
+    pub(crate) on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub(crate) on_new_external_addr: Vec<Multiaddr>,
+    pub(crate) on_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub(crate) on_expired_external_addr: Vec<Multiaddr>,
+    pub(crate) on_listener_error: Vec<ListenerId>,
+    pub(crate) on_listener_closed: Vec<(ListenerId, bool)>,
+    pub(crate) poll: usize,
 }
 
 impl<TInner> CallTraceBehaviour<TInner>
@@ -177,7 +179,7 @@ where
     TInner: NetworkBehaviour,
     THandlerOutEvent<TInner>: Clone,
 {
-    pub fn new(inner: TInner) -> Self {
+    pub(crate) fn new(inner: TInner) -> Self {
         Self {
             inner,
             handle_pending_inbound_connection: Vec::new(),
@@ -200,7 +202,7 @@ where
     }
 
     #[allow(dead_code)]
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.handle_pending_inbound_connection = Vec::new();
         self.handle_pending_outbound_connection = Vec::new();
         self.handle_established_inbound_connection = Vec::new();
@@ -217,11 +219,11 @@ where
         self.poll = 0;
     }
 
-    pub fn inner(&mut self) -> &mut TInner {
+    pub(crate) fn inner(&mut self) -> &mut TInner {
         &mut self.inner
     }
 
-    pub fn num_connections_to_peer(&self, peer: PeerId) -> usize {
+    pub(crate) fn num_connections_to_peer(&self, peer: PeerId) -> usize {
         self.on_connection_established
             .iter()
             .filter(|(peer_id, _, _, _)| *peer_id == peer)
@@ -237,7 +239,7 @@ where
     /// given number of expected disconnections have been received as well.
     ///
     /// Returns if the first condition is met.
-    pub fn assert_disconnected(
+    pub(crate) fn assert_disconnected(
         &self,
         expected_closed_connections: usize,
         expected_disconnections: usize,
@@ -260,7 +262,7 @@ where
     /// a given number of expected connections have been received as well.
     ///
     /// Returns if the first condition is met.
-    pub fn assert_connected(
+    pub(crate) fn assert_connected(
         &self,
         expected_established_connections: usize,
         expected_connections: usize,

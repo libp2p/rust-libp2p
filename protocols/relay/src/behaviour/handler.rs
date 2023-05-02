@@ -962,7 +962,7 @@ pub struct OutboundOpenInfo {
     src_connection_id: ConnectionId,
 }
 
-pub struct CircuitParts {
+pub(crate) struct CircuitParts {
     circuit_id: CircuitId,
     src_stream: NegotiatedSubstream,
     src_pending_data: Bytes,
