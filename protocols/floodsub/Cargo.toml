@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-floodsub"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Floodsub protocol for libp2p"
-version = "0.42.1"
+version = "0.43.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,12 +15,12 @@ asynchronous-codec = "0.6"
 cuckoofilter = "0.5.0"
 fnv = "1.0"
 futures = "0.3.28"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4"
 quick-protobuf = "0.8"
-quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
+quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0.40"

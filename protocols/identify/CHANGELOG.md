@@ -1,3 +1,12 @@
+## 0.43.0 - unreleased
+
+- Remove deprecated `Identify` prefixed symbols. See [PR 3698].
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3698]: https://github.com/libp2p/rust-libp2p/pull/3698
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.42.2
 
 - Do not implicitly dial a peer upon `identify::Behaviour::push`.
