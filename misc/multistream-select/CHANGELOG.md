@@ -1,3 +1,10 @@
+## 0.13.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.12.1
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].

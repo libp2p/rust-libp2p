@@ -21,12 +21,12 @@
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     messages: Counter,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("gossipsub");
 
         let messages = Counter::default();

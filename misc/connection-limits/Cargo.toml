@@ -1,25 +1,25 @@
 [package]
 name = "libp2p-connection-limits"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Connection limits for libp2p."
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
-libp2p-identity = { version = "0.1.0", path = "../../identity", features = ["peerid"] }
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid"] }
 void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-libp2p-identify = { path = "../../protocols/identify" }
-libp2p-ping = { path = "../../protocols/ping" }
-libp2p-swarm-derive = { path = "../../swarm-derive" }
-libp2p-swarm-test = { path = "../../swarm-test" }
-quickcheck-ext = { path = "../quickcheck-ext" }
+libp2p-identify = { workspace = true }
+libp2p-ping = { workspace = true }
+libp2p-swarm-derive = { workspace = true }
+libp2p-swarm-test = { workspace = true }
+quickcheck = { workspace = true }
 rand = "0.8.5"

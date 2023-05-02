@@ -50,11 +50,11 @@ use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
-use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
+use crate::metrics_priv::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
-use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache::{DuplicateCache, TimeCache};
+use crate::protocol_priv::{ProtocolConfig, SIGNING_PREFIX};
+use crate::subscription_filter_priv::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
+use crate::time_cache_priv::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
@@ -189,7 +189,7 @@ impl SequenceNumber {
 }
 
 impl PublishConfig {
-    pub fn get_own_id(&self) -> Option<&PeerId> {
+    pub(crate) fn get_own_id(&self) -> Option<&PeerId> {
         match self {
             Self::Signing { author, .. } => Some(author),
             Self::Author(author) => Some(author),
@@ -203,7 +203,7 @@ impl From<MessageAuthenticity> for PublishConfig {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
                 let public_key = keypair.public();
-                let key_enc = public_key.to_protobuf_encoding();
+                let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::proto::Message::key`] field.
@@ -3709,7 +3709,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {
@@ -3824,7 +3824,7 @@ mod local_test {
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol_priv::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs

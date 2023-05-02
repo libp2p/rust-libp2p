@@ -503,18 +503,20 @@ where
 /// A helper struct for substream handlers that can be implemented as async functions.
 ///
 /// This only works for substreams without an `InEvent` because - once constructed - the state of an inner future is opaque.
-pub struct FutureSubstream<TOutEvent, TError> {
+pub(crate) struct FutureSubstream<TOutEvent, TError> {
     future: Fuse<BoxFuture<'static, Result<TOutEvent, TError>>>,
 }
 
 impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
-    pub fn new(future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static) -> Self {
+    pub(crate) fn new(
+        future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static,
+    ) -> Self {
         Self {
             future: future.boxed().fuse(),
         }
     }
 
-    pub fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
+    pub(crate) fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
         if self.future.is_terminated() {
             return Ok(Next::Done);
         }
