@@ -296,8 +296,8 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
     > {
-        if !self.events.is_empty() {
-            return Poll::Ready(self.events.remove(0));
+        if let Some(event) = self.events.pop() {
+            return Poll::Ready(event);
         }
 
         // Poll the future that fires when we need to identify the node again.
