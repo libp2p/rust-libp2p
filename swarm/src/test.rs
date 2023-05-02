@@ -69,7 +69,7 @@ where
 impl<THandler, TOutEvent> NetworkBehaviour for MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
-    THandler::ToSwarm: Clone,
+    THandler::ToBehaviour: Clone,
     TOutEvent: Send + 'static,
 {
     type ConnectionHandler = THandler;
