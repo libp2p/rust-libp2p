@@ -3,7 +3,11 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Return a bool from `ExternalAddresses::on_swarm_event` and `ListenAddresses::on_swarm_event` indicating whether any state was changed.
+  See [PR XXXX].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.42.2
 
