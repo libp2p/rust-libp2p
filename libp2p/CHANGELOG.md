@@ -1,3 +1,9 @@
+## 0.51.4 - unreleased
+
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
+
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
+
 ## 0.51.3
 
 - Deprecate the `mplex` feature.
