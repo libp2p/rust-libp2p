@@ -4,10 +4,10 @@
   See [PR 3715].
 
 - Remove deprecated symbols related to upgrades.
-  See [PR XXXX].
+  See [PR 3867].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
 
 ## 0.39.2
 
