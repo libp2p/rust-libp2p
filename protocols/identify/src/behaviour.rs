@@ -25,9 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
-    THandlerInEvent, ToSwarm,
+    AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -89,7 +88,10 @@ pub struct Config {
     /// The initial delay before the first identification request
     /// is sent to a remote on a newly established connection.
     ///
-    /// Defaults to 500ms.
+    /// Defaults to 0ms.
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
+                completely removed since a remote should be able to instantly
+                answer to an identify request")]
     pub initial_delay: Duration,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
@@ -118,12 +120,13 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
+    #[allow(deprecated)]
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
             local_public_key,
-            initial_delay: Duration::from_millis(500),
+            initial_delay: Duration::from_millis(0),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -138,6 +141,10 @@ impl Config {
 
     /// Configures the initial delay before the first identification
     /// request is sent on a newly established connection to a peer.
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
+                completely removed since a remote should be able to instantly
+                answer to an identify request thus also this setter will be removed")]
+    #[allow(deprecated)]
     pub fn with_initial_delay(mut self, d: Duration) -> Self {
         self.initial_delay = d;
         self
@@ -193,16 +200,17 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             let request = Request {
                 peer_id: p,
                 protocol: Protocol::Push,
             };
             if !self.requests.contains(&request) {
                 self.requests.push(request);
-
-                self.events.push_back(ToSwarm::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
             }
         }
     }
@@ -239,6 +247,7 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -257,6 +266,7 @@ impl NetworkBehaviour for Behaviour {
         ))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -564,13 +574,10 @@ mod tests {
         transport::Boxed<(PeerId, StreamMuxerBox)>,
     ) {
         let id_keys = identity::Keypair::generate_ed25519();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
         let pubkey = id_keys.public();
         let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .authenticate(noise::Config::new(&id_keys).unwrap())
             .multiplex(MplexConfig::new())
             .boxed();
         (pubkey, transport)
@@ -740,6 +747,7 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
+            #[allow(deprecated)]
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone())
                     // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus

@@ -166,6 +166,7 @@ pub struct OtherVariantError {
 }
 
 impl OtherVariantError {
+    #[allow(dead_code)] // This is used but the cfg is too complicated to write ..
     pub(crate) fn new(actual: KeyType) -> OtherVariantError {
         OtherVariantError { actual }
     }

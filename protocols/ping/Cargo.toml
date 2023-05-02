@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-ping"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = { workspace = true }
 description = "Ping protocol for libp2p"
-version = "0.42.0"
+version = "0.43.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,9 +15,9 @@ either = "1.8.0"
 futures = "0.3.28"
 futures-timer = "3.0.2"
 instant = "0.1.11"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-swarm = { version = "0.42.1", path = "../../swarm" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4.1"
 rand = "0.8"
 void = "1.0"
@@ -25,9 +25,9 @@ void = "1.0"
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.10.0"
-libp2p-swarm = { path = "../../swarm", features = ["macros"] }
-libp2p-swarm-test = { path = "../../swarm-test" }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-swarm = { workspace = true, features = ["macros"] }
+libp2p-swarm-test = { workspace = true }
+quickcheck = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
