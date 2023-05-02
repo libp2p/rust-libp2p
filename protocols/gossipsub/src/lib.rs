@@ -138,8 +138,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod time_cache;
-
 mod backoff;
 mod behaviour;
 mod config;
@@ -150,12 +148,12 @@ mod mcache;
 mod metrics;
 mod peer_score;
 mod protocol;
+mod rpc_proto;
 mod subscription_filter;
+mod time_cache;
 mod topic;
 mod transform;
 mod types;
-
-mod rpc_proto;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
