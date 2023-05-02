@@ -93,9 +93,9 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
 pub trait ConnectionHandler: Send + 'static {
-    /// A type representing the message(s) a [`NetworkBehaviour`] can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`]
+    /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
     type FromBehaviour: fmt::Debug + Send + 'static;
-    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`] via [`ConnectionHandlerEvent::NotifyBehaviour`].
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
