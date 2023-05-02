@@ -291,6 +291,7 @@ pub enum ProtocolsChange<'a> {
     Removed(ProtocolsRemoved<'a>),
 }
 
+/// An [`Iterator`] over all protocols that have been added.
 #[derive(Clone)]
 pub struct ProtocolsAdded<'a> {
     pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
@@ -304,6 +305,7 @@ impl<'a> ProtocolsAdded<'a> {
     }
 }
 
+/// An [`Iterator`] over all protocols that have been removed.
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
     pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
