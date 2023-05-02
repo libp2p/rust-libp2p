@@ -1,3 +1,10 @@
+## 0.40.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.39.2
 
 - Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.

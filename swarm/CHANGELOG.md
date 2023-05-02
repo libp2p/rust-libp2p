@@ -1,10 +1,14 @@
 ## 0.43.0 - unreleased
 
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
 - Remove `ConnectionHandlerUpgrErr::Timer` variant.
   This variant was never constructed and thus dead code.
   See [PR 3605].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.42.2
 
