@@ -1,4 +1,3 @@
-======
 ## 0.25.0 - unreleased
 
 - Raise MSRV to 1.65.
@@ -14,7 +13,6 @@
 
 [PR 3847]: https://github.com/libp2p/rust-libp2p/pull/3847
 
->>>>>>> master
 ## 0.24.0
 
 - Update to `libp2p-core` `v0.39.0`.
