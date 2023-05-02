@@ -48,7 +48,7 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub(crate) next_action: Option<ToSwarm<TOutEvent, THandler::InEvent>>,
+    pub(crate) next_action: Option<ToSwarm<TOutEvent, THandler::FromBehaviour>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
