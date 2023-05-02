@@ -136,9 +136,6 @@ pub enum UpgradeError {
     NoAddresses,
     #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
-    #[deprecated(since = "0.8.1", note = "Error is no longer constructed.")]
-    #[error("Invalid addresses in reservation.")]
-    InvalidAddrs,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Unexpected message type 'connect'")]
