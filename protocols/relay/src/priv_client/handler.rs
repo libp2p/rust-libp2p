@@ -189,10 +189,11 @@ impl Handler {
 
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
-                let connection = super::Connection::new_inbound(inbound_circuit, tx);
+                let connection = super::ConnectionState::new_inbound(inbound_circuit, tx);
 
                 pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
-                    stream: connection,
+                    // stream: connection,
+                    stream: super::Connection { state: connection },
                     src_peer_id,
                     relay_peer_id: self.remote_peer_id,
                     relay_addr: self.remote_addr.clone(),
@@ -271,11 +272,9 @@ impl Handler {
                 OutboundOpenInfo::Connect { send_back },
             ) => {
                 let (tx, rx) = oneshot::channel();
-                match send_back.send(Ok(super::Connection::new_outbound(
-                    substream,
-                    read_buffer,
-                    tx,
-                ))) {
+                match send_back.send(Ok(super::Connection {
+                    state: super::ConnectionState::new_outbound(substream, read_buffer, tx),
+                })) {
                     Ok(()) => {
                         self.alive_lend_out_substreams.push(rx);
                         self.queued_events.push_back(ConnectionHandlerEvent::Custom(

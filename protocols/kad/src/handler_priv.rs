@@ -68,8 +68,7 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    requested_streams:
-        VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
+    pending_messages: VecDeque<(KadRequestMsg, Option<TUserData>)>,
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState<TUserData>>,
@@ -502,7 +501,7 @@ where
             inbound_substreams: Default::default(),
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
-            requested_streams: Default::default(),
+            pending_messages: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unknown,
             remote_supported_protocols: Default::default(),
@@ -511,19 +510,22 @@ where
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound {
-            protocol,
-            info: (msg, user_data),
-        }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        self.outbound_substreams
-            .push(OutboundSubstreamState::PendingSend(
-                protocol, msg, user_data,
-            ));
+        if let Some((msg, user_data)) = self.pending_messages.pop_front() {
+            self.outbound_substreams
+                .push(OutboundSubstreamState::PendingSend(
+                    protocol, msg, user_data,
+                ));
+        } else {
+            debug_assert!(false, "Requested outbound stream without message")
+        }
+
         self.num_requested_outbound_streams -= 1;
+
         if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
@@ -591,9 +593,7 @@ where
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError {
-            info: (_, user_data),
-            error,
-            ..
+            info: (), error, ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -601,10 +601,12 @@ where
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
-        if let Some(user_data) = user_data {
+
+        if let Some((_, Some(user_data))) = self.pending_messages.pop_front() {
             self.outbound_substreams
                 .push(OutboundSubstreamState::ReportError(error.into(), user_data));
         }
+
         self.num_requested_outbound_streams -= 1;
     }
 }
@@ -618,8 +620,7 @@ where
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
-    // Message of the request to send to the remote, and user data if we expect an answer.
-    type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
+    type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -649,10 +650,7 @@ where
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
@@ -660,10 +658,7 @@ where
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
@@ -678,24 +673,15 @@ where
             ),
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, None),
-                ));
+                self.pending_messages.push_back((msg, None));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::GetRecordRes {
                 record,
@@ -754,11 +740,13 @@ where
 
         let num_in_progress_outbound_substreams =
             self.outbound_substreams.len() + self.num_requested_outbound_streams;
-        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS {
-            if let Some(protocol) = self.requested_streams.pop_front() {
-                self.num_requested_outbound_streams += 1;
-                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
-            }
+        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS
+            && self.num_requested_outbound_streams < self.pending_messages.len()
+        {
+            self.num_requested_outbound_streams += 1;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(self.config.protocol_config.clone(), ()),
+            });
         }
 
         let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
@@ -864,7 +852,7 @@ where
 {
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
+        (),
         KademliaHandlerEvent<TUserData>,
         io::Error,
     >;
@@ -1000,7 +988,7 @@ where
 {
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
+        (),
         KademliaHandlerEvent<TUserData>,
         io::Error,
     >;

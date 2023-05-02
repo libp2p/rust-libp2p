@@ -21,8 +21,8 @@
 //!
 //! Manages and stores the Scoring logic of a particular peer on the gossipsub behaviour.
 
-use crate::metrics_priv::{Metrics, Penalty};
-use crate::time_cache_priv::TimeCache;
+use crate::metrics::{Metrics, Penalty};
+use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
 use libp2p_identity::PeerId;
 use log::{debug, trace, warn};
