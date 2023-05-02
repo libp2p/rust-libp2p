@@ -69,11 +69,11 @@ where
 impl<THandler, TOutEvent> NetworkBehaviour for MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
-    THandler::ToBehaviour: Clone,
+    THandler::ToSwarm: Clone,
     TOutEvent: Send + 'static,
 {
     type ConnectionHandler = THandler;
-    type ToBehaviour = TOutEvent;
+    type ToSwarm = TOutEvent;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -404,7 +404,7 @@ where
     THandlerOutEvent<TInner>: Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
-    type ToBehaviour = TInner::ToBehaviour;
+    type ToSwarm = TInner::ToSwarm;
 
     fn handle_pending_inbound_connection(
         &mut self,
