@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-plaintext"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "Plaintext encryption dummy protocol for libp2p"
-version = "0.39.1"
+version = "0.40.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,8 +14,8 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 bytes = "1"
 futures = "0.3.28"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.2", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4.8"
 quick-protobuf = "0.8"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
@@ -23,8 +23,8 @@ void = "1.0.2"
 
 [dev-dependencies]
 env_logger = "0.10.0"
-libp2p-identity = { path = "../../identity", features = ["ed25519"] }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-identity = { workspace = true, features = ["ed25519"] }
+quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.3.1"
 
