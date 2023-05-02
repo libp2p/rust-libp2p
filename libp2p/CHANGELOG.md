@@ -1,7 +1,11 @@
-## 0.51.4 - unreleased
+## 0.52.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
 
 - Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
 
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 
 ## 0.51.3

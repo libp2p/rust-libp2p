@@ -1,9 +1,12 @@
-## 0.32.1 - unreleased
+## 0.33.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
 
 - Rename `out_event` to `to_swarm` and deprecate `out_event`. See [PR 3848].
 
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
-
 
 ## 0.32.0
 

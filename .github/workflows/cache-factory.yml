@@ -1,5 +1,7 @@
-# This workflow _produces_ caches which are used to speed up pull request builds.
-# The caches are split by Rust version (stable vs MSRV per crate) because those caches cannot share any artifacts.
+# This workflow _produces_ a cache that is used to speed up pull request builds.
+#
+# Our CI runs a job per crate, meaning all jobs share compilation artifacts but never the full cache.
+# Thus, we make a single cache here that is used by all jobs and the jobs only read from this cache.
 
 name: Cache factory
 
@@ -13,42 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gather_msrv_versions:
-    runs-on: ubuntu-latest
-    outputs:
-      versions: ${{ steps.find-rust-versions.outputs.versions }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - id: find-rust-versions
-        run: |
-          RUST_VERSIONS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(.rust_version) | unique | del(..|nulls)')
-          echo "versions=${RUST_VERSIONS}" >> $GITHUB_OUTPUT
-
-  make_msrv_cache:
-    runs-on: ubuntu-latest
-    needs: gather_msrv_versions
-    strategy:
-      fail-fast: false
-      matrix:
-        rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
-
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
-        with:
-          shared-key: msrv-cache
-
-      - name: Compile all crates which have MSRV ${{ matrix.rust }}
-        run: |
-          cargo metadata --format-version=1 --no-deps | \
-          jq -r '.packages[] | select(.rust_version == "${{ matrix.rust }}") | "+\(.rust_version) build --all-features --package \(.name)"' |
-          xargs --verbose -L 1 cargo
-
   make_stable_rust_cache:
     runs-on: ubuntu-latest
     steps:

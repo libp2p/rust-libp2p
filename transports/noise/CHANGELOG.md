@@ -1,3 +1,10 @@
+## 0.42.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.42.2
 
 - Deprecate all noise handshakes apart from XX.
