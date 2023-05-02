@@ -32,7 +32,7 @@ use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
     THandlerErr,
 };
-use libp2p_yamux::YamuxConfig;
+use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -216,7 +216,7 @@ where
             .authenticate(PlainText2Config {
                 local_public_key: identity.public(),
             })
-            .multiplex(YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .timeout(Duration::from_secs(20))
             .boxed();
 

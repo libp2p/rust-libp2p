@@ -22,7 +22,7 @@
 
 pub(crate) mod x25519;
 pub(crate) mod x25519_spec;
-use crate::NoiseError;
+use crate::Error;
 use libp2p_identity as identity;
 use rand::SeedableRng;
 use zeroize::Zeroize;
@@ -68,6 +68,9 @@ pub enum XX {}
 
 /// A Noise protocol over DH keys of type `C`. The choice of `C` determines the
 /// protocol parameters for each handshake pattern.
+#[deprecated(
+    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
+)]
 pub trait Protocol<C> {
     /// The protocol parameters for the IK handshake pattern.
     fn params_ik() -> ProtocolParams;
@@ -77,7 +80,7 @@ pub trait Protocol<C> {
     fn params_xx() -> ProtocolParams;
 
     /// Construct a DH public key from a byte slice.
-    fn public_from_bytes(s: &[u8]) -> Result<PublicKey<C>, NoiseError>;
+    fn public_from_bytes(s: &[u8]) -> Result<PublicKey<C>, Error>;
 
     /// Determines whether the authenticity of the given DH static public key
     /// and public identity key is linked, i.e. that proof of ownership of a
@@ -103,7 +106,7 @@ pub trait Protocol<C> {
     /// without a signature, otherwise a signature over the static DH public key
     /// must be given and is verified with the public identity key, establishing
     /// the authenticity of the static DH public key w.r.t. the public identity key.
-    #[allow(deprecated)]
+
     fn verify(id_pk: &identity::PublicKey, dh_pk: &PublicKey<C>, sig: &Option<Vec<u8>>) -> bool
     where
         C: AsRef<[u8]>,
@@ -114,7 +117,7 @@ pub trait Protocol<C> {
                 .map_or(false, |s| id_pk.verify(dh_pk.as_ref(), s))
     }
 
-    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>) -> Result<Vec<u8>, NoiseError>
+    fn sign(id_keys: &identity::Keypair, dh_pk: &PublicKey<C>) -> Result<Vec<u8>, Error>
     where
         C: AsRef<[u8]>,
     {
@@ -175,10 +178,7 @@ impl<T: Zeroize> Keypair<T> {
 
     /// Turn this DH keypair into a [`AuthenticKeypair`], i.e. a DH keypair that
     /// is authentic w.r.t. the given identity keypair, by signing the DH public key.
-    pub fn into_authentic(
-        self,
-        id_keys: &identity::Keypair,
-    ) -> Result<AuthenticKeypair<T>, NoiseError>
+    pub fn into_authentic(self, id_keys: &identity::Keypair) -> Result<AuthenticKeypair<T>, Error>
     where
         T: AsRef<[u8]>,
         T: Protocol<T>,

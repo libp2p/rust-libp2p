@@ -1,4 +1,4 @@
-## 0.42.2 - unreleased
+## 0.42.2
 
 - Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
 

@@ -58,18 +58,31 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod codec;
-pub mod handler;
+mod codec_priv;
+#[deprecated(
+    note = "The `codec` module will be made private in the future and should not be depended on."
+)]
+pub mod codec {
+    pub use super::codec_priv::*;
+}
 
-pub use codec::{Codec, ProtocolName};
+mod handler_priv;
+#[deprecated(
+    note = "The `handler` module will be made private in the future and should not be depended on."
+)]
+pub mod handler {
+    pub use super::handler_priv::*;
+}
+
+pub use codec_priv::{Codec, ProtocolName};
 
 #[allow(deprecated)]
-pub use codec::RequestResponseCodec;
+pub use codec_priv::RequestResponseCodec;
 
-pub use handler::ProtocolSupport;
+pub use handler_priv::ProtocolSupport;
 
 use futures::channel::oneshot;
-use handler::{Handler, RequestProtocol};
+use handler_priv::{Handler, RequestProtocol};
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -116,7 +129,7 @@ pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
     since = "0.24.0",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
 )]
-pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
+pub type HandlerEvent<TCodec> = handler_priv::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -802,7 +815,7 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            handler::Event::Response {
+            handler_priv::Event::Response {
                 request_id,
                 response,
             } => {
@@ -819,7 +832,7 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
             }
-            handler::Event::Request {
+            handler_priv::Event::Request {
                 request_id,
                 request,
                 sender,
@@ -850,7 +863,7 @@ where
                     }
                 }
             }
-            handler::Event::ResponseSent(request_id) => {
+            handler_priv::Event::ResponseSent(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -863,7 +876,7 @@ where
                         request_id,
                     }));
             }
-            handler::Event::ResponseOmission(request_id) => {
+            handler_priv::Event::ResponseOmission(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -877,7 +890,7 @@ where
                         error: InboundFailure::ResponseOmission,
                     }));
             }
-            handler::Event::OutboundTimeout(request_id) => {
+            handler_priv::Event::OutboundTimeout(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -891,7 +904,7 @@ where
                         error: OutboundFailure::Timeout,
                     }));
             }
-            handler::Event::InboundTimeout(request_id) => {
+            handler_priv::Event::InboundTimeout(request_id) => {
                 // Note: `Event::InboundTimeout` is emitted both for timing
                 // out to receive the request and for timing out sending the response. In the former
                 // case the request is never added to `pending_outbound_responses` and thus one can
@@ -905,7 +918,7 @@ where
                         error: InboundFailure::Timeout,
                     }));
             }
-            handler::Event::OutboundUnsupportedProtocols(request_id) => {
+            handler_priv::Event::OutboundUnsupportedProtocols(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -919,7 +932,7 @@ where
                         error: OutboundFailure::UnsupportedProtocols,
                     }));
             }
-            handler::Event::InboundUnsupportedProtocols(request_id) => {
+            handler_priv::Event::InboundUnsupportedProtocols(request_id) => {
                 // Note: No need to call `self.remove_pending_outbound_response`,
                 // `Event::Request` was never emitted for this request and
                 // thus request was never added to `pending_outbound_responses`.
