@@ -686,4 +686,7 @@ impl Ord for KeepAlive {
     }
 }
 
+/// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
+/// [`ProtocolsAdded::from_set`] and [`ProtocolsRemoved::from_set`]. Those have lifetime-constraints
+/// which don't work unless we have a [`HashSet`] with a `'static' lifetime.
 static EMPTY_HASHSET: Lazy<HashSet<String>> = Lazy::new(HashSet::new);
