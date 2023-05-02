@@ -90,8 +90,7 @@ pub struct Config {
     ///
     /// Defaults to 0ms.
     #[deprecated(
-        since = "0.42.1",
-        note = "The `initial_delay` is no longer necessary and will be 
+        note = "The `initial_delay` is no longer necessary and will be
                 completely removed since a remote should be able to instantly
                 answer to an identify request"
     )]
@@ -144,8 +143,7 @@ impl Config {
     /// Configures the initial delay before the first identification
     /// request is sent on a newly established connection to a peer.
     #[deprecated(
-        since = "0.42.1",
-        note = "The `initial_delay` is no longer necessary and will be 
+        note = "The `initial_delay` is no longer necessary and will be
                 completely removed since a remote should be able to instantly
                 answer to an identify request thus also this setter will be removed"
     )]
