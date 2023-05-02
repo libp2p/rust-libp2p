@@ -1,4 +1,11 @@
-## 0.42.2 - unreleased
+## 0.42.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.42.2
 
 - Deprecate all noise handshakes apart from XX.
   This deprecates `NoiseConfig` and `NoiseAuthenticated` in favor of a new `libp2p_noise::Config` struct.

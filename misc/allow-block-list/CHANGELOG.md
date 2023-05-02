@@ -1,4 +1,11 @@
-## 0.1.1 - unreleased
+## 0.2.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.1.1
 
 - Correctly unblock and disallow peer in `unblock_peer` and `disallow_peer` functions.
   See [PR 3789].

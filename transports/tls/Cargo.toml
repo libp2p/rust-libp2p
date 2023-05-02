@@ -1,8 +1,8 @@
 [package]
 name = "libp2p-tls"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "TLS configuration based on libp2p TLS specs."
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
@@ -11,8 +11,8 @@ exclude = ["src/test_assets"]
 [dependencies]
 futures = { version = "0.3.28", default-features = false }
 futures-rustls = "0.22.2"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.2", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
 rcgen = "0.10.0"
 ring = "0.16.20"
 thiserror = "1.0.40"
@@ -29,10 +29,10 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.4.1"
-libp2p-core = { path = "../../core" }
-libp2p-identity = { path = "../../identity", features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
-libp2p-swarm = { path = "../../swarm" }
-libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
+libp2p-swarm = { workspace = true }
+libp2p-yamux = { workspace = true }
 tokio = { version = "1.28.0", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
