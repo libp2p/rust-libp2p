@@ -38,25 +38,6 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
-#[deprecated(
-    since = "0.42.0",
-    note = "Use re-exports that omit `Mdns` prefix, i.e. `libp2p::mdns::Config`"
-)]
-pub type MdnsConfig = Config;
-
-#[deprecated(
-    since = "0.42.0",
-    note = "Use re-exports that omit `Mdns` prefix, i.e. `libp2p::mdns::Event`"
-)]
-pub type MdnsEvent = Event;
-
-#[deprecated(
-    since = "0.42.0",
-    note = "Use the async-io prefixed `Mdns`, i.e. `libp2p::mdns::async_io::Mdns`"
-)]
-#[cfg(feature = "async-io")]
-pub type Mdns = async_io::Behaviour;
-
 mod behaviour;
 pub use crate::behaviour::{Behaviour, Event};
 
