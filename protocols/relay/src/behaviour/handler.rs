@@ -418,21 +418,23 @@ impl Handler {
     ) {
         match request {
             inbound_hop::Req::Reserve(inbound_reservation_req) => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::ReservationReqReceived {
-                        inbound_reservation_req,
-                        endpoint: self.endpoint.clone(),
-                        renewed: self.active_reservation.is_some(),
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqReceived {
+                            inbound_reservation_req,
+                            endpoint: self.endpoint.clone(),
+                            renewed: self.active_reservation.is_some(),
+                        },
+                    ));
             }
             inbound_hop::Req::Connect(inbound_circuit_req) => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::CircuitReqReceived {
-                        inbound_circuit_req,
-                        endpoint: self.endpoint.clone(),
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitReqReceived {
+                            inbound_circuit_req,
+                            endpoint: self.endpoint.clone(),
+                        },
+                    ));
             }
         }
     }
@@ -456,17 +458,18 @@ impl Handler {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::OutboundConnectNegotiated {
-                circuit_id,
-                src_peer_id,
-                src_connection_id,
-                inbound_circuit_req,
-                dst_handler_notifier: tx,
-                dst_stream,
-                dst_pending_data,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiated {
+                    circuit_id,
+                    src_peer_id,
+                    src_connection_id,
+                    inbound_circuit_req,
+                    dst_handler_notifier: tx,
+                    dst_stream,
+                    dst_pending_data,
+                },
+            ));
     }
 
     fn on_listen_upgrade_error(
@@ -502,11 +505,12 @@ impl Handler {
             }
         };
 
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::CircuitReqReceiveFailed {
-                error: non_fatal_error,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::CircuitReqReceiveFailed {
+                    error: non_fatal_error,
+                },
+            ));
     }
 
     fn on_dial_upgrade_error(
@@ -577,16 +581,17 @@ impl Handler {
             src_connection_id,
         } = open_info;
 
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::OutboundConnectNegotiationFailed {
-                circuit_id,
-                src_peer_id,
-                src_connection_id,
-                inbound_circuit_req,
-                status,
-                error: non_fatal_error,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiationFailed {
+                    circuit_id,
+                    src_peer_id,
+                    src_connection_id,
+                    inbound_circuit_req,
+                    status,
+                    error: non_fatal_error,
+                },
+            ));
     }
 }
 
@@ -744,18 +749,22 @@ impl ConnectionHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitClosed {
-                        circuit_id,
-                        dst_peer_id,
-                        error: None,
-                    }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitClosed {
+                            circuit_id,
+                            dst_peer_id,
+                            error: None,
+                        },
+                    ))
                 }
                 Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitClosed {
-                        circuit_id,
-                        dst_peer_id,
-                        error: Some(e),
-                    }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitClosed {
+                            circuit_id,
+                            dst_peer_id,
+                            error: Some(e),
+                        },
+                    ))
                 }
             }
         }
@@ -766,13 +775,15 @@ impl ConnectionHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitReqDenied {
-                        circuit_id,
-                        dst_peer_id,
-                    }));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitReqDenied {
+                            circuit_id,
+                            dst_peer_id,
+                        },
+                    ));
                 }
                 Err(error) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqDenyFailed {
                             circuit_id,
                             dst_peer_id,
@@ -825,7 +836,7 @@ impl ConnectionHandler for Handler {
 
                     self.circuits.push(circuit);
 
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqAccepted {
                             circuit_id,
                             dst_peer_id,
@@ -833,7 +844,7 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Err((circuit_id, dst_peer_id, error)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqAcceptFailed {
                             circuit_id,
                             dst_peer_id,
@@ -851,7 +862,7 @@ impl ConnectionHandler for Handler {
             .map(|fut| fut.poll_unpin(cx))
         {
             self.active_reservation = None;
-            return Poll::Ready(ConnectionHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::ReservationTimedOut {},
             ));
         }
@@ -868,12 +879,12 @@ impl ConnectionHandler for Handler {
                                 .active_reservation
                                 .replace(Delay::new(self.config.reservation_duration))
                                 .is_some();
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqAccepted { renewed },
                             ));
                         }
                         Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqAcceptFailed { error },
                             ));
                         }
@@ -886,12 +897,12 @@ impl ConnectionHandler for Handler {
 
                     match result {
                         Ok(()) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenied {},
                             ))
                         }
                         Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenyFailed { error },
                             ));
                         }

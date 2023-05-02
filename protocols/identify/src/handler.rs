@@ -153,7 +153,7 @@ impl Handler {
         match output {
             future::Either::Left(substream) => {
                 self.events
-                    .push(ConnectionHandlerEvent::Custom(Event::Identify));
+                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identify));
                 if !self.reply_streams.is_empty() {
                     warn!(
                         "New inbound identify request from {} while a previous one \
@@ -187,14 +187,14 @@ impl Handler {
         match output {
             future::Either::Left(remote_info) => {
                 self.events
-                    .push(ConnectionHandlerEvent::Custom(Event::Identified(
+                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                         remote_info,
                     )));
                 self.keep_alive = KeepAlive::No;
             }
-            future::Either::Right(()) => self
-                .events
-                .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
+            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::IdentificationPushed,
+            )),
         }
     }
 
@@ -212,10 +212,9 @@ impl Handler {
             UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
             UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
         });
-        self.events
-            .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
-                err,
-            )));
+        self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+            Event::IdentificationError(err),
+        ));
         self.keep_alive = KeepAlive::No;
         self.trigger_next_identify.reset(self.interval);
     }
@@ -307,16 +306,18 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(info) = res {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    info,
+                )));
             }
         }
 
         // Check for pending replies to send.
         match self.pending_replies.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::Identification(peer_id),
             )),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+            Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
                     libp2p_core::upgrade::UpgradeError::Apply(err),
                 )),

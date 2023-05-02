@@ -157,7 +157,9 @@ where
         }
 
         if !self.events_out.is_empty() {
-            return Poll::Ready(ConnectionHandlerEvent::Custom(self.events_out.remove(0)));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                self.events_out.remove(0),
+            ));
         } else {
             self.events_out.shrink_to_fit();
         }
