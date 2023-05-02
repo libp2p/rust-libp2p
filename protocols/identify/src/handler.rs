@@ -39,7 +39,7 @@ use libp2p_swarm::{
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::HashSet;
-use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{io, task::Context, task::Poll, time::Duration};
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -301,7 +301,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Poll the future that fires when we need to identify the node again.
-        match Future::poll(Pin::new(&mut self.trigger_next_identify), cx) {
+        match self.trigger_next_identify.poll_unpin(cx) {
             Poll::Pending => {}
             Poll::Ready(()) => {
                 self.trigger_next_identify.reset(self.interval);
