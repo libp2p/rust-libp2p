@@ -465,13 +465,13 @@ impl<P: Provider> fmt::Debug for Listener<P> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProtocolVersion {
+pub(crate) enum ProtocolVersion {
     V1, // i.e. RFC9000
     Draft29,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SocketFamily {
+pub(crate) enum SocketFamily {
     Ipv4,
     Ipv6,
 }

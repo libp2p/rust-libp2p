@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = "1.65.0"
 description = "Metrics for libp2p"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -19,18 +19,18 @@ relay = ["libp2p-relay"]
 dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-dcutr =  { version = "0.9.0", path = "../../protocols/dcutr", optional = true }
-libp2p-identify = { version = "0.42.0", path = "../../protocols/identify", optional = true }
-libp2p-kad = { version = "0.43.0", path = "../../protocols/kad", optional = true }
-libp2p-ping = { version = "0.42.0", path = "../../protocols/ping", optional = true }
-libp2p-relay =  { version = "0.15.0", path = "../../protocols/relay", optional = true }
-libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-dcutr =  { workspace = true, optional = true }
+libp2p-identify = { workspace = true, optional = true }
+libp2p-kad = { workspace = true, optional = true }
+libp2p-ping = { workspace = true, optional = true }
+libp2p-relay =  { workspace = true, optional = true }
+libp2p-swarm = { workspace = true }
+libp2p-identity = { workspace = true }
 prometheus-client = "0.19.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", optional = true }
+libp2p-gossipsub =  { workspace = true, optional = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
