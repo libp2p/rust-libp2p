@@ -301,15 +301,12 @@ impl ConnectionHandler for Handler {
         }
 
         // Poll the future that fires when we need to identify the node again.
-        match self.trigger_next_identify.poll_unpin(cx) {
-            Poll::Pending => {}
-            Poll::Ready(()) => {
-                self.trigger_next_identify.reset(self.interval);
-                let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
-                };
-                return Poll::Ready(ev);
-            }
+        if let Poll::Ready(()) = self.trigger_next_identify.poll_unpin(cx) {
+            self.trigger_next_identify.reset(self.interval);
+            let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
+            };
+            return Poll::Ready(ev);
         }
 
         if let Some(Poll::Ready(res)) = self
