@@ -20,6 +20,7 @@
 
 //! Components of a Noise protocol.
 
+use crate::protocol::x25519_spec::STATIC_KEY_DOMAIN;
 use crate::Error;
 use libp2p_identity as identity;
 use once_cell::sync::Lazy;
@@ -89,7 +90,7 @@ impl Keypair {
         self,
         id_keys: &identity::Keypair,
     ) -> Result<AuthenticKeypair, Error> {
-        let sig = id_keys.sign(self.public.as_ref())?;
+        let sig = id_keys.sign(&[STATIC_KEY_DOMAIN.as_bytes(), self.public.as_ref()].concat())?;
 
         let identity = KeypairIdentity {
             public: id_keys.public(),
