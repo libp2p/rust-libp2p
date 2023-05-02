@@ -380,7 +380,7 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
 
-    /// Other event.
+    /// Notify behaviour event from [`ConnectionHandler`].
     NotifyBehaviour(TCustom),
 }
 
