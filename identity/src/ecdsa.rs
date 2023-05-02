@@ -24,6 +24,7 @@ use super::error::DecodingError;
 use core::cmp;
 use core::fmt;
 use core::hash;
+use p256::pkcs8::DecodePrivateKey;
 use p256::pkcs8::EncodePrivateKey;
 use p256::{
     ecdsa::{
@@ -133,13 +134,13 @@ impl SecretKey {
             .to_vec()
     }
 
-    // Cannot implement this because error type does not implement `std::error::Error`
-    // pub fn try_decode_pkcs8_der(buf:&[u8])->Result<Self,DecodingError>{
-    //     match SigningKey::from_pkcs8_der(buf){
-    //         Ok(key) => Ok(SecretKey(key)),
-    //         Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
-    //     }
-    // }
+    /// Try to decode a secret key from a byte buffer in DER-encoded PKCS#8 format.
+    pub fn try_decode_pkcs8_der(buf: &[u8]) -> Result<Self, DecodingError> {
+        match SigningKey::from_pkcs8_der(buf) {
+            Ok(key) => Ok(SecretKey(key)),
+            Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
+        }
+    }
 }
 
 impl fmt::Debug for SecretKey {
