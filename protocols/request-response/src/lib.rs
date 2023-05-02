@@ -58,8 +58,8 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod codec;
-pub mod handler;
+mod codec;
+mod handler;
 
 pub use codec::{Codec, ProtocolName};
 
