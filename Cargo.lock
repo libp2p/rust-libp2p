@@ -2928,9 +2928,10 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm-derive"
-version = "0.32.0"
+version = "0.32.1"
 dependencies = [
  "heck",
+ "log",
  "quote",
  "syn 2.0.15",
 ]

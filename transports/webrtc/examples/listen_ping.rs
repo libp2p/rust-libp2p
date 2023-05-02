@@ -38,7 +38,7 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
 
 #[derive(NetworkBehaviour, Default)]
 #[behaviour(
-    out_event = "Event",
+    to_swarm = "Event",
     event_process = false,
     prelude = "libp2p_swarm::derive_prelude"
 )]

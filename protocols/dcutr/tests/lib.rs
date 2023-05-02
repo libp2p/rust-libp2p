@@ -137,7 +137,7 @@ fn build_client() -> Swarm<Client> {
 
 #[derive(NetworkBehaviour)]
 #[behaviour(
-    out_event = "ClientEvent",
+    to_swarm = "ClientEvent",
     event_process = false,
     prelude = "libp2p_swarm::derive_prelude"
 )]

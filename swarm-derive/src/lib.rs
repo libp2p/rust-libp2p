@@ -96,7 +96,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     let (out_event_name, out_event_definition, out_event_from_clauses) = {
-        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
+        // If we find a `#[behaviour(to_swarm = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `ToSwarm` is
         // generated.
         match user_specified_out_event {
@@ -896,7 +896,11 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
                 continue;
             }
 
-            if meta.path().is_ident("out_event") {
+            if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
+                if meta.path().is_ident("out_event") {
+                    log::warn!("The 'out_event' key is deprecated, use 'to_swarm' instead",);
+                }
+
                 match meta {
                     Meta::Path(_) => unimplemented!(),
                     Meta::List(_) => unimplemented!(),

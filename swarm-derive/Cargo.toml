@@ -3,7 +3,7 @@ name = "libp2p-swarm-derive"
 edition = "2021"
 rust-version = "1.60.0"
 description = "Procedural macros of libp2p-swarm"
-version = "0.32.0"
+version = "0.32.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,6 +17,7 @@ proc-macro = true
 heck = "0.4"
 quote = "1.0"
 syn = { version = "2.0.15", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+log = "0.4"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

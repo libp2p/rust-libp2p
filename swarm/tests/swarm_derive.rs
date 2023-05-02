@@ -125,7 +125,7 @@ fn three_fields() {
 fn custom_event() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "MyEvent", prelude = "libp2p_swarm::derive_prelude")]
+    #[behaviour(to_swarm = "MyEvent", prelude = "libp2p_swarm::derive_prelude")]
     struct Foo {
         ping: ping::Behaviour,
         identify: identify::Behaviour,
@@ -159,7 +159,7 @@ fn custom_event() {
 fn custom_event_mismatching_field_names() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "MyEvent", prelude = "libp2p_swarm::derive_prelude")]
+    #[behaviour(to_swarm = "MyEvent", prelude = "libp2p_swarm::derive_prelude")]
     struct Foo {
         a: ping::Behaviour,
         b: identify::Behaviour,
@@ -271,7 +271,7 @@ fn custom_event_emit_event_through_poll() {
     #[allow(dead_code, clippy::large_enum_variant)]
     #[derive(NetworkBehaviour)]
     #[behaviour(
-        out_event = "BehaviourOutEvent",
+        to_swarm = "BehaviourOutEvent",
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Foo {
@@ -400,7 +400,7 @@ fn custom_event_with_either() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     #[behaviour(
-        out_event = "BehaviourOutEvent",
+        to_swarm = "BehaviourOutEvent",
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Foo {
@@ -437,7 +437,7 @@ fn generated_out_event_derive_debug() {
 fn multiple_behaviour_attributes() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "FooEvent")]
+    #[behaviour(to_swarm = "FooEvent")]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Foo {
         ping: ping::Behaviour,
@@ -525,7 +525,7 @@ fn custom_out_event_no_type_parameters() {
     }
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "OutEvent", prelude = "libp2p_swarm::derive_prelude")]
+    #[behaviour(to_swarm = "OutEvent", prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour<T: 'static + Send> {
         custom: TemplatedBehaviour<T>,
     }
