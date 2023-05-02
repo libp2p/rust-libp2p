@@ -50,11 +50,11 @@ use crate::config::{Config, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
-use crate::metrics_priv::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol_priv::{ProtocolConfig, SIGNING_PREFIX};
-use crate::subscription_filter_priv::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache_priv::{DuplicateCache, TimeCache};
+use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
+use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
+use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
@@ -3824,7 +3824,7 @@ mod local_test {
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol_priv::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs
