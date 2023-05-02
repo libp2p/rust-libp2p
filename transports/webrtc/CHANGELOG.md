@@ -1,3 +1,10 @@
+## 0.5.0-alpha - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.4.0-alpha.4
 
 - Make `Fingerprint` type public. See [PR 3648].

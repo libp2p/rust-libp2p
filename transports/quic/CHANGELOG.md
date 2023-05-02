@@ -1,3 +1,10 @@
+## 0.8.0-alpha - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
 ## 0.7.0-alpha.3
 
 - Depend `libp2p-tls` `v0.1.0`.
