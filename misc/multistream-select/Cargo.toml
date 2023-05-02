@@ -1,9 +1,9 @@
 [package]
 name = "multistream-select"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "Multistream-select negotiation protocol for libp2p"
-version = "0.12.1"
+version = "0.13.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -21,14 +21,14 @@ unsigned-varint = "0.7"
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.10"
-libp2p-core = { path = "../../core" }
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
-libp2p-swarm = { path = "../../swarm", features = ["async-std"] }
-libp2p-identity = { path = "../../identity", features = ["ed25519"] }
-quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+libp2p-core = { workspace = true }
+libp2p-mplex = { workspace = true }
+libp2p-plaintext = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["async-std"] }
+libp2p-identity = { workspace = true, features = ["ed25519"] }
+quickcheck = { workspace = true }
 rand = "0.8"
-rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

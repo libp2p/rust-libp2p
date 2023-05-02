@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-websocket"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "WebSocket transport for libp2p"
-version = "0.41.0"
+version = "0.42.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,19 +14,19 @@ categories = ["network-programming", "asynchronous"]
 futures-rustls = "0.22"
 either = "1.5.3"
 futures = "0.3.28"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4.8"
 parking_lot = "0.12.0"
 quicksink = "0.1"
-rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
+rw-stream-sink = { workspace = true }
 soketto = { version = "0.7.0", features = ["deflate"] }
 url = "2.1"
 webpki-roots = "0.23"
 
 [dev-dependencies]
-libp2p-tcp = { path = "../tcp", features = ["async-io"] }
-libp2p-dns = { path = "../dns", features = ["async-std"] }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-dns = { workspace = true, features = ["async-std"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
 rcgen = "0.9.3"
 

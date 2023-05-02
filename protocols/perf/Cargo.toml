@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-perf"
 edition = "2021"
-rust-version = "1.64.0"
+rust-version = { workspace = true }
 description = "libp2p perf protocol implementation"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,21 +17,21 @@ clap = { version = "4.2.5", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
 instant = "0.1.11"
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-dns = { version = "0.39.0", path = "../../transports/dns", features = ["async-std"] }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
-libp2p-noise = { version = "0.42.2", path = "../../transports/noise" }
-libp2p-quic = { version = "0.7.0-alpha.2", path = "../../transports/quic", features = ["async-std"] }
-libp2p-swarm = { version = "0.42.1", path = "../../swarm", features = ["macros", "async-std"] }
-libp2p-tcp = { version = "0.39.0", path = "../../transports/tcp", features = ["async-io"] }
-libp2p-yamux = { version = "0.43.1", path = "../../muxers/yamux" }
+libp2p-core = { workspace = true }
+libp2p-dns = { workspace = true, features = ["async-std"] }
+libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-quic = { workspace = true, features = ["async-std"] }
+libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
 log = "0.4"
 thiserror = "1.0"
 void = "1"
 
 [dev-dependencies]
 rand = "0.8"
-libp2p-swarm-test = { path = "../../swarm-test"}
+libp2p-swarm-test = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
