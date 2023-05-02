@@ -855,7 +855,9 @@ struct BehaviourAttributes {
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
 fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
-    env_logger::init();
+    let mut logger_builder = env_logger::Builder::new();
+    logger_builder.init(); // Initialize the logger only once.
+
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
