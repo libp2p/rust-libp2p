@@ -89,11 +89,9 @@ pub struct Config {
     /// is sent to a remote on a newly established connection.
     ///
     /// Defaults to 0ms.
-    #[deprecated(
-        note = "The `initial_delay` is no longer necessary and will be
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
                 completely removed since a remote should be able to instantly
-                answer to an identify request"
-    )]
+                answer to an identify request")]
     pub initial_delay: Duration,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
@@ -143,11 +141,9 @@ impl Config {
 
     /// Configures the initial delay before the first identification
     /// request is sent on a newly established connection to a peer.
-    #[deprecated(
-        note = "The `initial_delay` is no longer necessary and will be
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
                 completely removed since a remote should be able to instantly
-                answer to an identify request thus also this setter will be removed"
-    )]
+                answer to an identify request thus also this setter will be removed")]
     #[allow(deprecated)]
     pub fn with_initial_delay(mut self, d: Duration) -> Self {
         self.initial_delay = d;
@@ -751,6 +747,7 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
+            #[allow(deprecated)]
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone())
                     // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
