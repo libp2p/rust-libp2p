@@ -1,8 +1,12 @@
 ## 0.44.0 - unreleased
 
+- Change `mdns::Event` to hold `Vec` and remove `DiscoveredAddrsIter` and `ExpiredAddrsIter`.
+  See [PR 3621].
+  
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+[PR 3621]: https://github.com/libp2p/rust-libp2p/pull/3621
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.43.1
@@ -10,6 +14,7 @@
 - Derive `Clone` for `mdns::Event`. See [PR 3606].
 
 [PR 3606]: https://github.com/libp2p/rust-libp2p/pull/3606
+
 ## 0.43.0
 
 - Update to `libp2p-core` `v0.39.0`.
