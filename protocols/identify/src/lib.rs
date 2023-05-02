@@ -49,6 +49,7 @@ mod handler;
 mod protocol;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::structs::Identify;
+    pub(crate) use self::structs::Identify;
 }

@@ -1,3 +1,16 @@
+## 0.43.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.42.2
+
+- Add `ConnectionEvent::{is_outbound,is_inbound}`. See [PR 3625].
+
+[PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3625
+
 ## 0.42.1
 
 - Deprecate `ConnectionLimits` in favor of `libp2p::connection_limits`.
