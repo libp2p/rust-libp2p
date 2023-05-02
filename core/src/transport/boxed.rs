@@ -29,7 +29,7 @@ use std::{
 };
 
 /// Creates a new [`Boxed`] transport from the given transport.
-pub fn boxed<T>(transport: T) -> Boxed<T::Output>
+pub(crate) fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send + Sync,

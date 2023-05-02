@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future, prelude::*};
-use libp2p_core::{transport::Transport, upgrade};
+use futures::prelude::*;
+use libp2p_core::OutboundUpgrade;
 use libp2p_deflate::DeflateConfig;
-use libp2p_tcp as tcp;
 use quickcheck::{QuickCheck, TestResult};
 use rand::RngCore;
 
@@ -31,7 +30,7 @@ fn deflate() {
         if message.is_empty() {
             return TestResult::discard();
         }
-        async_std::task::block_on(run(message));
+        futures::executor::block_on(run(message));
         TestResult::passed()
     }
     QuickCheck::new().quickcheck(prop as fn(Vec<u8>) -> TestResult)
@@ -41,68 +40,41 @@ fn deflate() {
 fn lot_of_data() {
     let mut v = vec![0; 2 * 1024 * 1024];
     rand::thread_rng().fill_bytes(&mut v);
-    async_std::task::block_on(run(v))
+    futures::executor::block_on(run(v));
 }
 
 async fn run(message1: Vec<u8>) {
-    let new_transport = || {
-        tcp::async_io::Transport::default()
-            .and_then(|conn, endpoint| {
-                upgrade::apply(
-                    conn,
-                    DeflateConfig::default(),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .boxed()
-    };
-    let mut listener_transport = new_transport();
-    listener_transport
-        .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
-        .expect("listener");
-
-    let listen_addr = listener_transport
-        .next()
-        .await
-        .expect("some event")
-        .into_new_address()
-        .expect("new address");
+    let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
 
     let message2 = message1.clone();
 
-    let listener_task = async_std::task::spawn(async move {
-        let mut conn = listener_transport
-            .filter(|e| future::ready(e.is_upgrade()))
-            .next()
+    let client_task = async move {
+        let mut client = DeflateConfig::default()
+            .upgrade_outbound(client, b"")
             .await
-            .expect("some event")
-            .into_incoming()
-            .expect("upgrade")
-            .0
-            .await
-            .expect("connection");
+            .unwrap();
 
         let mut buf = vec![0; message2.len()];
-        conn.read_exact(&mut buf).await.expect("read_exact");
+        client.read_exact(&mut buf).await.expect("read_exact");
         assert_eq!(&buf[..], &message2[..]);
 
-        conn.write_all(&message2).await.expect("write_all");
-        conn.close().await.expect("close")
-    });
+        client.write_all(&message2).await.expect("write_all");
+        client.close().await.expect("close")
+    };
 
-    let mut dialer_transport = new_transport();
-    let mut conn = dialer_transport
-        .dial(listen_addr)
-        .expect("dialer")
-        .await
-        .expect("connection");
-    conn.write_all(&message1).await.expect("write_all");
-    conn.close().await.expect("close");
+    let server_task = async move {
+        let mut server = DeflateConfig::default()
+            .upgrade_outbound(server, b"")
+            .await
+            .unwrap();
 
-    let mut buf = Vec::new();
-    conn.read_to_end(&mut buf).await.expect("read_to_end");
-    assert_eq!(&buf[..], &message1[..]);
+        server.write_all(&message1).await.expect("write_all");
+        server.close().await.expect("close");
 
-    listener_task.await
+        let mut buf = Vec::new();
+        server.read_to_end(&mut buf).await.expect("read_to_end");
+        assert_eq!(&buf[..], &message1[..]);
+    };
+
+    futures::future::join(server_task, client_task).await;
 }

@@ -133,7 +133,6 @@ impl Behaviour {
                         handler: NotifyHandler::One(connection_id),
                         event: Either::Left(handler::relayed::Command::Connect {
                             obs_addrs: self.observed_addreses(),
-                            attempt: 1,
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
@@ -190,7 +189,6 @@ impl Behaviour {
                 handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {
-                    attempt: attempt + 1,
                     obs_addrs: self.observed_addreses(),
                 }),
             })
