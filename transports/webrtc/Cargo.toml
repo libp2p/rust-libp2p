@@ -1,12 +1,12 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.4.0-alpha.4"
+version = "0.5.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
@@ -18,14 +18,14 @@ futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
 if-watch = "3.0"
-libp2p-core = { version = "0.39.0", path = "../../core"  }
-libp2p-noise = { version = "0.42.2", path = "../../transports/noise" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4"
 sha2 = "0.10.6"
 multihash = { version = "0.17.0", default-features = false }
 quick-protobuf = "0.8"
-quick-protobuf-codec = { version = "0.1", path = "../../misc/quick-protobuf-codec" }
+quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 rcgen = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
@@ -44,8 +44,8 @@ pem = ["webrtc?/pem"]
 anyhow = "1.0"
 env_logger = "0.10"
 hex-literal = "0.4"
-libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
-libp2p-ping = { path = "../../protocols/ping" }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
+libp2p-ping = { workspace = true }
 tokio = { version = "1.28", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"

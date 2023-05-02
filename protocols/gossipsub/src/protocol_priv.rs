@@ -516,7 +516,7 @@ mod tests {
     use crate::{Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
     use libp2p_core::identity::Keypair;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     #[derive(Clone, Debug)]
     struct Message(RawMessage);

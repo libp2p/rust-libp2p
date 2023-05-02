@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-dns"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
-version = "0.39.0"
+version = "0.40.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,8 +11,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.39.0", path = "../../core" }
-libp2p-identity = { version = "0.1.0", path = "../../identity" }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
 log = "0.4.1"
 futures = "0.3.28"
 async-std-resolver = { version = "0.22", optional = true }
