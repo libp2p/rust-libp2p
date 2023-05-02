@@ -4,8 +4,12 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Reduce the initial delay before running the identify protocol to 0 and make the option deprecated.
+  See [PR 3545].
+
 [PR 3698]: https://github.com/libp2p/rust-libp2p/pull/3698
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3545]: https://github.com/libp2p/rust-libp2p/pull/3545
 
 ## 0.42.2
 
