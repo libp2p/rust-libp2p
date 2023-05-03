@@ -63,7 +63,7 @@ pub struct Muxer<S> {
     inbound_stream_waker: Option<Waker>,
 }
 
-const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
+const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<S> fmt::Debug for Muxer<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
