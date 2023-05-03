@@ -354,7 +354,7 @@ dependencies = [
  "polling",
  "rustix",
  "slab",
- "socket2",
+ "socket2 0.4.9",
  "waker-fn",
 ]
 
@@ -437,7 +437,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "pin-utils",
- "socket2",
+ "socket2 0.4.9",
  "trust-dns-resolver",
 ]
 
@@ -1991,7 +1991,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.9",
- "socket2",
+ "socket2 0.4.9",
  "tokio",
  "tower-service",
  "tracing",
@@ -2149,7 +2149,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd302af1b90f2463a98fa5ad469fc212c8e3175a41c3068601bfa2727591c5be"
 dependencies = [
- "socket2",
+ "socket2 0.4.9",
  "widestring",
  "winapi",
  "winreg",
@@ -2626,7 +2626,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "smallvec",
- "socket2",
+ "socket2 0.5.2",
  "tokio",
  "trust-dns-proto",
  "void",
@@ -2966,7 +2966,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "log",
- "socket2",
+ "socket2 0.5.2",
  "tokio",
 ]
 
@@ -4670,6 +4670,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d283f86695ae989d1e18440a943880967156325ba025f05049946bff47bcc2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "soketto"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4922,7 +4932,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "pin-project-lite 0.2.9",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.4.9",
  "tokio-macros",
  "windows-sys 0.48.0",
 ]
@@ -5034,7 +5044,7 @@ dependencies = [
  "rustls 0.20.8",
  "rustls-pemfile",
  "smallvec",
- "socket2",
+ "socket2 0.4.9",
  "thiserror",
  "tinyvec",
  "tokio",
@@ -5525,7 +5535,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f08dfd7a6e3987e255c4dbe710dde5d94d0f0574f8a21afa95d171376c143106"
 dependencies = [
  "log",
- "socket2",
+ "socket2 0.4.9",
  "thiserror",
  "tokio",
  "webrtc-util",
