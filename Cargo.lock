@@ -2630,6 +2630,7 @@ dependencies = [
  "bs58",
  "criterion",
  "ed25519-dalek",
+ "hex-literal",
  "libsecp256k1",
  "log",
  "multiaddr",

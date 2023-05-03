@@ -308,12 +308,4 @@ mod tests {
         let invalid_msg = "h3ll0 w0rld".as_bytes();
         assert!(!pk.verify(invalid_msg, &sig));
     }
-
-    #[test]
-    fn secret_key_encode_decode_roundtrip() {
-        let secret_key = SecretKey::generate();
-        let encoded_bytes = secret_key.encode_pkcs8_der();
-        let decoded_key = SecretKey::try_decode_pkcs8_der(encoded_bytes.clone().as_mut()).unwrap();
-        assert_eq!(decoded_key.encode_pkcs8_der(), encoded_bytes)
-    }
 }

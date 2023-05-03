@@ -715,6 +715,40 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ecdsa")]
+    fn keypair_protobuf_roundtrip_ecdsa() {
+        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+            "08031220f0d87659b402f0d47589e7670ca0954036f87b2fbf11fafbc66f4de7c3eb10a2"
+        ))
+        .unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de6af15d8bc9b7f7c6eb8b32888d0da721d33f16af062306bafc64cdad741240cd61d6d9884c4899308ea25513a5cc03495ff88200dc7ae8e603ceb6698d2fee")).unwrap();
+
+        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+    }
+
+    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey) {
+        assert_eq!(&private_key.public(), public_key);
+
+        let encoded_priv = private_key.to_protobuf_encoding().unwrap();
+        let decoded_priv = Keypair::from_protobuf_encoding(&encoded_priv).unwrap();
+
+        assert_eq!(
+            private_key.public().to_peer_id(),
+            decoded_priv.public().to_peer_id(),
+            "PeerId from roundtripped private key should be the same"
+        );
+
+        let encoded_public = private_key.public().encode_protobuf();
+        let decoded_public = PublicKey::try_decode_protobuf(&encoded_public).unwrap();
+
+        assert_eq!(
+            private_key.public().to_peer_id(),
+            decoded_public.to_peer_id(),
+            "PeerId from roundtripped public key should be the same"
+        );
+    }
+
+    #[test]
     #[cfg(feature = "peerid")]
     fn keypair_from_protobuf_encoding() {
         // E.g. retrieved from an IPFS config file.
