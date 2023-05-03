@@ -99,9 +99,9 @@ pub enum Error {
 /// Dialing a remote peer failed.
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectError(#[from] quinn::ConnectError);
+pub struct ConnectError(quinn::ConnectError);
 
 /// Error on an established [`Connection`].
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ConnectionError(#[from] quinn::ConnectionError);
+pub struct ConnectionError(quinn::ConnectionError);
