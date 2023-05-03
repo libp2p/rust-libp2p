@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "MyBehaviourEvent")]
+    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         kademlia: Kademlia<MemoryStore>,
         mdns: mdns::async_io::Behaviour,
