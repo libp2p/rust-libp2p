@@ -3,7 +3,11 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Increase the amount of buffered inbound streams to 256.
+  See [PR XXXX].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.43.1
 
