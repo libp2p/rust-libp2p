@@ -36,7 +36,7 @@ impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
 
     fn runtime() -> super::Runtime {
-        super::Runtime::Tokio(quinn::TokioRuntime)
+        super::Runtime::Tokio
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

@@ -37,7 +37,7 @@ impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
 
     fn runtime() -> super::Runtime {
-        super::Runtime::AsyncStd(quinn::AsyncStdRuntime)
+        super::Runtime::AsyncStd
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

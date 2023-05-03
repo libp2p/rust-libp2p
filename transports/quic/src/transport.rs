@@ -98,14 +98,16 @@ impl<P: Provider> GenTransport<P> {
         use crate::provider::Runtime;
         match P::runtime() {
             #[cfg(feature = "tokio")]
-            Runtime::Tokio(runtime) => {
+            Runtime::Tokio => {
+                let runtime = quinn::TokioRuntime;
                 let socket = std::net::UdpSocket::bind(socket_addr)?;
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
                 Ok(endpoint)
             }
             #[cfg(feature = "async-std")]
-            Runtime::AsyncStd(runtime) => {
+            Runtime::AsyncStd => {
+                let runtime = quinn::AsyncStdRuntime;
                 let socket = std::net::UdpSocket::bind(socket_addr)?;
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;

@@ -32,9 +32,9 @@ pub mod tokio;
 
 pub enum Runtime {
     #[cfg(feature = "tokio")]
-    Tokio(quinn::TokioRuntime),
+    Tokio,
     #[cfg(feature = "async-std")]
-    AsyncStd(quinn::AsyncStdRuntime),
+    AsyncStd,
     Dummy,
 }
 
