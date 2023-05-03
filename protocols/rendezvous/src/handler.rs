@@ -24,9 +24,8 @@ use void::Void;
 
 const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
 
-pub mod inbound;
-pub mod outbound;
-
+pub(crate) mod inbound;
+pub(crate) mod outbound;
 /// Errors that can occur while interacting with a substream.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, thiserror::Error)]
@@ -41,9 +40,10 @@ pub enum Error {
     UnexpectedEndOfStream,
 }
 
-pub type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
-pub type OutboundOutEvent =
+pub(crate) type OutboundInEvent = crate::substream_handler::InEvent<outbound::OpenInfo, Void, Void>;
+pub(crate) type OutboundOutEvent =
     crate::substream_handler::OutEvent<Void, outbound::OutEvent, Void, Error>;
 
-pub type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
-pub type InboundOutEvent = crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;
+pub(crate) type InboundInEvent = crate::substream_handler::InEvent<(), inbound::InEvent, Void>;
+pub(crate) type InboundOutEvent =
+    crate::substream_handler::OutEvent<inbound::OutEvent, Void, Error, Void>;
