@@ -126,7 +126,7 @@ impl SecretKey {
     }
 
     /// Encode the secret key into DER-encoded PKCS#8 format.
-    pub fn encode_pkcs8_der(&self) -> Vec<u8> {
+    pub(crate) fn encode_pkcs8_der(&self) -> Vec<u8> {
         self.0
             .to_pkcs8_der()
             .expect("Encoding to pkcs#8 format to succeed")
@@ -135,7 +135,7 @@ impl SecretKey {
     }
 
     /// Try to decode a secret key from a byte buffer in DER-encoded PKCS#8 format.
-    pub fn try_decode_pkcs8_der(buf: &[u8]) -> Result<Self, DecodingError> {
+    pub(crate) fn try_decode_pkcs8_der(buf: &[u8]) -> Result<Self, DecodingError> {
         match SigningKey::from_pkcs8_der(buf) {
             Ok(key) => Ok(SecretKey(key)),
             Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
