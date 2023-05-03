@@ -21,7 +21,7 @@
 use crate::error::{DecodingError, SigningError};
 
 #[derive(Debug, Clone)]
-pub enum Keypair {}
+pub struct Keypair;
 
 impl Keypair {
     pub fn sign(&self, _: &[u8]) -> Result<Vec<u8>, SigningError> {
@@ -44,7 +44,7 @@ impl Keypair {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum PublicKey {}
+pub struct PublicKey;
 
 impl PublicKey {
     #[must_use]
