@@ -1,7 +1,7 @@
 use futures::prelude::*;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::iter;
 
@@ -73,10 +73,10 @@ async fn identify_push() {
     let _ = env_logger::try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+        Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(
+        Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -85,19 +85,53 @@ async fn identify_push() {
     swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
+    // First, let the periodic identify do its thing.
+    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+        (
+            [BehaviourEvent::Identify(identify::Event::Sent { .. }), BehaviourEvent::Identify(identify::Event::Received { .. })],
+            [BehaviourEvent::Identify(identify::Event::Sent { .. }), BehaviourEvent::Identify(identify::Event::Received { .. })],
+        ) => {}
+        other => panic!("Unexpected events: {other:?}"),
+    };
+
+    // Second, actively push.
     swarm2
         .behaviour_mut()
+        .identify
         .push(iter::once(*swarm1.local_peer_id()));
 
-    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-        ([identify::Event::Received { info, .. }], [identify::Event::Pushed { .. }]) => {
-            assert_eq!(info.public_key.to_peer_id(), *swarm2.local_peer_id());
-            assert_eq!(info.protocol_version, "a");
-            assert_eq!(info.agent_version, "b");
-            assert!(!info.protocols.is_empty());
-            assert!(info.listen_addrs.is_empty());
-        }
+    let swarm1_received_info = match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+        (
+            [BehaviourEvent::Identify(identify::Event::Received { info, .. })],
+            [BehaviourEvent::Identify(identify::Event::Pushed { .. })],
+        ) => info,
         other => panic!("Unexpected events: {other:?}"),
+    };
+
+    assert_eq!(
+        swarm1_received_info.public_key.to_peer_id(),
+        *swarm2.local_peer_id()
+    );
+    assert_eq!(swarm1_received_info.protocol_version, "a");
+    assert_eq!(swarm1_received_info.agent_version, "b");
+    assert!(!swarm1_received_info.protocols.is_empty());
+    assert!(swarm1_received_info.listen_addrs.is_empty());
+
+    /// Combined behaviour to keep the connection alive after the periodic identify.
+    #[derive(libp2p_swarm::NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Behaviour {
+        identify: identify::Behaviour,
+        keep_alive: keep_alive::Behaviour,
+    }
+
+    impl Behaviour {
+        fn new(config: identify::Config) -> Self {
+            Self {
+                identify: identify::Behaviour::new(config),
+                keep_alive: keep_alive::Behaviour::default(),
+            }
+        }
     }
 }
 
