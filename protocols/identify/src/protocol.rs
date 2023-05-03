@@ -22,10 +22,12 @@ use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    identity, multiaddr,
+    multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr, PublicKey,
+    Multiaddr,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
@@ -167,7 +169,7 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.to_protobuf_encoding();
+    let pubkey_bytes = info.public_key.encode_protobuf();
 
     let message = proto::Identify {
         agentVersion: Some(info.agent_version),
@@ -233,7 +235,7 @@ impl TryFrom<proto::Identify> for Info {
             addrs
         };
 
-        let public_key = PublicKey::from_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
+        let public_key = PublicKey::try_decode_protobuf(&msg.publicKey.unwrap_or_default())?;
 
         let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,
@@ -266,7 +268,7 @@ pub enum UpgradeError {
     #[error("Failed decoding multiaddr")]
     Multiaddr(#[from] multiaddr::Error),
     #[error("Failed decoding public key")]
-    PublicKey(#[from] identity::error::DecodingError),
+    PublicKey(#[from] identity::DecodingError),
 }
 
 #[cfg(test)]
@@ -274,10 +276,10 @@ mod tests {
     use super::*;
     use futures::channel::oneshot;
     use libp2p_core::{
-        identity,
         upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
+    use libp2p_identity as identity;
     use libp2p_tcp as tcp;
 
     #[test]
@@ -384,7 +386,7 @@ mod tests {
             publicKey: Some(
                 identity::Keypair::generate_ed25519()
                     .public()
-                    .to_protobuf_encoding(),
+                    .encode_protobuf(),
             ),
         };
 

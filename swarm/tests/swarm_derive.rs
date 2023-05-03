@@ -434,13 +434,34 @@ fn generated_out_event_derive_debug() {
 }
 
 #[test]
+fn multiple_behaviour_attributes() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "FooEvent")]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo {
+        ping: ping::Behaviour,
+    }
+
+    require_net_behaviour::<Foo>();
+
+    struct FooEvent;
+
+    impl From<ping::Event> for FooEvent {
+        fn from(_: ping::Event) -> Self {
+            unimplemented!()
+        }
+    }
+}
+
+#[test]
 fn custom_out_event_no_type_parameters() {
-    use libp2p_core::PeerId;
-    use libp2p_swarm::{ConnectionId, NetworkBehaviourAction, PollParameters};
+    use libp2p_identity::PeerId;
+    use libp2p_swarm::{ConnectionId, PollParameters, ToSwarm};
     use std::task::Context;
     use std::task::Poll;
 
-    pub struct TemplatedBehaviour<T: 'static> {
+    pub(crate) struct TemplatedBehaviour<T: 'static> {
         _data: T,
     }
 
@@ -481,7 +502,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _ctx: &mut Context,
             _: &mut impl PollParameters,
-        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+        ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
             Poll::Pending
         }
 

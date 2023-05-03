@@ -25,7 +25,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     connections_incoming: Family<AddressLabels, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
@@ -45,7 +45,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("swarm");
 
         let connections_incoming = Family::default();
@@ -223,8 +223,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             };
                         }
                     }
-
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
+                    #[allow(deprecated)]
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
                         record(OutgoingConnectionError::ConnectionLimit)
                     }
@@ -249,6 +250,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     }
                 };
             }
+            #[allow(deprecated)]
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
                 self.connected_to_banned_peer
                     .get_or_create(&AddressLabels {
@@ -371,6 +373,7 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
     fn from(error: &libp2p_swarm::ListenError) -> Self {
         match error {
             libp2p_swarm::ListenError::WrongPeerId { .. } => IncomingConnectionError::WrongPeerId,
+            #[allow(deprecated)]
             libp2p_swarm::ListenError::ConnectionLimit(_) => {
                 IncomingConnectionError::ConnectionLimit
             }

@@ -28,13 +28,13 @@ use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{OrTransport, Transport},
-        upgrade, PeerId,
+        upgrade,
     },
     dcutr,
     dns::DnsConfig,
     identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux,
+    tcp, yamux, PeerId,
 };
 use log::info;
 use std::error::Error;
@@ -96,12 +96,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         )))
         .unwrap(),
     )
-    .upgrade(upgrade::Version::V1)
+    .upgrade(upgrade::Version::V1Lazy)
     .authenticate(
-        noise::NoiseAuthenticated::xx(&local_key)
-            .expect("Signing libp2p-noise static DH keypair failed."),
+        noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
     )
-    .multiplex(yamux::YamuxConfig::default())
+    .multiplex(yamux::Config::default())
     .boxed();
 
     #[derive(NetworkBehaviour)]
@@ -281,7 +280,5 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     let mut bytes = [0u8; 32];
     bytes[0] = secret_key_seed;
 
-    let secret_key = identity::ed25519::SecretKey::from_bytes(&mut bytes)
-        .expect("this returns `Err` only if the length is wrong; the length is correct; qed");
-    identity::Keypair::Ed25519(secret_key.into())
+    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
 }

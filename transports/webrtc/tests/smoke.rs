@@ -24,7 +24,8 @@ use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::transport::{Boxed, TransportEvent};
-use libp2p_core::{Multiaddr, PeerId, Transport};
+use libp2p_core::{Multiaddr, Transport};
+use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
 use std::future::Future;
@@ -40,8 +41,8 @@ async fn smoke() {
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
 
-    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
-    start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
+    start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, addr).await;
 
@@ -61,8 +62,8 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop as fn(_, _) -> _);
 }
 
-fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
-    libp2p_core::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_identity::Keypair {
+    libp2p_identity::Keypair::generate_ed25519()
 }
 
 fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
@@ -108,7 +109,8 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
 
             async move {
                 let (peer_id, mut listener) = create_transport();
-                let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/webrtc").await;
+                let addr =
+                    start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/webrtc-direct").await;
 
                 listeners_tx.send((peer_id, addr)).await.unwrap();
 
@@ -295,7 +297,7 @@ struct ListenUpgrade<'a> {
 }
 
 impl<'a> ListenUpgrade<'a> {
-    pub fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
+    pub(crate) fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
         Self {
             listener,
             listener_upgrade_task: None,

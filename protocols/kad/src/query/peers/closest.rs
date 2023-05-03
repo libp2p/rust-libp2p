@@ -20,15 +20,14 @@
 
 use super::*;
 
-use crate::kbucket::{Distance, Key, KeyBytes};
+use crate::kbucket_priv::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 
-pub mod disjoint;
-
+pub(crate) mod disjoint;
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
 #[derive(Debug, Clone)]
@@ -475,10 +474,9 @@ enum PeerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::{
-        multihash::{Code, Multihash},
-        PeerId,
-    };
+    use crate::SHA_256_MH;
+    use libp2p_core::multihash::Multihash;
+    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::{iter, time::Duration};
@@ -486,10 +484,8 @@ mod tests {
     fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
             .map(|_| {
-                PeerId::from_multihash(
-                    Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap(),
-                )
-                .unwrap()
+                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &g.gen::<[u8; 32]>()).unwrap())
+                    .unwrap()
             })
             .collect()
     }
@@ -507,8 +503,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
             let peer_id =
-                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
-                    .unwrap();
+                PeerId::from_multihash(Multihash::wrap(SHA_256_MH, &hash).unwrap()).unwrap();
             ArbitraryPeerId(peer_id)
         }
     }

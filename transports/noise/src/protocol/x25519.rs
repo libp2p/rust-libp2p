@@ -23,12 +23,11 @@
 //! **Note**: This set of protocols is not interoperable with other
 //! libp2p implementations.
 
-#![allow(deprecated)]
-
-use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
+use crate::{Error, NoiseConfig, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use libp2p_core::UpgradeInfo;
-use libp2p_core::{identity, identity::ed25519};
+use libp2p_identity as identity;
+use libp2p_identity::ed25519;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use sha2::{Digest, Sha512};
@@ -58,10 +57,6 @@ static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
 
 /// A X25519 key.
 #[derive(Clone)]
-#[deprecated(
-    since = "0.42.0",
-    note = "Will be removed because it is not compliant with the official libp2p specification. Use `X25519Spec` instead."
-)]
 pub struct X25519([u8; 32]);
 
 impl AsRef<[u8]> for X25519 {
@@ -121,9 +116,9 @@ impl Protocol<X25519> for X25519 {
         PARAMS_XX.clone()
     }
 
-    fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519>, NoiseError> {
+    fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519>, Error> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidLength);
+            return Err(Error::InvalidLength);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);
@@ -281,7 +276,7 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::identity::ed25519;
+    use libp2p_identity::ed25519;
     use quickcheck::*;
 
     // The x25519 public key obtained through ed25519 keypair conversion

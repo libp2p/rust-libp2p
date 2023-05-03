@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol_stack;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     protocols: Protocols,
     error: Counter,
     pushed: Counter,
@@ -42,7 +42,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("identify");
 
         let protocols = Protocols::default();

@@ -23,7 +23,8 @@ use crate::protocol::{MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{upgrade, PeerId};
+use libp2p_core::upgrade;
+use libp2p_identity::PeerId;
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryInto;
 use std::iter;
@@ -31,7 +32,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 pub struct Upgrade {
-    pub relay_peer_id: PeerId,
+    pub src_peer_id: PeerId,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
 }
@@ -54,7 +55,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::CONNECT,
             peer: Some(proto::Peer {
-                id: self.relay_peer_id.to_bytes(),
+                id: self.src_peer_id.to_bytes(),
                 addrs: vec![],
             }),
             limit: Some(proto::Limit {

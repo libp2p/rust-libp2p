@@ -23,7 +23,8 @@ mod noise;
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
-use libp2p_core::{identity, PeerId};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use webrtc::api::setting_engine::SettingEngine;
@@ -42,7 +43,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
 
 /// Creates a new outbound WebRTC connection.
-pub async fn outbound(
+pub(crate) async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
@@ -78,7 +79,7 @@ pub async fn outbound(
 }
 
 /// Creates a new inbound WebRTC connection.
-pub async fn inbound(
+pub(crate) async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,

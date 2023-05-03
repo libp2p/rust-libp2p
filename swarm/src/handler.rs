@@ -49,7 +49,8 @@ mod select;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
@@ -209,6 +210,38 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+}
+
+impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
+    ConnectionEvent<'a, IP, OP, IOI, OOI>
+{
+    /// Whether the event concerns an outbound stream.
+    pub fn is_outbound(&self) -> bool {
+        match self {
+            ConnectionEvent::DialUpgradeError(_) | ConnectionEvent::FullyNegotiatedOutbound(_) => {
+                true
+            }
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_) => false,
+        }
+    }
+
+    /// Whether the event concerns an inbound stream.
+    pub fn is_inbound(&self) -> bool {
+        // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
+        match self {
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
+                ..
+            }) => true,
+            ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::DialUpgradeError(_) => false,
+        }
+    }
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about
@@ -457,7 +490,7 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
 
 impl<TUpgrErr> fmt::Display for ConnectionHandlerUpgrErr<TUpgrErr>
 where
-    TUpgrErr: fmt::Display,
+    TUpgrErr: error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -467,7 +500,10 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
+            ConnectionHandlerUpgrErr::Upgrade(err) => {
+                write!(f, "Upgrade: ")?;
+                crate::print_error_chain(f, err)
+            }
         }
     }
 }
@@ -480,7 +516,7 @@ where
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
             ConnectionHandlerUpgrErr::Timer => None,
-            ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
+            ConnectionHandlerUpgrErr::Upgrade(_) => None,
         }
     }
 }

@@ -25,7 +25,7 @@ use crate::PlainText2Config;
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
-use libp2p_core::{PeerId, PublicKey};
+use libp2p_identity::{PeerId, PublicKey};
 use log::{debug, trace};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
@@ -43,18 +43,17 @@ struct Local {
 }
 
 // HandshakeContext<Local> --with_remote-> HandshakeContext<Remote>
-pub struct Remote {
+pub(crate) struct Remote {
     // The remote's peer ID:
-    pub peer_id: PeerId,
-    // The remote's public key:
-    pub public_key: PublicKey,
+    pub(crate) peer_id: PeerId, // The remote's public key:
+    pub(crate) public_key: PublicKey,
 }
 
 impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
         let exchange = Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.to_protobuf_encoding()),
+            pubkey: Some(config.local_public_key.encode_protobuf()),
         };
         let mut buf = Vec::with_capacity(exchange.get_size());
         let mut writer = Writer::new(&mut buf);
@@ -77,7 +76,7 @@ impl HandshakeContext<Local> {
         let mut reader = BytesReader::from_bytes(&exchange_bytes);
         let prop = Exchange::from_reader(&mut reader, &exchange_bytes)?;
 
-        let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
+        let public_key = PublicKey::try_decode_protobuf(&prop.pubkey.unwrap_or_default())?;
         let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;
 
         // Check the validity of the remote's `Exchange`.
@@ -95,7 +94,7 @@ impl HandshakeContext<Local> {
     }
 }
 
-pub async fn handshake<S>(
+pub(crate) async fn handshake<S>(
     socket: S,
     config: PlainText2Config,
 ) -> Result<(S, Remote, Bytes), PlainTextError>

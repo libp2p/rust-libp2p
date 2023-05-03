@@ -22,7 +22,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 
 pub mod protocol;
 
@@ -30,8 +30,9 @@ mod layer;
 mod topic;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
+    pub(crate) use self::floodsub::pb::{mod_RPC::SubOpts, Message, RPC};
 }
 
 pub use self::layer::{Floodsub, FloodsubEvent};

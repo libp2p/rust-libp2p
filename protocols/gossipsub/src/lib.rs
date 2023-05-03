@@ -50,8 +50,9 @@
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
 //! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
 //! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
-//! integers. They are chosen at random in this implementation of gossipsub, but are sequential in
-//! the current go implementation.
+//! integers. When messages are signed, they are monotonically increasing integers starting from a
+//! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
+//! NOTE: These numbers are sequential in the current go implementation.
 //!
 //! # Peer Discovery
 //!
@@ -137,84 +138,39 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod error;
-pub mod metrics;
-pub mod protocol;
-pub mod subscription_filter;
-pub mod time_cache;
-
 mod backoff;
 mod behaviour;
 mod config;
-mod error_priv;
+mod error;
 mod gossip_promises;
 mod handler;
 mod mcache;
+mod metrics;
 mod peer_score;
+mod protocol;
+mod rpc_proto;
+mod subscription_filter;
+mod time_cache;
 mod topic;
 mod transform;
 mod types;
 
-mod rpc_proto;
-
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error_priv::{HandlerError, PublishError, SubscriptionError, ValidationError};
+pub use self::error::{PublishError, SubscriptionError, ValidationError};
+pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
+pub use self::subscription_filter::{
+    AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
+    MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
+    WhitelistSubscriptionFilter,
+};
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `Behaviour` instead of `Gossipsub` for Network Behaviour, i.e. `libp2p::gossipsub::Behaviour"
-)]
-pub type Gossipsub = Behaviour;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Event"
-)]
-pub type GossipsubEvent = Event;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
-)]
-pub type GossipsubConfig = Config;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Message"
-)]
-pub type GossipsubMessage = Message;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Rpc"
-)]
-pub type GossipsubRpc = Rpc;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` infix, i.e. `libp2p::gossipsub::RawMessage"
-)]
-pub type RawGossipsubMessage = RawMessage;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::ConfigBuilder"
-)]
-pub type GossipsubConfigBuilder = ConfigBuilder;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
-)]
-pub type GossipsubVersion = Version;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

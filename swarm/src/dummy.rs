@@ -1,4 +1,4 @@
-use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, PollParameters, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -8,8 +8,9 @@ use crate::{
     SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::{Endpoint, PeerId};
+use libp2p_core::Endpoint;
 use libp2p_core::{Multiaddr, UpgradeError};
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -53,7 +54,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 

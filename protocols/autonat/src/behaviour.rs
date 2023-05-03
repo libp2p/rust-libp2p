@@ -28,7 +28,8 @@ use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_request_response::{
     self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
@@ -38,10 +39,10 @@ use libp2p_swarm::{
         ExpiredListenAddr, FromSwarm,
     },
     ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -169,7 +170,7 @@ pub struct Behaviour {
     config: Config,
 
     // Additional peers apart from the currently connected ones, that may be used for probes.
-    servers: Vec<PeerId>,
+    servers: HashSet<PeerId>,
 
     // Assumed NAT status.
     nat_status: NatStatus,
@@ -207,9 +208,7 @@ pub struct Behaviour {
 
     last_probe: Option<Instant>,
 
-    pending_actions: VecDeque<
-        NetworkBehaviourAction<<Self as NetworkBehaviour>::OutEvent, THandlerInEvent<Self>>,
-    >,
+    pending_actions: VecDeque<ToSwarm<<Self as NetworkBehaviour>::OutEvent, THandlerInEvent<Self>>>,
 
     probe_id: ProbeId,
 
@@ -228,7 +227,7 @@ impl Behaviour {
             inner,
             schedule_probe: Delay::new(config.boot_delay),
             config,
-            servers: Vec::new(),
+            servers: HashSet::new(),
             ongoing_inbound: HashMap::default(),
             ongoing_outbound: HashMap::default(),
             connected: HashMap::default(),
@@ -267,7 +266,7 @@ impl Behaviour {
     /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
     /// establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
-        self.servers.push(peer);
+        self.servers.insert(peer);
         if let Some(addr) = address {
             self.inner.add_address(&peer, addr);
         }
@@ -335,9 +334,7 @@ impl Behaviour {
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_actions
-                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
-                            event,
-                        )));
+                        .push_back(ToSwarm::GenerateEvent(Event::InboundProbe(event)));
                 }
             }
             ConnectedPoint::Dialer {
@@ -398,9 +395,7 @@ impl Behaviour {
             }));
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
-                    event,
-                )));
+                .push_back(ToSwarm::GenerateEvent(Event::InboundProbe(event)));
         }
     }
 
@@ -440,7 +435,7 @@ impl NetworkBehaviour for Behaviour {
             }
 
             match self.inner.poll(cx, params) {
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                Poll::Ready(ToSwarm::GenerateEvent(event)) => {
                     let actions = match event {
                         request_response::Event::Message {
                             message: request_response::Message::Response { .. },
@@ -473,9 +468,7 @@ impl NetworkBehaviour for Behaviour {
             match self.as_client().poll_auto_probe(cx) {
                 Poll::Ready(event) => {
                     self.pending_actions
-                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
-                            event,
-                        )));
+                        .push_back(ToSwarm::GenerateEvent(Event::OutboundProbe(event)));
                     continue;
                 }
                 Poll::Pending => {}
@@ -600,8 +593,7 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-type Action =
-    NetworkBehaviourAction<<Behaviour as NetworkBehaviour>::OutEvent, THandlerInEvent<Behaviour>>;
+type Action = ToSwarm<<Behaviour as NetworkBehaviour>::OutEvent, THandlerInEvent<Behaviour>>;
 
 // Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {

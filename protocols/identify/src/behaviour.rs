@@ -20,12 +20,13 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandlerInEvent,
+    AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -42,7 +43,7 @@ use std::{
 /// about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
-/// are reported via [`NetworkBehaviourAction::ReportObservedAddr`] with a
+/// are reported via [`ToSwarm::ReportObservedAddr`] with a
 /// [score](AddressScore) of `1`.
 pub struct Behaviour {
     config: Config,
@@ -53,7 +54,7 @@ pub struct Behaviour {
     /// with current information about the local peer.
     requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, InEvent>>,
+    events: VecDeque<ToSwarm<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 
@@ -87,7 +88,10 @@ pub struct Config {
     /// The initial delay before the first identification request
     /// is sent to a remote on a newly established connection.
     ///
-    /// Defaults to 500ms.
+    /// Defaults to 0ms.
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
+                completely removed since a remote should be able to instantly
+                answer to an identify request")]
     pub initial_delay: Duration,
     /// The interval at which identification requests are sent to
     /// the remote on established connections after the first request,
@@ -116,12 +120,13 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
+    #[allow(deprecated)]
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
         Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
             local_public_key,
-            initial_delay: Duration::from_millis(500),
+            initial_delay: Duration::from_millis(0),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             cache_size: 100,
@@ -136,6 +141,10 @@ impl Config {
 
     /// Configures the initial delay before the first identification
     /// request is sent on a newly established connection to a peer.
+    #[deprecated(note = "The `initial_delay` is no longer necessary and will be
+                completely removed since a remote should be able to instantly
+                answer to an identify request thus also this setter will be removed")]
+    #[allow(deprecated)]
     pub fn with_initial_delay(mut self, d: Duration) -> Self {
         self.initial_delay = d;
         self
@@ -191,16 +200,17 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
+            if !self.connected.contains_key(&p) {
+                log::debug!("Not pushing to {p} because we are not connected");
+                continue;
+            }
+
             let request = Request {
                 peer_id: p,
                 protocol: Protocol::Push,
             };
             if !self.requests.contains(&request) {
                 self.requests.push(request);
-
-                self.events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(p).build(),
-                });
             }
         }
     }
@@ -237,6 +247,7 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -255,6 +266,7 @@ impl NetworkBehaviour for Behaviour {
         ))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -291,27 +303,19 @@ impl NetworkBehaviour for Behaviour {
 
                 let observed = info.observed_addr.clone();
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Received {
-                        peer_id,
-                        info,
-                    }));
-                self.events
-                    .push_back(NetworkBehaviourAction::ReportObservedAddr {
-                        address: observed,
-                        score: AddressScore::Finite(1),
-                    });
+                    .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
+                self.events.push_back(ToSwarm::ReportObservedAddr {
+                    address: observed,
+                    score: AddressScore::Finite(1),
+                });
             }
             handler::Event::Identification(peer) => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Sent {
-                        peer_id: peer,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id: peer }));
             }
             handler::Event::IdentificationPushed => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Pushed {
-                        peer_id,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
             }
             handler::Event::Identify => {
                 self.requests.push(Request {
@@ -321,10 +325,7 @@ impl NetworkBehaviour for Behaviour {
             }
             handler::Event::IdentificationError(error) => {
                 self.events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Error {
-                        peer_id,
-                        error,
-                    }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
             }
         }
     }
@@ -333,7 +334,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -343,7 +344,7 @@ impl NetworkBehaviour for Behaviour {
             Some(Request {
                 peer_id,
                 protocol: Protocol::Push,
-            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+            }) => Poll::Ready(ToSwarm::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::Any,
                 event: InEvent {
@@ -360,7 +361,7 @@ impl NetworkBehaviour for Behaviour {
             Some(Request {
                 peer_id,
                 protocol: Protocol::Identify(connection_id),
-            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+            }) => Poll::Ready(ToSwarm::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::One(connection_id),
                 event: InEvent {
@@ -559,10 +560,12 @@ mod tests {
     use super::*;
     use futures::pin_mut;
     use futures::prelude::*;
-    use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
+    use libp2p_core::{muxing::StreamMuxerBox, transport, upgrade, Transport};
+    use libp2p_identity as identity;
+    use libp2p_identity::PeerId;
     use libp2p_mplex::MplexConfig;
     use libp2p_noise as noise;
-    use libp2p_swarm::{Swarm, SwarmEvent};
+    use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
     use libp2p_tcp as tcp;
     use std::time::Duration;
 
@@ -571,13 +574,10 @@ mod tests {
         transport::Boxed<(PeerId, StreamMuxerBox)>,
     ) {
         let id_keys = identity::Keypair::generate_ed25519();
-        let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-            .into_authentic(&id_keys)
-            .unwrap();
         let pubkey = id_keys.public();
         let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .authenticate(noise::Config::new(&id_keys).unwrap())
             .multiplex(MplexConfig::new())
             .boxed();
         (pubkey, transport)
@@ -590,7 +590,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -599,7 +601,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -667,7 +671,9 @@ mod tests {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -676,7 +682,9 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
+            let swarm =
+                SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+                    .build();
             (swarm, pubkey)
         };
 
@@ -739,6 +747,7 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
+            #[allow(deprecated)]
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone())
                     // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
@@ -748,7 +757,7 @@ mod tests {
                     .with_initial_delay(Duration::from_secs(10)),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let mut swarm2 = {
@@ -757,7 +766,7 @@ mod tests {
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
-            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
+            SwarmBuilder::with_async_std_executor(transport, protocol, pubkey.to_peer_id()).build()
         };
 
         let swarm1_peer_id = *swarm1.local_peer_id();

@@ -34,17 +34,17 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
-use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
-    DialFailure, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    DialFailure, NegotiatedSubstream, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
-use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use transport::Transport;
@@ -103,7 +103,7 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<Event, Either<handler::In, Void>>>,
+    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
@@ -218,12 +218,11 @@ impl NetworkBehaviour for Behaviour {
                 }
 
                 if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
-                    self.queued_actions
-                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::One(connection_id),
-                            event: Either::Left(event),
-                        })
+                    self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                        peer_id,
+                        handler: NotifyHandler::One(connection_id),
+                        event: Either::Left(event),
+                    })
                 }
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
@@ -295,15 +294,14 @@ impl NetworkBehaviour for Behaviour {
             }
         };
 
-        self.queued_actions
-            .push_back(NetworkBehaviourAction::GenerateEvent(event))
+        self.queued_actions.push_back(ToSwarm::GenerateEvent(event))
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
         }
@@ -319,7 +317,7 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::Reserve { to_listener }),
@@ -333,7 +331,7 @@ impl NetworkBehaviour for Behaviour {
 
                         self.pending_handler_commands
                             .insert(relayed_connection_id, handler::In::Reserve { to_listener });
-                        NetworkBehaviourAction::Dial { opts }
+                        ToSwarm::Dial { opts }
                     }
                 }
             }
@@ -349,7 +347,7 @@ impl NetworkBehaviour for Behaviour {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
@@ -372,7 +370,7 @@ impl NetworkBehaviour for Behaviour {
                             },
                         );
 
-                        NetworkBehaviourAction::Dial { opts }
+                        ToSwarm::Dial { opts }
                     }
                 }
             }
@@ -388,32 +386,43 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-/// A [`NegotiatedSubstream`] acting as a [`Connection`].
-pub enum Connection {
+/// Represents a connection to another peer via a relay.
+///
+/// Internally, this uses a stream to the relay.
+pub struct Connection {
+    state: ConnectionState,
+}
+
+enum ConnectionState {
     InboundAccepting {
-        accept: BoxFuture<'static, Result<Connection, Error>>,
+        accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },
     Operational {
         read_buffer: Bytes,
         substream: NegotiatedSubstream,
+        /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
+        ///
+        /// This is flagged as "dead-code" by the compiler because we never read from it here.
+        /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
+        #[allow(dead_code)]
         drop_notifier: oneshot::Sender<void::Void>,
     },
 }
 
-impl Unpin for Connection {}
+impl Unpin for ConnectionState {}
 
-impl Connection {
+impl ConnectionState {
     pub(crate) fn new_inbound(
         circuit: inbound_stop::Circuit,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        Connection::InboundAccepting {
+        ConnectionState::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
                     .accept()
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e))?;
-                Ok(Connection::Operational {
+                Ok(ConnectionState::Operational {
                     read_buffer,
                     substream,
                     drop_notifier,
@@ -428,7 +437,7 @@ impl Connection {
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        Connection::Operational {
+        ConnectionState::Operational {
             substream,
             read_buffer,
             drop_notifier,
@@ -443,11 +452,13 @@ impl AsyncWrite for Connection {
         buf: &[u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write(cx, buf);
                 }
             }
@@ -455,11 +466,13 @@ impl AsyncWrite for Connection {
     }
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_flush(cx);
                 }
             }
@@ -467,11 +480,13 @@ impl AsyncWrite for Connection {
     }
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_close(cx);
                 }
             }
@@ -484,11 +499,13 @@ impl AsyncWrite for Connection {
         bufs: &[IoSlice],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational { substream, .. } => {
+                ConnectionState::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write_vectored(cx, bufs);
                 }
             }
@@ -503,11 +520,13 @@ impl AsyncRead for Connection {
         buf: &mut [u8],
     ) -> Poll<Result<usize, Error>> {
         loop {
-            match self.deref_mut() {
-                Connection::InboundAccepting { accept } => {
-                    *self = ready!(accept.poll_unpin(cx))?;
+            match &mut self.state {
+                ConnectionState::InboundAccepting { accept } => {
+                    *self = Connection {
+                        state: ready!(accept.poll_unpin(cx))?,
+                    };
                 }
-                Connection::Operational {
+                ConnectionState::Operational {
                     read_buffer,
                     substream,
                     ..
