@@ -63,6 +63,10 @@ pub struct Muxer<S> {
     inbound_stream_waker: Option<Waker>,
 }
 
+/// Yamux does not have any built-in backpressure mechanism.
+///
+/// Implementations are encouraged to not open more than 256 unacknowledged streams, see <https://github.com/libp2p/specs/tree/master/yamux#ack-backlog>.
+/// Thus, it makes sense to buffer up to 256 streams before dropping them for good interoperability.
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<S> fmt::Debug for Muxer<S> {
