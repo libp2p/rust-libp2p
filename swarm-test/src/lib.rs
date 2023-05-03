@@ -27,10 +27,12 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
+    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
+    THandlerErr,
 };
-use libp2p_yamux::YamuxConfig;
+use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -214,11 +216,11 @@ where
             .authenticate(PlainText2Config {
                 local_public_key: identity.public(),
             })
-            .multiplex(YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::without_executor(transport, behaviour_fn(identity), peer_id)
+        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id).build()
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
@@ -234,6 +236,7 @@ where
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
+            .condition(PeerCondition::Always)
             .build();
 
         self.dial(dial_opts).unwrap();

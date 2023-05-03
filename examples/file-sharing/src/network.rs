@@ -14,11 +14,13 @@ use libp2p::{
         record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult,
     },
     multiaddr::Protocol,
+    noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent},
-    PeerId,
+    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
+    tcp, yamux, PeerId, Transport,
 };
 
+use libp2p::core::upgrade::Version;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
 use std::iter;
@@ -31,7 +33,7 @@ use std::iter;
 /// - The network event stream, e.g. for incoming requests.
 ///
 /// - The network task driving the network itself.
-pub async fn new(
+pub(crate) async fn new(
     secret_key_seed: Option<u8>,
 ) -> Result<(Client, impl Stream<Item = Event>, EventLoop), Box<dyn Error>> {
     // Create a public/private key pair, either random or based on a seed.
@@ -45,10 +47,16 @@ pub async fn new(
     };
     let peer_id = id_keys.public().to_peer_id();
 
+    let transport = tcp::async_io::Transport::default()
+        .upgrade(Version::V1Lazy)
+        .authenticate(noise::Config::new(&id_keys)?)
+        .multiplex(yamux::Config::default())
+        .boxed();
+
     // Build the Swarm, connecting the lower layer transport logic with the
     // higher layer network behaviour logic.
-    let swarm = Swarm::with_threadpool_executor(
-        libp2p::development_transport(id_keys).await?,
+    let swarm = SwarmBuilder::with_async_std_executor(
+        transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
             request_response: request_response::Behaviour::new(
@@ -58,7 +66,8 @@ pub async fn new(
             ),
         },
         peer_id,
-    );
+    )
+    .build();
 
     let (command_sender, command_receiver) = mpsc::channel(0);
     let (event_sender, event_receiver) = mpsc::channel(0);
@@ -73,13 +82,16 @@ pub async fn new(
 }
 
 #[derive(Clone)]
-pub struct Client {
+pub(crate) struct Client {
     sender: mpsc::Sender<Command>,
 }
 
 impl Client {
     /// Listen for incoming connections on the given address.
-    pub async fn start_listening(&mut self, addr: Multiaddr) -> Result<(), Box<dyn Error + Send>> {
+    pub(crate) async fn start_listening(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<(), Box<dyn Error + Send>> {
         let (sender, receiver) = oneshot::channel();
         self.sender
             .send(Command::StartListening { addr, sender })
@@ -89,7 +101,7 @@ impl Client {
     }
 
     /// Dial the given peer at the given address.
-    pub async fn dial(
+    pub(crate) async fn dial(
         &mut self,
         peer_id: PeerId,
         peer_addr: Multiaddr,
@@ -107,7 +119,7 @@ impl Client {
     }
 
     /// Advertise the local node as the provider of the given file on the DHT.
-    pub async fn start_providing(&mut self, file_name: String) {
+    pub(crate) async fn start_providing(&mut self, file_name: String) {
         let (sender, receiver) = oneshot::channel();
         self.sender
             .send(Command::StartProviding { file_name, sender })
@@ -117,7 +129,7 @@ impl Client {
     }
 
     /// Find the providers for the given file on the DHT.
-    pub async fn get_providers(&mut self, file_name: String) -> HashSet<PeerId> {
+    pub(crate) async fn get_providers(&mut self, file_name: String) -> HashSet<PeerId> {
         let (sender, receiver) = oneshot::channel();
         self.sender
             .send(Command::GetProviders { file_name, sender })
@@ -127,7 +139,7 @@ impl Client {
     }
 
     /// Request the content of the given file from the given peer.
-    pub async fn request_file(
+    pub(crate) async fn request_file(
         &mut self,
         peer: PeerId,
         file_name: String,
@@ -145,7 +157,11 @@ impl Client {
     }
 
     /// Respond with the provided file content to the given request.
-    pub async fn respond_file(&mut self, file: Vec<u8>, channel: ResponseChannel<FileResponse>) {
+    pub(crate) async fn respond_file(
+        &mut self,
+        file: Vec<u8>,
+        channel: ResponseChannel<FileResponse>,
+    ) {
         self.sender
             .send(Command::RespondFile { file, channel })
             .await
@@ -153,7 +169,7 @@ impl Client {
     }
 }
 
-pub struct EventLoop {
+pub(crate) struct EventLoop {
     swarm: Swarm<ComposedBehaviour>,
     command_receiver: mpsc::Receiver<Command>,
     event_sender: mpsc::Sender<Event>,
@@ -181,7 +197,7 @@ impl EventLoop {
         }
     }
 
-    pub async fn run(mut self) {
+    pub(crate) async fn run(mut self) {
         loop {
             futures::select! {
                 event = self.swarm.next() => self.handle_event(event.expect("Swarm stream to be infinite.")).await  ,
@@ -443,7 +459,7 @@ enum Command {
 }
 
 #[derive(Debug)]
-pub enum Event {
+pub(crate) enum Event {
     InboundRequest {
         request: String,
         channel: ResponseChannel<FileResponse>,
@@ -459,8 +475,7 @@ struct FileExchangeCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FileRequest(String);
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FileResponse(Vec<u8>);
-
+pub(crate) struct FileResponse(Vec<u8>);
 impl ProtocolName for FileExchangeProtocol {
     fn protocol_name(&self) -> &[u8] {
         "/file-exchange/1".as_bytes()

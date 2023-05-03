@@ -7,7 +7,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.18.3/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+    - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.20.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
       shell: bash
 
     - name: Get released version
@@ -17,12 +17,20 @@ runs:
         MAX_STABLE_VERSION=$(curl https://crates.io/api/v1/crates/${{ inputs.crate }} --silent | jq '.crate.max_stable_version')
         echo "version=${MAX_STABLE_VERSION}" >> $GITHUB_OUTPUT
 
+    - shell: bash
+      run: |
+        rustc --version | tee .rustc-version
+        cargo semver-checks --version | tee .semver-checks-version
+
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: semver-checks-cache-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
+        key: semver-checks-cache-${{ hashFiles('.rustc-version') }}-${{ hashFiles('.semver-checks-version') }}-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
 
     - run: cargo semver-checks check-release --package ${{ inputs.crate }} --verbose
       shell: bash
       env:
         CARGO_TERM_VERBOSE: "true"
+        # debugging https://github.com/libp2p/rust-libp2p/pull/3782#issuecomment-1523346255
+        CARGO_HTTP_DEBUG: "true"
+        CARGO_LOG: "cargo::ops::registry=debug"

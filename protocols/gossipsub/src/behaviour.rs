@@ -40,8 +40,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use wasm_timer::Instant;
 
@@ -64,6 +64,7 @@ use crate::types::{
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto::proto, TopicScoreParams};
 use crate::{PublishError, SubscriptionError, ValidationError};
+use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -80,7 +81,7 @@ mod tests;
 #[derive(Clone)]
 pub enum MessageAuthenticity {
     /// Message signing is enabled. The author will be the owner of the key and the sequence number
-    /// will be a random number.
+    /// will be linearly increasing.
     Signed(Keypair),
     /// Message signing is disabled.
     ///
@@ -149,20 +150,46 @@ pub enum Event {
 /// A data structure for storing configuration for publishing messages. See [`MessageAuthenticity`]
 /// for further details.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
 enum PublishConfig {
     Signing {
         keypair: Keypair,
         author: PeerId,
         inline_key: Option<Vec<u8>>,
+        last_seq_no: SequenceNumber,
     },
     Author(PeerId),
     RandomAuthor,
     Anonymous,
 }
 
+/// A strictly linearly increasing sequence number.
+///
+/// We start from the current time as unix timestamp in milliseconds.
+#[derive(Debug)]
+struct SequenceNumber(u64);
+
+impl SequenceNumber {
+    fn new() -> Self {
+        let unix_timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time to be linear")
+            .as_nanos();
+
+        Self(unix_timestamp as u64)
+    }
+
+    fn next(&mut self) -> u64 {
+        self.0 = self
+            .0
+            .checked_add(1)
+            .expect("to not exhaust u64 space for sequence numbers");
+
+        self.0
+    }
+}
+
 impl PublishConfig {
-    pub fn get_own_id(&self) -> Option<&PeerId> {
+    pub(crate) fn get_own_id(&self) -> Option<&PeerId> {
         match self {
             Self::Signing { author, .. } => Some(author),
             Self::Author(author) => Some(author),
@@ -176,7 +203,7 @@ impl From<MessageAuthenticity> for PublishConfig {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
                 let public_key = keypair.public();
-                let key_enc = public_key.to_protobuf_encoding();
+                let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::proto::Message::key`] field.
@@ -190,6 +217,7 @@ impl From<MessageAuthenticity> for PublishConfig {
                     keypair,
                     author: public_key.to_peer_id(),
                     inline_key: key,
+                    last_seq_no: SequenceNumber::new(),
                 }
             }
             MessageAuthenticity::Author(peer_id) => PublishConfig::Author(peer_id),
@@ -215,7 +243,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     config: Config,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
+    events: VecDeque<ToSwarm<Event, HandlerIn>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<ControlAction>>,
@@ -1130,7 +1158,7 @@ where
         if !self.peer_topics.contains_key(peer_id) {
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
-            self.events.push_back(NetworkBehaviourAction::Dial {
+            self.events.push_back(ToSwarm::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
             });
         }
@@ -1629,7 +1657,7 @@ where
                 self.px_peers.insert(peer_id);
 
                 // dial peer
-                self.events.push_back(NetworkBehaviourAction::Dial {
+                self.events.push_back(ToSwarm::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
                 });
             }
@@ -1815,7 +1843,7 @@ where
         if self.mesh.contains_key(&message.topic) {
             debug!("Sending received message to user");
             self.events
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Message {
+                .push_back(ToSwarm::GenerateEvent(Event::Message {
                     propagation_source: *propagation_source,
                     message_id: msg_id.clone(),
                     message,
@@ -1991,12 +2019,10 @@ where
                         }
                     }
                     // generates a subscription event to be polled
-                    application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        Event::Subscribed {
-                            peer_id: *propagation_source,
-                            topic: topic_hash.clone(),
-                        },
-                    ));
+                    application_event.push(ToSwarm::GenerateEvent(Event::Subscribed {
+                        peer_id: *propagation_source,
+                        topic: topic_hash.clone(),
+                    }));
                 }
                 SubscriptionAction::Unsubscribe => {
                     if peer_list.remove(propagation_source) {
@@ -2011,12 +2037,10 @@ where
                     subscribed_topics.remove(topic_hash);
                     unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
-                    application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        Event::Unsubscribed {
-                            peer_id: *propagation_source,
-                            topic: topic_hash.clone(),
-                        },
-                    ));
+                    application_event.push(ToSwarm::GenerateEvent(Event::Unsubscribed {
+                        peer_id: *propagation_source,
+                        topic: topic_hash.clone(),
+                    }));
                 }
             }
 
@@ -2749,18 +2773,18 @@ where
 
     /// Constructs a [`RawMessage`] performing message signing if required.
     pub(crate) fn build_raw_message(
-        &self,
+        &mut self,
         topic: TopicHash,
         data: Vec<u8>,
     ) -> Result<RawMessage, PublishError> {
-        match &self.publish_config {
+        match &mut self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
                 author,
                 inline_key,
+                last_seq_no,
             } => {
-                // Build and sign the message
-                let sequence_number: u64 = rand::random();
+                let sequence_number = last_seq_no.next();
 
                 let signature = {
                     let message = proto::Message {
@@ -2884,12 +2908,11 @@ where
         let messages = self.fragment_message(message)?;
 
         for message in messages {
-            self.events
-                .push_back(NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    event: HandlerIn::Message(message),
-                    handler: NotifyHandler::Any,
-                })
+            self.events.push_back(ToSwarm::NotifyHandler {
+                peer_id,
+                event: HandlerIn::Message(message),
+                handler: NotifyHandler::Any,
+            })
         }
         Ok(())
     }
@@ -3144,12 +3167,11 @@ where
                         for topic in topics {
                             if let Some(mesh_peers) = self.mesh.get(topic) {
                                 if mesh_peers.contains(&peer_id) {
-                                    self.events
-                                        .push_back(NetworkBehaviourAction::NotifyHandler {
-                                            peer_id,
-                                            event: HandlerIn::JoinedMesh,
-                                            handler: NotifyHandler::One(connections.connections[0]),
-                                        });
+                                    self.events.push_back(ToSwarm::NotifyHandler {
+                                        peer_id,
+                                        event: HandlerIn::JoinedMesh,
+                                        handler: NotifyHandler::One(connections.connections[0]),
+                                    });
                                     break;
                                 }
                             }
@@ -3332,11 +3354,10 @@ where
                         "Peer does not support gossipsub protocols. {}",
                         propagation_source
                     );
-                    self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                        Event::GossipsubNotSupported {
+                    self.events
+                        .push_back(ToSwarm::GenerateEvent(Event::GossipsubNotSupported {
                             peer_id: propagation_source,
-                        },
-                    ));
+                        }));
                 } else if let Some(conn) = self.connected_peers.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
                     // `NetworkBehaviour::on_event` with FromSwarm::ConnectionEstablished).
@@ -3444,7 +3465,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -3493,7 +3514,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
+    events: &mut VecDeque<ToSwarm<Event, HandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3519,7 +3540,7 @@ fn peer_added_to_mesh(
         }
     }
     // This is the first mesh the peer has joined, inform the handler
-    events.push_back(NetworkBehaviourAction::NotifyHandler {
+    events.push_back(ToSwarm::NotifyHandler {
         peer_id,
         event: HandlerIn::JoinedMesh,
         handler: NotifyHandler::One(connection_id),
@@ -3534,7 +3555,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
+    events: &mut VecDeque<ToSwarm<Event, HandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3558,7 +3579,7 @@ fn peer_removed_from_mesh(
         }
     }
     // The peer is not in any other mesh, inform the handler
-    events.push_back(NetworkBehaviourAction::NotifyHandler {
+    events.push_back(ToSwarm::NotifyHandler {
         peer_id,
         event: HandlerIn::LeftMesh,
         handler: NotifyHandler::One(*connection_id),
@@ -3688,7 +3709,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {

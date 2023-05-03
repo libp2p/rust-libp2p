@@ -3,7 +3,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
-use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
+use libp2p_swarm::{keep_alive, Swarm, SwarmBuilder, SwarmEvent};
 
 #[tokio::test]
 async fn can_establish_connection() {
@@ -61,12 +61,13 @@ fn make_swarm() -> Swarm<keep_alive::Behaviour> {
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_tls::Config::new(&identity).unwrap())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    Swarm::without_executor(
+    SwarmBuilder::without_executor(
         transport,
         keep_alive::Behaviour,
         identity.public().to_peer_id(),
     )
+    .build()
 }

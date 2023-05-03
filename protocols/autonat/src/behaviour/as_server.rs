@@ -30,7 +30,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    ConnectionId, DialError, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, PollParameters, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -74,16 +74,14 @@ pub enum InboundProbeEvent {
 }
 
 /// View over [`super::Behaviour`] in a server role.
-pub struct AsServer<'a> {
-    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
-    pub config: &'a Config,
-    pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
-    pub probe_id: &'a mut ProbeId,
-
-    pub throttled_clients: &'a mut Vec<(PeerId, Instant)>,
-
+pub(crate) struct AsServer<'a> {
+    pub(crate) inner: &'a mut request_response::Behaviour<AutoNatCodec>,
+    pub(crate) config: &'a Config,
+    pub(crate) connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
+    pub(crate) probe_id: &'a mut ProbeId,
+    pub(crate) throttled_clients: &'a mut Vec<(PeerId, Instant)>,
     #[allow(clippy::type_complexity)]
-    pub ongoing_inbound: &'a mut HashMap<
+    pub(crate) ongoing_inbound: &'a mut HashMap<
         PeerId,
         (
             ProbeId,
@@ -124,14 +122,14 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         self.throttled_clients.push((peer, Instant::now()));
 
                         VecDeque::from([
-                            NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                            ToSwarm::GenerateEvent(Event::InboundProbe(
                                 InboundProbeEvent::Request {
                                     probe_id,
                                     peer,
                                     addresses: addrs.clone(),
                                 },
                             )),
-                            NetworkBehaviourAction::Dial {
+                            ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer)
                                     .condition(PeerCondition::Always)
                                     .override_dial_concurrency_factor(
@@ -155,13 +153,13 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        VecDeque::from([NetworkBehaviourAction::GenerateEvent(
-                            Event::InboundProbe(InboundProbeEvent::Error {
+                        VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
+                            InboundProbeEvent::Error {
                                 probe_id,
                                 peer,
                                 error: InboundProbeError::Response(error),
-                            }),
-                        )])
+                            },
+                        ))])
                     }
                 }
             }
@@ -183,7 +181,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                VecDeque::from([ToSwarm::GenerateEvent(Event::InboundProbe(
                     InboundProbeEvent::Error {
                         probe_id,
                         peer,
@@ -197,7 +195,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
 }
 
 impl<'a> AsServer<'a> {
-    pub fn on_outbound_connection(
+    pub(crate) fn on_outbound_connection(
         &mut self,
         peer: &PeerId,
         address: &Multiaddr,
@@ -229,7 +227,7 @@ impl<'a> AsServer<'a> {
         })
     }
 
-    pub fn on_outbound_dial_error(
+    pub(crate) fn on_outbound_dial_error(
         &mut self,
         peer: Option<PeerId>,
         error: &DialError,

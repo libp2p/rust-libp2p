@@ -81,7 +81,7 @@ fn upgrade_pipeline() {
     let listener_id = listener_keys.public().to_peer_id();
     let mut listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&listener_keys).unwrap())
+        .authenticate(noise::Config::new(&listener_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -92,7 +92,7 @@ fn upgrade_pipeline() {
     let dialer_id = dialer_keys.public().to_peer_id();
     let mut dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&dialer_keys).unwrap())
+        .authenticate(noise::Config::new(&dialer_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})

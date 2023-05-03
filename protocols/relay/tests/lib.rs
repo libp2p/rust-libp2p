@@ -34,7 +34,7 @@ use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -203,34 +203,50 @@ fn connect() {
         relay_peer_id,
         false, // No renewal.
     ));
-    spawn_swarm_on_pool(&pool, dst);
 
     let mut src = build_client();
+    let src_peer_id = *src.local_peer_id();
 
     src.dial(dst_addr).unwrap();
 
-    pool.run_until(async {
-        loop {
-            match src.select_next_some().await {
-                SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
-                    if peer == dst_peer_id =>
-                {
-                    break
-                }
-                SwarmEvent::Behaviour(ClientEvent::Relay(
-                    relay::client::Event::OutboundCircuitEstablished { .. },
-                )) => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
-                    if peer == relay_peer_id => {}
-                SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
-                    break
-                }
-                e => panic!("{e:?}"),
+    pool.run_until(futures::future::join(
+        connection_established_to(&mut src, relay_peer_id, dst_peer_id),
+        connection_established_to(&mut dst, relay_peer_id, src_peer_id),
+    ));
+}
+
+async fn connection_established_to(
+    swarm: &mut Swarm<Client>,
+    relay_peer_id: PeerId,
+    other: PeerId,
+) {
+    loop {
+        match swarm.select_next_some().await {
+            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
+            SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
+                break
             }
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                relay::client::Event::OutboundCircuitEstablished { .. },
+            )) => {}
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                relay::client::Event::InboundCircuitEstablished { src_peer_id, .. },
+            )) => {
+                assert_eq!(src_peer_id, other);
+            }
+            SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
+                if peer == relay_peer_id => {}
+            SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == other => break,
+            SwarmEvent::IncomingConnection { send_back_addr, .. } => {
+                let peer_id_from_addr =
+                    PeerId::try_from_multiaddr(&send_back_addr).expect("to have /p2p");
+
+                assert_eq!(peer_id_from_addr, other)
+            }
+            e => panic!("{e:?}"),
         }
-    })
+    }
 }
 
 #[test]
@@ -292,7 +308,7 @@ fn build_relay() -> Swarm<Relay> {
 
     let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
-    Swarm::with_threadpool_executor(
+    SwarmBuilder::with_async_std_executor(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -306,6 +322,7 @@ fn build_relay() -> Swarm<Relay> {
         },
         local_peer_id,
     )
+    .build()
 }
 
 fn build_client() -> Swarm<Client> {
@@ -319,7 +336,7 @@ fn build_client() -> Swarm<Client> {
         local_public_key,
     );
 
-    Swarm::with_threadpool_executor(
+    SwarmBuilder::with_async_std_executor(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -327,6 +344,7 @@ fn build_client() -> Swarm<Client> {
         },
         local_peer_id,
     )
+    .build()
 }
 
 fn upgrade_transport<StreamSink>(
@@ -339,7 +357,7 @@ where
     transport
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed()
 }
 

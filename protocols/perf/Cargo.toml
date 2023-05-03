@@ -1,0 +1,41 @@
+[package]
+name = "libp2p-perf"
+edition = "2021"
+rust-version = { workspace = true }
+description = "libp2p perf protocol implementation"
+version = "0.2.0"
+authors = ["Max Inden <mail@max-inden.de>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+anyhow = "1"
+async-std = { version = "1.9.0", features = ["attributes"] }
+clap = { version = "4.2.7", features = ["derive"] }
+env_logger = "0.10.0"
+futures = "0.3.28"
+instant = "0.1.11"
+libp2p-core = { workspace = true }
+libp2p-dns = { workspace = true, features = ["async-std"] }
+libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-quic = { workspace = true, features = ["async-std"] }
+libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }
+libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-yamux = { workspace = true }
+log = "0.4"
+thiserror = "1.0"
+void = "1"
+
+[dev-dependencies]
+rand = "0.8"
+libp2p-swarm-test = { workspace = true }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

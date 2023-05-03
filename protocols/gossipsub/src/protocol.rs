@@ -24,8 +24,8 @@ use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
+use crate::ValidationError;
 use crate::{rpc_proto::proto, Config};
-use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -37,6 +37,7 @@ use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
+use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
@@ -56,7 +57,7 @@ impl ProtocolConfig {
     ///
     /// Sets the maximum gossip transmission size.
     pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
-        let protocol_ids = match gossipsub_config.custom_id_version() {
+        let mut protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
                 Version::V1_0 => vec![ProtocolId::new(
                     gossipsub_config.protocol_id(),
@@ -70,23 +71,21 @@ impl ProtocolConfig {
                 )],
             },
             None => {
-                let mut protocol_ids = vec![
+                vec![
                     ProtocolId::new(
                         gossipsub_config.protocol_id(),
                         PeerKind::Gossipsubv1_1,
                         true,
                     ),
                     ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
-                ];
-
-                // add floodsub support if enabled.
-                if gossipsub_config.support_floodsub() {
-                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
-                }
-
-                protocol_ids
+                ]
             }
         };
+
+        // add floodsub support if enabled.
+        if gossipsub_config.support_floodsub() {
+            protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
+        }
 
         ProtocolConfig {
             protocol_ids,
@@ -147,7 +146,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -168,7 +167,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = HandlerError;
+    type Error = Void;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -234,13 +233,9 @@ impl GossipsubCodec {
 
         // If there is a key value in the protobuf, use that key otherwise the key must be
         // obtained from the inlined source peer_id.
-        let public_key = match message
-            .key
-            .as_deref()
-            .map(PublicKey::from_protobuf_encoding)
-        {
+        let public_key = match message.key.as_deref().map(PublicKey::try_decode_protobuf) {
             Some(Ok(key)) => key,
-            _ => match PublicKey::from_protobuf_encoding(&source.to_bytes()[2..]) {
+            _ => match PublicKey::try_decode_protobuf(&source.to_bytes()[2..]) {
                 Ok(v) => v,
                 Err(_) => {
                     warn!("Signature verification failed: No valid public key supplied");
@@ -272,18 +267,18 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = proto::RPC;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
-        Ok(self.codec.encode(item, dst)?)
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        self.codec.encode(item, dst)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = HandlerError;
+    type Error = quick_protobuf_codec::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, HandlerError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let rpc = match self.codec.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
@@ -559,10 +554,10 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::Behaviour;
     use crate::IdentTopic as Topic;
+    use crate::{Behaviour, ConfigBuilder};
     use libp2p_core::identity::Keypair;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     #[derive(Clone, Debug)]
     struct Message(RawMessage);
@@ -573,7 +568,7 @@ mod tests {
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
             let config = Config::default();
-            let gs: Behaviour =
+            let mut gs: Behaviour =
                 Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))
@@ -655,5 +650,25 @@ mod tests {
         }
 
         QuickCheck::new().quickcheck(prop as fn(_) -> _)
+    }
+
+    #[test]
+    fn support_floodsub_with_custom_protocol() {
+        let gossipsub_config = ConfigBuilder::default()
+            .protocol_id("/foosub", Version::V1_1)
+            .support_floodsub()
+            .build()
+            .unwrap();
+
+        let protocol_config = ProtocolConfig::new(&gossipsub_config);
+
+        assert_eq!(
+            String::from_utf8_lossy(&protocol_config.protocol_ids[0].protocol_id),
+            "/foosub"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&protocol_config.protocol_ids[1].protocol_id),
+            "/floodsub/1.0.0"
+        );
     }
 }

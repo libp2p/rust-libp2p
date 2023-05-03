@@ -40,10 +40,8 @@ use libp2p::{
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviour, SwarmEvent},
-    tcp,
-    yamux::YamuxConfig,
-    Multiaddr, PeerId, Swarm, Transport,
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
@@ -52,8 +50,8 @@ pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
-    let yamux_config = YamuxConfig::default();
+    let noise_config = noise::Config::new(&key_pair).unwrap();
+    let yamux_config = yamux::Config::default();
 
     let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
@@ -63,7 +61,7 @@ pub fn build_transport(
         None => Either::Right(base_transport),
     };
     maybe_encrypted
-        .upgrade(Version::V1)
+        .upgrade(Version::V1Lazy)
         .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
@@ -199,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Subscribing to {gossipsub_topic:?}");
         behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Reach out to other nodes if specified

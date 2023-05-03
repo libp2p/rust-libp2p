@@ -42,7 +42,7 @@ use std::{cmp::Ordering, collections::VecDeque, num::NonZeroUsize};
 ///     it is removed from the collection.
 ///
 #[derive(Debug, Clone)]
-pub struct Addresses {
+pub(crate) struct Addresses {
     /// The ranked sequence of addresses, from highest to lowest score.
     ///
     /// By design, the number of finitely scored addresses stored here is
@@ -171,7 +171,7 @@ pub enum AddAddressResult {
 impl Addresses {
     /// Create a new ranked address collection with the given size limit
     /// for [finitely scored](AddressScore::Finite) addresses.
-    pub fn new(limit: NonZeroUsize) -> Self {
+    pub(crate) fn new(limit: NonZeroUsize) -> Self {
         Addresses {
             registry: SmallVec::new(),
             limit,
@@ -189,7 +189,7 @@ impl Addresses {
     /// as per this limited history has its score reduced by the amount
     /// used in this prior report, with removal from the collection
     /// occurring when the score drops to 0.
-    pub fn add(&mut self, addr: Multiaddr, score: AddressScore) -> AddAddressResult {
+    pub(crate) fn add(&mut self, addr: Multiaddr, score: AddressScore) -> AddAddressResult {
         // If enough reports (i.e. address additions) occurred, reduce
         // the score of the least-recently added address.
         if self.reports.len() == self.limit.get() {
@@ -240,7 +240,7 @@ impl Addresses {
     ///
     /// Returns `true` if the address existed in the collection
     /// and was thus removed, false otherwise.
-    pub fn remove(&mut self, addr: &Multiaddr) -> bool {
+    pub(crate) fn remove(&mut self, addr: &Multiaddr) -> bool {
         if let Some(pos) = self.registry.iter().position(|r| &r.addr == addr) {
             self.registry.remove(pos);
             true
@@ -252,7 +252,7 @@ impl Addresses {
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
-    pub fn iter(&self) -> AddressIter<'_> {
+    pub(crate) fn iter(&self) -> AddressIter<'_> {
         AddressIter {
             items: &self.registry,
             offset: 0,
@@ -262,7 +262,7 @@ impl Addresses {
     /// Return an iterator over all [`Multiaddr`] values.
     ///
     /// The iteration is ordered by descending score.
-    pub fn into_iter(self) -> AddressIntoIter {
+    pub(crate) fn into_iter(self) -> AddressIntoIter {
         AddressIntoIter {
             items: self.registry,
         }
@@ -271,7 +271,7 @@ impl Addresses {
 
 /// An iterator over [`Multiaddr`] values.
 #[derive(Clone)]
-pub struct AddressIter<'a> {
+pub(crate) struct AddressIter<'a> {
     items: &'a [AddressRecord],
     offset: usize,
 }
