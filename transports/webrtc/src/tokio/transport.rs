@@ -600,7 +600,10 @@ mod tests {
         for _ in 0..2 {
             let listener = Default::default();
             transport
-                .listen_on(listener, "/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap())
+                .listen_on(
+                    listener,
+                    "/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap(),
+                )
                 .unwrap();
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {

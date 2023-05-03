@@ -44,7 +44,6 @@ fn lot_of_data() {
 }
 
 async fn run(message1: Vec<u8>) {
-
     let (server, client) = futures_ringbuf::Endpoint::pair(100, 100);
 
     let message2 = message1.clone();
