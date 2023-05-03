@@ -20,7 +20,6 @@
 
 //! Components of a Noise protocol.
 
-use crate::protocol::x25519_spec::STATIC_KEY_DOMAIN;
 use crate::Error;
 use libp2p_identity as identity;
 use once_cell::sync::Lazy;
