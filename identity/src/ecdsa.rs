@@ -34,6 +34,7 @@ use p256::{
     EncodedPoint,
 };
 use void::Void;
+use zeroize::Zeroize;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
 #[derive(Clone)]
@@ -134,10 +135,13 @@ impl SecretKey {
             .to_vec()
     }
 
-    /// Try to decode a secret key from a byte buffer in DER-encoded PKCS#8 format.
-    pub(crate) fn try_decode_pkcs8_der(buf: &[u8]) -> Result<Self, DecodingError> {
+    /// Try to decode a secret key from a byte buffer in DER-encoded PKCS#8 format, zeroize the buffer on success.
+    pub(crate) fn try_decode_pkcs8_der(buf: &mut [u8]) -> Result<Self, DecodingError> {
         match SigningKey::from_pkcs8_der(buf) {
-            Ok(key) => Ok(SecretKey(key)),
+            Ok(key) => {
+                buf.zeroize();
+                Ok(SecretKey(key))
+            }
             Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
         }
     }
@@ -309,7 +313,7 @@ mod tests {
     fn secret_key_encode_decode_roundtrip() {
         let secret_key = SecretKey::generate();
         let encoded_bytes = secret_key.encode_pkcs8_der();
-        let decoded_key = SecretKey::try_decode_pkcs8_der(&encoded_bytes).unwrap();
+        let decoded_key = SecretKey::try_decode_pkcs8_der(encoded_bytes.clone().as_mut()).unwrap();
         assert_eq!(decoded_key.encode_pkcs8_der(), encoded_bytes)
     }
 }
