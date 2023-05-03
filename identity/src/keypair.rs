@@ -223,29 +223,25 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[cfg_attr(
-        not(feature = "ed25519"),
-        allow(unreachable_code, unused_variables, unused_mut)
-    )]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
-
-        #[cfg(not(feature = "ed25519"))]
-        return Err(DecodingError::missing_feature("ed25519"));
 
         #[allow(deprecated)]
         let pk: proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => proto::PrivateKey {
                 Type: proto::KeyType::Ed25519,
-                Data: data.encode().to_vec(),
+                Data: data.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
             #[cfg(feature = "secp256k1")]
             Self::Secp256k1(_) => return Err(DecodingError::encoding_unsupported("secp256k1")),
             #[cfg(feature = "ecdsa")]
-            Self::Ecdsa(_) => return Err(DecodingError::encoding_unsupported("ECDSA")),
+            Self::Ecdsa(data) => proto::PrivateKey {
+                Type: proto::KeyType::ECDSA,
+                Data: data.secret().encode_pkcs8_der(),
+            },
         };
 
         let mut buf = Vec::with_capacity(pk.get_size());
@@ -256,7 +252,6 @@ impl Keypair {
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
-    #[cfg_attr(not(feature = "ed25519"), allow(unused_mut))]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
@@ -265,18 +260,21 @@ impl Keypair {
             .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
             .map(zeroize::Zeroizing::new)?;
 
+        #[allow(deprecated, unreachable_code)]
         match private_key.Type {
-            #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 =>
-            {
-                #[allow(deprecated)]
-                ed25519::Keypair::decode(&mut private_key.Data).map(Keypair::Ed25519)
+            proto::KeyType::Ed25519 => {
+                #[cfg(not(feature = "ed25519"))]
+                return Err(DecodingError::missing_feature("ed25519"));
+                ed25519::Keypair::try_from_bytes(&mut private_key.Data).map(Keypair::Ed25519)
             }
-            #[cfg(not(feature = "ed25519"))]
-            proto::KeyType::Ed25519 => Err(DecodingError::missing_feature("ed25519")),
             proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
             proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
-            proto::KeyType::ECDSA => Err(DecodingError::decoding_unsupported("ECDSA")),
+            proto::KeyType::ECDSA => {
+                #[cfg(not(feature = "ecdsa"))]
+                return Err(DecodingError::missing_feature("ecdsa"));
+                ecdsa::SecretKey::try_decode_pkcs8_der(&mut private_key.Data)
+                    .map(|key| Keypair::Ecdsa(key.into()))
+            }
         }
     }
 }
