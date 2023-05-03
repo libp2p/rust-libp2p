@@ -88,9 +88,17 @@ async fn identify_push() {
     // First, let the periodic identify do its thing.
     match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
         (
-            [BehaviourEvent::Identify(identify::Event::Sent { .. }), BehaviourEvent::Identify(identify::Event::Received { .. })],
-            [BehaviourEvent::Identify(identify::Event::Sent { .. }), BehaviourEvent::Identify(identify::Event::Received { .. })],
-        ) => {}
+            [BehaviourEvent::Identify(e1), BehaviourEvent::Identify(e2)],
+            [BehaviourEvent::Identify(e3), BehaviourEvent::Identify(e4)],
+        ) => {
+            use identify::Event::{Received, Sent};
+
+            // These can be received in any order, hence assert them here instead of the pattern above.
+            assert!(matches!(e1, Received { .. } | Sent { .. }));
+            assert!(matches!(e2, Received { .. } | Sent { .. }));
+            assert!(matches!(e3, Received { .. } | Sent { .. }));
+            assert!(matches!(e4, Received { .. } | Sent { .. }));
+        }
         other => panic!("Unexpected events: {other:?}"),
     };
 
