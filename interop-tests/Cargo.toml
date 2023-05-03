@@ -3,13 +3,14 @@ edition = "2021"
 name = "interop-tests"
 version = "0.1.0"
 publish = false
+license = "MIT"
 
 [dependencies]
 anyhow = "1"
 either = "1.8.0"
 env_logger = "0.10.0"
 futures = "0.3.26"
-libp2p = { path = "../", features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
+libp2p = { path = "../libp2p", features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
 log = "0.4"
 rand = "0.8.5"
 redis = { version = "0.22.1", default-features = false, features = ["tokio-comp"] }

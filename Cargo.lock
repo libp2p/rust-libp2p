@@ -306,7 +306,7 @@ dependencies = [
  "slab",
  "socket2",
  "waker-fn",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -346,7 +346,7 @@ dependencies = [
  "futures-lite",
  "libc",
  "signal-hook",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -400,9 +400,9 @@ checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
 name = "async-trait"
-version = "0.1.64"
+version = "0.1.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cd7fce9ba8c3c042128ce72d8b2ddbf3a05747efb67ea0313c635e10bda47a2"
+checksum = "b84f9ebcc6c1f5b8cb160f6990096a5c127f423fcb6e1ccc46c370cbdfb75dfc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -635,6 +635,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "chat-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+]
+
+[[package]]
 name = "ciborium"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -703,9 +714,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.1.6"
+version = "4.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0b0588d44d4d63a87dbd75c136c166bbfd9a86a31cb89e09906521c7d3f5e3"
+checksum = "c3d7ae14b20b94cb02149ed21a86c423859cbe18dc7ed69845cace50e52b40a5"
 dependencies = [
  "bitflags",
  "clap_derive",
@@ -718,9 +729,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.1.0"
+version = "4.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "684a277d672e91966334af371f1a7b5833f9aa00b07c84e92fbce95e00208ce8"
+checksum = "44bec8e5c9d09e439c4335b1af0abaab56dcf3b94999a936e1bb47b9134288f0"
 dependencies = [
  "heck",
  "proc-macro-error",
@@ -1105,6 +1116,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dcutr"
+version = "0.1.0"
+dependencies = [
+ "clap 4.1.8",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "log",
+]
+
+[[package]]
 name = "der"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,6 +1226,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "distributed-key-value-store"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
 ]
 
 [[package]]
@@ -1372,6 +1407,20 @@ name = "fiat-crypto"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a214f5bb88731d436478f3ae1f8a277b62124089ba9fb67f4f93fb100ef73c90"
+
+[[package]]
+name = "file-sharing"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap 4.1.8",
+ "either",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
 
 [[package]]
 name = "flate2"
@@ -1824,6 +1873,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "identify"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "libp2p",
+]
+
+[[package]]
 name = "idna"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1946,7 +2005,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7d6c6f8c91b4b9ed43484ad1a938e393caf35960fce7f82a040497207bd8e9e"
 dependencies = [
  "libc",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -1959,6 +2018,30 @@ dependencies = [
  "widestring",
  "winapi",
  "winreg",
+]
+
+[[package]]
+name = "ipfs-kad"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+]
+
+[[package]]
+name = "ipfs-private"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "either",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "multiaddr",
 ]
 
 [[package]]
@@ -1976,7 +2059,7 @@ dependencies = [
  "hermit-abi 0.2.6",
  "io-lifetimes",
  "rustix",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -2017,7 +2100,7 @@ name = "keygen"
 version = "0.1.0"
 dependencies = [
  "base64 0.21.0",
- "clap 4.1.6",
+ "clap 4.1.8",
  "libp2p-core",
  "serde",
  "serde_json",
@@ -2058,7 +2141,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bytes",
- "clap 4.1.6",
+ "clap 4.1.8",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2104,7 +2187,7 @@ version = "0.10.0"
 dependencies = [
  "async-std",
  "async-trait",
- "clap 4.1.6",
+ "clap 4.1.8",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
@@ -2114,6 +2197,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-request-response",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2168,8 +2252,9 @@ dependencies = [
 name = "libp2p-dcutr"
 version = "0.9.0"
 dependencies = [
+ "async-std",
  "asynchronous-codec",
- "clap 4.1.6",
+ "clap 4.1.8",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2183,6 +2268,7 @@ dependencies = [
  "libp2p-plaintext",
  "libp2p-relay",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2258,9 +2344,8 @@ dependencies = [
  "libp2p-core",
  "libp2p-mplex",
  "libp2p-noise",
- "libp2p-plaintext",
  "libp2p-swarm",
- "libp2p-yamux",
+ "libp2p-swarm-test",
  "log",
  "prometheus-client",
  "quick-protobuf",
@@ -2344,6 +2429,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-noise",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2441,15 +2527,13 @@ version = "0.42.0"
 dependencies = [
  "async-std",
  "either",
+ "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
  "libp2p-core",
- "libp2p-mplex",
- "libp2p-noise",
  "libp2p-swarm",
- "libp2p-tcp",
- "libp2p-yamux",
+ "libp2p-swarm-test",
  "log",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -2525,7 +2609,7 @@ version = "0.15.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "clap 4.1.6",
+ "clap 4.1.8",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2566,6 +2650,7 @@ dependencies = [
  "libp2p-noise",
  "libp2p-ping",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
@@ -2589,6 +2674,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-noise",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
  "rand 0.8.5",
@@ -2630,6 +2716,22 @@ dependencies = [
  "heck",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "libp2p-swarm-test"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "futures-timer",
+ "libp2p-core",
+ "libp2p-plaintext",
+ "libp2p-swarm",
+ "libp2p-tcp",
+ "libp2p-yamux",
+ "log",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -2942,7 +3044,7 @@ dependencies = [
  "libc",
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -3305,7 +3407,7 @@ dependencies = [
  "libc",
  "redox_syscall",
  "smallvec",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -3377,6 +3479,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "ping-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "libp2p",
+ "multiaddr",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3437,7 +3550,7 @@ dependencies = [
  "libc",
  "log",
  "wepoll-ffi",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -3802,6 +3915,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "456c603be3e8d448b072f410900c09faf164fbce2d480456f50eea6e25f9c848"
 
 [[package]]
+name = "rendezvous-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "env_logger 0.10.0",
+ "futures",
+ "libp2p",
+ "log",
+ "tokio",
+]
+
+[[package]]
 name = "resolv-conf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3935,7 +4061,7 @@ dependencies = [
  "io-lifetimes",
  "libc",
  "linux-raw-sys",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -4101,9 +4227,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.93"
+version = "1.0.94"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cad406b69c91885b5107daf2c29572f6c8cdb3c66826821e286c533490c0bc76"
+checksum = "1c533a59c9d8a93a09c6ab31f0fd5e5f4dd1b8fc9434804029839884765d04ea"
 dependencies = [
  "itoa",
  "ryu",
@@ -4387,7 +4513,7 @@ dependencies = [
  "fastrand",
  "redox_syscall",
  "rustix",
- "windows-sys",
+ "windows-sys 0.42.0",
 ]
 
 [[package]]
@@ -4407,18 +4533,18 @@ checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
 
 [[package]]
 name = "thiserror"
-version = "1.0.38"
+version = "1.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a9cd18aa97d5c45c6603caea1da6628790b37f7a34b6ca89522331c5180fed0"
+checksum = "a5ab016db510546d856297882807df8da66a16fb8c4101cb8b30054b0d5b2d9c"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.38"
+version = "1.0.39"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fb327af4685e4d03fa8cbcf1716380da910eeb2bb8be417e7f9fd3fb164f36f"
+checksum = "5420d42e90af0c38c3290abcca25b9b3bdf379fc9f55c528f53a269d9c9a267e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4479,9 +4605,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "tokio"
-version = "1.25.0"
+version = "1.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8e00990ebabbe4c14c08aca901caed183ecd5c09562a12c824bb53d3c3fd3af"
+checksum = "03201d01c3c27a29c8a5cee5b55a93ddae1ccf6f08f65365c2c918f8c1b76f64"
 dependencies = [
  "autocfg",
  "bytes",
@@ -4494,7 +4620,7 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
- "windows-sys",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -5228,6 +5354,30 @@ name = "windows-sys"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a3e1820f08b8513f676f7ab6c1f99ff312fb97b553d30ff4dd86f9f15728aa7"
+dependencies = [
+ "windows_aarch64_gnullvm",
+ "windows_aarch64_msvc 0.42.1",
+ "windows_i686_gnu 0.42.1",
+ "windows_i686_msvc 0.42.1",
+ "windows_x86_64_gnu 0.42.1",
+ "windows_x86_64_gnullvm",
+ "windows_x86_64_msvc 0.42.1",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.45.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75283be5efb2831d37ea142365f009c02ec203cd29a3ebecbc093d52315b66d0"
+dependencies = [
+ "windows-targets",
+]
+
+[[package]]
+name = "windows-targets"
+version = "0.42.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e2522491fbfcd58cc84d47aeb2958948c4b8982e9a2d8a2a35bbaed431390e7"
 dependencies = [
  "windows_aarch64_gnullvm",
  "windows_aarch64_msvc 0.42.1",

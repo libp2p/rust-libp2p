@@ -14,7 +14,7 @@ futures-rustls = "0.22.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 rcgen = "0.10.0"
 ring = "0.16.20"
-thiserror = "1.0.36"
+thiserror = "1.0.39"
 webpki = "0.22.0"
 x509-parser = "0.14.0"
 yasna = "0.5.0"

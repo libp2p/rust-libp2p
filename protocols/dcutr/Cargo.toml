@@ -25,6 +25,7 @@ thiserror = "1.0"
 void = "1"
 
 [dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
 clap = { version = "4.1.6", features = ["derive"] }
 env_logger = "0.10.0"
 libp2p-dns = { path = "../../transports/dns", features = ["async-std"] }
@@ -34,6 +35,7 @@ libp2p-ping = { path = "../../protocols/ping" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-relay = { path = "../relay" }
 libp2p-swarm = { path = "../../swarm", features = ["macros"] }
+libp2p-swarm-test = { path = "../../swarm-test"}
 libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 rand = "0.8"

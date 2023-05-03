@@ -23,7 +23,7 @@
 //! In the first terminal window, run:
 //!
 //! ```sh
-//! cargo run --example identify
+//! cargo run
 //! ```
 //! It will print the [`PeerId`] and the listening addresses, e.g. `Listening on
 //! "/ip4/127.0.0.1/tcp/24915"`
@@ -31,16 +31,18 @@
 //! In the second terminal window, start a new instance of the example with:
 //!
 //! ```sh
-//! cargo run --example identify -- /ip4/127.0.0.1/tcp/24915
+//! cargo run -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //! The two nodes establish a connection, negotiate the identify protocol
 //! and will send each other identify info which is then printed to the console.
 
 use futures::prelude::*;
-use libp2p_core::upgrade::Version;
-use libp2p_core::{identity, Multiaddr, PeerId, Transport};
-use libp2p_identify as identify;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p::{
+    core::{multiaddr::Multiaddr, upgrade::Version, PeerId},
+    identify, identity, noise,
+    swarm::{Swarm, SwarmEvent},
+    tcp, yamux, Transport,
+};
 use std::error::Error;
 
 #[async_std::main]
@@ -49,10 +51,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let transport = libp2p_tcp::async_io::Transport::default()
+    let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
-        .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
+        .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
     // Create a identify network behaviour.
