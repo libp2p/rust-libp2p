@@ -82,7 +82,7 @@ mod tests {
     }
 
     static FOO_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
-        Lazy::new(|| HashSet::from([StreamProtocol::new("foo")]));
+        Lazy::new(|| HashSet::from([StreamProtocol::new("/foo")]));
     static FOO_BAR_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
-        Lazy::new(|| HashSet::from([StreamProtocol::new("foo"), StreamProtocol::new("bar")]));
+        Lazy::new(|| HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]));
 }
