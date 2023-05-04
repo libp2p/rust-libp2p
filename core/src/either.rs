@@ -22,7 +22,7 @@ use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr, ProtocolName,
+    Multiaddr,
 };
 use either::Either;
 use futures::prelude::*;
@@ -111,21 +111,6 @@ where
             EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
                 .map_ok(future::Either::Right)
                 .map_err(Either::Right),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum EitherName<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
-    fn protocol_name(&self) -> &[u8] {
-        match self {
-            EitherName::A(a) => a.protocol_name(),
-            EitherName::B(b) => b.protocol_name(),
         }
     }
 }

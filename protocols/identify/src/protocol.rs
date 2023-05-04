@@ -28,7 +28,7 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::ConnectionId;
+use libp2p_swarm::{ConnectionId, StreamProtocol};
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
@@ -37,9 +37,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
 
-pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
+pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/push/1.0.0");
 
 /// The type of the Substream protocol.
 #[derive(Debug, PartialEq, Eq)]
@@ -84,13 +84,13 @@ pub struct Info {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub protocols: Vec<String>,
+    pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
 }
 
 impl UpgradeInfo for Identify {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -122,7 +122,7 @@ where
 }
 
 impl<T> UpgradeInfo for Push<T> {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -177,7 +177,7 @@ where
         publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols,
+        protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -249,7 +249,17 @@ impl TryFrom<proto::Identify> for Info {
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
-            protocols: msg.protocols,
+            protocols: msg
+                .protocols
+                .into_iter()
+                .filter_map(|p| match StreamProtocol::try_from_owned(p) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        debug!("Received invalid protocol from peer: {e}");
+                        None
+                    }
+                })
+                .collect(),
             observed_addr,
         };
 
@@ -328,7 +338,10 @@ mod tests {
                         "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
                         "/ip6/::1/udp/1000".parse().unwrap(),
                     ],
-                    protocols: vec!["proto1".to_string(), "proto2".to_string()],
+                    protocols: vec![
+                        StreamProtocol::new("/proto1"),
+                        StreamProtocol::new("/proto2"),
+                    ],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
                 },
             )
@@ -357,10 +370,7 @@ mod tests {
                     "/ip6/::1/udp/1000".parse().unwrap()
                 ]
             );
-            assert_eq!(
-                info.protocols,
-                &["proto1".to_string(), "proto2".to_string()]
-            );
+            assert_eq!(info.protocols, &["/proto1", "/proto2"]);
 
             bg_task.await;
         });
