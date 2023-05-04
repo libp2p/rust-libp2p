@@ -36,11 +36,6 @@ use crate::secp256k1;
 #[cfg(feature = "ecdsa")]
 use crate::ecdsa;
 
-#[derive(Debug, Clone)]
-pub struct Keypair {
-    keypair: Inner,
-}
-
 /// Identity keypair of a node.
 ///
 /// # Example: Generating RSA keys with OpenSSL
@@ -58,6 +53,11 @@ pub struct Keypair {
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
 ///
+#[derive(Debug, Clone)]
+pub struct Keypair {
+    keypair: Inner,
+}
+
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 enum Inner {
@@ -390,7 +390,6 @@ impl TryInto<rsa::Keypair> for Keypair {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-/// The public key of a node's identity keypair.
 enum PublicKeyType {
     /// A public Ed25519 key.
     #[cfg(feature = "ed25519")]
@@ -406,6 +405,7 @@ enum PublicKeyType {
     Ecdsa(ecdsa::PublicKey),
 }
 
+/// The public key of a node's identity keypair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey {
     publickey: PublicKeyType,
