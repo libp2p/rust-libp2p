@@ -859,7 +859,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
     };
-    let mut is_out_event = false;
 
     for attr in ast
         .attrs
@@ -898,9 +897,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
             }
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
-                if meta.path().is_ident("out_event") {
-                    is_out_event = true;
-                }
                 match meta {
                     Meta::Path(_) => unimplemented!(),
                     Meta::List(_) => unimplemented!(),
@@ -928,27 +924,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
                 continue;
             }
         }
-    }
-
-    if is_out_event {
-        let out_event_type: syn::Type = match attributes.user_specified_out_event {
-            Some(ref path) => {
-                let path_str = quote! { #path }.to_string();
-
-                syn::parse_str(&path_str).unwrap()
-            }
-            None => syn::parse_str("()").unwrap(),
-        };
-
-        quote! {
-            #[deprecated(
-                since = "0.33.0",
-                note = "The 'out_event' key is deprecated, use 'to_swarm' instead."
-            )]
-            trait OutEventAttributeIsDeprecatedAndHasBeenRenamedToToSwarm{};
-
-            impl OutEventAttributeIsDeprecatedAndHasBeenRenamedToToSwarm for #out_event_type {}
-        };
     }
 
     Ok(attributes)
