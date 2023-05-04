@@ -27,7 +27,7 @@ use futures_timer::Delay;
 use instant::{Duration, SystemTime};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
 use std::convert::TryFrom;
 use std::iter;
 use thiserror::Error;
@@ -38,7 +38,7 @@ pub enum Upgrade {
 }
 
 impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
