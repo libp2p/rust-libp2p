@@ -304,9 +304,7 @@ impl<'a> ProtocolsChange<'a> {
     ) -> Option<Self> {
         let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
 
-        if actually_added_protocols.peek().is_none() {
-            return None;
-        }
+        actually_added_protocols.peek()?;
 
         Some(ProtocolsChange::Added(ProtocolsAdded {
             protocols: actually_added_protocols,
@@ -320,11 +318,9 @@ impl<'a> ProtocolsChange<'a> {
         existing_protocols: &'a HashSet<StreamProtocol>,
         to_remove: &'a HashSet<StreamProtocol>,
     ) -> Option<Self> {
-        let mut actually_removed_protocols = existing_protocols.intersection(&to_remove).peekable();
+        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
 
-        if actually_removed_protocols.peek().is_none() {
-            return None;
-        }
+        actually_removed_protocols.peek()?;
 
         Some(ProtocolsChange::Removed(ProtocolsRemoved {
             protocols: Either::Right(actually_removed_protocols),
@@ -343,7 +339,7 @@ impl<'a> ProtocolsChange<'a> {
         let mut changes = SmallVec::new();
 
         let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
-        let mut removed_protocols = existing_protocols.difference(&new_protocols).peekable();
+        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
 
         if added_protocols.peek().is_some() {
             changes.push(ProtocolsChange::Added(ProtocolsAdded {
