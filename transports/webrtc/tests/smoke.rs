@@ -23,7 +23,7 @@ use futures::future::{BoxFuture, Either};
 use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, TransportEvent, ListenerId};
+use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
 use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;

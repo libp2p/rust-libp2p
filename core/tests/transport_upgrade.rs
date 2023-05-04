@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::transport::{MemoryTransport, Transport, ListenerId};
+use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
 use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;

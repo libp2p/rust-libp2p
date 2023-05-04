@@ -31,7 +31,8 @@ use std::{
     error::Error,
     fmt,
     pin::Pin,
-    task::{Context, Poll}, sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicU64, Ordering},
+    task::{Context, Poll},
 };
 
 pub mod and_then;
