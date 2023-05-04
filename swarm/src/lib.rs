@@ -2489,7 +2489,7 @@ mod tests {
                 for _ in 0..num_listen_addrs {
                     let mut transport = transport::MemoryTransport::default().boxed();
                     transport
-                        .listen_on(Default::default(), "/memory/0".parse().unwrap())
+                        .listen_on(ListenerId::default(), "/memory/0".parse().unwrap())
                         .unwrap();
 
                     match transport.select_next_some().await {

@@ -919,7 +919,7 @@ mod tests {
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
                     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -988,7 +988,7 @@ mod tests {
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
 
             loop {
                 match tcp.select_next_some().await {
@@ -1061,7 +1061,7 @@ mod tests {
             port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
         ) {
             let mut tcp = Transport::<T>::new(Config::new()).boxed();
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
                     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -1096,7 +1096,7 @@ mod tests {
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
                     // Check that tcp and listener share the same port reuse SocketAddr
@@ -1164,7 +1164,7 @@ mod tests {
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress {
                     listen_addr: addr1, ..
@@ -1179,7 +1179,7 @@ mod tests {
                     assert_eq!(port_reuse_tcp, port_reuse_listener1);
 
                     // Listen on the same address a second time.
-                    tcp.listen_on(Default::default(), addr1.clone()).unwrap();
+                    tcp.listen_on(ListenerId::default(), addr1.clone()).unwrap();
                     match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                         TransportEvent::NewAddress {
                             listen_addr: addr2, ..
@@ -1218,7 +1218,7 @@ mod tests {
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
-            tcp.listen_on(Default::default(), addr).unwrap();
+            tcp.listen_on(ListenerId::default(), addr).unwrap();
             tcp.select_next_some()
                 .await
                 .into_new_address()
@@ -1255,13 +1255,13 @@ mod tests {
             #[cfg(feature = "async-io")]
             {
                 let mut tcp = async_io::Transport::default();
-                assert!(tcp.listen_on(Default::default(), addr.clone()).is_err());
+                assert!(tcp.listen_on(ListenerId::default(), addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
                 let mut tcp = tokio::Transport::default();
-                assert!(tcp.listen_on(Default::default(), addr).is_err());
+                assert!(tcp.listen_on(ListenerId::default(), addr).is_err());
             }
         }
 

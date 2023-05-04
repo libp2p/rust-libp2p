@@ -87,7 +87,7 @@ mod tests {
     use futures::StreamExt;
     use libp2p_core::{
         multiaddr::multiaddr,
-        transport::{memory::MemoryTransport, Transport},
+        transport::{memory::MemoryTransport, Transport, ListenerId},
     };
     use rand::{thread_rng, Rng};
     use std::time::Duration;
@@ -96,7 +96,7 @@ mod tests {
     fn ping_pong() {
         let mem_addr = multiaddr![Memory(thread_rng().gen::<u64>())];
         let mut transport = MemoryTransport::new().boxed();
-        transport.listen_on(Default::default(), mem_addr).unwrap();
+        transport.listen_on(ListenerId::default(), mem_addr).unwrap();
 
         let listener_addr = transport
             .select_next_some()

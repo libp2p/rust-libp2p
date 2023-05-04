@@ -58,7 +58,7 @@ use std::{
 ///
 /// ```
 /// # use futures::future;
-/// # use libp2p_core::Transport;
+/// # use libp2p_core::{transport::ListenerId, Transport};
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
@@ -77,7 +77,7 @@ use std::{
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
-/// let id = transport.listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::default(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -89,7 +89,7 @@ use std::{
 ///
 /// ```
 /// # use futures::future;
-/// # use libp2p_core::Transport;
+/// # use libp2p_core::{transport::ListenerId, Transport};
 /// # use libp2p_dns as dns;
 /// # use libp2p_tcp as tcp;
 /// # use libp2p_websocket as websocket;
@@ -102,7 +102,7 @@ use std::{
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// );
 ///
-/// let id = transport.listen_on(Default::default(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::default(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -291,7 +291,7 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport};
+    use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport, transport::ListenerId};
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
 
@@ -314,7 +314,7 @@ mod tests {
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();
         ws_config
-            .listen_on(Default::default(), listen_addr)
+            .listen_on(ListenerId::default(), listen_addr)
             .expect("listener");
 
         let addr = ws_config
