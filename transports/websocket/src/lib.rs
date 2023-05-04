@@ -55,6 +55,8 @@ use std::{
 /// # Dependencies
 ///
 /// This transport requires the `zlib` shared library to be installed on the system.
+/// 
+/// Future releases might lift this requirement, see <https://github.com/paritytech/soketto/issues/72>.
 ///
 /// # Examples
 ///
