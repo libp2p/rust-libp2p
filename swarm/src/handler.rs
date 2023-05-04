@@ -48,12 +48,14 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
+use ::either::Either;
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
+use smallvec::SmallVec;
 use std::collections::hash_map::RandomState;
-use std::collections::hash_set::Difference;
+use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
@@ -292,10 +294,73 @@ pub enum ProtocolsChange<'a> {
     Removed(ProtocolsRemoved<'a>),
 }
 
+impl<'a> ProtocolsChange<'a> {
+    /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
+    pub(crate) fn add(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_add: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+
+        actually_added_protocols.peek()?;
+
+        Some(ProtocolsChange::Added(ProtocolsAdded {
+            protocols: actually_added_protocols,
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    pub(crate) fn remove(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_remove: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
+
+        actually_removed_protocols.peek()?;
+
+        Some(ProtocolsChange::Removed(ProtocolsRemoved {
+            protocols: Either::Right(actually_removed_protocols),
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
+    pub(crate) fn from_full_sets(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        new_protocols: &'a HashSet<StreamProtocol>,
+    ) -> SmallVec<[Self; 2]> {
+        if existing_protocols == new_protocols {
+            return SmallVec::new();
+        }
+
+        let mut changes = SmallVec::new();
+
+        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
+        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
+
+        if added_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Added(ProtocolsAdded {
+                protocols: added_protocols,
+            }));
+        }
+
+        if removed_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
+                protocols: Either::Left(removed_protocols),
+            }));
+        }
+
+        changes
+    }
+}
+
 /// An [`Iterator`] over all protocols that have been added.
 #[derive(Clone)]
 pub struct ProtocolsAdded<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
 }
 
 impl<'a> ProtocolsAdded<'a> {
@@ -309,13 +374,17 @@ impl<'a> ProtocolsAdded<'a> {
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+    protocols: Either<
+        Peekable<Difference<'a, StreamProtocol, RandomState>>,
+        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
+    >,
 }
 
 impl<'a> ProtocolsRemoved<'a> {
+    #[cfg(test)]
     pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
         ProtocolsRemoved {
-            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
         }
     }
 }
@@ -690,6 +759,5 @@ impl Ord for KeepAlive {
 }
 
 /// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
-/// [`ProtocolsAdded::from_set`] and [`ProtocolsRemoved::from_set`]. Those have lifetime-constraints
-/// which don't work unless we have a [`HashSet`] with a `'static' lifetime.
+/// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
 static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);

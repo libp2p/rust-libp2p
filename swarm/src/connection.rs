@@ -32,7 +32,6 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    ProtocolsRemoved,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 use crate::{
@@ -153,7 +152,7 @@ where
     >,
 
     local_supported_protocols: HashSet<StreamProtocol>,
-    remote_supported_protocols: SupportedProtocols,
+    remote_supported_protocols: HashSet<StreamProtocol>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -184,11 +183,11 @@ where
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
 
-        handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-            ProtocolsChange::Added(ProtocolsAdded {
-                protocols: initial_protocols.difference(&HashSet::new()).peekable(),
-            }),
-        ));
+        if !initial_protocols.is_empty() {
+            handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
+            ));
+        }
 
         Connection {
             muxing: muxer,
@@ -200,7 +199,7 @@ where
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
-            remote_supported_protocols: SupportedProtocols::default(),
+            remote_supported_protocols: Default::default(),
         }
     }
 
@@ -268,11 +267,11 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    let change = ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols));
-
-                    if remote_supported_protocols.on_protocols_change(change.clone()) {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
-                        // TODO: Should we optimise this to be the _actual_ change?
+                    if let Some(added) =
+                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
+                        remote_supported_protocols.extend(protocols);
                     }
 
                     continue;
@@ -280,11 +279,12 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    let change = ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols));
-
-                    if remote_supported_protocols.on_protocols_change(change.clone()) {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
-                        // TODO: Should we optimise this to be the _actual_ change?
+                    if let Some(removed) =
+                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
+                    {
+                        handler
+                            .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
+                        remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
 
                     continue;
@@ -409,32 +409,21 @@ where
 
             let new_protocols = gather_supported_protocols(handler);
 
-            if &new_protocols != supported_protocols {
-                let mut added_protocols = new_protocols.difference(supported_protocols).peekable();
-                let mut removed_protocols =
-                    supported_protocols.difference(&new_protocols).peekable();
-
-                if added_protocols.peek().is_some() {
-                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        ProtocolsChange::Added(ProtocolsAdded {
-                            protocols: added_protocols,
-                        }),
-                    ));
-                }
-
-                if removed_protocols.peek().is_some() {
-                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        ProtocolsChange::Removed(ProtocolsRemoved {
-                            protocols: removed_protocols,
-                        }),
-                    ));
-                }
+            for change in ProtocolsChange::from_full_sets(supported_protocols, &new_protocols) {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
             }
 
             *supported_protocols = new_protocols;
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
+    }
+
+    #[cfg(test)]
+    fn poll_noop_waker(
+        &mut self,
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+        Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
 }
 
@@ -689,7 +678,6 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connection::supported_protocols::SupportedProtocols;
     use crate::keep_alive;
     use futures::future;
     use futures::AsyncRead;
@@ -716,8 +704,7 @@ mod tests {
                 max_negotiating_inbound_streams,
             );
 
-            let result = Pin::new(&mut connection)
-                .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+            let result = connection.poll_noop_waker();
 
             assert!(result.is_pending());
             assert_eq!(
@@ -741,13 +728,11 @@ mod tests {
         );
 
         connection.handler.open_new_outbound();
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         std::thread::sleep(upgrade_timeout + Duration::from_secs(1));
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         assert!(matches!(
             connection.handler.error.unwrap(),
@@ -763,50 +748,84 @@ mod tests {
             None,
             0,
         );
-        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/foo")]);
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
-        assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/foo")])
-        );
+        // First, start listening on a single protocol.
+        connection.handler.listen_on(&["/foo"]);
+        let _ = connection.poll_noop_waker();
 
-        connection.handler.active_protocols =
-            HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]);
+        assert_eq!(connection.handler.local_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.local_removed.is_empty());
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        // Second, listen on two protocols.
+        connection.handler.listen_on(&["/foo", "/bar"]);
+        let _ = connection.poll_noop_waker();
 
         assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/bar"), StreamProtocol::new("/foo")])
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocols"
         );
+        assert!(connection.handler.local_removed.is_empty());
 
-        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/bar")]);
-
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        // Third, stop listening on the first protocol.
+        connection.handler.listen_on(&["/bar"]);
+        let _ = connection.poll_noop_waker();
 
         assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/bar")])
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]]
         );
+        assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
+    }
+
+    #[test]
+    fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            0,
+        );
+
+        // First, remote supports a single protocol.
+        connection.handler.remote_adds_support_for(&["/foo"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(connection.handler.remote_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Second, it adds a protocol but also still includes the first one.
+        connection
+            .handler
+            .remote_adds_support_for(&["/foo", "/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocol"
+        );
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Third, stop listening on a protocol it never advertised (we can't control what handlers do so this needs to be handled gracefully).
+        connection.handler.remote_removes_support_for(&["/baz"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert!(&connection.handler.remote_removed.is_empty());
+
+        // Fourth, stop listening on a protocol that was previously supported
+        connection.handler.remote_removes_support_for(&["/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert_eq!(connection.handler.remote_removed, vec![vec!["/bar"]]);
     }
 
     struct DummyStreamMuxer {
@@ -928,8 +947,36 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void, Void>>,
         active_protocols: HashSet<StreamProtocol>,
-        supported_local_protocols: SupportedProtocols,
+        local_added: Vec<Vec<StreamProtocol>>,
+        local_removed: Vec<Vec<StreamProtocol>>,
+        remote_added: Vec<Vec<StreamProtocol>>,
+        remote_removed: Vec<Vec<StreamProtocol>>,
+    }
+
+    impl ConfigurableProtocolConnectionHandler {
+        fn listen_on(&mut self, protocols: &[&'static str]) {
+            self.active_protocols = protocols.iter().copied().map(StreamProtocol::new).collect();
+        }
+
+        fn remote_adds_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
+        }
+
+        fn remote_removes_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
+        }
     }
 
     impl ConnectionHandler for MockConnectionHandler {
@@ -1035,8 +1082,20 @@ mod tests {
                 Self::OutboundOpenInfo,
             >,
         ) {
-            if let ConnectionEvent::LocalProtocolsChange(change) = event {
-                self.supported_local_protocols.on_protocols_change(change);
+            match event {
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.local_added.push(added.cloned().collect())
+                }
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.local_removed.push(removed.cloned().collect())
+                }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.remote_added.push(added.cloned().collect())
+                }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.remote_removed.push(removed.cloned().collect())
+                }
+                _ => {}
             }
         }
 
@@ -1059,6 +1118,10 @@ mod tests {
                 Self::Error,
             >,
         > {
+            if let Some(event) = self.events.pop() {
+                return Poll::Ready(event);
+            }
+
             Poll::Pending
         }
     }
