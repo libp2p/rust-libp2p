@@ -718,10 +718,10 @@ mod tests {
     #[cfg(all(feature = "ecdsa", feature = "peerid"))]
     fn keypair_protobuf_roundtrip_ecdsa() {
         let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
-            "0803128a01308187020100301306072a8648ce3d020106082a8648ce3d030107046d306b0201010420122f33dad49e77dd1a467ac4b4b9432079d3ac0c110f9a608e86ff31a7552e55a14403420004ada418c4f1f7715ef1a365d9ae1e80f5d7069ab55ee19f1c4d77b44ea8dc9cbda558fe88dc32779c68573bf330daeeae1f44158a3b7d4b325230a8daf0d46dc5"
+            "08031279307702010104203E5B1FE9712E6C314942A750BD67485DE3C1EFE85B1BFB520AE8F9AE3DFA4A4CA00A06082A8648CE3D030107A14403420004DE3D300FA36AE0E8F5D530899D83ABAB44ABF3161F162A4BC901D8E6ECDA020E8B6D5F8DA30525E71D6851510C098E5C47C646A597FB4DCEC034E9F77C409E62"
         ))
         .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004ada418c4f1f7715ef1a365d9ae1e80f5d7069ab55ee19f1c4d77b44ea8dc9cbda558fe88dc32779c68573bf330daeeae1f44158a3b7d4b325230a8daf0d46dc5")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }
