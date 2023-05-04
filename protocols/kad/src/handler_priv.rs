@@ -35,7 +35,7 @@ use libp2p_swarm::handler::{
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
 };
 use log::trace;
 use std::collections::{HashSet, VecDeque};
@@ -86,7 +86,7 @@ pub struct KademliaHandler<TUserData> {
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
 
-    remote_supported_protocols: HashSet<String>,
+    remote_supported_protocols: HashSet<StreamProtocol>,
 }
 
 /// The states of protocol confirmation that a connection
@@ -796,19 +796,10 @@ where
             }
         }
 
-        // TODO: We should cache this / it will get simpler with #2831.
-        let our_kademlia_protocols = self
-            .config
-            .protocol_config
-            .protocol_names()
-            .iter()
-            .filter_map(|b| String::from_utf8(b.to_vec()).ok())
-            .collect::<Vec<_>>();
-
         let remote_supports_our_kademlia_protocols = self
             .remote_supported_protocols
             .iter()
-            .any(|p| our_kademlia_protocols.contains(p));
+            .any(|p| self.config.protocol_config.protocol_names().contains(p));
 
         if remote_supports_our_kademlia_protocols {
             self.protocol_status = ProtocolStatus::Confirmed;

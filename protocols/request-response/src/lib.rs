@@ -61,7 +61,7 @@
 mod codec;
 mod handler;
 
-pub use codec::{Codec, ProtocolName};
+pub use codec::Codec;
 pub use handler::ProtocolSupport;
 
 use crate::handler::protocol::RequestProtocol;

@@ -508,10 +508,7 @@ mod tests {
     use libp2p_tcp as tcp;
     use std::time::Duration;
 
-    fn transport() -> (
-        identity::PublicKey,
-        transport::Boxed<(PeerId, StreamMuxerBox)>,
-    ) {
+    fn transport() -> (PublicKey, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         let id_keys = identity::Keypair::generate_ed25519();
         let pubkey = id_keys.public();
         let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))

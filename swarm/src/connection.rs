@@ -35,7 +35,9 @@ use crate::handler::{
     ProtocolsRemoved,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
+use crate::{
+    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol, SubstreamProtocol,
+};
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -46,7 +48,7 @@ use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::Endpoint;
-use libp2p_core::{upgrade, ProtocolName as _, UpgradeError};
+use libp2p_core::{upgrade, UpgradeError};
 use libp2p_identity::PeerId;
 use std::collections::HashSet;
 use std::future::Future;
@@ -150,7 +152,7 @@ where
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
 
-    local_supported_protocols: HashSet<String>,
+    local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: SupportedProtocols,
 }
 
@@ -436,12 +438,12 @@ where
     }
 }
 
-fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<String> {
+fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
     handler
         .listen_protocol()
         .upgrade()
         .protocol_info()
-        .filter_map(|i| String::from_utf8(i.protocol_name().to_vec()).ok())
+        .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
 }
 
@@ -761,7 +763,7 @@ mod tests {
             None,
             0,
         );
-        connection.handler.active_protocols = HashSet::from(["/foo"]);
+        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/foo")]);
 
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
@@ -772,10 +774,11 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<HashSet<_>>(),
-            HashSet::from(["/foo".to_owned()])
+            HashSet::from([StreamProtocol::new("/foo")])
         );
 
-        connection.handler.active_protocols = HashSet::from(["/foo", "/bar"]);
+        connection.handler.active_protocols =
+            HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]);
 
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
@@ -787,10 +790,10 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<HashSet<_>>(),
-            HashSet::from(["/bar".to_owned(), "/foo".to_owned()])
+            HashSet::from([StreamProtocol::new("/bar"), StreamProtocol::new("/foo")])
         );
 
-        connection.handler.active_protocols = HashSet::from(["/bar"]);
+        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/bar")]);
 
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
@@ -802,7 +805,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<HashSet<_>>(),
-            HashSet::from(["/bar".to_owned()])
+            HashSet::from([StreamProtocol::new("/bar")])
         );
     }
 
@@ -925,7 +928,7 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
-        active_protocols: HashSet<&'static str>,
+        active_protocols: HashSet<StreamProtocol>,
         supported_local_protocols: SupportedProtocols,
     }
 
@@ -1061,11 +1064,11 @@ mod tests {
     }
 
     struct ManyProtocolsUpgrade {
-        protocols: Vec<&'static str>,
+        protocols: Vec<StreamProtocol>,
     }
 
     impl UpgradeInfo for ManyProtocolsUpgrade {
-        type Info = &'static str;
+        type Info = StreamProtocol;
         type InfoIter = std::vec::IntoIter<Self::Info>;
 
         fn protocol_info(&self) -> Self::InfoIter {

@@ -79,6 +79,7 @@ pub enum HandlerIn {
 /// creation loops.
 const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
+#[allow(clippy::large_enum_variant)]
 pub enum Handler {
     Enabled(EnabledHandler),
     Disabled(DisabledHandler),

@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::warn;
@@ -81,7 +81,7 @@ pub struct Handler {
     observed_addr: Multiaddr,
 
     local_supported_protocols: SupportedProtocols,
-    remote_supported_protocols: HashSet<String>,
+    remote_supported_protocols: HashSet<StreamProtocol>,
     external_addresses: HashSet<Multiaddr>,
 }
 

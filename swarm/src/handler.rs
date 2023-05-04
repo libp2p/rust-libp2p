@@ -58,6 +58,7 @@ use std::collections::HashSet;
 use std::iter::Peekable;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
+use crate::StreamProtocol;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
@@ -294,11 +295,11 @@ pub enum ProtocolsChange<'a> {
 /// An [`Iterator`] over all protocols that have been added.
 #[derive(Clone)]
 pub struct ProtocolsAdded<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
+    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
 }
 
 impl<'a> ProtocolsAdded<'a> {
-    pub(crate) fn from_set(protocols: &'a HashSet<String, RandomState>) -> Self {
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
         ProtocolsAdded {
             protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
         }
@@ -308,11 +309,11 @@ impl<'a> ProtocolsAdded<'a> {
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, String, RandomState>>,
+    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
 }
 
 impl<'a> ProtocolsRemoved<'a> {
-    pub(crate) fn from_set(protocols: &'a HashSet<String, RandomState>) -> Self {
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
         ProtocolsRemoved {
             protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
         }
@@ -320,14 +321,14 @@ impl<'a> ProtocolsRemoved<'a> {
 }
 
 impl<'a> Iterator for ProtocolsAdded<'a> {
-    type Item = &'a String;
+    type Item = &'a StreamProtocol;
     fn next(&mut self) -> Option<Self::Item> {
         self.protocols.next()
     }
 }
 
 impl<'a> Iterator for ProtocolsRemoved<'a> {
-    type Item = &'a String;
+    type Item = &'a StreamProtocol;
     fn next(&mut self) -> Option<Self::Item> {
         self.protocols.next()
     }
@@ -451,9 +452,9 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProtocolSupport {
     /// The remote now supports these additional protocols.
-    Added(HashSet<String>),
+    Added(HashSet<StreamProtocol>),
     /// The remote no longer supports these protocols.
-    Removed(HashSet<String>),
+    Removed(HashSet<StreamProtocol>),
 }
 
 /// Event produced by a handler.
@@ -691,4 +692,4 @@ impl Ord for KeepAlive {
 /// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
 /// [`ProtocolsAdded::from_set`] and [`ProtocolsRemoved::from_set`]. Those have lifetime-constraints
 /// which don't work unless we have a [`HashSet`] with a `'static' lifetime.
-static EMPTY_HASHSET: Lazy<HashSet<String>> = Lazy::new(HashSet::new);
+static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);

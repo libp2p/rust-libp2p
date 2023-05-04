@@ -1,9 +1,10 @@
 use crate::handler::ProtocolsChange;
+use crate::StreamProtocol;
 use std::collections::HashSet;
 
 #[derive(Default, Clone, Debug)]
 pub struct SupportedProtocols {
-    protocols: HashSet<String>,
+    protocols: HashSet<StreamProtocol>,
 }
 
 impl SupportedProtocols {
@@ -30,7 +31,7 @@ impl SupportedProtocols {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &String> {
+    pub fn iter(&self) -> impl Iterator<Item = &StreamProtocol> {
         self.protocols.iter()
     }
 }
@@ -80,7 +81,8 @@ mod tests {
         ProtocolsChange::Removed(ProtocolsRemoved::from_set(&FOO_PROTOCOLS))
     }
 
-    static FOO_PROTOCOLS: Lazy<HashSet<String>> = Lazy::new(|| HashSet::from(["foo".to_string()]));
-    static FOO_BAR_PROTOCOLS: Lazy<HashSet<String>> =
-        Lazy::new(|| HashSet::from(["foo".to_string(), "bar".to_string()]));
+    static FOO_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
+        Lazy::new(|| HashSet::from([StreamProtocol::new("foo")]));
+    static FOO_BAR_PROTOCOLS: Lazy<HashSet<StreamProtocol>> =
+        Lazy::new(|| HashSet::from([StreamProtocol::new("foo"), StreamProtocol::new("bar")]));
 }
