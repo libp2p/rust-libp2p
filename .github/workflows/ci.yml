@@ -29,7 +29,8 @@ jobs:
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
-      - run: sudo apt-get install zlib1g-dev --yes
+      - name: Install zlib for `libp2p-websocket` # https://github.com/paritytech/soketto/issues/72
+        run: sudo apt-get install zlib1g-dev --yes
 
       - uses: actions/checkout@v3
 
