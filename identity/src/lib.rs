@@ -73,7 +73,6 @@ mod keypair;
     not(feature = "ed25519"),
     not(feature = "rsa")
 ))]
-#[path = "./keypair_dummy.rs"]
 mod keypair;
 #[cfg(feature = "peerid")]
 mod peer_id;
