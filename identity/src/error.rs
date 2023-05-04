@@ -33,13 +33,6 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    #[cfg(not(all(
-        feature = "ecdsa",
-        feature = "rsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        not(target_arch = "wasm32")
-    )))]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
