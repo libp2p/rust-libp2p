@@ -72,29 +72,29 @@ impl Zeroize for X25519 {
 }
 
 impl UpgradeInfo for NoiseConfig<IX, X25519> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/ix/25519/chachapoly/sha256/0.1.0")
     }
 }
 
 impl UpgradeInfo for NoiseConfig<XX, X25519> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/xx/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/xx/25519/chachapoly/sha256/0.1.0")
     }
 }
 
 impl<R> UpgradeInfo for NoiseConfig<IK, X25519, R> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/ik/25519/chachapoly/sha256/0.1.0")
     }
 }
 

@@ -23,7 +23,7 @@
 //! receives a request and sends a response, whereas the
 //! outbound upgrade send a request and receives a response.
 
-use crate::codec_priv::Codec;
+use crate::codec::Codec;
 use crate::RequestId;
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*};

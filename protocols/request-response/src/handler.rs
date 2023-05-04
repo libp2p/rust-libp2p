@@ -18,20 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod protocol;
+pub(crate) mod protocol;
 
-use crate::codec_priv::Codec;
+pub use protocol::ProtocolSupport;
+
+use crate::codec::Codec;
+use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
-
-use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
-pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError,
+};
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
     SubstreamProtocol,
@@ -47,12 +48,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Handler`"
-)]
-pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
 
 /// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
 pub struct Handler<TCodec>
@@ -192,12 +187,6 @@ where
         }
     }
 }
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type RequestResponseHandlerEvent<TCodec> = Event<TCodec>;
 
 /// The events emitted by the [`Handler`].
 pub enum Event<TCodec>

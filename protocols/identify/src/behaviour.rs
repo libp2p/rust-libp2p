@@ -26,7 +26,8 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, ToSwarm,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol,
+    THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -498,12 +499,14 @@ pub enum Event {
     },
 }
 
-fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
+fn supported_protocols(params: &impl PollParameters) -> Vec<StreamProtocol> {
     // The protocol names can be bytes, but the identify protocol except UTF-8 strings.
     // There's not much we can do to solve this conflict except strip non-UTF-8 characters.
     params
         .supported_protocols()
-        .map(|p| String::from_utf8_lossy(&p).to_string())
+        .filter_map(|p| {
+            StreamProtocol::try_from_owned(String::from_utf8_lossy(&p).to_string()).ok()
+        })
         .collect()
 }
 

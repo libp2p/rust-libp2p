@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol_priv::{GossipsubCodec, ProtocolConfig};
+use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::rpc_proto::proto;
 use crate::types::{PeerKind, RawMessage, Rpc};
 use crate::ValidationError;
@@ -79,6 +79,7 @@ pub enum HandlerIn {
 /// creation loops.
 const MAX_SUBSTREAM_ATTEMPTS: usize = 5;
 
+#[allow(clippy::large_enum_variant)]
 pub enum Handler {
     Enabled(EnabledHandler),
     Disabled(DisabledHandler),
