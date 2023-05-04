@@ -169,9 +169,10 @@ impl Keypair {
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
-    pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Inner, DecodingError> {
-        #[allow(deprecated)]
-        secp256k1::SecretKey::from_der(der).map(|sk| Inner::Secp256k1(secp256k1::Keypair::from(sk)))
+    pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        Ok(secp256k1::SecretKey::from_der(der).map(|sk| Keypair {
+            keypair: Inner::Secp256k1(secp256k1::Keypair::from(sk)),
+        })?)
     }
 
     #[cfg(feature = "ed25519")]
@@ -188,7 +189,6 @@ impl Keypair {
     /// a signature that can be verified using the corresponding public key.
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         use Inner::*;
-        #[allow(deprecated)]
         match self.keypair {
             #[cfg(feature = "ed25519")]
             Ed25519(ref pair) => Ok(pair.sign(msg)),
