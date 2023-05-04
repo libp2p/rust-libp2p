@@ -331,11 +331,11 @@ impl TryInto<ed25519::Keypair> for Keypair {
         match self.keypair {
             KeyPairInner::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -348,11 +348,11 @@ impl TryInto<ecdsa::Keypair> for Keypair {
         match self {
             KeyPairInner::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
         }
     }
 }
@@ -365,11 +365,11 @@ impl TryInto<secp256k1::Keypair> for Keypair {
         match self.keypair {
             KeyPairInner::Secp256k1(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            KeyPairInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -382,17 +382,17 @@ impl TryInto<rsa::Keypair> for Keypair {
         match self.keypair {
             KeyPairInner::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            KeyPairInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            KeyPairInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum PublicKeyInner {
+pub enum PublicKeyInner {
     /// A public Ed25519 key.
     #[cfg(feature = "ed25519")]
     Ed25519(ed25519::PublicKey),
@@ -410,7 +410,7 @@ enum PublicKeyInner {
 /// The public key of a node's identity keypair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey {
-    publickey: PublicKeyInner,
+    pub(crate) publickey: PublicKeyInner,
 }
 
 impl PublicKey {
@@ -605,11 +605,11 @@ impl TryInto<ed25519::PublicKey> for PublicKey {
         match self.publickey {
             PublicKeyInner::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -639,11 +639,11 @@ impl TryInto<secp256k1::PublicKey> for PublicKey {
         match self.publickey {
             PublicKeyInner::Secp256k1(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "ecdsa")]
-            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -656,11 +656,11 @@ impl TryInto<rsa::PublicKey> for PublicKey {
         match self.publickey {
             PublicKeyInner::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
-            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKeyInner::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
