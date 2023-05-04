@@ -39,14 +39,14 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p_tcp::TcpTransport;
+//! use libp2p_core::{Transport, upgrade, transport::MemoryTransport};
 //! use libp2p_noise as noise;
+//! use libp2p_identity as identity;
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let noise = noise::Config::new(&id_keys).unwrap();
-//! let builder = TcpTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = MemoryTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```
@@ -137,11 +137,11 @@ impl Config {
 }
 
 impl UpgradeInfo for Config {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise")
+        std::iter::once("/noise")
     }
 }
 
