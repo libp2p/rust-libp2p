@@ -186,9 +186,7 @@ where
 
         if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                ProtocolsChange::Added(ProtocolsAdded {
-                    protocols: initial_protocols.difference(&HashSet::new()).peekable(),
-                }),
+                ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
             ));
         }
 
