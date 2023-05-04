@@ -50,7 +50,7 @@ async fn run(message1: Vec<u8>) {
 
     let client_task = async move {
         let mut client = DeflateConfig::default()
-            .upgrade_outbound(client, b"")
+            .upgrade_outbound(client, "")
             .await
             .unwrap();
 
@@ -64,7 +64,7 @@ async fn run(message1: Vec<u8>) {
 
     let server_task = async move {
         let mut server = DeflateConfig::default()
-            .upgrade_outbound(server, b"")
+            .upgrade_outbound(server, "")
             .await
             .unwrap();
 

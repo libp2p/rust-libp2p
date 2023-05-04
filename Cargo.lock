@@ -354,7 +354,7 @@ dependencies = [
  "polling",
  "rustix",
  "slab",
- "socket2",
+ "socket2 0.4.9",
  "waker-fn",
 ]
 
@@ -437,7 +437,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "pin-utils",
- "socket2",
+ "socket2 0.4.9",
  "trust-dns-resolver",
 ]
 
@@ -499,7 +499,7 @@ name = "autonat-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "clap 4.2.5",
+ "clap 4.2.7",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
@@ -787,9 +787,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.2.5"
+version = "4.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a1f23fa97e1d1641371b51f35535cb26959b8e27ab50d167a8b996b5bada819"
+checksum = "34d21f9bf1b425d2968943631ec91202fe5e837264063503708b83013f8fc938"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -798,9 +798,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.2.5"
+version = "4.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fdc5d93c358224b4d6867ef1356d740de2303e9892edc06c5340daeccd96bab"
+checksum = "914c8c79fb560f238ef6429439a30023c862f7a28e688c58f7203f12b29970bd"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1250,7 +1250,7 @@ dependencies = [
 name = "dcutr"
 version = "0.1.0"
 dependencies = [
- "clap 4.2.5",
+ "clap 4.2.7",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
@@ -1588,7 +1588,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "clap 4.2.5",
+ "clap 4.2.7",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2064,7 +2064,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite 0.2.9",
- "socket2",
+ "socket2 0.4.9",
  "tokio",
  "tower-service",
  "tracing",
@@ -2222,7 +2222,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd302af1b90f2463a98fa5ad469fc212c8e3175a41c3068601bfa2727591c5be"
 dependencies = [
- "socket2",
+ "socket2 0.4.9",
  "widestring",
  "winapi",
  "winreg",
@@ -2308,7 +2308,7 @@ name = "keygen"
 version = "0.1.0"
 dependencies = [
  "base64 0.21.0",
- "clap 4.2.5",
+ "clap 4.2.7",
  "libp2p-core",
  "libp2p-identity",
  "serde",
@@ -2350,7 +2350,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bytes",
- "clap 4.2.5",
+ "clap 4.2.7",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2481,7 +2481,7 @@ version = "0.10.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
- "clap 4.2.5",
+ "clap 4.2.7",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2589,7 +2589,6 @@ dependencies = [
  "serde",
  "sha2 0.10.6",
  "smallvec",
- "thiserror",
  "unsigned-varint",
  "void",
  "wasm-timer",
@@ -2701,7 +2700,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "smallvec",
- "socket2",
+ "socket2 0.5.2",
  "tokio",
  "trust-dns-proto",
  "void",
@@ -2788,7 +2787,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-std",
- "clap 4.2.5",
+ "clap 4.2.7",
  "env_logger 0.10.0",
  "futures",
  "instant",
@@ -3041,7 +3040,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "log",
- "socket2",
+ "socket2 0.5.2",
  "tokio",
 ]
 
@@ -3989,9 +3988,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6fa99d535dd930d1249e6c79cb3c2915f9172a540fe2b02a4c8f9ca954721e"
+checksum = "e227aeb6c2cfec819e999c4773b35f8c7fa37298a203ff46420095458eee567e"
 dependencies = [
  "dtoa",
  "itoa",
@@ -4271,7 +4270,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "clap 4.2.5",
+ "clap 4.2.7",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
@@ -4788,6 +4787,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d283f86695ae989d1e18440a943880967156325ba025f05049946bff47bcc2b"
+dependencies = [
+ "libc",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "soketto"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5050,7 +5059,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "pin-project-lite 0.2.9",
  "signal-hook-registry",
- "socket2",
+ "socket2 0.4.9",
  "tokio-macros",
  "windows-sys 0.48.0",
 ]
@@ -5162,7 +5171,7 @@ dependencies = [
  "rustls 0.20.8",
  "rustls-pemfile",
  "smallvec",
- "socket2",
+ "socket2 0.4.9",
  "thiserror",
  "tinyvec",
  "tokio",
@@ -5653,7 +5662,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f08dfd7a6e3987e255c4dbe710dde5d94d0f0574f8a21afa95d171376c143106"
 dependencies = [
  "log",
- "socket2",
+ "socket2 0.4.9",
  "thiserror",
  "tokio",
  "webrtc-util",
