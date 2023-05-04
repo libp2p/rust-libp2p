@@ -409,15 +409,8 @@ where
 
             let new_protocols = gather_supported_protocols(handler);
 
-            let (added, removed) =
-                ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
-
-            if let Some(added) = added {
-                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(added));
-            }
-
-            if let Some(removed) = removed {
-                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(removed));
+            for change in ProtocolsChange::from_full_sets(supported_protocols, &new_protocols) {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
             }
 
             *supported_protocols = new_protocols;

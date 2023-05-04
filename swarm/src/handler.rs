@@ -53,6 +53,7 @@ use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
+use smallvec::SmallVec;
 use std::collections::hash_map::RandomState;
 use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
@@ -334,28 +335,29 @@ impl<'a> ProtocolsChange<'a> {
     pub(crate) fn from_full_sets(
         existing_protocols: &'a HashSet<StreamProtocol>,
         new_protocols: &'a HashSet<StreamProtocol>,
-    ) -> (Option<Self>, Option<Self>) {
+    ) -> SmallVec<[Self; 2]> {
         if existing_protocols == new_protocols {
-            return (None, None);
+            return SmallVec::new();
         }
+
+        let mut changes = SmallVec::new();
 
         let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
         let mut removed_protocols = existing_protocols.difference(&new_protocols).peekable();
 
-        let added = added_protocols
-            .peek()
-            .is_some()
-            .then_some(ProtocolsChange::Added(ProtocolsAdded {
+        if added_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Added(ProtocolsAdded {
                 protocols: added_protocols,
             }));
-        let removed = removed_protocols
-            .peek()
-            .is_some()
-            .then_some(ProtocolsChange::Removed(ProtocolsRemoved {
+        }
+
+        if removed_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
                 protocols: Either::Left(removed_protocols),
             }));
+        }
 
-        (added, removed)
+        changes
     }
 }
 
