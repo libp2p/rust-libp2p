@@ -392,7 +392,7 @@ impl TryInto<rsa::Keypair> for Keypair {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum PublicKeyInner {
+pub(crate) enum PublicKeyInner {
     /// A public Ed25519 key.
     #[cfg(feature = "ed25519")]
     Ed25519(ed25519::PublicKey),
