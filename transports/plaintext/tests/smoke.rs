@@ -49,11 +49,11 @@ fn variable_msg_length() {
                 PlainText2Config {
                     local_public_key: server_id_public,
                 }
-                .upgrade_inbound(server, b""),
+                .upgrade_inbound(server, ""),
                 PlainText2Config {
                     local_public_key: client_id_public,
                 }
-                .upgrade_inbound(client, b""),
+                .upgrade_inbound(client, ""),
             )
             .await
             .unwrap();

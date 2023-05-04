@@ -138,70 +138,32 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod error;
-
-mod metrics_priv;
-#[deprecated(
-    note = "The `metrics` module will be made private in the future and should not be depended on."
-)]
-pub mod metrics {
-    pub use super::metrics_priv::*;
-}
-
-mod protocol_priv;
-#[deprecated(
-    note = "The `protocol` module will be made private in the future and should not be depended on."
-)]
-pub mod protocol {
-    pub use super::protocol_priv::*;
-}
-
-mod subscription_filter_priv;
-#[deprecated(
-    note = "The `subscription_filter` module will be made private in the future, import the types from the crate root instead."
-)]
-pub mod subscription_filter {
-    pub use super::subscription_filter_priv::*;
-
-    pub mod regex {
-        pub use crate::subscription_filter_priv::RegexSubscriptionFilter;
-    }
-}
-
-mod time_cache_priv;
-#[deprecated(
-    note = "The `time_cache` module will be made private in the future and should not be depended on."
-)]
-pub mod time_cache {
-    pub use super::time_cache_priv::*;
-}
-
 mod backoff;
 mod behaviour;
 mod config;
-mod error_priv;
+mod error;
 mod gossip_promises;
 mod handler;
 mod mcache;
+mod metrics;
 mod peer_score;
+mod protocol;
+mod rpc_proto;
+mod subscription_filter;
+mod time_cache;
 mod topic;
 mod transform;
 mod types;
 
-mod rpc_proto;
-
-#[deprecated(note = "This error will no longer be emitted")]
-pub type HandlerError = error_priv::HandlerError;
-
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error_priv::{PublishError, SubscriptionError, ValidationError};
-pub use self::metrics_priv::Config as MetricsConfig;
+pub use self::error::{PublishError, SubscriptionError, ValidationError};
+pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
-pub use self::subscription_filter_priv::{
+pub use self::subscription_filter::{
     AllowAllSubscriptionFilter, CallbackSubscriptionFilter, CombinedSubscriptionFilters,
     MaxCountSubscriptionFilter, RegexSubscriptionFilter, TopicSubscriptionFilter,
     WhitelistSubscriptionFilter,
@@ -209,54 +171,6 @@ pub use self::subscription_filter_priv::{
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use `Behaviour` instead of `Gossipsub` for Network Behaviour, i.e. `libp2p::gossipsub::Behaviour"
-)]
-pub type Gossipsub = Behaviour;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Event"
-)]
-pub type GossipsubEvent = Event;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
-)]
-pub type GossipsubConfig = Config;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Message"
-)]
-pub type GossipsubMessage = Message;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Rpc"
-)]
-pub type GossipsubRpc = Rpc;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` infix, i.e. `libp2p::gossipsub::RawMessage"
-)]
-pub type RawGossipsubMessage = RawMessage;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::ConfigBuilder"
-)]
-pub type GossipsubConfigBuilder = ConfigBuilder;
-
-#[deprecated(
-    since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
-)]
-pub type GossipsubVersion = Version;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
