@@ -689,7 +689,6 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connection::supported_protocols::SupportedProtocols;
     use crate::keep_alive;
     use futures::future;
     use futures::AsyncRead;
@@ -768,14 +767,10 @@ mod tests {
         let _ = Pin::new(&mut connection)
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
         assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/foo")])
+            connection.handler.added,
+            vec![vec![StreamProtocol::new("/foo")]]
         );
+        assert!(connection.handler.removed.is_empty());
 
         connection.handler.active_protocols =
             HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]);
@@ -784,14 +779,13 @@ mod tests {
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
 
         assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/bar"), StreamProtocol::new("/foo")])
+            connection.handler.added,
+            vec![
+                vec![StreamProtocol::new("/foo")],
+                vec![StreamProtocol::new("/bar")]
+            ]
         );
+        assert!(connection.handler.removed.is_empty());
 
         connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/bar")]);
 
@@ -799,13 +793,15 @@ mod tests {
             .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
 
         assert_eq!(
-            connection
-                .handler
-                .supported_local_protocols
-                .iter()
-                .cloned()
-                .collect::<HashSet<_>>(),
-            HashSet::from([StreamProtocol::new("/bar")])
+            connection.handler.added,
+            vec![
+                vec![StreamProtocol::new("/foo")],
+                vec![StreamProtocol::new("/bar")]
+            ]
+        );
+        assert_eq!(
+            connection.handler.removed,
+            vec![vec![StreamProtocol::new("/foo")]]
         );
     }
 
@@ -929,7 +925,8 @@ mod tests {
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
         active_protocols: HashSet<StreamProtocol>,
-        supported_local_protocols: SupportedProtocols,
+        added: Vec<Vec<StreamProtocol>>,
+        removed: Vec<Vec<StreamProtocol>>,
     }
 
     impl ConnectionHandler for MockConnectionHandler {
@@ -1035,8 +1032,14 @@ mod tests {
                 Self::OutboundOpenInfo,
             >,
         ) {
-            if let ConnectionEvent::LocalProtocolsChange(change) = event {
-                self.supported_local_protocols.on_protocols_change(change);
+            match event {
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.added.push(added.cloned().collect())
+                }
+                ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.removed.push(removed.cloned().collect())
+                }
+                _ => {}
             }
         }
 
