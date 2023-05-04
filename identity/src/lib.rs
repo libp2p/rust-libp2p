@@ -98,28 +98,64 @@ impl zeroize::Zeroize for proto::PrivateKey {
 ))]
 impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
+        // #[allow(deprecated)]
+        // match key {
+        //     #[cfg(feature = "ed25519")]
+        //     PublicKey::Ed25519(key) => proto::PublicKey {
+        //         Type: proto::KeyType::Ed25519,
+        //         Data: key.encode().to_vec(),
+        //     },
+        //     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+        //     PublicKey::Rsa(key) => proto::PublicKey {
+        //         Type: proto::KeyType::RSA,
+        //         Data: key.encode_x509(),
+        //     },
+        //     #[cfg(feature = "secp256k1")]
+        //     PublicKey::Secp256k1(key) => proto::PublicKey {
+        //         Type: proto::KeyType::Secp256k1,
+        //         Data: key.encode().to_vec(),
+        //     },
+        //     #[cfg(feature = "ecdsa")]
+        //     PublicKey::Ecdsa(key) => proto::PublicKey {
+        //         Type: proto::KeyType::ECDSA,
+        //         Data: key.encode_der(),
+        //     },
+        // }
+
         #[allow(deprecated)]
-        match key {
+        #[cfg(any(
+            feature = "ed25519",
+            all(feature = "rsa", not(target_arch = "wasm32")),
+            feature = "secp256k1",
+            feature = "ecdsa"
+        ))]
+        match (
+            key.clone().try_into_ed25519(),
+            key.clone().try_into_rsa(),
+            key.clone().try_into_secp256k1(),
+            key.clone().try_into_ecdsa(),
+        ) {
             #[cfg(feature = "ed25519")]
-            PublicKey::Ed25519(key) => proto::PublicKey {
+            (Ok(key), _, _, _) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
                 Data: key.encode().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKey::Rsa(key) => proto::PublicKey {
+            (_, Ok(key), _, _) => proto::PublicKey {
                 Type: proto::KeyType::RSA,
                 Data: key.encode_x509(),
             },
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(key) => proto::PublicKey {
+            (_, _, Ok(key), _) => proto::PublicKey {
                 Type: proto::KeyType::Secp256k1,
                 Data: key.encode().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
-            PublicKey::Ecdsa(key) => proto::PublicKey {
+            (_, _, _, Ok(key)) => proto::PublicKey {
                 Type: proto::KeyType::ECDSA,
                 Data: key.encode_der(),
             },
+            (Err(_), Err(_), Err(_), Err(_)) => todo!(),
         }
     }
 }

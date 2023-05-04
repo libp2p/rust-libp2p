@@ -127,8 +127,8 @@ impl Protocol<X25519> for X25519 {
 
     #[allow(irrefutable_let_patterns)]
     fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519>) -> bool {
-        if let identity::PublicKey::Ed25519(ref p) = id_pk {
-            PublicKey::from_ed25519(p).as_ref() == dh_pk.as_ref()
+        if let Ok(p) = identity::PublicKey::try_into_ed25519(id_pk.clone()) {
+            PublicKey::from_ed25519(&p).as_ref() == dh_pk.as_ref()
         } else {
             false
         }
