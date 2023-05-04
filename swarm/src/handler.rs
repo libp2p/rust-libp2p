@@ -48,12 +48,13 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
+use ::either::Either;
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use once_cell::sync::Lazy;
 use std::collections::hash_map::RandomState;
-use std::collections::hash_set::Difference;
+use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
@@ -309,13 +310,17 @@ impl<'a> ProtocolsAdded<'a> {
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+    pub(crate) protocols: Either<
+        Peekable<Difference<'a, StreamProtocol, RandomState>>,
+        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
+    >,
 }
 
 impl<'a> ProtocolsRemoved<'a> {
+    #[cfg(test)]
     pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
         ProtocolsRemoved {
-            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
         }
     }
 }

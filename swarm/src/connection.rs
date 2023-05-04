@@ -38,6 +38,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, Upgra
 use crate::{
     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
+use either::Either;
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -153,7 +154,7 @@ where
     >,
 
     local_supported_protocols: HashSet<StreamProtocol>,
-    remote_supported_protocols: SupportedProtocols,
+    remote_supported_protocols: HashSet<StreamProtocol>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -200,7 +201,7 @@ where
             max_negotiating_inbound_streams,
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
-            remote_supported_protocols: SupportedProtocols::default(),
+            remote_supported_protocols: Default::default(),
         }
     }
 
@@ -268,11 +269,17 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    let change = ProtocolsChange::Added(ProtocolsAdded::from_set(&protocols));
+                    let mut actually_added_protocols =
+                        protocols.difference(remote_supported_protocols).peekable();
 
-                    if remote_supported_protocols.on_protocols_change(change.clone()) {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
-                        // TODO: Should we optimise this to be the _actual_ change?
+                    if actually_added_protocols.peek().is_some() {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                            ProtocolsChange::Added(ProtocolsAdded {
+                                protocols: actually_added_protocols,
+                            }),
+                        ));
+
+                        remote_supported_protocols.extend(protocols);
                     }
 
                     continue;
@@ -280,11 +287,18 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    let change = ProtocolsChange::Removed(ProtocolsRemoved::from_set(&protocols));
+                    let mut actually_removed_protocols = remote_supported_protocols
+                        .intersection(&protocols)
+                        .peekable();
 
-                    if remote_supported_protocols.on_protocols_change(change.clone()) {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
-                        // TODO: Should we optimise this to be the _actual_ change?
+                    if actually_removed_protocols.peek().is_some() {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                            ProtocolsChange::Removed(ProtocolsRemoved {
+                                protocols: Either::Right(actually_removed_protocols),
+                            }),
+                        ));
+
+                        remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
 
                     continue;
@@ -425,7 +439,7 @@ where
                 if removed_protocols.peek().is_some() {
                     handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                         ProtocolsChange::Removed(ProtocolsRemoved {
-                            protocols: removed_protocols,
+                            protocols: Either::Left(removed_protocols),
                         }),
                     ));
                 }
