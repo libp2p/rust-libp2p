@@ -389,40 +389,6 @@ impl TryInto<rsa::Keypair> for Keypair {
     }
 }
 
-// /// The public key of a node's identity keypair.
-// #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-// pub enum PublicKey {
-//     /// A public Ed25519 key.
-//     #[cfg(feature = "ed25519")]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ed25519` instead."
-//     )]
-//     Ed25519(ed25519::PublicKey),
-//     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-//     /// A public RSA key.
-
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_rsa` instead."
-//     )]
-//     Rsa(rsa::PublicKey),
-//     #[cfg(feature = "secp256k1")]
-//     /// A public Secp256k1 key.
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_secp256k1` instead."
-//     )]
-//     Secp256k1(secp256k1::PublicKey),
-//     /// A public ECDSA key.
-//     #[cfg(feature = "ecdsa")]
-//     #[deprecated(
-//         since = "0.1.0",
-//         note = "This enum will be made opaque in the future, use `PublicKey::from` and `PublicKey::into_ecdsa` instead."
-//     )]
-//     Ecdsa(ecdsa::PublicKey),
-// }
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 /// The public key of a node's identity keypair.
 enum PublicKeyType {
@@ -453,7 +419,6 @@ impl PublicKey {
     #[must_use]
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         use PublicKeyType::*;
-        #[allow(deprecated)]
         match &self.publickey {
             #[cfg(feature = "ed25519")]
             Ed25519(pk) => pk.verify(msg, sig),
@@ -635,7 +600,6 @@ impl TryInto<ed25519::PublicKey> for PublicKey {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<ed25519::PublicKey, Self::Error> {
-        #[allow(deprecated)]
         match self.publickey {
             PublicKeyType::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
