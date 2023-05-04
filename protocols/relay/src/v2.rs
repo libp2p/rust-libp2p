@@ -154,18 +154,6 @@ pub mod protocol {
         note = "Use libp2p_relay::outbound::stop::FatalUpgradeError instead."
     )]
     pub type OutboundStopFatalUpgradeError = crate::outbound::stop::FatalUpgradeError;
-
-    #[deprecated(
-        since = "0.15.0",
-        note = "Use libp2p_relay::HOP_PROTOCOL_NAME instead."
-    )]
-    pub const HOP_PROTOCOL_NAME: &[u8; 31] = crate::HOP_PROTOCOL_NAME;
-
-    #[deprecated(
-        since = "0.15.0",
-        note = "Use libp2p_relay::STOP_PROTOCOL_NAME instead."
-    )]
-    pub const STOP_PROTOCOL_NAME: &[u8; 32] = crate::STOP_PROTOCOL_NAME;
 }
 
 #[deprecated(
