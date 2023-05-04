@@ -796,6 +796,56 @@ mod tests {
         assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
     }
 
+    #[test]
+    fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            0,
+        );
+
+        // First, remote supports a single protocol.
+        connection.handler.remote_adds_support_for(&["/foo"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(connection.handler.remote_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Second, it adds a protocol but also still includes the first one.
+        connection
+            .handler
+            .remote_adds_support_for(&["/foo", "/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocol"
+        );
+        assert!(connection.handler.remote_removed.is_empty());
+
+        // Third, stop listening on a protocol it never advertised (we can't control what handlers do so this needs to be handled gracefully).
+        connection.handler.remote_removes_support_for(&["/baz"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert!(&connection.handler.remote_removed.is_empty());
+
+        // Fourth, stop listening on a protocol that was previously supported
+        connection.handler.remote_removes_support_for(&["/bar"]);
+        let _ = connection.poll_noop_waker();
+
+        assert_eq!(
+            connection.handler.remote_added,
+            vec![vec!["/foo"], vec!["/bar"]]
+        );
+        assert_eq!(connection.handler.remote_removed, vec![vec!["/bar"]]);
+    }
+
     struct DummyStreamMuxer {
         counter: Arc<()>,
     }
@@ -915,14 +965,35 @@ mod tests {
 
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
+        events: Vec<ConnectionHandlerEvent<DeniedUpgrade, (), Void, Void>>,
         active_protocols: HashSet<StreamProtocol>,
         local_added: Vec<Vec<StreamProtocol>>,
         local_removed: Vec<Vec<StreamProtocol>>,
+        remote_added: Vec<Vec<StreamProtocol>>,
+        remote_removed: Vec<Vec<StreamProtocol>>,
     }
 
     impl ConfigurableProtocolConnectionHandler {
         fn listen_on(&mut self, protocols: &[&'static str]) {
             self.active_protocols = protocols.iter().copied().map(StreamProtocol::new).collect();
+        }
+
+        fn remote_adds_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
+        }
+
+        fn remote_removes_support_for(&mut self, protocols: &[&'static str]) {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(
+                        protocols.iter().copied().map(StreamProtocol::new).collect(),
+                    ),
+                ));
         }
     }
 
@@ -1036,6 +1107,12 @@ mod tests {
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
                     self.local_removed.push(removed.cloned().collect())
                 }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(added)) => {
+                    self.remote_added.push(added.cloned().collect())
+                }
+                ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Removed(removed)) => {
+                    self.remote_removed.push(removed.cloned().collect())
+                }
                 _ => {}
             }
         }
@@ -1059,6 +1136,10 @@ mod tests {
                 Self::Error,
             >,
         > {
+            if let Some(event) = self.events.pop() {
+                return Poll::Ready(event);
+            }
+
             Poll::Pending
         }
     }
