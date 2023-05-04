@@ -124,23 +124,6 @@ async fn identify_push() {
     assert_eq!(swarm1_received_info.agent_version, "b");
     assert!(!swarm1_received_info.protocols.is_empty());
     assert!(swarm1_received_info.listen_addrs.is_empty());
-
-    /// Combined behaviour to keep the connection alive after the periodic identify.
-    #[derive(libp2p_swarm::NetworkBehaviour)]
-    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-    struct Behaviour {
-        identify: identify::Behaviour,
-        keep_alive: keep_alive::Behaviour,
-    }
-
-    impl Behaviour {
-        fn new(config: identify::Config) -> Self {
-            Self {
-                identify: identify::Behaviour::new(config),
-                keep_alive: keep_alive::Behaviour::default(),
-            }
-        }
-    }
 }
 
 #[async_std::test]
@@ -148,10 +131,10 @@ async fn discover_peer_after_disconnect() {
     let _ = env_logger::try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+        Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(
+        Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -168,7 +151,7 @@ async fn discover_peer_after_disconnect() {
         .wait(|event| {
             matches!(
                 event,
-                SwarmEvent::Behaviour(identify::Event::Received { .. })
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received { .. }))
             )
             .then_some(())
         })
@@ -192,4 +175,24 @@ async fn discover_peer_after_disconnect() {
         .await;
 
     assert_eq!(connected_peer, swarm1_peer_id);
+}
+
+/// Combined behaviour to keep the connection alive after the periodic identify.
+///
+/// The identify implementation sets `keep_alive` to `No` once it has done its thing.
+/// This can result in unexpected connection closures if one peer is faster than the other.
+#[derive(libp2p_swarm::NetworkBehaviour)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+struct Behaviour {
+    identify: identify::Behaviour,
+    keep_alive: keep_alive::Behaviour,
+}
+
+impl Behaviour {
+    fn new(config: identify::Config) -> Self {
+        Self {
+            identify: identify::Behaviour::new(config),
+            keep_alive: keep_alive::Behaviour::default(),
+        }
+    }
 }
