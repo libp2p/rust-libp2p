@@ -60,19 +60,6 @@ pub mod rsa;
 pub mod secp256k1;
 
 mod error;
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
-mod keypair;
-#[cfg(all(
-    not(feature = "ecdsa"),
-    not(feature = "secp256k1"),
-    not(feature = "ed25519"),
-    not(feature = "rsa")
-))]
 mod keypair;
 #[cfg(feature = "peerid")]
 mod peer_id;
