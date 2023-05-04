@@ -436,6 +436,13 @@ where
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
     }
+
+    #[cfg(test)]
+    fn poll_noop_waker(
+        &mut self,
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+        Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
+    }
 }
 
 fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<StreamProtocol> {
@@ -715,8 +722,7 @@ mod tests {
                 max_negotiating_inbound_streams,
             );
 
-            let result = Pin::new(&mut connection)
-                .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+            let result = connection.poll_noop_waker();
 
             assert!(result.is_pending());
             assert_eq!(
@@ -740,13 +746,11 @@ mod tests {
         );
 
         connection.handler.open_new_outbound();
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         std::thread::sleep(upgrade_timeout + Duration::from_secs(1));
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         assert!(matches!(
             connection.handler.error.unwrap(),
@@ -764,8 +768,7 @@ mod tests {
         );
         connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/foo")]);
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
         assert_eq!(
             connection.handler.added,
             vec![vec![StreamProtocol::new("/foo")]]
@@ -775,8 +778,7 @@ mod tests {
         connection.handler.active_protocols =
             HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]);
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         assert_eq!(
             connection.handler.added,
@@ -789,8 +791,7 @@ mod tests {
 
         connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/bar")]);
 
-        let _ = Pin::new(&mut connection)
-            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+        let _ = connection.poll_noop_waker();
 
         assert_eq!(
             connection.handler.added,
