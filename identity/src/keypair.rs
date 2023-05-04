@@ -286,7 +286,6 @@ impl Keypair {
 #[cfg(feature = "ecdsa")]
 impl From<ecdsa::Keypair> for Keypair {
     fn from(kp: ecdsa::Keypair) -> Self {
-        #[allow(deprecated)]
         Inner::Ecdsa(kp)
     }
 }
@@ -294,7 +293,6 @@ impl From<ecdsa::Keypair> for Keypair {
 #[cfg(feature = "ed25519")]
 impl From<ed25519::Keypair> for Keypair {
     fn from(kp: ed25519::Keypair) -> Self {
-        #[allow(deprecated)]
         Keypair {
             keypair: Inner::Ed25519(kp),
         }
@@ -304,7 +302,6 @@ impl From<ed25519::Keypair> for Keypair {
 #[cfg(feature = "secp256k1")]
 impl From<secp256k1::Keypair> for Keypair {
     fn from(kp: secp256k1::Keypair) -> Self {
-        #[allow(deprecated)]
         Inner::Secp256k1(kp)
     }
 }
@@ -312,7 +309,6 @@ impl From<secp256k1::Keypair> for Keypair {
 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 impl From<rsa::Keypair> for Keypair {
     fn from(kp: rsa::Keypair) -> Self {
-        #[allow(deprecated)]
         Keypair {
             keypair: Inner::Rsa(kp),
         }
@@ -324,7 +320,6 @@ impl TryInto<ed25519::Keypair> for Keypair {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<ed25519::Keypair, Self::Error> {
-        #[allow(deprecated)]
         match self.keypair {
             Inner::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
@@ -342,7 +337,6 @@ impl TryInto<ecdsa::Keypair> for Keypair {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<ecdsa::Keypair, Self::Error> {
-        #[allow(deprecated)]
         match self {
             Inner::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
@@ -360,7 +354,6 @@ impl TryInto<secp256k1::Keypair> for Keypair {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<secp256k1::Keypair, Self::Error> {
-        #[allow(deprecated)]
         match self {
             Inner::Secp256k1(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
@@ -378,7 +371,6 @@ impl TryInto<rsa::Keypair> for Keypair {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<rsa::Keypair, Self::Error> {
-        #[allow(deprecated)]
         match self.keypair {
             Inner::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
