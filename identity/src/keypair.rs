@@ -223,29 +223,25 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[cfg_attr(
-        not(feature = "ed25519"),
-        allow(unreachable_code, unused_variables, unused_mut)
-    )]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
-
-        #[cfg(not(feature = "ed25519"))]
-        return Err(DecodingError::missing_feature("ed25519"));
 
         #[allow(deprecated)]
         let pk: proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => proto::PrivateKey {
                 Type: proto::KeyType::Ed25519,
-                Data: data.encode().to_vec(),
+                Data: data.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
             #[cfg(feature = "secp256k1")]
             Self::Secp256k1(_) => return Err(DecodingError::encoding_unsupported("secp256k1")),
             #[cfg(feature = "ecdsa")]
-            Self::Ecdsa(_) => return Err(DecodingError::encoding_unsupported("ECDSA")),
+            Self::Ecdsa(data) => proto::PrivateKey {
+                Type: proto::KeyType::ECDSA,
+                Data: data.secret().encode_der(),
+            },
         };
 
         let mut buf = Vec::with_capacity(pk.get_size());
@@ -256,7 +252,6 @@ impl Keypair {
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
-    #[cfg_attr(not(feature = "ed25519"), allow(unused_mut))]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
@@ -265,18 +260,22 @@ impl Keypair {
             .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
             .map(zeroize::Zeroizing::new)?;
 
+        #[allow(deprecated, unreachable_code)]
         match private_key.Type {
-            #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 =>
-            {
-                #[allow(deprecated)]
-                ed25519::Keypair::decode(&mut private_key.Data).map(Keypair::Ed25519)
+            proto::KeyType::Ed25519 => {
+                #[cfg(feature = "ed25519")]
+                return ed25519::Keypair::try_from_bytes(&mut private_key.Data)
+                    .map(Keypair::Ed25519);
+                Err(DecodingError::missing_feature("ed25519"))
             }
-            #[cfg(not(feature = "ed25519"))]
-            proto::KeyType::Ed25519 => Err(DecodingError::missing_feature("ed25519")),
             proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
             proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
-            proto::KeyType::ECDSA => Err(DecodingError::decoding_unsupported("ECDSA")),
+            proto::KeyType::ECDSA => {
+                #[cfg(feature = "ecdsa")]
+                return ecdsa::SecretKey::try_decode_der(&mut private_key.Data)
+                    .map(|key| Keypair::Ecdsa(key.into()));
+                Err(DecodingError::missing_feature("ecdsa"))
+            }
         }
     }
 }
@@ -713,6 +712,41 @@ mod tests {
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
+    }
+
+    #[test]
+    #[cfg(all(feature = "ecdsa", feature = "peerid"))]
+    fn keypair_protobuf_roundtrip_ecdsa() {
+        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+            "08031279307702010104203E5B1FE9712E6C314942A750BD67485DE3C1EFE85B1BFB520AE8F9AE3DFA4A4CA00A06082A8648CE3D030107A14403420004DE3D300FA36AE0E8F5D530899D83ABAB44ABF3161F162A4BC901D8E6ECDA020E8B6D5F8DA30525E71D6851510C098E5C47C646A597FB4DCEC034E9F77C409E62"
+        ))
+        .unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
+
+        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+    }
+
+    #[cfg(feature = "peerid")]
+    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey) {
+        assert_eq!(&private_key.public(), public_key);
+
+        let encoded_priv = private_key.to_protobuf_encoding().unwrap();
+        let decoded_priv = Keypair::from_protobuf_encoding(&encoded_priv).unwrap();
+
+        assert_eq!(
+            private_key.public().to_peer_id(),
+            decoded_priv.public().to_peer_id(),
+            "PeerId from roundtripped private key should be the same"
+        );
+
+        let encoded_public = private_key.public().encode_protobuf();
+        let decoded_public = PublicKey::try_decode_protobuf(&encoded_public).unwrap();
+
+        assert_eq!(
+            private_key.public().to_peer_id(),
+            decoded_public.to_peer_id(),
+            "PeerId from roundtripped public key should be the same"
+        );
     }
 
     #[test]

@@ -36,13 +36,14 @@ use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{BytesReader, Writer};
-use std::{borrow::Cow, convert::TryFrom, time::Duration};
+use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
+pub const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 
 /// The default maximum size for a varint length-delimited packet.
 pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
@@ -139,20 +140,20 @@ impl From<KadPeer> for proto::Peer {
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
-    protocol_names: Vec<Cow<'static, [u8]>>,
+    protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
-    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+    pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
     }
 
     /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) {
+    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
         self.protocol_names = names;
     }
 
@@ -165,14 +166,14 @@ impl KademliaProtocolConfig {
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_names: iter::once(Cow::Borrowed(DEFAULT_PROTO_NAME)).collect(),
+            protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
 
 impl UpgradeInfo for KademliaProtocolConfig {
-    type Info = Cow<'static, [u8]>;
+    type Info = StreamProtocol;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
