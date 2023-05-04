@@ -31,14 +31,13 @@ use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolsChange,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
@@ -85,8 +84,6 @@ pub struct KademliaHandler<TUserData> {
 
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
-
-    remote_supported_protocols: HashSet<StreamProtocol>,
 }
 
 /// The states of protocol confirmation that a connection
@@ -94,12 +91,10 @@ pub struct KademliaHandler<TUserData> {
 enum ProtocolStatus {
     /// It is as yet unknown whether the remote supports the
     /// configured protocol name.
-    Unknown,
+    Unconfirmed,
     /// The configured protocol name has been confirmed by the remote
     /// but has not yet been reported to the `Kademlia` behaviour.
     Confirmed,
-    /// The configured protocol name(s) are not or no longer supported by the remote.
-    NotSupported,
     /// The configured protocol has been confirmed by the remote
     /// and the confirmation reported to the `Kademlia` behaviour.
     Reported,
@@ -230,11 +225,13 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerEvent<TUserData> {
     /// The configured protocol name has been confirmed by the peer through
-    /// a successfully negotiated substream or by learning the supported protocols of the remote.
+    /// a successfully negotiated substream.
+    ///
+    /// This event is only emitted once by a handler upon the first
+    /// successfully negotiated inbound or outbound substream and
+    /// indicates that the connected peer participates in the Kademlia
+    /// overlay network identified by the configured protocol name.
     ProtocolConfirmed { endpoint: ConnectedPoint },
-    /// The configured protocol name(s) are not or no longer supported by the peer on the provided
-    /// connection and it should be removed from the routing table.
-    ProtocolNotSupported { endpoint: ConnectedPoint },
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -503,8 +500,7 @@ where
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
             keep_alive,
-            protocol_status: ProtocolStatus::Unknown,
-            remote_supported_protocols: Default::default(),
+            protocol_status: ProtocolStatus::Unconfirmed,
         }
     }
 
@@ -526,7 +522,7 @@ where
 
         self.num_requested_outbound_streams -= 1;
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -548,7 +544,7 @@ where
             future::Either::Right(p) => void::unreachable(p),
         };
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -781,30 +777,7 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_) => {}
-            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Added(added)) => {
-                for p in added {
-                    self.remote_supported_protocols.insert(p.to_owned());
-                }
-            }
-            ConnectionEvent::RemoteProtocolsChange(ProtocolsChange::Removed(removed)) => {
-                for p in removed {
-                    self.remote_supported_protocols.remove(p);
-                }
-            }
-        }
-
-        let remote_supports_our_kademlia_protocols = self
-            .remote_supported_protocols
-            .iter()
-            .any(|p| self.config.protocol_config.protocol_names().contains(p));
-
-        if remote_supports_our_kademlia_protocols {
-            self.protocol_status = ProtocolStatus::Confirmed;
-        } else {
-            self.protocol_status = ProtocolStatus::NotSupported;
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) | ConnectionEvent::LocalProtocolsChange(_) | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
