@@ -355,9 +355,9 @@ where
 #[derive(Debug, Clone)]
 pub struct IndexedProtoName<H>(usize, H);
 
-impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
-    fn protocol_name(&self) -> &[u8] {
-        self.1.protocol_name()
+impl<H: AsRef<str>> AsRef<str> for IndexedProtoName<H> {
+    fn as_ref(&self) -> &str {
+        self.1.as_ref()
     }
 }
 
@@ -478,7 +478,7 @@ where
     let mut set = HashSet::new();
     for infos in iter {
         for i in infos.protocol_info() {
-            let v = Vec::from(i.protocol_name());
+            let v = Vec::from(i.as_ref());
             if set.contains(&v) {
                 return Err(DuplicateProtonameError(v));
             } else {

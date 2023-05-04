@@ -3,11 +3,16 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Introduce `StreamProtocol` type.
+  This type enforces invariants on protocol names, such as leading forward slashes and correct UTF8 encoding.
+  See [PR 3746].
+
 - Remove `ConnectionHandlerUpgrErr::Timer` variant.
   This variant was never constructed and thus dead code.
   See [PR 3605].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.42.2

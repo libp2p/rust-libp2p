@@ -32,9 +32,9 @@ fn select_proto_basic() {
 
         let server = async_std::task::spawn(async move {
             let connec = listener.accept().await.unwrap().0;
-            let protos = vec![b"/proto1", b"/proto2"];
+            let protos = vec!["/proto1", "/proto2"];
             let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
-            assert_eq!(proto, b"/proto2");
+            assert_eq!(proto, "/proto2");
 
             let mut out = vec![0; 32];
             let n = io.read(&mut out).await.unwrap();
@@ -47,11 +47,11 @@ fn select_proto_basic() {
 
         let client = async_std::task::spawn(async move {
             let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let protos = vec![b"/proto3", b"/proto2"];
+            let protos = vec!["/proto3", "/proto2"];
             let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
                 .await
                 .unwrap();
-            assert_eq!(proto, b"/proto2");
+            assert_eq!(proto, "/proto2");
 
             io.write_all(b"ping").await.unwrap();
             io.flush().await.unwrap();
