@@ -161,20 +161,16 @@ impl Keypair<X25519> {
     /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
     #[allow(unreachable_patterns)]
     pub fn from_identity(id_keys: &identity::Keypair) -> Option<AuthenticKeypair<X25519>> {
-        match id_keys.clone().try_into_ed25519().ok() {
-            Some(ed25519_keypair) => {
-                let kp = Keypair::from(SecretKey::from_ed25519(&ed25519_keypair.secret()));
-                let id = KeypairIdentity {
-                    public: id_keys.public(),
-                    signature: None,
-                };
-                Some(AuthenticKeypair {
-                    keypair: kp,
-                    identity: id,
-                })
-            }
-            _ => None,
-        }
+        let ed25519_keypair = id_keys.clone().try_into_ed25519().ok()?;
+        let kp = Keypair::from(SecretKey::from_ed25519(&ed25519_keypair.secret()));
+        let id = KeypairIdentity {
+            public: id_keys.public(),
+            signature: None,
+        };
+        Some(AuthenticKeypair {
+            keypair: kp,
+            identity: id,
+        })
     }
 }
 
