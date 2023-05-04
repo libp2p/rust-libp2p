@@ -766,18 +766,17 @@ mod tests {
             None,
             0,
         );
-        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/foo")]);
 
+        connection.handler.listen_on(&["/foo"]);
         let _ = connection.poll_noop_waker();
+
         assert_eq!(
             connection.handler.added,
             vec![vec![StreamProtocol::new("/foo")]]
         );
         assert!(connection.handler.removed.is_empty());
 
-        connection.handler.active_protocols =
-            HashSet::from([StreamProtocol::new("/foo"), StreamProtocol::new("/bar")]);
-
+        connection.handler.listen_on(&["/foo", "/bar"]);
         let _ = connection.poll_noop_waker();
 
         assert_eq!(
@@ -789,8 +788,7 @@ mod tests {
         );
         assert!(connection.handler.removed.is_empty());
 
-        connection.handler.active_protocols = HashSet::from([StreamProtocol::new("/bar")]);
-
+        connection.handler.listen_on(&["/bar"]);
         let _ = connection.poll_noop_waker();
 
         assert_eq!(
@@ -928,6 +926,12 @@ mod tests {
         active_protocols: HashSet<StreamProtocol>,
         added: Vec<Vec<StreamProtocol>>,
         removed: Vec<Vec<StreamProtocol>>,
+    }
+
+    impl ConfigurableProtocolConnectionHandler {
+        fn listen_on(&mut self, protocols: &[&'static str]) {
+            self.active_protocols = protocols.iter().copied().map(StreamProtocol::new).collect();
+        }
     }
 
     impl ConnectionHandler for MockConnectionHandler {
