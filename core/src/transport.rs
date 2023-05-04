@@ -31,7 +31,7 @@ use std::{
     error::Error,
     fmt,
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context, Poll}, sync::atomic::{AtomicU64, Ordering},
 };
 
 pub mod and_then;
@@ -53,6 +53,8 @@ pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
+
+static NEXT_LISTENER_ID: AtomicU64 = AtomicU64::new(1);
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -249,7 +251,7 @@ pub struct ListenerId(u64);
 impl ListenerId {
     /// Creates a new `ListenerId`.
     pub fn new() -> Self {
-        ListenerId(rand::random())
+        ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
     }
 }
 
