@@ -240,7 +240,7 @@ impl Keypair {
             #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => proto::PrivateKey {
                 Type: proto::KeyType::ECDSA,
-                Data: data.secret().encode_pkcs8_der(),
+                Data: data.secret().encode_der(),
             },
         };
 
@@ -272,7 +272,7 @@ impl Keypair {
             proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
             proto::KeyType::ECDSA => {
                 #[cfg(feature = "ecdsa")]
-                return ecdsa::SecretKey::try_decode_pkcs8_der(&mut private_key.Data)
+                return ecdsa::SecretKey::try_decode_der(&mut private_key.Data)
                     .map(|key| Keypair::Ecdsa(key.into()));
                 Err(DecodingError::missing_feature("ecdsa"))
             }

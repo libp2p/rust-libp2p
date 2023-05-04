@@ -24,8 +24,6 @@ use super::error::DecodingError;
 use core::cmp;
 use core::fmt;
 use core::hash;
-use p256::pkcs8::DecodePrivateKey;
-use p256::pkcs8::EncodePrivateKey;
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -33,6 +31,7 @@ use p256::{
     },
     EncodedPoint,
 };
+use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
 use void::Void;
 use zeroize::Zeroize;
 
@@ -126,18 +125,18 @@ impl SecretKey {
             .map(SecretKey)
     }
 
-    /// Encode the secret key into DER-encoded PKCS#8 format.
-    pub(crate) fn encode_pkcs8_der(&self) -> Vec<u8> {
+    /// Encode the secret key into DER-encoded byte buffer.
+    pub(crate) fn encode_der(&self) -> Vec<u8> {
         self.0
-            .to_pkcs8_der()
+            .to_sec1_der()
             .expect("Encoding to pkcs#8 format to succeed")
             .to_bytes()
             .to_vec()
     }
 
-    /// Try to decode a secret key from a byte buffer in DER-encoded PKCS#8 format, zeroize the buffer on success.
-    pub(crate) fn try_decode_pkcs8_der(buf: &mut [u8]) -> Result<Self, DecodingError> {
-        match SigningKey::from_pkcs8_der(buf) {
+    /// Try to decode a secret key from a DER-encoded byte buffer, zeroize the buffer on success.
+    pub(crate) fn try_decode_der(buf: &mut [u8]) -> Result<Self, DecodingError> {
+        match SigningKey::from_sec1_der(buf) {
             Ok(key) => {
                 buf.zeroize();
                 Ok(SecretKey(key))

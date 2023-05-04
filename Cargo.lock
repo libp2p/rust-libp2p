@@ -2641,7 +2641,7 @@ dependencies = [
  "rand 0.8.5",
  "ring",
  "rmp-serde",
- "sec1 0.3.0",
+ "sec1 0.7.1",
  "serde",
  "serde_json",
  "sha2 0.10.6",
