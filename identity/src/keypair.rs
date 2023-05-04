@@ -268,8 +268,9 @@ impl Keypair {
         match private_key.Type {
             proto::KeyType::Ed25519 => {
                 #[cfg(feature = "ed25519")]
-                return ed25519::Keypair::try_from_bytes(&mut private_key.Data)
-                    .map(Keypair::Ed25519);
+                return ed25519::Keypair::try_from_bytes(&mut private_key.Data).map(|sk| Keypair {
+                    keypair: KeyPairInner::Ed25519(sk),
+                });
                 Err(DecodingError::missing_feature("ed25519"))
             }
             proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
