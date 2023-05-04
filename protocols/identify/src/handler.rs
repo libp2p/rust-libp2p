@@ -35,7 +35,7 @@ use libp2p_swarm::handler::{
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -92,7 +92,7 @@ pub struct InEvent {
     pub listen_addrs: Vec<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<String>,
+    pub supported_protocols: Vec<StreamProtocol>,
 
     /// The protocol w.r.t. the information requested.
     pub protocol: Protocol,

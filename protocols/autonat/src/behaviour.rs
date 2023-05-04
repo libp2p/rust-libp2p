@@ -21,7 +21,8 @@
 mod as_client;
 mod as_server;
 
-use crate::protocol::{AutoNatCodec, AutoNatProtocol, DialRequest, DialResponse, ResponseError};
+use crate::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
+use crate::DEFAULT_PROTOCOL_NAME;
 use as_client::AsClient;
 pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
@@ -218,7 +219,7 @@ pub struct Behaviour {
 
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
-        let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
+        let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
         let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
         let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);

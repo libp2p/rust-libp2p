@@ -30,7 +30,7 @@ use libp2p_core::upgrade;
 /// [`UpgradeInfo`](upgrade::UpgradeInfo).
 pub trait UpgradeInfoSend: Send + 'static {
     /// Equivalent to [`UpgradeInfo::Info`](upgrade::UpgradeInfo::Info).
-    type Info: upgrade::ProtocolName + Clone + Send + 'static;
+    type Info: AsRef<str> + Clone + Send + 'static;
     /// Equivalent to [`UpgradeInfo::InfoIter`](upgrade::UpgradeInfo::InfoIter).
     type InfoIter: Iterator<Item = Self::Info> + Send + 'static;
 
@@ -72,7 +72,7 @@ pub trait OutboundUpgradeSend: UpgradeInfoSend {
 impl<T, TInfo> OutboundUpgradeSend for T
 where
     T: upgrade::OutboundUpgrade<NegotiatedSubstream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: upgrade::ProtocolName + Clone + Send + 'static,
+    TInfo: AsRef<str> + Clone + Send + 'static,
     T::Output: Send + 'static,
     T::Error: Send + 'static,
     T::Future: Send + 'static,
@@ -106,7 +106,7 @@ pub trait InboundUpgradeSend: UpgradeInfoSend {
 impl<T, TInfo> InboundUpgradeSend for T
 where
     T: upgrade::InboundUpgrade<NegotiatedSubstream, Info = TInfo> + UpgradeInfoSend<Info = TInfo>,
-    TInfo: upgrade::ProtocolName + Clone + Send + 'static,
+    TInfo: AsRef<str> + Clone + Send + 'static,
     T::Output: Send + 'static,
     T::Error: Send + 'static,
     T::Future: Send + 'static,

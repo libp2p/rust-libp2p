@@ -56,7 +56,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod connection;
+mod executor;
 mod registry;
+mod stream_protocol;
 #[cfg(test)]
 mod test;
 mod upgrade;
@@ -64,7 +66,6 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
-mod executor;
 pub mod handler;
 pub mod keep_alive;
 
@@ -130,6 +131,7 @@ pub use handler::{
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
+pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
@@ -142,11 +144,11 @@ use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
-    multiaddr::Protocol,
+    multiaddr,
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, Transport,
 };
 use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
@@ -886,7 +888,7 @@ where
                     .listen_protocol()
                     .upgrade()
                     .protocol_info()
-                    .map(|p| p.protocol_name().to_owned())
+                    .map(|p| p.as_ref().as_bytes().to_vec())
                     .collect();
                 let other_established_connection_ids = self
                     .pool
@@ -2015,13 +2017,13 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(Protocol::P2p(hash)) = addr.iter().last() {
+    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
         if &hash != peer.as_ref() {
             return Err(addr);
         }
         Ok(addr)
     } else {
-        Ok(addr.with(Protocol::P2p(peer.into())))
+        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
     }
 }
 
@@ -2728,7 +2730,7 @@ mod tests {
             }));
 
         let other_id = PeerId::random();
-        let other_addr = address.with(Protocol::P2p(other_id.into()));
+        let other_addr = address.with(multiaddr::Protocol::P2p(other_id.into()));
 
         swarm2.dial(other_addr.clone()).unwrap();
 
@@ -2876,7 +2878,7 @@ mod tests {
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
                     .into_iter()
-                    .map(|addr| addr.with(Protocol::P2p(target.into())))
+                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target.into())))
                     .collect::<Vec<_>>();
 
                 assert_eq!(expected_addresses, failed_addresses);

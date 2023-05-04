@@ -38,11 +38,11 @@ impl Default for DeflateConfig {
 }
 
 impl UpgradeInfo for DeflateConfig {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/deflate/1.0.0")
+        iter::once("/deflate/1.0.0")
     }
 }
 

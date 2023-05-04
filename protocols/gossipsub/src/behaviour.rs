@@ -52,7 +52,7 @@ use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
+use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
@@ -3317,7 +3317,7 @@ where
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
@@ -3330,7 +3330,7 @@ where
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
