@@ -79,7 +79,6 @@ impl Keypair {
     /// Generate a new Ed25519 keypair.
     #[cfg(feature = "ed25519")]
     pub fn generate_ed25519() -> Keypair {
-        #[allow(deprecated)]
         Keypair {
             keypair: Inner::Ed25519(ed25519::Keypair::generate()),
         }
@@ -88,7 +87,6 @@ impl Keypair {
     /// Generate a new Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
     pub fn generate_secp256k1() -> Keypair {
-        #[allow(deprecated)]
         Keypair {
             keypair: Inner::Secp256k1(secp256k1::Keypair::generate()),
         }
@@ -97,7 +95,6 @@ impl Keypair {
     /// Generate a new ECDSA keypair.
     #[cfg(feature = "ecdsa")]
     pub fn generate_ecdsa() -> Keypair {
-        #[allow(deprecated)]
         Keypair {
             keypair: Inner::Ecdsa(ecdsa::Keypair::generate()),
         }
