@@ -59,11 +59,11 @@ impl Config {
 }
 
 impl UpgradeInfo for Config {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/tls/1.0.0")
+        std::iter::once("/tls/1.0.0")
     }
 }
 

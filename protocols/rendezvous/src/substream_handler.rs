@@ -31,7 +31,8 @@ use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -127,21 +128,21 @@ impl fmt::Display for OutboundSubstreamId {
 }
 
 pub struct PassthroughProtocol {
-    ident: Option<&'static [u8]>,
+    ident: Option<StreamProtocol>,
 }
 
 impl PassthroughProtocol {
-    pub fn new(ident: &'static [u8]) -> Self {
+    pub fn new(ident: StreamProtocol) -> Self {
         Self { ident: Some(ident) }
     }
 }
 
 impl UpgradeInfo for PassthroughProtocol {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = std::option::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.ident.into_iter()
+        self.ident.clone().into_iter()
     }
 }
 

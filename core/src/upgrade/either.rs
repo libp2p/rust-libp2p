@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherFuture, EitherName},
+    either::EitherFuture,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
@@ -31,7 +31,7 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
+    type Info = Either<A::Info, B::Info>;
     type InfoIter = Either<
         Map<<A::InfoIter as IntoIterator>::IntoIter, fn(A::Info) -> Self::Info>,
         Map<<B::InfoIter as IntoIterator>::IntoIter, fn(B::Info) -> Self::Info>,
@@ -39,8 +39,8 @@ where
 
     fn protocol_info(&self) -> Self::InfoIter {
         match self {
-            Either::Left(a) => Either::Left(a.protocol_info().into_iter().map(EitherName::A)),
-            Either::Right(b) => Either::Right(b.protocol_info().into_iter().map(EitherName::B)),
+            Either::Left(a) => Either::Left(a.protocol_info().into_iter().map(Either::Left)),
+            Either::Right(b) => Either::Right(b.protocol_info().into_iter().map(Either::Right)),
         }
     }
 }
@@ -56,10 +56,10 @@ where
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (Either::Left(a), EitherName::A(info)) => {
+            (Either::Left(a), Either::Left(info)) => {
                 EitherFuture::First(a.upgrade_inbound(sock, info))
             }
-            (Either::Right(b), EitherName::B(info)) => {
+            (Either::Right(b), Either::Right(info)) => {
                 EitherFuture::Second(b.upgrade_inbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound"),
@@ -78,10 +78,10 @@ where
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (Either::Left(a), EitherName::A(info)) => {
+            (Either::Left(a), Either::Left(info)) => {
                 EitherFuture::First(a.upgrade_outbound(sock, info))
             }
-            (Either::Right(b), EitherName::B(info)) => {
+            (Either::Right(b), Either::Right(info)) => {
                 EitherFuture::Second(b.upgrade_outbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),

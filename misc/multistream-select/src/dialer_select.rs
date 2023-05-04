@@ -52,7 +52,7 @@ pub fn dialer_select_proto<R, I>(
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>,
+    I::Item: AsRef<str>,
 {
     let protocols = protocols.into_iter().peekable();
     DialerSelectFuture {
@@ -88,7 +88,7 @@ where
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
     I: Iterator,
-    I::Item: AsRef<[u8]>,
+    I::Item: AsRef<str>,
 {
     type Output = Result<(I::Item, Negotiated<R>), NegotiationError>;
 
@@ -187,7 +187,7 @@ where
                         Message::NotAvailable => {
                             log::debug!(
                                 "Dialer: Received rejection of protocol: {}",
-                                String::from_utf8_lossy(protocol.as_ref())
+                                protocol.as_ref()
                             );
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
