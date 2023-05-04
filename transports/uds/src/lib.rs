@@ -260,6 +260,7 @@ mod tests {
     use futures::{channel::oneshot, prelude::*};
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
+        transport::ListenerId,
         Transport,
     };
     use std::{self, borrow::Cow, path::Path};
