@@ -293,10 +293,76 @@ pub enum ProtocolsChange<'a> {
     Removed(ProtocolsRemoved<'a>),
 }
 
+impl<'a> ProtocolsChange<'a> {
+    /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
+    pub(crate) fn add(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_add: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+
+        if actually_added_protocols.peek().is_none() {
+            return None;
+        }
+
+        Some(ProtocolsChange::Added(ProtocolsAdded {
+            protocols: actually_added_protocols,
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    pub(crate) fn remove(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_remove: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_removed_protocols = existing_protocols.intersection(&to_remove).peekable();
+
+        if actually_removed_protocols.peek().is_none() {
+            return None;
+        }
+
+        Some(ProtocolsChange::Removed(ProtocolsRemoved {
+            protocols: Either::Right(actually_removed_protocols),
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
+    pub(crate) fn from_full_sets(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        new_protocols: &'a HashSet<StreamProtocol>,
+    ) -> (Option<Self>, Option<Self>) {
+        if existing_protocols == new_protocols {
+            return (None, None);
+        }
+
+        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
+        let mut removed_protocols = existing_protocols.difference(&new_protocols).peekable();
+
+        let added = added_protocols
+            .peek()
+            .is_some()
+            .then_some(ProtocolsChange::Added(ProtocolsAdded {
+                protocols: added_protocols,
+            }));
+        let removed = removed_protocols
+            .peek()
+            .is_some()
+            .then_some(ProtocolsChange::Removed(ProtocolsRemoved {
+                protocols: Either::Left(removed_protocols),
+            }));
+
+        (added, removed)
+    }
+}
+
 /// An [`Iterator`] over all protocols that have been added.
 #[derive(Clone)]
 pub struct ProtocolsAdded<'a> {
-    pub(crate) protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
 }
 
 impl<'a> ProtocolsAdded<'a> {
@@ -310,7 +376,7 @@ impl<'a> ProtocolsAdded<'a> {
 /// An [`Iterator`] over all protocols that have been removed.
 #[derive(Clone)]
 pub struct ProtocolsRemoved<'a> {
-    pub(crate) protocols: Either<
+    protocols: Either<
         Peekable<Difference<'a, StreamProtocol, RandomState>>,
         Peekable<Intersection<'a, StreamProtocol, RandomState>>,
     >,

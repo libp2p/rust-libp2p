@@ -32,13 +32,11 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
-    ProtocolsRemoved,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 use crate::{
     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
-use either::Either;
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -269,16 +267,10 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Added(protocols),
                 )) => {
-                    let mut actually_added_protocols =
-                        protocols.difference(remote_supported_protocols).peekable();
-
-                    if actually_added_protocols.peek().is_some() {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                            ProtocolsChange::Added(ProtocolsAdded {
-                                protocols: actually_added_protocols,
-                            }),
-                        ));
-
+                    if let Some(added) =
+                        ProtocolsChange::add(remote_supported_protocols, &protocols)
+                    {
+                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(added));
                         remote_supported_protocols.extend(protocols);
                     }
 
@@ -287,17 +279,11 @@ where
                 Poll::Ready(ConnectionHandlerEvent::ReportRemoteProtocols(
                     ProtocolSupport::Removed(protocols),
                 )) => {
-                    let mut actually_removed_protocols = remote_supported_protocols
-                        .intersection(&protocols)
-                        .peekable();
-
-                    if actually_removed_protocols.peek().is_some() {
-                        handler.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
-                            ProtocolsChange::Removed(ProtocolsRemoved {
-                                protocols: Either::Right(actually_removed_protocols),
-                            }),
-                        ));
-
+                    if let Some(removed) =
+                        ProtocolsChange::remove(remote_supported_protocols, &protocols)
+                    {
+                        handler
+                            .on_connection_event(ConnectionEvent::RemoteProtocolsChange(removed));
                         remote_supported_protocols.retain(|p| !protocols.contains(p));
                     }
 
@@ -423,26 +409,15 @@ where
 
             let new_protocols = gather_supported_protocols(handler);
 
-            if &new_protocols != supported_protocols {
-                let mut added_protocols = new_protocols.difference(supported_protocols).peekable();
-                let mut removed_protocols =
-                    supported_protocols.difference(&new_protocols).peekable();
+            let (added, removed) =
+                ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
 
-                if added_protocols.peek().is_some() {
-                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        ProtocolsChange::Added(ProtocolsAdded {
-                            protocols: added_protocols,
-                        }),
-                    ));
-                }
+            if let Some(added) = added {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(added));
+            }
 
-                if removed_protocols.peek().is_some() {
-                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-                        ProtocolsChange::Removed(ProtocolsRemoved {
-                            protocols: Either::Left(removed_protocols),
-                        }),
-                    ));
-                }
+            if let Some(removed) = removed {
+                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(removed));
             }
 
             *supported_protocols = new_protocols;
