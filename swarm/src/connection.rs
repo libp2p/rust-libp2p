@@ -184,11 +184,13 @@ where
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
 
-        handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
-            ProtocolsChange::Added(ProtocolsAdded {
-                protocols: initial_protocols.difference(&HashSet::new()).peekable(),
-            }),
-        ));
+        if !initial_protocols.is_empty() {
+            handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                ProtocolsChange::Added(ProtocolsAdded {
+                    protocols: initial_protocols.difference(&HashSet::new()).peekable(),
+                }),
+            ));
+        }
 
         Connection {
             muxing: muxer,
