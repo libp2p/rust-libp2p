@@ -87,16 +87,20 @@ impl Keypair {
 
     /// Generate a new Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
-    pub fn generate_secp256k1() -> KeypairType {
+    pub fn generate_secp256k1() -> Keypair {
         #[allow(deprecated)]
-        KeypairType::Secp256k1(secp256k1::Keypair::generate())
+        Keypair {
+            keypair: KeypairType::Secp256k1(secp256k1::Keypair::generate()),
+        }
     }
 
     /// Generate a new ECDSA keypair.
     #[cfg(feature = "ecdsa")]
-    pub fn generate_ecdsa() -> KeypairType {
+    pub fn generate_ecdsa() -> Keypair {
         #[allow(deprecated)]
-        KeypairType::Ecdsa(ecdsa::Keypair::generate())
+        Keypair {
+            keypair: KeypairType::Ecdsa(ecdsa::Keypair::generate()),
+        }
     }
 
     #[cfg(feature = "ed25519")]
