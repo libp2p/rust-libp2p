@@ -55,10 +55,10 @@ fn xx() {
             ) = futures::future::try_join(
                 noise::Config::new(&server_id)
                     .unwrap()
-                    .upgrade_inbound(server, b""),
+                    .upgrade_inbound(server, ""),
                 noise::Config::new(&client_id)
                     .unwrap()
-                    .upgrade_outbound(client, b""),
+                    .upgrade_outbound(client, ""),
             )
             .await
             .unwrap();
