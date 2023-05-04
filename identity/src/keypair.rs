@@ -20,7 +20,7 @@
 
 use crate::error::OtherVariantError;
 use crate::error::{DecodingError, SigningError};
-use crate::{proto, KeyType};
+use crate::proto;
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
 

@@ -30,7 +30,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
     SubstreamProtocol,
 };
 use log::error;
@@ -67,7 +67,7 @@ impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = Event;
     type Error = Void;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();

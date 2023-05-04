@@ -22,14 +22,11 @@
 
 use async_trait::async_trait;
 use futures::{prelude::*, AsyncWriteExt};
-use libp2p_core::{
-    upgrade::{read_length_prefixed, write_length_prefixed},
-    ProtocolName,
-};
+use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
 use std::{io, iter};
@@ -40,7 +37,10 @@ async fn is_response_outbound() {
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
-    let protocols = iter::once((PingProtocol(), request_response::ProtocolSupport::Full));
+    let protocols = iter::once((
+        StreamProtocol::new("/ping/1"),
+        request_response::ProtocolSupport::Full,
+    ));
     let cfg = request_response::Config::default();
 
     let mut swarm1 =
@@ -83,7 +83,7 @@ async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -174,7 +174,7 @@ async fn ping_protocol() {
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -237,7 +237,7 @@ async fn emits_inbound_connection_closed_failure() {
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
@@ -286,8 +286,6 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
 
 // Simple Ping-Pong Protocol
 
-#[derive(Debug, Clone)]
-struct PingProtocol();
 #[derive(Clone)]
 struct PingCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,19 +293,13 @@ struct Ping(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Pong(Vec<u8>);
 
-impl ProtocolName for PingProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/ping/1".as_bytes()
-    }
-}
-
 #[async_trait]
 impl libp2p_request_response::Codec for PingCodec {
-    type Protocol = PingProtocol;
+    type Protocol = StreamProtocol;
     type Request = Ping;
     type Response = Pong;
 
-    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -320,7 +312,11 @@ impl libp2p_request_response::Codec for PingCodec {
         Ok(Ping(vec))
     }
 
-    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
+    async fn read_response<T>(
+        &mut self,
+        _: &StreamProtocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -335,7 +331,7 @@ impl libp2p_request_response::Codec for PingCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &PingProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         Ping(data): Ping,
     ) -> io::Result<()>
@@ -350,7 +346,7 @@ impl libp2p_request_response::Codec for PingCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &PingProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         Pong(data): Pong,
     ) -> io::Result<()>

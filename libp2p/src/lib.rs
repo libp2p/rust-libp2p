@@ -167,8 +167,6 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
-#[allow(deprecated)]
-pub use self::core::upgrade::{InboundUpgradeExt, OutboundUpgradeExt};
 pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, OutboundUpgrade},
@@ -179,6 +177,7 @@ pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
+pub use libp2p_swarm::StreamProtocol;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
