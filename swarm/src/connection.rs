@@ -767,41 +767,33 @@ mod tests {
             0,
         );
 
+        // First, start listening on a single protocol.
         connection.handler.listen_on(&["/foo"]);
         let _ = connection.poll_noop_waker();
 
-        assert_eq!(
-            connection.handler.added,
-            vec![vec![StreamProtocol::new("/foo")]]
-        );
-        assert!(connection.handler.removed.is_empty());
+        assert_eq!(connection.handler.local_added, vec![vec!["/foo"]]);
+        assert!(connection.handler.local_removed.is_empty());
 
+        // Second, listen on two protocols.
         connection.handler.listen_on(&["/foo", "/bar"]);
         let _ = connection.poll_noop_waker();
 
         assert_eq!(
-            connection.handler.added,
-            vec![
-                vec![StreamProtocol::new("/foo")],
-                vec![StreamProtocol::new("/bar")]
-            ]
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]],
+            "expect to only receive an event for the newly added protocols"
         );
-        assert!(connection.handler.removed.is_empty());
+        assert!(connection.handler.local_removed.is_empty());
 
+        // Third, stop listening on the first protocol.
         connection.handler.listen_on(&["/bar"]);
         let _ = connection.poll_noop_waker();
 
         assert_eq!(
-            connection.handler.added,
-            vec![
-                vec![StreamProtocol::new("/foo")],
-                vec![StreamProtocol::new("/bar")]
-            ]
+            connection.handler.local_added,
+            vec![vec!["/foo"], vec!["/bar"]]
         );
-        assert_eq!(
-            connection.handler.removed,
-            vec![vec![StreamProtocol::new("/foo")]]
-        );
+        assert_eq!(connection.handler.local_removed, vec![vec!["/foo"]]);
     }
 
     struct DummyStreamMuxer {
@@ -924,8 +916,8 @@ mod tests {
     #[derive(Default)]
     struct ConfigurableProtocolConnectionHandler {
         active_protocols: HashSet<StreamProtocol>,
-        added: Vec<Vec<StreamProtocol>>,
-        removed: Vec<Vec<StreamProtocol>>,
+        local_added: Vec<Vec<StreamProtocol>>,
+        local_removed: Vec<Vec<StreamProtocol>>,
     }
 
     impl ConfigurableProtocolConnectionHandler {
@@ -1039,10 +1031,10 @@ mod tests {
         ) {
             match event {
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Added(added)) => {
-                    self.added.push(added.cloned().collect())
+                    self.local_added.push(added.cloned().collect())
                 }
                 ConnectionEvent::LocalProtocolsChange(ProtocolsChange::Removed(removed)) => {
-                    self.removed.push(removed.cloned().collect())
+                    self.local_removed.push(removed.cloned().collect())
                 }
                 _ => {}
             }
