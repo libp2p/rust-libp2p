@@ -31,10 +31,13 @@ mod protocol;
 pub mod v2;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::message_v2::pb::mod_HopMessage::Type as HopMessageType;
+    pub(crate) use self::message_v2::pb::mod_HopMessage::Type as HopMessageType;
     pub use self::message_v2::pb::mod_StopMessage::Type as StopMessageType;
-    pub use self::message_v2::pb::{HopMessage, Limit, Peer, Reservation, Status, StopMessage};
+    pub(crate) use self::message_v2::pb::{
+        HopMessage, Limit, Peer, Reservation, Status, StopMessage,
+    };
 }
 
 pub use behaviour::{Behaviour, CircuitId, Config, Event};

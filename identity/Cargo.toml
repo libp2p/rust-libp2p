@@ -1,9 +1,9 @@
 [package]
 name = "libp2p-identity"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
-rust-version = "1.60.0"
+rust-version = { workspace = true }
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking", "cryptography"]
@@ -22,7 +22,7 @@ multihash = { version = "0.17.0", default-features = false, features = ["std"], 
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std","pkcs8"], optional = true }
 quick-protobuf = { version = "0.8.1", optional = true }
 rand = { version = "0.8", optional = true }
-sec1 = { version = "0.3.0", features = ["std"], optional = true } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
+sec1 = { version = "0.7", default-features = false, optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.0", optional = true }
 thiserror = { version = "1.0", optional = true }
@@ -41,13 +41,20 @@ ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:quick-protobuf"
 peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
 
 [dev-dependencies]
+quickcheck = { workspace = true }
 base64 = "0.21.0"
 criterion = "0.4"
 hex-literal = "0.4.1"
-quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 rmp-serde = "1.0"
 serde_json = "1.0"
 
 [[bench]]
 name = "peer_id"
 harness = false
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

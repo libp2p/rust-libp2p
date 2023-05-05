@@ -12,7 +12,7 @@ concurrency:
 jobs:
   run-multidim-interop:
     name: Run multidimensional interoperability tests
-    runs-on: ubuntu-22.04
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v2

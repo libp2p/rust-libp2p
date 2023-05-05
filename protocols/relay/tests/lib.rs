@@ -357,7 +357,7 @@ where
     transport
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed()
 }
 

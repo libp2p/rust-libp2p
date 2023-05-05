@@ -41,7 +41,7 @@ use void::Void;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
-pub enum Command<T> {
+pub(crate) enum Command<T> {
     /// Notify the connection handler of an event.
     NotifyHandler(T),
     /// Gracefully close the connection (active close) before
@@ -49,7 +49,7 @@ pub enum Command<T> {
     Close,
 }
 
-pub enum PendingConnectionEvent {
+pub(crate) enum PendingConnectionEvent {
     ConnectionEstablished {
         id: ConnectionId,
         output: (PeerId, StreamMuxerBox),
@@ -66,7 +66,7 @@ pub enum PendingConnectionEvent {
 }
 
 #[derive(Debug)]
-pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
+pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,
@@ -91,7 +91,7 @@ pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     },
 }
 
-pub async fn new_for_pending_outgoing_connection(
+pub(crate) async fn new_for_pending_outgoing_connection(
     connection_id: ConnectionId,
     dial: ConcurrentDial,
     abort_receiver: oneshot::Receiver<Void>,
@@ -127,7 +127,7 @@ pub async fn new_for_pending_outgoing_connection(
     }
 }
 
-pub async fn new_for_pending_incoming_connection<TFut>(
+pub(crate) async fn new_for_pending_incoming_connection<TFut>(
     connection_id: ConnectionId,
     future: TFut,
     abort_receiver: oneshot::Receiver<Void>,
@@ -167,7 +167,7 @@ pub async fn new_for_pending_incoming_connection<TFut>(
     }
 }
 
-pub async fn new_for_established_connection<THandler>(
+pub(crate) async fn new_for_established_connection<THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
     mut connection: crate::connection::Connection<THandler>,

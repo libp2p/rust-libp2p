@@ -58,18 +58,15 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod codec;
-pub mod handler;
+mod codec;
+mod handler;
 
-pub use codec::{Codec, ProtocolName};
-
-#[allow(deprecated)]
-pub use codec::RequestResponseCodec;
-
+pub use codec::Codec;
 pub use handler::ProtocolSupport;
 
+use crate::handler::protocol::RequestProtocol;
 use futures::channel::oneshot;
-use handler::{Handler, RequestProtocol};
+use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -86,37 +83,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use libp2p::request_response::Behaviour instead."
-)]
-pub type RequestResponse<TCodec> = Behaviour<TCodec>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Config`"
-)]
-pub type RequestResponseConfig = Config;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
-)]
-pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
-)]
-pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
-    Message<TRequest, TResponse, TChannelResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]

@@ -29,10 +29,11 @@ use p256::{
         signature::{Signer, Verifier},
         Signature, SigningKey, VerifyingKey,
     },
-    elliptic_curve::pkcs8::EncodePrivateKey,
     EncodedPoint,
 };
+use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
 use void::Void;
+use zeroize::Zeroize;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
 #[derive(Clone)]
@@ -131,8 +132,24 @@ impl SecretKey {
             .map(SecretKey)
     }
 
-    pub fn encode_pkcs8_der(&self) -> Vec<u8> {
-        self.0.to_pkcs8_der().unwrap().to_bytes().to_vec()
+    /// Encode the secret key into DER-encoded byte buffer.
+    pub(crate) fn encode_der(&self) -> Vec<u8> {
+        self.0
+            .to_sec1_der()
+            .expect("Encoding to pkcs#8 format to succeed")
+            .to_bytes()
+            .to_vec()
+    }
+
+    /// Try to decode a secret key from a DER-encoded byte buffer, zeroize the buffer on success.
+    pub(crate) fn try_decode_der(buf: &mut [u8]) -> Result<Self, DecodingError> {
+        match SigningKey::from_sec1_der(buf) {
+            Ok(key) => {
+                buf.zeroize();
+                Ok(SecretKey(key))
+            }
+            Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
+        }
     }
 }
 

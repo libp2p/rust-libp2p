@@ -59,13 +59,13 @@ async fn test_expired_tokio() {
 
     loop {
         match futures::future::select(a.next_behaviour_event(), b.next_behaviour_event()).await {
-            Either::Left((Event::Expired(mut peers), _)) => {
-                if peers.any(|(p, _)| p == b_peer_id) {
+            Either::Left((Event::Expired(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == b_peer_id) {
                     return;
                 }
             }
-            Either::Right((Event::Expired(mut peers), _)) => {
-                if peers.any(|(p, _)| p == a_peer_id) {
+            Either::Right((Event::Expired(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == a_peer_id) {
                     return;
                 }
             }
@@ -86,13 +86,13 @@ async fn run_discovery_test(config: Config) {
 
     while !discovered_a && !discovered_b {
         match futures::future::select(a.next_behaviour_event(), b.next_behaviour_event()).await {
-            Either::Left((Event::Discovered(mut peers), _)) => {
-                if peers.any(|(p, _)| p == b_peer_id) {
+            Either::Left((Event::Discovered(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == b_peer_id) {
                     discovered_b = true;
                 }
             }
-            Either::Right((Event::Discovered(mut peers), _)) => {
-                if peers.any(|(p, _)| p == a_peer_id) {
+            Either::Right((Event::Discovered(peers), _)) => {
+                if peers.into_iter().any(|(p, _)| p == a_peer_id) {
                     discovered_a = true;
                 }
             }

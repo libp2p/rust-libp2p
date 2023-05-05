@@ -52,14 +52,14 @@ enum Failure {
     Other,
 }
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     rtt: Histogram,
     failure: Family<FailureLabels, Counter>,
     pong_received: Counter,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("ping");
 
         let rtt = Histogram::new(exponential_buckets(0.001, 2.0, 12));
