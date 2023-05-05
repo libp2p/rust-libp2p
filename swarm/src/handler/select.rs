@@ -28,10 +28,7 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
-use libp2p_core::{
-    upgrade::{SelectUpgrade, UpgradeError},
-    ConnectedPoint,
-};
+use libp2p_core::{upgrade::SelectUpgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use std::{cmp, task::Context, task::Poll};
 
@@ -163,31 +160,31 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
+                error: ConnectionHandlerUpgrErr::Apply(Either::Left(err)),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: ConnectionHandlerUpgrErr::Apply(err),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
+                error: ConnectionHandlerUpgrErr::Apply(Either::Right(err)),
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: ConnectionHandlerUpgrErr::Apply(err),
             }),
             DialUpgradeError {
                 info: Either::Left(info),
                 error: e,
             } => Either::Left(DialUpgradeError {
                 info,
-                error: e.map_upgrade_err(|e| e.map_err(|_| panic!("already handled above"))),
+                error: e.map_upgrade_err(|_| panic!("already handled above")),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
                 error: e,
             } => Either::Right(DialUpgradeError {
                 info,
-                error: e.map_upgrade_err(|e| e.map_err(|_| panic!("already handled above"))),
+                error: e.map_upgrade_err(|_| panic!("already handled above")),
             }),
         }
     }

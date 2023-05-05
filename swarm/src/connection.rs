@@ -41,7 +41,9 @@ use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
+use libp2p_core::upgrade::{
+    InboundUpgradeApply, NegotiationError, OutboundUpgradeApply, ProtocolError,
+};
 use libp2p_core::Endpoint;
 use libp2p_core::{upgrade, UpgradeError};
 use libp2p_identity::PeerId;
@@ -273,20 +275,18 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((
-                    info,
-                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error))),
-                ))) => {
+                Poll::Ready(Some((info, Err(ConnectionHandlerUpgrErr::Apply(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
                     continue;
                 }
-                Poll::Ready(Some((
-                    _,
-                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e))),
-                ))) => {
+                Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Io(e))))) => {
                     log::debug!("failed to upgrade inbound stream: {e}");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::NegotiationFailed)))) => {
+                    log::debug!("no protocol could be agreed upon for inbound stream");
                     continue;
                 }
                 Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Timeout)))) => {
@@ -515,7 +515,21 @@ where
             .take()
             .expect("Future not to be polled again once ready.");
 
-        Poll::Ready((user_data, result.map_err(ConnectionHandlerUpgrErr::Upgrade)))
+        Poll::Ready((
+            user_data,
+            result.map_err(|e| match e {
+                UpgradeError::Select(NegotiationError::Failed) => {
+                    ConnectionHandlerUpgrErr::NegotiationFailed
+                }
+                UpgradeError::Select(NegotiationError::ProtocolError(ProtocolError::IoError(
+                    e,
+                ))) => ConnectionHandlerUpgrErr::Io(e),
+                UpgradeError::Select(NegotiationError::ProtocolError(other)) => {
+                    ConnectionHandlerUpgrErr::Io(io::Error::new(io::ErrorKind::Other, other))
+                }
+                UpgradeError::Apply(e) => ConnectionHandlerUpgrErr::Apply(e),
+            }),
+        ))
     }
 }
 

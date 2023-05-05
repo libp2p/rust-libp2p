@@ -26,7 +26,7 @@ use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use instant::Instant;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -212,12 +212,10 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
-            match error {
-                Either::Left(e) => Either::Left(e),
-                Either::Right(v) => void::unreachable(v),
-            },
-        )));
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Apply(match error {
+            Either::Left(e) => Either::Left(e),
+            Either::Right(v) => void::unreachable(v),
+        }));
     }
 
     fn on_dial_upgrade_error(
@@ -237,22 +235,20 @@ impl Handler {
                     },
                 ));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::OutboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
+                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
                     },
                 ));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(Either::Right)));
+                self.pending_error = Some(error.map_upgrade_err(Either::Right));
             }
         }
     }
@@ -353,7 +349,7 @@ impl ConnectionHandler for Handler {
                 }
                 Err(e) => {
                     return Poll::Ready(ConnectionHandlerEvent::Close(
-                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(e))),
+                        ConnectionHandlerUpgrErr::Apply(Either::Left(e)),
                     ))
                 }
             }

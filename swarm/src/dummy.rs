@@ -9,7 +9,7 @@ use crate::{
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
-use libp2p_core::{Multiaddr, UpgradeError};
+use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
@@ -133,8 +133,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
+                ConnectionHandlerUpgrErr::Apply(e) => void::unreachable(e),
+                ConnectionHandlerUpgrErr::NegotiationFailed | ConnectionHandlerUpgrErr::Io(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },

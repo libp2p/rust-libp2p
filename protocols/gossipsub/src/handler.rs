@@ -27,7 +27,7 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
@@ -532,14 +532,11 @@ impl ConnectionHandler for Handler {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: ConnectionHandlerUpgrErr::Apply(e),
                         ..
                     }) => void::unreachable(e),
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::Failed,
-                            )),
+                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
                         ..
                     }) => {
                         // The protocol is not supported
@@ -551,10 +548,7 @@ impl ConnectionHandler for Handler {
                         });
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::ProtocolError(e),
-                            )),
+                        error: ConnectionHandlerUpgrErr::Io(e),
                         ..
                     }) => {
                         log::debug!("Protocol negotiation failed: {e}")

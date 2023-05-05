@@ -49,9 +49,9 @@ mod select;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
@@ -464,19 +464,27 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
-    /// Error while upgrading the substream to the protocol we want.
-    Upgrade(UpgradeError<TUpgrErr>),
+    /// The upgrade produced an error.
+    Apply(TUpgrErr),
+    /// No protocol could be agreed upon.
+    NegotiationFailed,
+    /// An IO or otherwise unrecoverable error happened.
+    Io(io::Error),
 }
 
 impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
     /// Map the inner [`UpgradeError`] type.
     pub fn map_upgrade_err<F, E>(self, f: F) -> ConnectionHandlerUpgrErr<E>
     where
-        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>,
+        F: FnOnce(TUpgrErr) -> E,
     {
         match self {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
+            ConnectionHandlerUpgrErr::Apply(e) => ConnectionHandlerUpgrErr::Apply(f(e)),
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
+                ConnectionHandlerUpgrErr::NegotiationFailed
+            }
+            ConnectionHandlerUpgrErr::Io(e) => ConnectionHandlerUpgrErr::Io(e),
         }
     }
 }
@@ -490,9 +498,16 @@ where
             ConnectionHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                write!(f, "Upgrade: ")?;
+            ConnectionHandlerUpgrErr::Apply(err) => {
+                write!(f, "Apply: ")?;
                 crate::print_error_chain(f, err)
+            }
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
+                write!(f, "no protocols could be agreed upon")
+            }
+            ConnectionHandlerUpgrErr::Io(e) => {
+                write!(f, "IO error: ")?;
+                crate::print_error_chain(f, e)
             }
         }
     }
@@ -503,10 +518,7 @@ where
     TUpgrErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            ConnectionHandlerUpgrErr::Timeout => None,
-            ConnectionHandlerUpgrErr::Upgrade(_) => None,
-        }
+        None
     }
 }
 
