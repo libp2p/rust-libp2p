@@ -11,10 +11,13 @@
   See [PR 3865].
 
 - Remove deprecated `ConnectionLimits`.
+  Users should migrate to `libp2p::connection_limits::Behaviour`.
+  See [PR 3885].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
+[PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 
 ## 0.42.2
 
