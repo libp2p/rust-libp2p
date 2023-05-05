@@ -191,7 +191,6 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
-    #[allow(unused_variables)]
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
@@ -290,7 +289,7 @@ impl Keypair {
                 .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
                 .map(zeroize::Zeroizing::new)?;
 
-            #[allow(deprecated, unreachable_code)]
+            #[allow(unreachable_code)]
             match private_key.Type {
                 proto::KeyType::Ed25519 => {
                     #[cfg(feature = "ed25519")]

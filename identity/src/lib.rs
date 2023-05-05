@@ -84,12 +84,11 @@ impl zeroize::Zeroize for proto::PrivateKey {
 ))]
 impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
-        #[allow(deprecated)]
         match &key.publickey {
             #[cfg(feature = "ed25519")]
             keypair::PublicKeyInner::Ed25519(key) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
-                Data: key.encode().to_vec(),
+                Data: key.to_bytes().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             keypair::PublicKeyInner::Rsa(key) => proto::PublicKey {
@@ -99,7 +98,7 @@ impl From<&PublicKey> for proto::PublicKey {
             #[cfg(feature = "secp256k1")]
             keypair::PublicKeyInner::Secp256k1(key) => proto::PublicKey {
                 Type: proto::KeyType::Secp256k1,
-                Data: key.encode().to_vec(),
+                Data: key.to_bytes().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
             keypair::PublicKeyInner::Ecdsa(key) => proto::PublicKey {
@@ -112,7 +111,6 @@ impl From<&PublicKey> for proto::PublicKey {
 
 pub use error::{DecodingError, OtherVariantError, SigningError};
 pub use keypair::{Keypair, PublicKey};
-
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};
 

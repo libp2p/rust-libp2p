@@ -5,7 +5,7 @@
 - Add support for exporting and importing ECDSA keys via the libp2p [protobuf format].
   See [PR 3863].
 
-- Make `Keypair` and `Publickey` opaque.
+- Make `Keypair` and `PublicKey` opaque.
   See [PR 3866].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
