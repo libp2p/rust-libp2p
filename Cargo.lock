@@ -2992,6 +2992,7 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
+ "once_cell",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
