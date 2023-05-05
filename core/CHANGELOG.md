@@ -1,10 +1,36 @@
-## 0.39.2 - unreleased
+## 0.40.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+- Remove deprecated symbols related to upgrades.
+  See [PR 3867].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
+
+- Enforce protocol names to be valid UTF8 strings as required by the [spec].
+  We delete the `ProtocolName` trait and replace it with a requirement for `AsRef<str>`.
+  See [PR 3746]
+
+[spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+
+## 0.39.2
 
 - Deprecate `upgrade::from_fn` without replacement as it is not used within `rust-libp2p`.
   If you depend on it, we suggest you vendor it.
   See [PR 3747].
 
+- Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
+  See [PR 3807].
+
+- Deprecate `OptionalUpgrade` without replacement.
+  See [PR 3806].
+
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
+[PR 3807]: https://github.com/libp2p/rust-libp2p/pull/3807
+[PR 3806]: https://github.com/libp2p/rust-libp2p/pull/3806
 
 ## 0.39.1
 

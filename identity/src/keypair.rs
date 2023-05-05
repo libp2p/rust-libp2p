@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::error::{DecodingError, OtherVariantError, SigningError};
-use crate::{proto, KeyType};
+use crate::proto;
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
 
@@ -235,7 +235,6 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
-    #[deprecated(note = "Renamed to `encode_protobuf`")]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         Ok(self.encode_protobuf())
     }
@@ -266,7 +265,7 @@ impl Keypair {
             #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => proto::PrivateKey {
                 Type: proto::KeyType::ECDSA,
-                Data: data.secret().encode_pkcs8_der(),
+                Data: data.secret().encode_der(),
             },
         };
 
@@ -316,8 +315,9 @@ impl Keypair {
             }
             proto::KeyType::ECDSA => {
                 #[cfg(feature = "ecdsa")]
-                return ecdsa::Keypair::try_from_bytes(&private_key.Data).map(Keypair::Ecdsa);
-                Err(DecodingError::missing_feature("ECDSA"))
+                return ecdsa::SecretKey::try_decode_der(&mut private_key.Data)
+                    .map(|key| Keypair::Ecdsa(key.into()));
+                Err(DecodingError::missing_feature("ecdsa"))
             }
         }
     }
@@ -364,11 +364,11 @@ impl TryInto<ed25519::Keypair> for Keypair {
         match self {
             Keypair::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            Keypair::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            Keypair::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            Keypair::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -382,11 +382,11 @@ impl TryInto<ecdsa::Keypair> for Keypair {
         match self {
             Keypair::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            Keypair::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            Keypair::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            Keypair::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
         }
     }
 }
@@ -400,11 +400,11 @@ impl TryInto<secp256k1::Keypair> for Keypair {
         match self {
             Keypair::Secp256k1(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            Keypair::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Keypair::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            Keypair::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "ecdsa")]
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            Keypair::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -418,11 +418,11 @@ impl TryInto<rsa::Keypair> for Keypair {
         match self {
             Keypair::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            Keypair::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            Keypair::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
-            Keypair::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            Keypair::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            Keypair::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            Keypair::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -631,11 +631,11 @@ impl TryInto<ed25519::PublicKey> for PublicKey {
         match self {
             PublicKey::Ed25519(inner) => Ok(inner),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKey::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -649,11 +649,11 @@ impl TryInto<ecdsa::PublicKey> for PublicKey {
         match self {
             PublicKey::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKey::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKey::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
         }
     }
 }
@@ -667,11 +667,11 @@ impl TryInto<secp256k1::PublicKey> for PublicKey {
         match self {
             PublicKey::Secp256k1(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKey::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKey::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKey::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "ecdsa")]
-            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -685,11 +685,11 @@ impl TryInto<rsa::PublicKey> for PublicKey {
         match self {
             PublicKey::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKey::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKey::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
-            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKey::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
             #[cfg(feature = "ecdsa")]
-            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(KeyType::Ecdsa)),
+            PublicKey::Ecdsa(_) => Err(OtherVariantError::new(crate::KeyType::Ecdsa)),
         }
     }
 }
@@ -762,13 +762,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "ecdsa", feature = "peerid"))]
     fn keypair_protobuf_roundtrip_ecdsa() {
-        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
-            "08031220f0d87659b402f0d47589e7670ca0954036f87b2fbf11fafbc66f4de7c3eb10a2"
+        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+            "08031279307702010104203E5B1FE9712E6C314942A750BD67485DE3C1EFE85B1BFB520AE8F9AE3DFA4A4CA00A06082A8648CE3D030107A14403420004DE3D300FA36AE0E8F5D530899D83ABAB44ABF3161F162A4BC901D8E6ECDA020E8B6D5F8DA30525E71D6851510C098E5C47C646A597FB4DCEC034E9F77C409E62"
         ))
         .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de6af15d8bc9b7f7c6eb8b32888d0da721d33f16af062306bafc64cdad741240cd61d6d9884c4899308ea25513a5cc03495ff88200dc7ae8e603ceb6698d2fee")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }

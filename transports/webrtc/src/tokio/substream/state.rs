@@ -25,7 +25,7 @@ use std::io;
 use crate::proto::Flag;
 
 #[derive(Debug, Copy, Clone)]
-pub enum State {
+pub(crate) enum State {
     Open,
     ReadClosed,
     WriteClosed,
@@ -49,7 +49,7 @@ pub enum State {
 /// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag respectively
 /// and flushing the underlying connection.
 #[derive(Debug, Copy, Clone)]
-pub enum Closing {
+pub(crate) enum Closing {
     Requested,
     MessageSent,
 }
@@ -278,7 +278,7 @@ impl State {
     }
 
     /// Acts as a "barrier" for [`Substream::poll_close_read`](super::Substream::poll_close_read).
-    pub fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
+    pub(crate) fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match self {
                 State::ReadClosed => return Ok(None),
