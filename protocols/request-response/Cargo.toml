@@ -13,6 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1"
 futures = "0.3.28"
+futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }

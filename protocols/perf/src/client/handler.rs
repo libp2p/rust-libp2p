@@ -21,7 +21,7 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
@@ -66,6 +66,8 @@ pub struct Handler {
     outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
 
     keep_alive: KeepAlive,
+
+    timeout: Option<futures_timer::Delay>,
 }
 
 impl Handler {
@@ -75,6 +77,7 @@ impl Handler {
             requested_streams: Default::default(),
             outbound: Default::default(),
             keep_alive: KeepAlive::Yes,
+            timeout: None,
         }
     }
 }
@@ -192,15 +195,20 @@ impl ConnectionHandler for Handler {
         }
 
         if self.outbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
+            // Criteria met to set a timer if none present.
+            self.timeout
+                .get_or_insert(futures_timer::Delay::new(Duration::from_secs(10)));
         } else {
-            self.keep_alive = KeepAlive::Yes
+            // Cancel the timer.
+            // Note that cancellation happens before checking the timeout,
+            // which may cause the connection not be droped after 10 seconds.
+            self.timeout.take();
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
         }
 
         Poll::Pending

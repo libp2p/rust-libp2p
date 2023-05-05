@@ -24,7 +24,7 @@ use crate::handler::{
     SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use instant::Instant;
+use futures::FutureExt;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
@@ -46,6 +46,7 @@ where
     dial_negotiated: u32,
     /// Value to return from `connection_keep_alive`.
     keep_alive: KeepAlive,
+    timeout: Option<futures_timer::Delay>,
     /// The configuration container for the handler
     config: OneShotHandlerConfig,
 }
@@ -66,6 +67,7 @@ where
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
             keep_alive: KeepAlive::Yes,
+            timeout: None,
             config,
         }
     }
@@ -143,7 +145,7 @@ where
 
     fn poll(
         &mut self,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
@@ -174,8 +176,15 @@ where
         } else {
             self.dial_queue.shrink_to_fit();
 
-            if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+            if self.dial_negotiated == 0 && self.keep_alive.is_yes() && self.timeout.is_none() {
+                self.timeout = Some(futures_timer::Delay::new(self.config.keep_alive_timeout))
+            }
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No;
+                self.timeout = None;
             }
         }
 
@@ -198,8 +207,8 @@ where
             }) => {
                 // If we're shutting down the connection for inactivity, reset the timeout.
                 if !self.keep_alive.is_yes() {
-                    self.keep_alive =
-                        KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+                    self.keep_alive = KeepAlive::Yes;
+                    self.timeout = Some(futures_timer::Delay::new(self.config.keep_alive_timeout))
                 }
 
                 self.events_out.push(out.into());
@@ -265,9 +274,6 @@ mod tests {
             }
         }));
 
-        assert!(matches!(
-            handler.connection_keep_alive(),
-            KeepAlive::Until(_)
-        ));
+        assert!(matches!(handler.connection_keep_alive(), KeepAlive::No));
     }
 }

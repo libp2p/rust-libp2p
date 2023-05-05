@@ -27,7 +27,6 @@ use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
-use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -66,6 +65,8 @@ where
     substream_timeout: Duration,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
+
+    timeout: Option<futures_timer::Delay>,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
@@ -103,6 +104,7 @@ where
             inbound_protocols,
             codec,
             keep_alive: KeepAlive::Yes,
+            timeout: None,
             keep_alive_timeout,
             substream_timeout,
             outbound: VecDeque::new(),
@@ -379,8 +381,17 @@ where
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.
-            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
-            self.keep_alive = KeepAlive::Until(until);
+            self.timeout.get_or_insert(futures_timer::Delay::new(
+                self.substream_timeout + self.keep_alive_timeout,
+            ));
+        } else {
+            self.timeout.take();
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
         }
 
         Poll::Pending

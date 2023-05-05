@@ -122,6 +122,10 @@ pub struct EnabledHandler {
     /// The amount of time we keep an idle connection alive.
     idle_timeout: Duration,
 
+    keep_alive: KeepAlive,
+
+    timeout: Option<futures_timer::Delay>,
+
     /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
     /// decisions about the keep alive state for this connection.
     in_mesh: bool,
@@ -177,6 +181,8 @@ impl Handler {
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
             idle_timeout,
+            keep_alive: KeepAlive::Yes,
+            timeout: None,
             in_mesh: false,
         })
     }
@@ -388,6 +394,29 @@ impl EnabledHandler {
             }
         }
 
+        match self.outbound_substream {
+            Some(
+                OutboundSubstreamState::PendingSend(_, _) | OutboundSubstreamState::PendingFlush(_),
+            ) => self.timeout = None, // Cancel the timer when there's pending activity
+            _ => {
+                if !self.in_mesh {
+                    // Criteria met to set a timer if none present.
+                    self.timeout.get_or_insert(futures_timer::Delay::new(
+                        (self.last_io_activity + self.idle_timeout).duration_since(Instant::now()),
+                    ));
+                } else {
+                    // In mesh, cancel the timer.
+                    self.timeout = None
+                }
+            }
+        }
+        // Note that cancellation happens before checking the timeout,
+        // which may cause the connection not be droped after timeout reached.
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
+        }
         Poll::Pending
     }
 }
@@ -431,21 +460,7 @@ impl ConnectionHandler for Handler {
 
     fn connection_keep_alive(&self) -> KeepAlive {
         match self {
-            Handler::Enabled(handler) => {
-                if handler.in_mesh {
-                    return KeepAlive::Yes;
-                }
-
-                if let Some(
-                    OutboundSubstreamState::PendingSend(_, _)
-                    | OutboundSubstreamState::PendingFlush(_),
-                ) = handler.outbound_substream
-                {
-                    return KeepAlive::Yes;
-                }
-
-                KeepAlive::Until(handler.last_io_activity + handler.idle_timeout)
-            }
+            Handler::Enabled(handler) => handler.keep_alive,
             Handler::Disabled(_) => KeepAlive::No,
         }
     }

@@ -571,6 +571,7 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeepAlive {
     /// If nothing new happens, the connection should be closed at the given `Instant`.
+    #[deprecated]
     Until(Instant),
     /// Keep the connection alive.
     Yes,
@@ -595,6 +596,7 @@ impl Ord for KeepAlive {
     fn cmp(&self, other: &KeepAlive) -> Ordering {
         use self::KeepAlive::*;
 
+        #[allow(deprecated)]
         match (self, other) {
             (No, No) | (Yes, Yes) => Ordering::Equal,
             (No, _) | (_, Yes) => Ordering::Less,

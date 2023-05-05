@@ -27,7 +27,6 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
@@ -123,6 +122,8 @@ pub struct Handler {
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
 
+    timeout: Option<futures_timer::Delay>,
+
     /// Queue of events to return when polled.
     queued_events: VecDeque<
         ConnectionHandlerEvent<
@@ -168,6 +169,7 @@ impl Handler {
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
+            timeout: None,
         }
     }
 
@@ -573,15 +575,16 @@ impl ConnectionHandler for Handler {
             && self.alive_lend_out_substreams.is_empty()
             && self.circuit_deny_futs.is_empty()
         {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
+            self.timeout
+                .get_or_insert(futures_timer::Delay::new(Duration::from_secs(10)));
         } else {
-            self.keep_alive = KeepAlive::Yes;
+            self.timeout.take();
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
         }
 
         Poll::Pending

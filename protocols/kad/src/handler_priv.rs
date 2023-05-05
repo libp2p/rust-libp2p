@@ -26,7 +26,6 @@ use crate::record_priv::{self, Record};
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
-use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
@@ -74,6 +73,8 @@ pub struct KademliaHandler<TUserData> {
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
+
+    timeout: Option<futures_timer::Delay>,
 
     /// The connected endpoint of the connection that the handler
     /// is associated with.
@@ -488,8 +489,7 @@ where
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
     ) -> Self {
-        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
-
+        let timeout = Some(futures_timer::Delay::new(config.idle_timeout.clone()));
         KademliaHandler {
             config,
             endpoint,
@@ -499,7 +499,8 @@ where
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
-            keep_alive,
+            keep_alive: KeepAlive::Yes,
+            timeout,
             protocol_status: ProtocolStatus::Unconfirmed,
         }
     }
@@ -746,14 +747,22 @@ where
         }
 
         let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-        self.keep_alive = match (no_streams, self.keep_alive) {
-            // No open streams. Preserve the existing idle timeout.
-            (true, k @ KeepAlive::Until(_)) => k,
-            // No open streams. Set idle timeout.
-            (true, _) => KeepAlive::Until(Instant::now() + self.config.idle_timeout),
-            // Keep alive for open streams.
-            (false, _) => KeepAlive::Yes,
-        };
+        if no_streams {
+            // Criteria met to set a timer if none present.
+            self.timeout
+                .get_or_insert(futures_timer::Delay::new(self.config.idle_timeout.clone()));
+        } else {
+            // Cancel the timer.
+            // Note that cancellation happens before checking the timeout,
+            // which may cause the connection not be droped after timeout reached.
+            self.timeout.take();
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
+        }
 
         Poll::Pending
     }

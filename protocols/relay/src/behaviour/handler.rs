@@ -29,7 +29,6 @@ use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
@@ -363,6 +362,8 @@ pub struct Handler {
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
 
+    timeout: Option<futures_timer::Delay>,
+
     /// Future handling inbound reservation request.
     reservation_request_future: Option<ReservationRequestFuture>,
     /// Timeout for the currently active reservation.
@@ -404,6 +405,7 @@ impl Handler {
             circuits: Default::default(),
             active_reservation: Default::default(),
             keep_alive: KeepAlive::Yes,
+            timeout: None,
         }
     }
 
@@ -914,15 +916,18 @@ impl ConnectionHandler for Handler {
             && self.circuits.is_empty()
             && self.active_reservation.is_none()
         {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
+            // Criteria met to set a timer.
+            self.timeout
+                .get_or_insert(futures_timer::Delay::new(Duration::from_secs(10)));
         } else {
-            self.keep_alive = KeepAlive::Yes;
+            // Cancel the timer.
+            self.timeout.take();
+        }
+
+        if let Some(timer) = &mut self.timeout {
+            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+                self.keep_alive = KeepAlive::No
+            }
         }
 
         Poll::Pending

@@ -37,7 +37,6 @@ use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_timer::Delay;
-use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
@@ -283,24 +282,10 @@ where
 
             // Ask the handler whether it wants the connection (and the handler itself)
             // to be kept alive, which determines the planned shutdown, if any.
-            let keep_alive = handler.connection_keep_alive();
-            match (&mut *shutdown, keep_alive) {
-                (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
-                    if *deadline != t {
-                        *deadline = t;
-                        if let Some(dur) = deadline.checked_duration_since(Instant::now()) {
-                            timer.reset(dur)
-                        }
-                    }
-                }
-                (_, KeepAlive::Until(t)) => {
-                    if let Some(dur) = t.checked_duration_since(Instant::now()) {
-                        *shutdown = Shutdown::Later(Delay::new(dur), t)
-                    }
-                }
-                (_, KeepAlive::No) => *shutdown = Shutdown::Asap,
-                (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
-            };
+            match handler.connection_keep_alive() {
+                KeepAlive::Yes => *shutdown = Shutdown::None,
+                _ => *shutdown = Shutdown::Asap,
+            }
 
             // Check if the connection (and handler) should be shut down.
             // As long as we're still negotiating substreams, shutdown is always postponed.
@@ -311,12 +296,6 @@ where
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
-                    Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
-                        Poll::Ready(_) => {
-                            return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-                        }
-                        Poll::Pending => {}
-                    },
                 }
             }
 
@@ -602,8 +581,6 @@ enum Shutdown {
     None,
     /// A shut down is planned as soon as possible.
     Asap,
-    /// A shut down is planned for when a `Delay` has elapsed.
-    Later(Delay, Instant),
 }
 
 #[cfg(test)]
