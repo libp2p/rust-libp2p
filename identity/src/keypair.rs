@@ -419,7 +419,7 @@ impl TryInto<rsa::Keypair> for Keypair {
 
     fn try_into(self) -> Result<rsa::Keypair, Self::Error> {
         match self.keypair {
-            KeyPairInner::Rsa(inner) => Ok(inner.clone()),
+            KeyPairInner::Rsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
             KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
@@ -644,24 +644,21 @@ impl TryFrom<proto::PublicKey> for PublicKey {
                 Err(DecodingError::missing_feature("rsa"))
             }
             #[cfg(feature = "secp256k1")]
-            proto::KeyType::Secp256k1 => Ok(secp256k1::PublicKey::decode(&pubkey.Data).map(
-                |kp| PublicKey {
+            proto::KeyType::Secp256k1 => Ok(secp256k1::PublicKey::try_from_bytes(&pubkey.Data)
+                .map(|kp| PublicKey {
                     publickey: PublicKeyInner::Secp256k1(kp),
-                },
-            )?),
+                })?),
             #[cfg(not(feature = "secp256k1"))]
             proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err(DecodingError::missing_feature("secp256k1"))
             }
             #[cfg(feature = "ecdsa")]
-            proto::KeyType::ECDSA => {
-                Ok(
-                    ecdsa::PublicKey::decode_der(&pubkey.Data).map(|kp| PublicKey {
-                        publickey: PublicKeyInner::Ecdsa(kp),
-                    })?,
-                )
-            }
+            proto::KeyType::ECDSA => Ok(ecdsa::PublicKey::try_decode_der(&pubkey.Data).map(
+                |kp| PublicKey {
+                    publickey: PublicKeyInner::Ecdsa(kp),
+                },
+            )?),
             #[cfg(not(feature = "ecdsa"))]
             proto::KeyType::ECDSA => {
                 log::debug!("support for ECDSA was disabled at compile-time");
