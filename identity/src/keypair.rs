@@ -277,8 +277,12 @@ impl Keypair {
             proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
             proto::KeyType::ECDSA => {
                 #[cfg(feature = "ecdsa")]
-                return ecdsa::SecretKey::try_decode_der(&mut private_key.Data)
-                    .map(|key| Keypair::Ecdsa(key.into()));
+                return ecdsa::SecretKey::try_decode_der(&mut private_key.Data).map(|key| {
+                    Keypair {
+                        keypair: KeyPairInner::Ecdsa(key.into()),
+                    }
+                });
+
                 Err(DecodingError::missing_feature("ecdsa"))
             }
         }
@@ -288,7 +292,9 @@ impl Keypair {
 #[cfg(feature = "ecdsa")]
 impl From<ecdsa::Keypair> for Keypair {
     fn from(kp: ecdsa::Keypair) -> Self {
-        KeyPairInner::Ecdsa(kp)
+        Keypair {
+            keypair: KeyPairInner::Ecdsa(kp),
+        }
     }
 }
 
@@ -341,7 +347,7 @@ impl TryInto<ecdsa::Keypair> for Keypair {
     type Error = OtherVariantError;
 
     fn try_into(self) -> Result<ecdsa::Keypair, Self::Error> {
-        match self {
+        match self.keypair {
             KeyPairInner::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
             KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
@@ -618,11 +624,11 @@ impl TryInto<ecdsa::PublicKey> for PublicKey {
         match self.publickey {
             PublicKeyInner::Ecdsa(inner) => Ok(inner),
             #[cfg(feature = "ed25519")]
-            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(KeyType::Ed25519)),
+            PublicKeyInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(KeyType::RSA)),
+            PublicKeyInner::Rsa(_) => Err(OtherVariantError::new(crate::KeyType::RSA)),
             #[cfg(feature = "secp256k1")]
-            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(KeyType::Secp256k1)),
+            PublicKeyInner::Secp256k1(_) => Err(OtherVariantError::new(crate::KeyType::Secp256k1)),
         }
     }
 }
