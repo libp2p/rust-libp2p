@@ -31,15 +31,12 @@ use zeroize::Zeroize;
 
 /// An RSA keypair.
 #[derive(Clone)]
-pub struct Keypair {
-    inner: Arc<RsaKeyPair>,
-    key: Vec<u8>,
-}
+pub struct Keypair(Arc<RsaKeyPair>);
 
 impl std::fmt::Debug for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("Keypair")
-            .field("public", self.inner.public_key())
+            .field("public", self.0.public_key())
             .finish()
     }
 }
@@ -58,44 +55,26 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    pub fn try_decode_pkcs8(bytes: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let kp = RsaKeyPair::from_pkcs8(bytes)
+    pub fn try_decode_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        let kp = RsaKeyPair::from_pkcs8(der)
             .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
-        let kp = Keypair {
-            inner: Arc::new(kp),
-            key: bytes.to_vec(),
-        };
-        bytes.zeroize();
-        Ok(kp)
+        der.zeroize();
+        Ok(Keypair(Arc::new(kp)))
     }
 
     /// Get the public key from the keypair.
     pub fn public(&self) -> PublicKey {
-        PublicKey(self.inner.public_key().as_ref().to_vec())
+        PublicKey(self.0.public_key().as_ref().to_vec())
     }
 
     /// Sign a message with this keypair.
     pub fn sign(&self, data: &[u8]) -> Result<Vec<u8>, SigningError> {
-        let mut signature = vec![0; self.inner.public_modulus_len()];
+        let mut signature = vec![0; self.0.public_modulus_len()];
         let rng = SystemRandom::new();
-        match self
-            .inner
-            .sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature)
-        {
+        match self.0.sign(&RSA_PKCS1_SHA256, &rng, data, &mut signature) {
             Ok(()) => Ok(signature),
             Err(e) => Err(SigningError::new("RSA", Some(Box::new(e)))),
         }
-    }
-
-    /// Get the byte array used to parse the keypair from.
-    pub(crate) fn encode_pkcs8_der(&self) -> Vec<u8> {
-        self.key.clone()
-    }
-}
-
-impl Drop for Keypair {
-    fn drop(&mut self) {
-        self.key.zeroize()
     }
 }
 
