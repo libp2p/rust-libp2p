@@ -62,13 +62,6 @@ impl Keypair {
     pub fn secret(&self) -> &SecretKey {
         &self.secret
     }
-
-    /// Try to parse an secret key byte array into a ECDSA `SecretKey`
-    /// and promote it into a `Keypair`.
-    pub fn try_from_bytes(pk: impl AsRef<[u8]>) -> Result<Keypair, DecodingError> {
-        let secret_key = SecretKey::try_from_bytes(pk)?;
-        Ok(secret_key.into())
-    }
 }
 
 impl fmt::Debug for Keypair {
@@ -212,9 +205,9 @@ impl PublicKey {
         Self::try_decode_der(k)
     }
 
-    /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
-    pub fn try_decode_der(k: impl AsRef<[u8]>) -> Result<PublicKey, DecodingError> {
-        let buf = Self::del_asn1_header(k.as_ref()).ok_or_else(|| {
+    /// Try to decode a public key from a DER encoded byte buffer as defined by SEC1 standard.
+    pub fn try_decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
+        let buf = Self::del_asn1_header(k).ok_or_else(|| {
             DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
         })?;
         Self::try_from_bytes(buf)
