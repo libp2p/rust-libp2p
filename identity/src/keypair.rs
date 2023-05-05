@@ -246,9 +246,10 @@ impl Keypair {
                 #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
                 KeyPairInner::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
                 #[cfg(feature = "secp256k1")]
-                KeyPairInner::Secp256k1(_) => {
-                    return Err(DecodingError::encoding_unsupported("secp256k1"))
-                }
+                KeyPairInner::Secp256k1(ref data) => proto::PrivateKey {
+                    Type: proto::KeyType::Secp256k1,
+                    Data: data.secret().to_bytes().to_vec(),
+                },
                 #[cfg(feature = "ecdsa")]
                 KeyPairInner::Ecdsa(ref data) => proto::PrivateKey {
                     Type: proto::KeyType::ECDSA,
@@ -283,6 +284,7 @@ impl Keypair {
         ))]
         {
             use quick_protobuf::MessageRead;
+
             let mut reader = BytesReader::from_bytes(bytes);
             let mut private_key = proto::PrivateKey::from_reader(&mut reader, bytes)
                 .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
@@ -300,7 +302,16 @@ impl Keypair {
                     Err(DecodingError::missing_feature("ed25519"))
                 }
                 proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
-                proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
+                proto::KeyType::Secp256k1 => {
+                    #[cfg(feature = "secp256k1")]
+                    return secp256k1::SecretKey::try_from_bytes(&mut private_key.Data).map(
+                        |key| Keypair {
+                            keypair: KeyPairInner::Secp256k1(key.into()),
+                        },
+                    );
+
+                    Err(DecodingError::missing_feature("secp256k1"))
+                }
                 proto::KeyType::ECDSA => {
                     #[cfg(feature = "ecdsa")]
                     return ecdsa::SecretKey::try_decode_der(&mut private_key.Data).map(|key| {
