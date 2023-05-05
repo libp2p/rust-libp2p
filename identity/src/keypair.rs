@@ -20,6 +20,12 @@
 
 use crate::error::OtherVariantError;
 use crate::error::{DecodingError, SigningError};
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use crate::proto;
 use quick_protobuf::{BytesReader, Writer};
 use std::convert::TryFrom;
@@ -225,6 +231,12 @@ impl Keypair {
     }
 
     /// Encode a private key as protobuf structure.
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
@@ -256,6 +268,12 @@ impl Keypair {
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         use quick_protobuf::MessageRead;
 
@@ -490,12 +508,24 @@ impl PublicKey {
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     #[deprecated(note = "Renamed to `PublicKey::encode_protobuf`.")]
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn to_protobuf_encoding(&self) -> Vec<u8> {
         Self::encode_protobuf(self)
     }
 
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn encode_protobuf(&self) -> Vec<u8> {
         use quick_protobuf::MessageWrite;
 
@@ -515,12 +545,24 @@ impl PublicKey {
     #[deprecated(
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         Self::try_decode_protobuf(bytes)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn try_decode_protobuf(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         use quick_protobuf::MessageRead;
 
@@ -539,6 +581,12 @@ impl PublicKey {
     }
 }
 
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 impl TryFrom<proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
