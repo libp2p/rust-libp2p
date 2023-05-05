@@ -210,19 +210,19 @@ impl Keypair {
         use KeyPairInner::*;
         match self.keypair {
             #[cfg(feature = "ed25519")]
-            Ed25519(pair) => PublicKey {
+            Ed25519(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Ed25519(pair.public()),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Rsa(pair) => PublicKey {
+            Rsa(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Rsa(pair.public()),
             },
             #[cfg(feature = "secp256k1")]
-            Secp256k1(pair) => PublicKey {
+            Secp256k1(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Secp256k1(pair.public().clone()),
             },
             #[cfg(feature = "ecdsa")]
-            Ecdsa(pair) => PublicKey {
+            Ecdsa(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Ecdsa(pair.public().clone()),
             },
         }
@@ -239,9 +239,9 @@ impl Keypair {
             feature = "rsa"
         ))]
         {
-            let pk: proto::PrivateKey = match &self.keypair {
+            let pk: proto::PrivateKey = match self.keypair {
                 #[cfg(feature = "ed25519")]
-                KeyPairInner::Ed25519(data) => proto::PrivateKey {
+                KeyPairInner::Ed25519(ref data) => proto::PrivateKey {
                     Type: proto::KeyType::Ed25519,
                     Data: data.to_bytes().to_vec(),
                 },
@@ -252,7 +252,7 @@ impl Keypair {
                     return Err(DecodingError::encoding_unsupported("secp256k1"))
                 }
                 #[cfg(feature = "ecdsa")]
-                KeyPairInner::Ecdsa(data) => proto::PrivateKey {
+                KeyPairInner::Ecdsa(ref data) => proto::PrivateKey {
                     Type: proto::KeyType::ECDSA,
                     Data: data.secret().encode_der(),
                 },
@@ -419,7 +419,7 @@ impl TryInto<rsa::Keypair> for Keypair {
 
     fn try_into(self) -> Result<rsa::Keypair, Self::Error> {
         match self.keypair {
-            KeyPairInner::Rsa(inner) => Ok(inner),
+            KeyPairInner::Rsa(inner) => Ok(inner.clone()),
             #[cfg(feature = "ed25519")]
             KeyPairInner::Ed25519(_) => Err(OtherVariantError::new(crate::KeyType::Ed25519)),
             #[cfg(feature = "secp256k1")]
@@ -460,7 +460,7 @@ impl PublicKey {
     #[must_use]
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         use PublicKeyInner::*;
-        match self.publickey {
+        match &self.publickey {
             #[cfg(feature = "ed25519")]
             Ed25519(pk) => pk.verify(msg, sig),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
