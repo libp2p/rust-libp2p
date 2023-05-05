@@ -121,12 +121,9 @@ pub use behaviour::{
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{ConnectionError, ConnectionId};
 pub use executor::Executor;
-#[allow(deprecated)]
-pub use handler::IntoConnectionHandler;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
-    SubstreamProtocol,
+    KeepAlive, OneShotHandler, OneShotHandlerConfig, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
@@ -174,8 +171,7 @@ type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::OutEvent
 /// [`ConnectionHandler`] of the [`NetworkBehaviour`] for all the protocols the [`NetworkBehaviour`]
 /// supports.
 #[allow(deprecated)]
-pub type THandler<TBehaviour> =
-    <<TBehaviour as NetworkBehaviour>::ConnectionHandler as IntoConnectionHandler>::Handler;
+pub type THandler<TBehaviour> = <TBehaviour as NetworkBehaviour>::ConnectionHandler;
 
 /// Custom event that can be received by the [`ConnectionHandler`] of the
 /// [`NetworkBehaviour`].

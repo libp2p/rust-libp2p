@@ -21,8 +21,6 @@
 //! A [`ConnectionHandler`] implementation that combines multiple other [`ConnectionHandler`]s
 //! indexed by some key.
 
-#[allow(deprecated)]
-use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -32,8 +30,6 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{NegotiationError, ProtocolError, UpgradeError};
-use libp2p_core::ConnectedPoint;
-use libp2p_identity::PeerId;
 use rand::Rng;
 use std::{
     cmp,
@@ -406,56 +402,6 @@ where
         f.debug_struct("IntoMultiHandler")
             .field("handlers", &self.handlers)
             .finish()
-    }
-}
-
-#[allow(deprecated)]
-impl<K, H> IntoMultiHandler<K, H>
-where
-    K: Hash + Eq,
-    H: IntoConnectionHandler,
-{
-    /// Create and populate an `IntoMultiHandler` from the given iterator.
-    ///
-    /// It is an error for any two protocols handlers to share the same protocol name.
-    pub fn try_from_iter<I>(iter: I) -> Result<Self, DuplicateProtonameError>
-    where
-        I: IntoIterator<Item = (K, H)>,
-    {
-        let m = IntoMultiHandler {
-            handlers: HashMap::from_iter(iter),
-        };
-        uniq_proto_names(m.handlers.values().map(|h| h.inbound_protocol()))?;
-        Ok(m)
-    }
-}
-
-#[allow(deprecated)]
-impl<K, H> IntoConnectionHandler for IntoMultiHandler<K, H>
-where
-    K: Debug + Clone + Eq + Hash + Send + 'static,
-    H: IntoConnectionHandler,
-{
-    type Handler = MultiHandler<K, H::Handler>;
-
-    fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
-        MultiHandler {
-            handlers: self
-                .handlers
-                .into_iter()
-                .map(|(k, h)| (k, h.into_handler(p, c)))
-                .collect(),
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        Upgrade {
-            upgrades: self
-                .handlers
-                .iter()
-                .map(|(k, h)| (k.clone(), h.inbound_protocol()))
-                .collect(),
-        }
     }
 }
 
