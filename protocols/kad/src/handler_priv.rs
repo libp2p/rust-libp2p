@@ -489,7 +489,7 @@ where
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
     ) -> Self {
-        let timeout = Some(futures_timer::Delay::new(config.idle_timeout.clone()));
+        let timeout = Some(futures_timer::Delay::new(config.idle_timeout));
         KademliaHandler {
             config,
             endpoint,
@@ -750,7 +750,7 @@ where
         if no_streams {
             // Criteria met to set a timer if none present.
             self.timeout
-                .get_or_insert(futures_timer::Delay::new(self.config.idle_timeout.clone()));
+                .get_or_insert(futures_timer::Delay::new(self.config.idle_timeout));
         } else {
             // Cancel the timer.
             // Note that cancellation happens before checking the timeout,
