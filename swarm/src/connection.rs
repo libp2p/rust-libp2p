@@ -509,21 +509,13 @@ where
             Poll::Pending => {}
         }
 
-        match self.upgrade.poll_unpin(cx) {
-            Poll::Ready(Ok(upgrade)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Ok(upgrade),
-            )),
-            Poll::Ready(Err(err)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
-            )),
-            Poll::Pending => Poll::Pending,
-        }
+        let result = futures::ready!(self.upgrade.poll_unpin(cx));
+        let user_data = self
+            .user_data
+            .take()
+            .expect("Future not to be polled again once ready.");
+
+        Poll::Ready((user_data, result.map_err(ConnectionHandlerUpgrErr::Upgrade)))
     }
 }
 
