@@ -13,12 +13,12 @@
 - Remove deprecated `IntoConnectionHandler` and all its implementations.
   This also removes the `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` methods.
   See changelog for `0.42` on how to migrate.
-  See [PR XXXX].
+  See [PR 3884].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
 
 ## 0.42.2
 
