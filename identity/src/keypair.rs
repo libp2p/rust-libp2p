@@ -236,7 +236,10 @@ impl Keypair {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
             #[cfg(feature = "secp256k1")]
-            Self::Secp256k1(_) => return Err(DecodingError::encoding_unsupported("secp256k1")),
+            Self::Secp256k1(data) => proto::PrivateKey {
+                Type: proto::KeyType::Secp256k1,
+                Data: data.secret().to_bytes().to_vec(),
+            },
             #[cfg(feature = "ecdsa")]
             Self::Ecdsa(data) => proto::PrivateKey {
                 Type: proto::KeyType::ECDSA,
@@ -269,7 +272,12 @@ impl Keypair {
                 Err(DecodingError::missing_feature("ed25519"))
             }
             proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
-            proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
+            proto::KeyType::Secp256k1 => {
+                #[cfg(feature = "secp256k1")]
+                return secp256k1::SecretKey::try_from_bytes(&mut private_key.Data)
+                    .map(|key| Keypair::Secp256k1(key.into()));
+                Err(DecodingError::missing_feature("secp256k1"))
+            }
             proto::KeyType::ECDSA => {
                 #[cfg(feature = "ecdsa")]
                 return ecdsa::SecretKey::try_decode_der(&mut private_key.Data)
@@ -722,6 +730,21 @@ mod tests {
         ))
         .unwrap();
         let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
+
+        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+    }
+
+    #[test]
+    #[cfg(all(feature = "secp256k1", feature = "peerid"))]
+    fn keypair_protobuf_roundtrip_secp256k1() {
+        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+            "0802122053DADF1D5A164D6B4ACDB15E24AA4C5B1D3461BDBD42ABEDB0A4404D56CED8FB"
+        ))
+        .unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
+            "08021221037777e994e452c21604f91de093ce415f5432f701dd8cd1a7a6fea0e630bfca99"
+        ))
+        .unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }
