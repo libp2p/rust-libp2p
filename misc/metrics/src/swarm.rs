@@ -225,10 +225,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     }
                     #[allow(deprecated)]
                     libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
-                    #[allow(deprecated)]
-                    libp2p_swarm::DialError::ConnectionLimit(_) => {
-                        record(OutgoingConnectionError::ConnectionLimit)
-                    }
                     libp2p_swarm::DialError::LocalPeerId { .. } => {
                         record(OutgoingConnectionError::LocalPeerId)
                     }
@@ -340,7 +336,6 @@ enum PeerStatus {
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum OutgoingConnectionError {
     Banned,
-    ConnectionLimit,
     LocalPeerId,
     NoAddresses,
     DialPeerConditionFalse,
@@ -365,7 +360,6 @@ enum IncomingConnectionError {
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
-    ConnectionLimit,
     Denied,
 }
 
@@ -373,10 +367,6 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
     fn from(error: &libp2p_swarm::ListenError) -> Self {
         match error {
             libp2p_swarm::ListenError::WrongPeerId { .. } => IncomingConnectionError::WrongPeerId,
-            #[allow(deprecated)]
-            libp2p_swarm::ListenError::ConnectionLimit(_) => {
-                IncomingConnectionError::ConnectionLimit
-            }
             libp2p_swarm::ListenError::LocalPeerId { .. } => IncomingConnectionError::LocalPeerId,
             libp2p_swarm::ListenError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
