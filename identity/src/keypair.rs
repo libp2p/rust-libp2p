@@ -191,38 +191,36 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
-    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
-        use KeyPairInner::*;
+    pub fn sign(&self, _msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
-            Ed25519(ref pair) => Ok(pair.sign(msg)),
+            KeyPairInner::Ed25519(ref pair) => Ok(pair.sign(_msg)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Rsa(ref pair) => pair.sign(msg),
+            KeyPairInner::Rsa(ref pair) => pair.sign(_msg),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(ref pair) => pair.secret().sign(msg),
+            KeyPairInner::Secp256k1(ref pair) => pair.secret().sign(_msg),
             #[cfg(feature = "ecdsa")]
-            Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
+            KeyPairInner::Ecdsa(ref pair) => Ok(pair.secret().sign(_msg)),
         }
     }
 
     /// Get the public key of this keypair.
     pub fn public(&self) -> PublicKey {
-        use KeyPairInner::*;
         match self.keypair {
             #[cfg(feature = "ed25519")]
-            Ed25519(ref pair) => PublicKey {
+            KeyPairInner::Ed25519(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Ed25519(pair.public()),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Rsa(ref pair) => PublicKey {
+            KeyPairInner::Rsa(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Rsa(pair.public()),
             },
             #[cfg(feature = "secp256k1")]
-            Secp256k1(ref pair) => PublicKey {
+            KeyPairInner::Secp256k1(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Secp256k1(pair.public().clone()),
             },
             #[cfg(feature = "ecdsa")]
-            Ecdsa(ref pair) => PublicKey {
+            KeyPairInner::Ecdsa(ref pair) => PublicKey {
                 publickey: PublicKeyInner::Ecdsa(pair.public().clone()),
             },
         }
@@ -230,8 +228,6 @@ impl Keypair {
 
     /// Encode a private key as protobuf structure.
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
-        use quick_protobuf::MessageWrite;
-
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -239,6 +235,7 @@ impl Keypair {
             feature = "rsa"
         ))]
         {
+            use quick_protobuf::MessageWrite;
             let pk: proto::PrivateKey = match self.keypair {
                 #[cfg(feature = "ed25519")]
                 KeyPairInner::Ed25519(ref data) => proto::PrivateKey {
@@ -275,9 +272,7 @@ impl Keypair {
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        use quick_protobuf::MessageRead;
-
+    pub fn from_protobuf_encoding(_bytes: &[u8]) -> Result<Keypair, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -285,8 +280,9 @@ impl Keypair {
             feature = "rsa"
         ))]
         {
-            let mut reader = BytesReader::from_bytes(bytes);
-            let mut private_key = proto::PrivateKey::from_reader(&mut reader, bytes)
+            use quick_protobuf::MessageRead;
+            let mut reader = BytesReader::from_bytes(_bytes);
+            let mut private_key = proto::PrivateKey::from_reader(&mut reader, _bytes)
                 .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
                 .map(zeroize::Zeroizing::new)?;
 
@@ -458,17 +454,16 @@ impl PublicKey {
     /// private key (authenticity), and that the message has not been
     /// tampered with (integrity).
     #[must_use]
-    pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
-        use PublicKeyInner::*;
-        match &self.publickey {
+    pub fn verify(&self, _msg: &[u8], _sig: &[u8]) -> bool {
+        match self.publickey {
             #[cfg(feature = "ed25519")]
-            Ed25519(pk) => pk.verify(msg, sig),
+            PublicKeyInner::Ed25519(ref pk) => pk.verify(_msg, _sig),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            Rsa(pk) => pk.verify(msg, sig),
+            PublicKeyInner::Rsa(ref pk) => pk.verify(_msg, _sig),
             #[cfg(feature = "secp256k1")]
-            Secp256k1(pk) => pk.verify(msg, sig),
+            PublicKeyInner::Secp256k1(ref pk) => pk.verify(_msg, _sig),
             #[cfg(feature = "ecdsa")]
-            Ecdsa(pk) => pk.verify(msg, sig),
+            PublicKeyInner::Ecdsa(ref pk) => pk.verify(_msg, _sig),
         }
     }
 
@@ -534,8 +529,6 @@ impl PublicKey {
     /// Encode the public key into a protobuf structure for storage or
     /// exchange with other nodes.
     pub fn encode_protobuf(&self) -> Vec<u8> {
-        use quick_protobuf::MessageWrite;
-
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -543,6 +536,7 @@ impl PublicKey {
             feature = "rsa"
         ))]
         {
+            use quick_protobuf::MessageWrite;
             let public_key = proto::PublicKey::from(self);
 
             let mut buf = Vec::with_capacity(public_key.get_size());
@@ -574,9 +568,7 @@ impl PublicKey {
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    pub fn try_decode_protobuf(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        use quick_protobuf::MessageRead;
-
+    pub fn try_decode_protobuf(_bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -584,9 +576,10 @@ impl PublicKey {
             feature = "rsa"
         ))]
         {
-            let mut reader = BytesReader::from_bytes(bytes);
+            use quick_protobuf::MessageRead;
+            let mut reader = BytesReader::from_bytes(_bytes);
 
-            let pubkey = proto::PublicKey::from_reader(&mut reader, bytes)
+            let pubkey = proto::PublicKey::from_reader(&mut reader, _bytes)
                 .map_err(|e| DecodingError::bad_protobuf("public key bytes", e))?;
 
             pubkey.try_into()
@@ -774,11 +767,8 @@ impl From<rsa::PublicKey> for PublicKey {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[cfg(feature = "peerid")]
     use crate::PeerId;
-    use base64::prelude::*;
-    use std::str::FromStr;
 
     #[test]
     #[cfg(feature = "ed25519")]
