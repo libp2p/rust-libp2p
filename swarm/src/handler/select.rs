@@ -163,38 +163,10 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timeout,
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timeout,
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
@@ -203,7 +175,20 @@ where
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
             }),
-            _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
+            DialUpgradeError {
+                info: Either::Left(info),
+                error: e,
+            } => Either::Left(DialUpgradeError {
+                info,
+                error: e.map_upgrade_err(|e| e.map_err(|_| panic!("already handled above"))),
+            }),
+            DialUpgradeError {
+                info: Either::Right(info),
+                error: e,
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: e.map_upgrade_err(|e| e.map_err(|_| panic!("already handled above"))),
+            }),
         }
     }
 }
