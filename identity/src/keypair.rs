@@ -764,7 +764,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "ecdsa", feature = "peerid"))]
     fn keypair_protobuf_roundtrip_ecdsa() {
-        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
             "08031279307702010104203E5B1FE9712E6C314942A750BD67485DE3C1EFE85B1BFB520AE8F9AE3DFA4A4CA00A06082A8648CE3D030107A14403420004DE3D300FA36AE0E8F5D530899D83ABAB44ABF3161F162A4BC901D8E6ECDA020E8B6D5F8DA30525E71D6851510C098E5C47C646A597FB4DCEC034E9F77C409E62"
         ))
         .unwrap();
