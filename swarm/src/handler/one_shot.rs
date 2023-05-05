@@ -182,9 +182,8 @@ where
         }
 
         if let Some(timer) = &mut self.timeout {
-            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+            if timer.poll_unpin(cx).is_ready() {
                 self.keep_alive = KeepAlive::No;
-                self.timeout = None;
             }
         }
 
@@ -267,10 +266,17 @@ mod tests {
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
             Default::default(),
         );
+        let mut first_poll = true;
 
         block_on(poll_fn(|cx| loop {
             if handler.poll(cx).is_pending() {
-                return Poll::Ready(());
+                if first_poll {
+                    first_poll = false;
+                    std::thread::sleep(Duration::from_secs(10));
+                    return Poll::Pending;
+                } else {
+                    return Poll::Ready(());
+                }
             }
         }));
 

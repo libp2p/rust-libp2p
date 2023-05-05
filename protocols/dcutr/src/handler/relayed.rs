@@ -143,7 +143,7 @@ pub struct Handler {
     inbound_connect:
         Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>>,
     keep_alive: KeepAlive,
-    timeout:futures_timer::Delay,
+    timeout: futures_timer::Delay,
 }
 
 impl Handler {
@@ -154,7 +154,7 @@ impl Handler {
             queued_events: Default::default(),
             inbound_connect: Default::default(),
             keep_alive: KeepAlive::Yes,
-            timeout:futures_timer::Delay::new(Duration::from_secs(30))
+            timeout: futures_timer::Delay::new(Duration::from_secs(30)),
         }
     }
 
@@ -393,7 +393,7 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        if let Poll::Ready(_) = self.timeout.poll_unpin(cx){
+        if self.timeout.poll_unpin(cx).is_ready() {
             self.keep_alive = KeepAlive::No // Close the connection 30 seconds after initiated.
         }
 

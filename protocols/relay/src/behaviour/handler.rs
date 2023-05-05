@@ -925,7 +925,7 @@ impl ConnectionHandler for Handler {
         }
 
         if let Some(timer) = &mut self.timeout {
-            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+            if timer.poll_unpin(cx).is_ready() {
                 self.keep_alive = KeepAlive::No
             }
         }

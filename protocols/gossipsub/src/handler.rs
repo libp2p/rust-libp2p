@@ -413,7 +413,7 @@ impl EnabledHandler {
         // Note that cancellation happens before checking the timeout,
         // which may cause the connection not be droped after timeout reached.
         if let Some(timer) = &mut self.timeout {
-            if let Poll::Ready(_) = timer.poll_unpin(cx) {
+            if timer.poll_unpin(cx).is_ready() {
                 self.keep_alive = KeepAlive::No
             }
         }
