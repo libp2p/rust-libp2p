@@ -159,9 +159,9 @@ impl Keypair {
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         #[allow(deprecated)]
-        Ok(rsa::Keypair::from_pkcs8(pkcs8_der).map(|kp| Keypair {
+        rsa::Keypair::from_pkcs8(pkcs8_der).map(|kp| Keypair {
             keypair: KeyPairInner::Rsa(kp),
-        })?)
+        })
     }
 
     /// Decode a keypair from a DER-encoded Secp256k1 secret key in an ECPrivateKey
@@ -170,9 +170,9 @@ impl Keypair {
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        Ok(secp256k1::SecretKey::from_der(der).map(|sk| Keypair {
+        secp256k1::SecretKey::from_der(der).map(|sk| Keypair {
             keypair: KeyPairInner::Secp256k1(secp256k1::Keypair::from(sk)),
-        })?)
+        })
     }
 
     #[cfg(feature = "ed25519")]
@@ -516,7 +516,7 @@ impl PublicKey {
         note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
     )]
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Ok(Self::try_decode_protobuf(bytes)?)
+        Self::try_decode_protobuf(bytes)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
