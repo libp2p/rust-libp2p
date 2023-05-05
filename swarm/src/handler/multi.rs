@@ -385,26 +385,6 @@ impl<K, H> IntoIterator for MultiHandler<K, H> {
     }
 }
 
-/// A [`IntoConnectionHandler`] for multiple other `IntoConnectionHandler`s.
-#[derive(Clone)]
-#[deprecated(note = "Use `MultiHandler` directly.")]
-pub struct IntoMultiHandler<K, H> {
-    handlers: HashMap<K, H>,
-}
-
-#[allow(deprecated)]
-impl<K, H> fmt::Debug for IntoMultiHandler<K, H>
-where
-    K: fmt::Debug + Eq + Hash,
-    H: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("IntoMultiHandler")
-            .field("handlers", &self.handlers)
-            .finish()
-    }
-}
-
 /// Index and protocol name pair used as `UpgradeInfo::Info`.
 #[derive(Debug, Clone)]
 pub struct IndexedProtoName<H>(usize, H);
