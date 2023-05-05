@@ -29,8 +29,8 @@ use futures::StreamExt;
 use instant::Instant;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
     SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
@@ -526,17 +526,17 @@ impl ConnectionHandler for Handler {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Timeout,
+                        error: StreamUpgradeError::Timeout,
                         ..
                     }) => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Apply(e),
+                        error: StreamUpgradeError::Apply(e),
                         ..
                     }) => void::unreachable(e),
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
+                        error: StreamUpgradeError::NegotiationFailed,
                         ..
                     }) => {
                         // The protocol is not supported
@@ -548,7 +548,7 @@ impl ConnectionHandler for Handler {
                         });
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Io(e),
+                        error: StreamUpgradeError::Io(e),
                         ..
                     }) => {
                         log::debug!("Protocol negotiation failed: {e}")

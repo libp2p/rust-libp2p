@@ -34,8 +34,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -111,7 +111,7 @@ pub enum Event {
     /// We received a request for identification.
     Identify,
     /// Failed to identify the remote, or to reply to an identification request.
-    IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
+    IdentificationError(StreamUpgradeError<UpgradeError>),
 }
 
 impl Handler {
@@ -311,7 +311,7 @@ impl ConnectionHandler for Handler {
                 Event::Identification(peer_id),
             )),
             Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::IdentificationError(ConnectionHandlerUpgrErr::Apply(err)),
+                Event::IdentificationError(StreamUpgradeError::Apply(err)),
             )),
             Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }

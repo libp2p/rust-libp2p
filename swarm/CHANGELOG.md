@@ -14,11 +14,16 @@
   This variant was never constructed and thus dead code.
   See [PR 3605].
 
+- Deprecate `ConnectionHandlerUpgrErr` in favor of `StreamUpgradeError`.
+  This new type features a flat interface which should be easier to use.
+  See [PR XXXX].
+
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.42.2
 

@@ -33,8 +33,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -82,11 +81,11 @@ pub enum Event {
         remote_addr: Multiaddr,
     },
     InboundNegotiationFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: StreamUpgradeError<void::Void>,
     },
     InboundConnectNegotiated(Vec<Multiaddr>),
     OutboundNegotiationFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: StreamUpgradeError<void::Void>,
     },
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
@@ -127,7 +126,7 @@ pub struct Handler {
     endpoint: ConnectedPoint,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ConnectionHandlerUpgrErr<
+        StreamUpgradeError<
             Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
         >,
     >,
@@ -212,7 +211,7 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        self.pending_error = Some(ConnectionHandlerUpgrErr::Apply(match error {
+        self.pending_error = Some(StreamUpgradeError::Apply(match error {
             Either::Left(e) => Either::Left(e),
             Either::Right(v) => void::unreachable(v),
         }));
@@ -228,20 +227,20 @@ impl Handler {
         self.keep_alive = KeepAlive::No;
 
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            StreamUpgradeError::Timeout => {
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::OutboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timeout,
+                        error: StreamUpgradeError::Timeout,
                     },
                 ));
             }
-            ConnectionHandlerUpgrErr::NegotiationFailed => {
+            StreamUpgradeError::NegotiationFailed => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::OutboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
+                        error: StreamUpgradeError::NegotiationFailed,
                     },
                 ));
             }
@@ -257,7 +256,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
+    type Error = StreamUpgradeError<
         Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
     >;
     type InboundProtocol = Either<protocol::inbound::Upgrade, DeniedUpgrade>;
@@ -348,9 +347,9 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(
-                        ConnectionHandlerUpgrErr::Apply(Either::Left(e)),
-                    ))
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                        Either::Left(e),
+                    )))
                 }
             }
         }

@@ -271,7 +271,7 @@ pub struct AddressChange<'a> {
 /// that upgrading an outbound substream to the given protocol has failed.
 pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
     pub info: OOI,
-    pub error: ConnectionHandlerUpgrErr<OP::Error>,
+    pub error: StreamUpgradeError<OP::Error>,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler
@@ -459,9 +459,12 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     }
 }
 
+#[deprecated(note = "Renamed to `StreamUpgradeError`")]
+pub type ConnectionHandlerUpgrErr<TUpgrErr> = StreamUpgradeError<TUpgrErr>;
+
 /// Error that can happen on an outbound substream opening attempt.
 #[derive(Debug)]
-pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
+pub enum StreamUpgradeError<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
     /// The upgrade produced an error.
@@ -472,40 +475,38 @@ pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     Io(io::Error),
 }
 
-impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
-    /// Map the inner [`UpgradeError`] type.
-    pub fn map_upgrade_err<F, E>(self, f: F) -> ConnectionHandlerUpgrErr<E>
+impl<TUpgrErr> StreamUpgradeError<TUpgrErr> {
+    /// Map the inner [`StreamUpgradeError`] type.
+    pub fn map_upgrade_err<F, E>(self, f: F) -> StreamUpgradeError<E>
     where
         F: FnOnce(TUpgrErr) -> E,
     {
         match self {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Apply(e) => ConnectionHandlerUpgrErr::Apply(f(e)),
-            ConnectionHandlerUpgrErr::NegotiationFailed => {
-                ConnectionHandlerUpgrErr::NegotiationFailed
-            }
-            ConnectionHandlerUpgrErr::Io(e) => ConnectionHandlerUpgrErr::Io(e),
+            StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
+            StreamUpgradeError::Apply(e) => StreamUpgradeError::Apply(f(e)),
+            StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
+            StreamUpgradeError::Io(e) => StreamUpgradeError::Io(e),
         }
     }
 }
 
-impl<TUpgrErr> fmt::Display for ConnectionHandlerUpgrErr<TUpgrErr>
+impl<TUpgrErr> fmt::Display for StreamUpgradeError<TUpgrErr>
 where
     TUpgrErr: error::Error + 'static,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectionHandlerUpgrErr::Timeout => {
+            StreamUpgradeError::Timeout => {
                 write!(f, "Timeout error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Apply(err) => {
+            StreamUpgradeError::Apply(err) => {
                 write!(f, "Apply: ")?;
                 crate::print_error_chain(f, err)
             }
-            ConnectionHandlerUpgrErr::NegotiationFailed => {
+            StreamUpgradeError::NegotiationFailed => {
                 write!(f, "no protocols could be agreed upon")
             }
-            ConnectionHandlerUpgrErr::Io(e) => {
+            StreamUpgradeError::Io(e) => {
                 write!(f, "IO error: ")?;
                 crate::print_error_chain(f, e)
             }
@@ -513,7 +514,7 @@ where
     }
 }
 
-impl<TUpgrErr> error::Error for ConnectionHandlerUpgrErr<TUpgrErr>
+impl<TUpgrErr> error::Error for StreamUpgradeError<TUpgrErr>
 where
     TUpgrErr: error::Error + 'static,
 {

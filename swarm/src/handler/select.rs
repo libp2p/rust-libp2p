@@ -21,9 +21,9 @@
 #[allow(deprecated)]
 use crate::handler::IntoConnectionHandler;
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, KeepAlive,
+    ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -160,17 +160,17 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Apply(Either::Left(err)),
+                error: StreamUpgradeError::Apply(Either::Left(err)),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Apply(err),
+                error: StreamUpgradeError::Apply(err),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Apply(Either::Right(err)),
+                error: StreamUpgradeError::Apply(Either::Right(err)),
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Apply(err),
+                error: StreamUpgradeError::Apply(err),
             }),
             DialUpgradeError {
                 info: Either::Left(info),

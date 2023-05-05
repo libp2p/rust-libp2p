@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
+    handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -66,7 +66,7 @@ where
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
     /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
+    pending_error: Option<StreamUpgradeError<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -139,10 +139,10 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            StreamUpgradeError::Timeout => {
                 self.pending_events.push_back(Event::OutboundTimeout(info));
             }
-            ConnectionHandlerUpgrErr::NegotiationFailed => {
+            StreamUpgradeError::NegotiationFailed => {
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -165,7 +165,7 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        self.pending_error = Some(ConnectionHandlerUpgrErr::Apply(error));
+        self.pending_error = Some(StreamUpgradeError::Apply(error));
     }
 }
 
@@ -241,7 +241,7 @@ where
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = Event<TCodec>;
-    type Error = ConnectionHandlerUpgrErr<io::Error>;
+    type Error = StreamUpgradeError<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;

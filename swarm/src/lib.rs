@@ -122,11 +122,13 @@ pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{ConnectionError, ConnectionId};
 pub use executor::Executor;
 #[allow(deprecated)]
+pub use handler::ConnectionHandlerUpgrErr;
+#[allow(deprecated)]
 pub use handler::IntoConnectionHandler;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect,
     IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
-    SubstreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
