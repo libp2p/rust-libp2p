@@ -223,8 +223,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     },
     /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
-    /// A corresponding [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished),
-    /// [`BannedPeer`](SwarmEvent::BannedPeer), or
+    /// A corresponding [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished) or
     /// [`IncomingConnectionError`](SwarmEvent::IncomingConnectionError) event will later be
     /// generated for this connection.
     IncomingConnection {
