@@ -854,7 +854,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "peerid")]
+    #[cfg(all(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa",
+        feature = "peerid"
+    ))]
     fn keypair_from_protobuf_encoding() {
         // E.g. retrieved from an IPFS config file.
         let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
