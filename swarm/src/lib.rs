@@ -1735,8 +1735,7 @@ pub enum DialError {
     LocalPeerId {
         endpoint: ConnectedPoint,
     },
-    /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
-    /// for the peer to dial.
+    /// No addresses have been provided by [`NetworkBehaviour::handle_pending_outbound_connection`] and [`DialOpts`].
     NoAddresses,
     /// The provided [`dial_opts::PeerCondition`] evaluated to false and thus
     /// the dial was aborted.
