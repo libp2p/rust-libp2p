@@ -741,7 +741,10 @@ mod tests {
             "0802122053DADF1D5A164D6B4ACDB15E24AA4C5B1D3461BDBD42ABEDB0A4404D56CED8FB"
         ))
         .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("08021221037777e994e452c21604f91de093ce415f5432f701dd8cd1a7a6fea0e630bfca99")).unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
+            "08021221037777e994e452c21604f91de093ce415f5432f701dd8cd1a7a6fea0e630bfca99"
+        ))
+        .unwrap();
 
         roundtrip_protobuf_encoding(&priv_key, &pub_key);
     }
