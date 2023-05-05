@@ -191,16 +191,17 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
-    pub fn sign(&self, _msg: &[u8]) -> Result<Vec<u8>, SigningError> {
+    #[allow(unused_variables)]
+    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(ref pair) => Ok(pair.sign(_msg)),
+            KeyPairInner::Ed25519(ref pair) => Ok(pair.sign(msg)),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(ref pair) => pair.sign(_msg),
+            KeyPairInner::Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(ref pair) => pair.secret().sign(_msg),
+            KeyPairInner::Secp256k1(ref pair) => pair.secret().sign(msg),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(ref pair) => Ok(pair.secret().sign(_msg)),
+            KeyPairInner::Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
         }
     }
 
@@ -272,7 +273,8 @@ impl Keypair {
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
-    pub fn from_protobuf_encoding(_bytes: &[u8]) -> Result<Keypair, DecodingError> {
+    #[allow(unused_variables)]
+    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -281,8 +283,8 @@ impl Keypair {
         ))]
         {
             use quick_protobuf::MessageRead;
-            let mut reader = BytesReader::from_bytes(_bytes);
-            let mut private_key = proto::PrivateKey::from_reader(&mut reader, _bytes)
+            let mut reader = BytesReader::from_bytes(bytes);
+            let mut private_key = proto::PrivateKey::from_reader(&mut reader, bytes)
                 .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
                 .map(zeroize::Zeroizing::new)?;
 
@@ -454,16 +456,17 @@ impl PublicKey {
     /// private key (authenticity), and that the message has not been
     /// tampered with (integrity).
     #[must_use]
-    pub fn verify(&self, _msg: &[u8], _sig: &[u8]) -> bool {
+    #[allow(unused_variables)]
+    pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         match self.publickey {
             #[cfg(feature = "ed25519")]
-            PublicKeyInner::Ed25519(ref pk) => pk.verify(_msg, _sig),
+            PublicKeyInner::Ed25519(ref pk) => pk.verify(msg, sig),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            PublicKeyInner::Rsa(ref pk) => pk.verify(_msg, _sig),
+            PublicKeyInner::Rsa(ref pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
-            PublicKeyInner::Secp256k1(ref pk) => pk.verify(_msg, _sig),
+            PublicKeyInner::Secp256k1(ref pk) => pk.verify(msg, sig),
             #[cfg(feature = "ecdsa")]
-            PublicKeyInner::Ecdsa(ref pk) => pk.verify(_msg, _sig),
+            PublicKeyInner::Ecdsa(ref pk) => pk.verify(msg, sig),
         }
     }
 
@@ -568,7 +571,8 @@ impl PublicKey {
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    pub fn try_decode_protobuf(_bytes: &[u8]) -> Result<PublicKey, DecodingError> {
+    #[allow(unused_variables)]
+    pub fn try_decode_protobuf(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
@@ -577,9 +581,9 @@ impl PublicKey {
         ))]
         {
             use quick_protobuf::MessageRead;
-            let mut reader = BytesReader::from_bytes(_bytes);
+            let mut reader = BytesReader::from_bytes(bytes);
 
-            let pubkey = proto::PublicKey::from_reader(&mut reader, _bytes)
+            let pubkey = proto::PublicKey::from_reader(&mut reader, bytes)
                 .map_err(|e| DecodingError::bad_protobuf("public key bytes", e))?;
 
             pubkey.try_into()
