@@ -164,8 +164,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        #[allow(deprecated)]
-        rsa::Keypair::from_pkcs8(pkcs8_der).map(|kp| Keypair {
+        rsa::Keypair::try_decode_pkcs8(pkcs8_der).map(|kp| Keypair {
             keypair: KeyPairInner::Rsa(kp),
         })
     }
@@ -183,11 +182,10 @@ impl Keypair {
 
     #[cfg(feature = "ed25519")]
     pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
-        #[allow(deprecated)]
         Ok(Keypair {
-            keypair: KeyPairInner::Ed25519(ed25519::Keypair::from(ed25519::SecretKey::from_bytes(
-                bytes,
-            )?)),
+            keypair: KeyPairInner::Ed25519(ed25519::Keypair::from(
+                ed25519::SecretKey::try_from_bytes(bytes)?,
+            )),
         })
     }
 
@@ -240,7 +238,6 @@ impl Keypair {
     pub fn to_protobuf_encoding(&self) -> Result<Vec<u8>, DecodingError> {
         use quick_protobuf::MessageWrite;
 
-        #[allow(deprecated)]
         let pk: proto::PrivateKey = match &self.keypair {
             #[cfg(feature = "ed25519")]
             KeyPairInner::Ed25519(data) => proto::PrivateKey {
@@ -591,16 +588,13 @@ impl TryFrom<proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
-        #[allow(deprecated)]
         match pubkey.Type {
             #[cfg(feature = "ed25519")]
-            proto::KeyType::Ed25519 => {
-                Ok(
-                    ed25519::PublicKey::decode(&pubkey.Data).map(|kp| PublicKey {
-                        publickey: PublicKeyInner::Ed25519(kp),
-                    })?,
-                )
-            }
+            proto::KeyType::Ed25519 => Ok(ed25519::PublicKey::try_from_bytes(&pubkey.Data).map(
+                |kp| PublicKey {
+                    publickey: PublicKeyInner::Ed25519(kp),
+                },
+            )?),
             #[cfg(not(feature = "ed25519"))]
             proto::KeyType::Ed25519 => {
                 log::debug!("support for ed25519 was disabled at compile-time");
@@ -609,7 +603,7 @@ impl TryFrom<proto::PublicKey> for PublicKey {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             proto::KeyType::RSA => {
                 Ok(
-                    rsa::PublicKey::decode_x509(&pubkey.Data).map(|kp| PublicKey {
+                    rsa::PublicKey::try_decode_x509(&pubkey.Data).map(|kp| PublicKey {
                         publickey: PublicKeyInner::Rsa(kp),
                     })?,
                 )
