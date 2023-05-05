@@ -51,6 +51,7 @@ libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
 void = "1"
+once_cell = "1.17.1"
 
 [[test]]
 name = "swarm_derive"

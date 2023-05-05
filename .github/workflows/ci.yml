@@ -28,6 +28,8 @@ jobs:
       fail-fast: false
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
+    env:
+      CRATE: ${{ matrix.crate }}
     steps:
       - name: Install Protoc
         run: sudo apt-get install -y protobuf-compiler
@@ -44,39 +46,39 @@ jobs:
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package "$CRATE" --all-features
 
       - name: Check if we compile without any features activated
-        run: cargo build --package ${{ matrix.crate }} --no-default-features
+        run: cargo build --package "$CRATE" --no-default-features
 
       - run: cargo clean
 
       - name: Check if crate has been released
         id: check-released
         run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
+          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          crate: ${{ matrix.crate }}
+          crate: env.CRATE
 
       - name: Enforce no dependency on meta crate
         run: |
           cargo metadata --format-version=1 --no-deps | \
-          jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
+          jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
       - uses: taiki-e/cache-cargo-install-action@7dd0cff2732612ac642812bcec4ada5a279239ed # v1
         with:
           tool: tomlq
 
       - name: Enforce version in `workspace.dependencies` matches latest version
-        if: matrix.crate != 'libp2p'
+        if: env.CRATE != 'libp2p'
         run: |
-          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .version')
-          SPECIFIED_VERSION=$(tomlq 'workspace.dependencies.${{ matrix.crate }}.version' --file ./Cargo.toml)
+          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
+          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
           
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";

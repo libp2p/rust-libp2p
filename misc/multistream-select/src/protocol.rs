@@ -68,9 +68,9 @@ impl From<Version> for HeaderLine {
 
 /// A protocol (name) exchanged during protocol negotiation.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Protocol(Bytes);
-impl AsRef<[u8]> for Protocol {
-    fn as_ref(&self) -> &[u8] {
+pub(crate) struct Protocol(String);
+impl AsRef<str> for Protocol {
+    fn as_ref(&self) -> &str {
         self.0.as_ref()
     }
 }
@@ -82,7 +82,10 @@ impl TryFrom<Bytes> for Protocol {
         if !value.as_ref().starts_with(b"/") {
             return Err(ProtocolError::InvalidProtocol);
         }
-        Ok(Protocol(value))
+        let protocol_as_string =
+            String::from_utf8(value.to_vec()).map_err(|_| ProtocolError::InvalidProtocol)?;
+
+        Ok(Protocol(protocol_as_string))
     }
 }
 
@@ -94,9 +97,21 @@ impl TryFrom<&[u8]> for Protocol {
     }
 }
 
+impl TryFrom<&str> for Protocol {
+    type Error = ProtocolError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if !value.starts_with('/') {
+            return Err(ProtocolError::InvalidProtocol);
+        }
+
+        Ok(Protocol(value.to_owned()))
+    }
+}
+
 impl fmt::Display for Protocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(&self.0))
+        write!(f, "{}", self.0)
     }
 }
 
@@ -130,7 +145,7 @@ impl Message {
                 Ok(())
             }
             Message::Protocol(p) => {
-                let len = p.0.as_ref().len() + 1; // + 1 for \n
+                let len = p.as_ref().len() + 1; // + 1 for \n
                 dest.reserve(len);
                 dest.put(p.0.as_ref());
                 dest.put_u8(b'\n');
@@ -145,7 +160,7 @@ impl Message {
                 let mut buf = uvi::encode::usize_buffer();
                 let mut encoded = Vec::with_capacity(ps.len());
                 for p in ps {
-                    encoded.extend(uvi::encode::usize(p.0.as_ref().len() + 1, &mut buf)); // +1 for '\n'
+                    encoded.extend(uvi::encode::usize(p.as_ref().len() + 1, &mut buf)); // +1 for '\n'
                     encoded.extend_from_slice(p.0.as_ref());
                     encoded.push(b'\n')
                 }
@@ -464,7 +479,7 @@ mod tests {
                 .filter(|&c| c.is_ascii_alphanumeric())
                 .take(n)
                 .collect();
-            Protocol(Bytes::from(format!("/{p}")))
+            Protocol(format!("/{p}"))
         }
     }
 

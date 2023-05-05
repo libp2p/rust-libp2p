@@ -72,29 +72,29 @@ impl Zeroize for X25519 {
 }
 
 impl UpgradeInfo for NoiseConfig<IX, X25519> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ix/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/ix/25519/chachapoly/sha256/0.1.0")
     }
 }
 
 impl UpgradeInfo for NoiseConfig<XX, X25519> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/xx/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/xx/25519/chachapoly/sha256/0.1.0")
     }
 }
 
 impl<R> UpgradeInfo for NoiseConfig<IK, X25519, R> {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once(b"/noise/ik/25519/chachapoly/sha256/0.1.0")
+        std::iter::once("/noise/ik/25519/chachapoly/sha256/0.1.0")
     }
 }
 
@@ -127,8 +127,8 @@ impl Protocol<X25519> for X25519 {
 
     #[allow(irrefutable_let_patterns)]
     fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519>) -> bool {
-        if let identity::PublicKey::Ed25519(ref p) = id_pk {
-            PublicKey::from_ed25519(p).as_ref() == dh_pk.as_ref()
+        if let Ok(p) = identity::PublicKey::try_into_ed25519(id_pk.clone()) {
+            PublicKey::from_ed25519(&p).as_ref() == dh_pk.as_ref()
         } else {
             false
         }
@@ -161,20 +161,16 @@ impl Keypair<X25519> {
     /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
     #[allow(unreachable_patterns)]
     pub fn from_identity(id_keys: &identity::Keypair) -> Option<AuthenticKeypair<X25519>> {
-        match id_keys {
-            identity::Keypair::Ed25519(p) => {
-                let kp = Keypair::from(SecretKey::from_ed25519(&p.secret()));
-                let id = KeypairIdentity {
-                    public: id_keys.public(),
-                    signature: None,
-                };
-                Some(AuthenticKeypair {
-                    keypair: kp,
-                    identity: id,
-                })
-            }
-            _ => None,
-        }
+        let ed25519_keypair = id_keys.clone().try_into_ed25519().ok()?;
+        let kp = Keypair::from(SecretKey::from_ed25519(&ed25519_keypair.secret()));
+        let id = KeypairIdentity {
+            public: id_keys.public(),
+            signature: None,
+        };
+        Some(AuthenticKeypair {
+            keypair: kp,
+            identity: id,
+        })
     }
 }
 
