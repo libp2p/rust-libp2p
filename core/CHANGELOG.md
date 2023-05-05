@@ -14,11 +14,11 @@
   See [PR 3746]
 
 - Remove `SingletonMuxer`.
-  See [PR XXXX].
+  See [PR 3883].
 
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
 
 ## 0.39.2
 
