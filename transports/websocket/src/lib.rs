@@ -77,7 +77,7 @@ use std::{
 /// let cert = websocket::tls::Certificate::new(rcgen_cert.serialize_der().unwrap());
 /// transport.set_tls_config(websocket::tls::Config::new(priv_key, vec![cert]).unwrap());
 ///
-/// let id = transport.listen_on(ListenerId::default(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/wss".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -102,7 +102,7 @@ use std::{
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// );
 ///
-/// let id = transport.listen_on(ListenerId::default(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0/ws".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 /// println!("Listening on {addr}");
@@ -314,7 +314,7 @@ mod tests {
     async fn connect(listen_addr: Multiaddr) {
         let mut ws_config = new_ws_config().boxed();
         ws_config
-            .listen_on(ListenerId::default(), listen_addr)
+            .listen_on(ListenerId::next(), listen_addr)
             .expect("listener");
 
         let addr = ws_config

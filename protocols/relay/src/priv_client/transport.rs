@@ -85,7 +85,7 @@ use thiserror::Error;
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
-///    transport.listen_on(ListenerId::default(), relay_addr).unwrap();
+///    transport.listen_on(ListenerId::next(), relay_addr).unwrap();
 ///    ```
 pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,

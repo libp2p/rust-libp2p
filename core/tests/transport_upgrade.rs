@@ -103,7 +103,7 @@ fn upgrade_pipeline() {
     let listen_addr2 = listen_addr1.clone();
 
     listener_transport
-        .listen_on(ListenerId::default(), listen_addr1)
+        .listen_on(ListenerId::next(), listen_addr1)
         .unwrap();
 
     let server = async move {

@@ -40,7 +40,7 @@
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1".parse().expect("address should be valid");
-//! quic_transport.listen_on(ListenerId::default(), addr).expect("listen error.");
+//! quic_transport.listen_on(ListenerId::next(), addr).expect("listen error.");
 //! #
 //! # Ok(())
 //! # }

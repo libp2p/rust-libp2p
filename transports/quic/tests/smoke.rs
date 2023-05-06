@@ -514,7 +514,7 @@ fn create_transport<P: Provider>(
 
 async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
     transport
-        .listen_on(ListenerId::default(), addr.parse().unwrap())
+        .listen_on(ListenerId::next(), addr.parse().unwrap())
         .unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,

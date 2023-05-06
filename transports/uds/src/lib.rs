@@ -293,7 +293,7 @@ mod tests {
 
         async_std::task::spawn(async move {
             let mut transport = UdsConfig::new().boxed();
-            transport.listen_on(ListenerId::default(), addr).unwrap();
+            transport.listen_on(ListenerId::next(), addr).unwrap();
 
             let listen_addr = transport
                 .select_next_some()
@@ -329,7 +329,7 @@ mod tests {
         let mut uds = UdsConfig::new();
 
         let addr = "/unix//foo/bar".parse::<Multiaddr>().unwrap();
-        assert!(uds.listen_on(ListenerId::default(), addr).is_err());
+        assert!(uds.listen_on(ListenerId::next(), addr).is_err());
     }
 
     #[test]

@@ -102,7 +102,7 @@ fn run(
     listen_addr: &Multiaddr,
 ) {
     receiver_trans
-        .listen_on(ListenerId::default(), listen_addr.clone())
+        .listen_on(ListenerId::next(), listen_addr.clone())
         .unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);

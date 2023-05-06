@@ -306,10 +306,7 @@ mod tests {
             let mut transport = tcp::async_io::Transport::default().boxed();
 
             transport
-                .listen_on(
-                    ListenerId::default(),
-                    "/ip4/127.0.0.1/tcp/0".parse().unwrap(),
-                )
+                .listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
             let addr = transport
