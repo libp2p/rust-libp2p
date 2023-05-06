@@ -33,6 +33,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
+    #[allow(dead_code)]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
