@@ -43,7 +43,7 @@ use std::task::{Context, Poll};
 /// # #[tokio::main]
 /// # async fn main() {
 /// let mut transport = tcp::tokio::Transport::new(tcp::Config::default());
-/// let id = transport.listen_on(ListenerId::new(), "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+/// let id = transport.listen_on(ListenerId::next(), "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 ///
