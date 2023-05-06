@@ -598,7 +598,7 @@ mod tests {
         // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let listener = Default::default();
+            let listener = ListenerId::next();
             transport
                 .listen_on(
                     listener,

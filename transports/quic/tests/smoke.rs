@@ -329,7 +329,7 @@ async fn draft_29_support() {
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
     assert!(matches!(
         d_transport.listen_on(
-            Default::default(),
+            ListenerId::next(),
             "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()
         ),
         Err(TransportError::MultiaddrNotSupported(_))

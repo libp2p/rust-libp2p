@@ -775,7 +775,7 @@ mod test {
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let id = Default::default();
+            let id = ListenerId::next();
             transport
                 .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
@@ -872,7 +872,7 @@ mod test {
         // Start listening so that the dialer and driver are dropped.
         transport
             .listen_on(
-                Default::default(),
+                ListenerId::next(),
                 "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
             )
             .unwrap();

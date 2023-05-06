@@ -1323,7 +1323,7 @@ mod tests {
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();
-            let listener_id = Default::default();
+            let listener_id = ListenerId::next();
             tcp.listen_on(listener_id, "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
             tcp.remove_listener(listener_id)
