@@ -736,21 +736,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "secp256k1")]
-    fn keypair_protobuf_roundtrip_secp256k1() {
-        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
-            "080212201e4f6a12b43bec6871976295bcb13aace62a7e7b821334125d3ed3b720af419f"
-        ))
-        .unwrap();
-        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
-            "0802122102f0a81ddde0a3180610155ff3b2d98d683a6831fad0c84ba36cd49b81eaa7cf8f"
-        ))
-        .unwrap();
-
-        roundtrip_protobuf_encoding(&priv_key, &pub_key);
-    }
-
-    #[test]
     #[cfg(all(feature = "ecdsa", feature = "peerid"))]
     fn keypair_protobuf_roundtrip_ecdsa() {
         let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
@@ -774,7 +759,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "secp256k1", feature = "peerid"))]
     fn keypair_protobuf_roundtrip_secp256k1() {
-        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+        let priv_key = Keypair::try_decode_protobuf(&hex_literal::hex!(
             "0802122053DADF1D5A164D6B4ACDB15E24AA4C5B1D3461BDBD42ABEDB0A4404D56CED8FB"
         ))
         .unwrap();
