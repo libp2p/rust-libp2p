@@ -144,7 +144,7 @@ where
             }
         };
         match self.transport.lock().listen_on(id, inner_addr) {
-            Ok(_) => {
+            Ok(()) => {
                 self.listener_protos.insert(id, proto);
                 Ok(())
             }
