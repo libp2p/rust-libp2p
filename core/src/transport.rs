@@ -261,7 +261,7 @@ impl ListenerId {
     pub fn next() -> Self {
         ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
     }
-    
+
     #[deprecated(note = "Use ` ListenerId::next` instead.")]
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> Self {
