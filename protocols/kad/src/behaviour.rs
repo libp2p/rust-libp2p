@@ -405,7 +405,7 @@ impl KademliaConfig {
 
     /// Sets the mode.
     ///
-    /// TODO: More docs.
+    /// The default is [`Mode::Server`].
     pub fn set_mode(&mut self, m: Mode) -> &mut Self {
         self.mode = m;
         self
@@ -3213,6 +3213,10 @@ pub enum RoutingUpdate {
     Failed,
 }
 
+/// The kademlia mode.
+///
+/// In server mode, a node accepts inbound kademlia messages and is therefore available to the wider network.
+/// In client mode, a node merely issues requests to the network.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Mode {
     Client,
