@@ -70,7 +70,7 @@ jobs:
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@7dd0cff2732612ac642812bcec4ada5a279239ed # v1
+      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
         with:
           tool: tomlq
 

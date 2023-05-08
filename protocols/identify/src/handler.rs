@@ -64,9 +64,6 @@ pub struct Handler {
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
 
-    /// Whether the handler should keep the connection alive.
-    keep_alive: KeepAlive,
-
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
 
@@ -132,7 +129,6 @@ impl Handler {
             reply_streams: VecDeque::new(),
             pending_replies: FuturesUnordered::new(),
             trigger_next_identify: Delay::new(initial_delay),
-            keep_alive: KeepAlive::Yes,
             interval,
             public_key,
             protocol_version,
@@ -190,7 +186,6 @@ impl Handler {
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
-                self.keep_alive = KeepAlive::No;
             }
             future::Either::Right(()) => self
                 .events
@@ -210,7 +205,6 @@ impl Handler {
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
                 err,
             )));
-        self.keep_alive = KeepAlive::No;
         self.trigger_next_identify.reset(self.interval);
     }
 }
@@ -268,7 +262,19 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.inbound_identify_push.is_some() {
+            return KeepAlive::Yes;
+        }
+
+        if !self.pending_replies.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        if !self.reply_streams.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        KeepAlive::No
     }
 
     fn poll(
