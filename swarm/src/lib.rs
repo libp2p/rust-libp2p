@@ -116,7 +116,7 @@ pub use behaviour::{
     PollParameters, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
-pub use connection::{ConnectionError, ConnectionId};
+pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
