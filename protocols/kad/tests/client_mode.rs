@@ -39,10 +39,14 @@ async fn two_servers_add_each_other_to_routing_table() {
     let server1_peer_id = *server1.local_peer_id();
     let server2_peer_id = *server2.local_peer_id();
 
+    use KademliaEvent::*;
+    use MyBehaviourEvent::*;
+
     match libp2p_swarm_test::drive(&mut server1, &mut server2).await {
         (
-            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_), MyBehaviourEvent::Kad(KademliaEvent::RoutingUpdated { peer: peer1, .. })],
-            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_), MyBehaviourEvent::Kad(KademliaEvent::UnroutablePeer { peer: peer2, .. })], // Unroutable because server2 did not dial.
+            [Identify(_), Identify(_), Kad(RoutingUpdated { peer: peer1, .. })],
+            [Identify(_), Identify(_), Kad(UnroutablePeer { peer: peer2, .. })]
+            | [Identify(_), Kad(UnroutablePeer { peer: peer2, .. }), Identify(_)], // Unroutable because server2 did not dial.
         ) => {
             assert_eq!(peer1, server2_peer_id);
             assert_eq!(peer2, server1_peer_id);
