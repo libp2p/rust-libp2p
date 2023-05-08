@@ -30,6 +30,10 @@
 - Flatten `ConnectionHandlerUpgrErr` and rename to `StreamUpgradeError`.
   See [PR 3882].
 
+- Remove deprecated `ConnectionLimits`.
+  Users should migrate to `libp2p::connection_limits::Behaviour`.
+  See [PR 3885].
+
 - Allow `ConnectionHandler`s to report and learn about the supported protocols on a connection.
   The newly introduced API elements are:
   - `ConnectionHandlerEvent::ReportRemoteProtocols`
@@ -45,6 +49,7 @@
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
 [PR 3882]: https://github.com/libp2p/rust-libp2p/pull/3882
 [PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
+[PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 
 ## 0.42.2
