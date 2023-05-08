@@ -417,7 +417,7 @@ where
 
     /// Adds a known address for a peer that can be used for
     /// dialing attempts by the `Swarm`, i.e. is returned
-    /// by [`NetworkBehaviour::addresses_of_peer`].
+    /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {

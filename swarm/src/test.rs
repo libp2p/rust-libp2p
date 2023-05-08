@@ -41,9 +41,9 @@ where
     TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
-    /// invocation of `new_handler`.
+    /// invocation of [`NetworkBehaviour::handle_established_inbound_connection`] and [`NetworkBehaviour::handle_established_outbound_connection`]
     pub(crate) handler_proto: THandler,
-    /// The addresses to return from `addresses_of_peer`.
+    /// The addresses to return from [`NetworkBehaviour::handle_established_outbound_connection`].
     pub(crate) addresses: HashMap<PeerId, Vec<Multiaddr>>,
     /// The next action to return from `poll`.
     ///

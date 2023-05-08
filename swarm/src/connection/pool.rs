@@ -20,8 +20,6 @@
 // DEALINGS IN THE SOFTWARE.
 #[allow(deprecated)]
 use crate::connection::{Connection, ConnectionId, ConnectionLimit, PendingPoint};
-#[allow(deprecated)]
-use crate::IntoConnectionHandler;
 use crate::{
     connection::{
         Connected, ConnectionError, IncomingInfo, PendingConnectionError,
@@ -512,7 +510,7 @@ where
         obtained_peer_id: PeerId,
         endpoint: &ConnectedPoint,
         connection: NewConnection,
-        handler: <THandler as IntoConnectionHandler>::Handler,
+        handler: THandler,
     ) {
         let connection = connection.extract();
 
