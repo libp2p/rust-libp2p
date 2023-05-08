@@ -208,6 +208,22 @@ where
                     handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
                 }
             },
+            ConnectionEvent::LocalProtocolsChange(supported_protocols) => match self {
+                Either::Left(handler) => handler.on_connection_event(
+                    ConnectionEvent::LocalProtocolsChange(supported_protocols),
+                ),
+                Either::Right(handler) => handler.on_connection_event(
+                    ConnectionEvent::LocalProtocolsChange(supported_protocols),
+                ),
+            },
+            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => match self {
+                Either::Left(handler) => handler.on_connection_event(
+                    ConnectionEvent::RemoteProtocolsChange(supported_protocols),
+                ),
+                Either::Right(handler) => handler.on_connection_event(
+                    ConnectionEvent::RemoteProtocolsChange(supported_protocols),
+                ),
+            },
         }
     }
 }

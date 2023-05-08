@@ -137,7 +137,9 @@ impl ConnectionHandler for Handler {
                 );
             }
 
-            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: (), error }) => {
                 let Command { id, .. } = self
                     .requested_streams
