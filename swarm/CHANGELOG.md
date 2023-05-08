@@ -18,6 +18,11 @@
   This variant was never constructed and thus dead code.
   See [PR 3605].
 
+- Remove deprecated `IntoConnectionHandler` and all its implementations.
+  This also removes the `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` methods.
+  See changelog for `0.42` on how to migrate.
+  See [PR 3884].
+
 - Allow `ConnectionHandler`s to report and learn about the supported protocols on a connection.
   The newly introduced API elements are:
   - `ConnectionHandlerEvent::ReportRemoteProtocols`
@@ -27,12 +32,12 @@
   See [PR 3651].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
-[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+[PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
+[PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
-[PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 
 ## 0.42.2
 

@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[allow(deprecated)]
-use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
     InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
@@ -27,70 +25,7 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
-use libp2p_core::ConnectedPoint;
-use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
-
-/// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
-/// already implemented for T, we cannot implement it for Either<A, B>.
-pub enum IntoEitherHandler<L, R> {
-    Left(L),
-    Right(R),
-}
-
-/// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
-/// implementations.
-#[allow(deprecated)]
-impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
-where
-    L: IntoConnectionHandler,
-    R: IntoConnectionHandler,
-{
-    type Handler = Either<L::Handler, R::Handler>;
-
-    fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
-        match self {
-            IntoEitherHandler::Left(into_handler) => Either::Left(into_handler.into_handler(p, c)),
-            IntoEitherHandler::Right(into_handler) => {
-                Either::Right(into_handler.into_handler(p, c))
-            }
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        match self {
-            IntoEitherHandler::Left(into_handler) => {
-                Either::Left(SendWrapper(into_handler.inbound_protocol()))
-            }
-            IntoEitherHandler::Right(into_handler) => {
-                Either::Right(SendWrapper(into_handler.inbound_protocol()))
-            }
-        }
-    }
-}
-
-// Taken from https://github.com/bluss/either.
-impl<L, R> IntoEitherHandler<L, R> {
-    /// Returns the left value.
-    pub fn unwrap_left(self) -> L {
-        match self {
-            IntoEitherHandler::Left(l) => l,
-            IntoEitherHandler::Right(_) => {
-                panic!("called `IntoEitherHandler::unwrap_left()` on a `Right` value.",)
-            }
-        }
-    }
-
-    /// Returns the right value.
-    pub fn unwrap_right(self) -> R {
-        match self {
-            IntoEitherHandler::Right(r) => r,
-            IntoEitherHandler::Left(_) => {
-                panic!("called `IntoEitherHandler::unwrap_right()` on a `Left` value.",)
-            }
-        }
-    }
-}
 
 impl<LIP, RIP, LIOI, RIOI>
     FullyNegotiatedInbound<Either<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
