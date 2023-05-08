@@ -29,7 +29,7 @@ use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
 use libp2p_core::{
-    upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
+    upgrade::{SelectUpgrade, UpgradeError},
     ConnectedPoint,
 };
 use libp2p_identity::PeerId;
@@ -163,13 +163,6 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Timeout,
             } => Either::Left(DialUpgradeError {
                 info,
@@ -188,13 +181,6 @@ where
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
             }),
             DialUpgradeError {
                 info: Either::Right(info),
@@ -238,96 +224,18 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timer => {
+            Either::Left(error) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Timer,
+                        error,
                     }));
-
+            }
+            Either::Right(error) => {
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    }));
-
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    }));
-
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => {
-                let (e1, e2);
-                match e {
-                    ProtocolError::IoError(e) => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::IoError(
-                            e.kind().into(),
-                        ));
-                        e2 = NegotiationError::ProtocolError(ProtocolError::IoError(e))
-                    }
-                    ProtocolError::InvalidMessage => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage)
-                    }
-                    ProtocolError::InvalidProtocol => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol)
-                    }
-                    ProtocolError::TooManyProtocols => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols)
-                    }
-                }
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e1)),
-                    }));
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(e))) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(e))) => {
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error,
                     }));
             }
         }
