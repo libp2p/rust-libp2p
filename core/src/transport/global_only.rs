@@ -22,8 +22,6 @@ use crate::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
 };
-
-use crate::Transport as TransportCore;
 use log::debug;
 use std::{
     pin::Pin,
@@ -297,11 +295,11 @@ impl<T> Transport<T> {
     }
 }
 
-impl<T: TransportCore + Unpin> TransportCore for Transport<T> {
-    type Output = <T as TransportCore>::Output;
-    type Error = <T as TransportCore>::Error;
-    type ListenerUpgrade = <T as TransportCore>::ListenerUpgrade;
-    type Dial = <T as TransportCore>::Dial;
+impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
+    type Output = <T as crate::Transport>::Output;
+    type Error = <T as crate::Transport>::Error;
+    type ListenerUpgrade = <T as crate::Transport>::ListenerUpgrade;
+    type Dial = <T as crate::Transport>::Dial;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.inner.listen_on(addr)
