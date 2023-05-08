@@ -400,31 +400,6 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-/// Information about a connection limit.
-#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
-#[derive(Debug, Clone, Copy)]
-pub struct ConnectionLimit {
-    /// The maximum number of connections.
-    pub limit: u32,
-    /// The current number of connections.
-    pub current: u32,
-}
-
-#[allow(deprecated)]
-impl fmt::Display for ConnectionLimit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "connection limit exceeded ({}/{})",
-            self.current, self.limit
-        )
-    }
-}
-
-/// A `ConnectionLimit` can represent an error if it has been exceeded.
-#[allow(deprecated)]
-impl std::error::Error for ConnectionLimit {}
-
 struct SubstreamUpgrade<UserData, Upgrade> {
     user_data: Option<UserData>,
     timeout: Delay,
