@@ -47,7 +47,13 @@ mod pending;
 mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+pub use map_in::MapInEvent;
+pub use map_out::MapOutEvent;
+pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
+pub use pending::PendingConnectionHandler;
+pub use select::ConnectionHandlerSelect;
 
+use crate::StreamProtocol;
 use ::either::Either;
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, Multiaddr};
@@ -58,13 +64,6 @@ use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
-
-use crate::StreamProtocol;
-pub use map_in::MapInEvent;
-pub use map_out::MapOutEvent;
-pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
-pub use pending::PendingConnectionHandler;
-pub use select::ConnectionHandlerSelect;
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
