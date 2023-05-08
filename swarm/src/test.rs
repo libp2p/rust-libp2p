@@ -235,29 +235,6 @@ where
                 .count()
     }
 
-    /// Checks that when the expected number of closed connection notifications are received, a
-    /// given number of expected disconnections have been received as well.
-    ///
-    /// Returns if the first condition is met.
-    pub(crate) fn assert_disconnected(
-        &self,
-        expected_closed_connections: usize,
-        expected_disconnections: usize,
-    ) -> bool {
-        if self.on_connection_closed.len() == expected_closed_connections {
-            assert_eq!(
-                self.on_connection_closed
-                    .iter()
-                    .filter(|(.., remaining_established)| { *remaining_established == 0 })
-                    .count(),
-                expected_disconnections
-            );
-            return true;
-        }
-
-        false
-    }
-
     /// Checks that when the expected number of established connection notifications are received,
     /// a given number of expected connections have been received as well.
     ///
