@@ -21,8 +21,9 @@
 use crate::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    Transport,
 };
+
+use crate::Transport as TransportCore;
 use log::debug;
 use std::{
     pin::Pin,
@@ -31,7 +32,7 @@ use std::{
 
 /// Dropping all dial requests to non-global IP addresses.
 #[derive(Debug, Clone, Default)]
-pub struct GlobalIpOnly<T> {
+pub struct Transport<T> {
     inner: T,
 }
 
@@ -290,17 +291,17 @@ mod ipv6_global {
     }
 }
 
-impl<T> GlobalIpOnly<T> {
+impl<T> Transport<T> {
     pub fn new(transport: T) -> Self {
-        GlobalIpOnly { inner: transport }
+        Transport { inner: transport }
     }
 }
 
-impl<T: Transport + Unpin> Transport for GlobalIpOnly<T> {
-    type Output = <T as Transport>::Output;
-    type Error = <T as Transport>::Error;
-    type ListenerUpgrade = <T as Transport>::ListenerUpgrade;
-    type Dial = <T as Transport>::Dial;
+impl<T: TransportCore + Unpin> TransportCore for Transport<T> {
+    type Output = <T as TransportCore>::Output;
+    type Error = <T as TransportCore>::Error;
+    type ListenerUpgrade = <T as TransportCore>::ListenerUpgrade;
+    type Dial = <T as TransportCore>::Dial;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.inner.listen_on(addr)
