@@ -229,15 +229,11 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 
     /// Whether the event concerns an inbound stream.
     pub fn is_inbound(&self) -> bool {
-        // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
         match self {
-            ConnectionEvent::FullyNegotiatedInbound(_)
-            | ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
-                ..
-            }) => true,
+            ConnectionEvent::FullyNegotiatedInbound(_) | ConnectionEvent::ListenUpgradeError(_) => {
+                true
+            }
             ConnectionEvent::FullyNegotiatedOutbound(_)
-            | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
@@ -282,7 +278,7 @@ pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
 /// that upgrading an inbound substream to the given protocol has failed.
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,
-    pub error: ConnectionHandlerUpgrErr<IP::Error>,
+    pub error: IP::Error,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)
@@ -468,8 +464,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
-    /// There was an error in the timer used.
-    Timer,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
 }
@@ -482,7 +476,6 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
     {
         match self {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
         }
     }
@@ -496,9 +489,6 @@ where
         match self {
             ConnectionHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
             }
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 write!(f, "Upgrade: ")?;
@@ -515,7 +505,6 @@ where
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
-            ConnectionHandlerUpgrErr::Timer => None,
             ConnectionHandlerUpgrErr::Upgrade(_) => None,
         }
     }

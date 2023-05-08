@@ -79,10 +79,6 @@ pub enum Event {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
     },
-    InboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
@@ -282,10 +278,6 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
                 Event::InboundCircuitEstablished { src_peer_id, limit }
             }
-            handler::Event::InboundCircuitReqFailed { error } => Event::InboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
             handler::Event::InboundCircuitReqDenied { src_peer_id } => {
                 Event::InboundCircuitReqDenied { src_peer_id }
             }

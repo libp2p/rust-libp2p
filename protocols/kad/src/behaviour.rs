@@ -1905,9 +1905,7 @@ where
         };
 
         match error {
-            #[allow(deprecated)]
-            DialError::Banned
-            | DialError::LocalPeerId { .. }
+            DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
