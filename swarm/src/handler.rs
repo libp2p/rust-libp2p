@@ -49,15 +49,14 @@ mod select;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr};
-use libp2p_identity::PeerId;
+use libp2p_core::{upgrade::UpgradeError, Multiaddr};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
-pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
+pub use select::ConnectionHandlerSelect;
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -229,15 +228,11 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 
     /// Whether the event concerns an inbound stream.
     pub fn is_inbound(&self) -> bool {
-        // Note: This will get simpler with https://github.com/libp2p/rust-libp2p/pull/3605.
         match self {
-            ConnectionEvent::FullyNegotiatedInbound(_)
-            | ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)), // Only `Select` is relevant, the others may be for other handlers too.
-                ..
-            }) => true,
+            ConnectionEvent::FullyNegotiatedInbound(_) | ConnectionEvent::ListenUpgradeError(_) => {
+                true
+            }
             ConnectionEvent::FullyNegotiatedOutbound(_)
-            | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
@@ -282,7 +277,7 @@ pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
 /// that upgrading an inbound substream to the given protocol has failed.
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,
-    pub error: ConnectionHandlerUpgrErr<IP::Error>,
+    pub error: IP::Error,
 }
 
 /// Configuration of inbound or outbound substream protocol(s)
@@ -468,8 +463,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
-    /// There was an error in the timer used.
-    Timer,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
 }
@@ -482,7 +475,6 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
     {
         match self {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
         }
     }
@@ -496,9 +488,6 @@ where
         match self {
             ConnectionHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
             }
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 write!(f, "Upgrade: ")?;
@@ -515,55 +504,8 @@ where
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
-            ConnectionHandlerUpgrErr::Timer => None,
             ConnectionHandlerUpgrErr::Upgrade(_) => None,
         }
-    }
-}
-
-/// Prototype for a [`ConnectionHandler`].
-#[deprecated(
-    note = "Implement `ConnectionHandler` directly and use `NetworkBehaviour::{handle_pending_inbound_connection,handle_pending_outbound_connection}` to handle pending connections."
-)]
-pub trait IntoConnectionHandler: Send + 'static {
-    /// The protocols handler.
-    type Handler: ConnectionHandler;
-
-    /// Builds the protocols handler.
-    ///
-    /// The `PeerId` is the id of the node the handler is going to handle.
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler;
-
-    /// Return the handler's inbound protocol.
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol;
-
-    /// Builds an implementation of [`IntoConnectionHandler`] that handles both this protocol and the
-    /// other one together.
-    fn select<TProto2>(self, other: TProto2) -> IntoConnectionHandlerSelect<Self, TProto2>
-    where
-        Self: Sized,
-    {
-        IntoConnectionHandlerSelect::new(self, other)
-    }
-}
-
-#[allow(deprecated)]
-impl<T> IntoConnectionHandler for T
-where
-    T: ConnectionHandler,
-{
-    type Handler = Self;
-
-    fn into_handler(self, _: &PeerId, _: &ConnectedPoint) -> Self {
-        self
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        self.listen_protocol().into_upgrade().0
     }
 }
 
