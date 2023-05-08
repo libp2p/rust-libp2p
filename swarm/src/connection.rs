@@ -35,7 +35,7 @@ use crate::handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 use crate::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol, SubstreamProtocol,
+    ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
@@ -45,9 +45,11 @@ use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
+use libp2p_core::upgrade;
+use libp2p_core::upgrade::{
+    InboundUpgradeApply, NegotiationError, OutboundUpgradeApply, ProtocolError,
+};
 use libp2p_core::Endpoint;
-use libp2p_core::{upgrade, UpgradeError};
 use libp2p_identity::PeerId;
 use std::collections::HashSet;
 use std::future::Future;
@@ -240,7 +242,7 @@ where
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError {
                             info,
-                            error: ConnectionHandlerUpgrErr::Timeout,
+                            error: StreamUpgradeError::Timeout,
                         },
                     ));
                     continue;
@@ -318,10 +320,22 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
+                Poll::Ready(Some((info, Err(StreamUpgradeError::Apply(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
+                    log::debug!("failed to upgrade inbound stream: {e}");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
+                    log::debug!("no protocol could be agreed upon for inbound stream");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
+                    log::debug!("inbound stream upgrade timed out");
                     continue;
                 }
             }
@@ -455,31 +469,6 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-/// Information about a connection limit.
-#[deprecated(note = "Use `libp2p::connection_limits` instead.", since = "0.42.1")]
-#[derive(Debug, Clone, Copy)]
-pub struct ConnectionLimit {
-    /// The maximum number of connections.
-    pub limit: u32,
-    /// The current number of connections.
-    pub current: u32,
-}
-
-#[allow(deprecated)]
-impl fmt::Display for ConnectionLimit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "connection limit exceeded ({}/{})",
-            self.current, self.limit
-        )
-    }
-}
-
-/// A `ConnectionLimit` can represent an error if it has been exceeded.
-#[allow(deprecated)]
-impl std::error::Error for ConnectionLimit {}
-
 struct SubstreamUpgrade<UserData, Upgrade> {
     user_data: Option<UserData>,
     timeout: Delay,
@@ -543,11 +532,11 @@ impl<UserData, Upgrade> Unpin for SubstreamUpgrade<UserData, Upgrade> {}
 
 impl<UserData, Upgrade, UpgradeOutput, TUpgradeError> Future for SubstreamUpgrade<UserData, Upgrade>
 where
-    Upgrade: Future<Output = Result<UpgradeOutput, UpgradeError<TUpgradeError>>> + Unpin,
+    Upgrade: Future<Output = Result<UpgradeOutput, upgrade::UpgradeError<TUpgradeError>>> + Unpin,
 {
     type Output = (
         UserData,
-        Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>,
+        Result<UpgradeOutput, StreamUpgradeError<TUpgradeError>>,
     );
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -557,28 +546,34 @@ where
                     self.user_data
                         .take()
                         .expect("Future not to be polled again once ready."),
-                    Err(ConnectionHandlerUpgrErr::Timeout),
+                    Err(StreamUpgradeError::Timeout),
                 ))
             }
 
             Poll::Pending => {}
         }
 
-        match self.upgrade.poll_unpin(cx) {
-            Poll::Ready(Ok(upgrade)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Ok(upgrade),
-            )),
-            Poll::Ready(Err(err)) => Poll::Ready((
-                self.user_data
-                    .take()
-                    .expect("Future not to be polled again once ready."),
-                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
-            )),
-            Poll::Pending => Poll::Pending,
-        }
+        let result = futures::ready!(self.upgrade.poll_unpin(cx));
+        let user_data = self
+            .user_data
+            .take()
+            .expect("Future not to be polled again once ready.");
+
+        Poll::Ready((
+            user_data,
+            result.map_err(|e| match e {
+                upgrade::UpgradeError::Select(NegotiationError::Failed) => {
+                    StreamUpgradeError::NegotiationFailed
+                }
+                upgrade::UpgradeError::Select(NegotiationError::ProtocolError(
+                    ProtocolError::IoError(e),
+                )) => StreamUpgradeError::Io(e),
+                upgrade::UpgradeError::Select(NegotiationError::ProtocolError(other)) => {
+                    StreamUpgradeError::Io(io::Error::new(io::ErrorKind::Other, other))
+                }
+                upgrade::UpgradeError::Apply(e) => StreamUpgradeError::Apply(e),
+            }),
+        ))
     }
 }
 
@@ -736,7 +731,7 @@ mod tests {
 
         assert!(matches!(
             connection.handler.error.unwrap(),
-            ConnectionHandlerUpgrErr::Timeout
+            StreamUpgradeError::Timeout
         ))
     }
 
@@ -927,7 +922,7 @@ mod tests {
 
     struct MockConnectionHandler {
         outbound_requested: bool,
-        error: Option<ConnectionHandlerUpgrErr<Void>>,
+        error: Option<StreamUpgradeError<Void>>,
         upgrade_timeout: Duration,
     }
 

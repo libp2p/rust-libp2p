@@ -1917,9 +1917,7 @@ where
         };
 
         match error {
-            #[allow(deprecated)]
-            DialError::Banned
-            | DialError::LocalPeerId { .. }
+            DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
@@ -1945,8 +1943,6 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(_) => {}
         }
     }
 

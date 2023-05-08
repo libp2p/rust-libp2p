@@ -31,7 +31,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use void::Void;
@@ -47,7 +47,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
+    pub(crate) result: Result<RunStats, StreamUpgradeError<Void>>,
 }
 
 pub struct Handler {
@@ -152,14 +152,7 @@ impl ConnectionHandler for Handler {
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout => {}
-                    ConnectionHandlerUpgrErr::Timer => {}
-                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
-                        libp2p_core::UpgradeError::Select(_) => {}
-                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
-                    },
-                }
+                void::unreachable(error)
             }
         }
     }
