@@ -96,7 +96,7 @@ pub enum Event {
     /// We obtained identification information from the remote.
     Identified(Info),
     /// We replied to an identification request from the remote.
-    Identification(PeerId),
+    Identification,
     /// We actively pushed our identification information to the remote.
     IdentificationPushed,
     /// Failed to identify the remote, or to reply to an identification request.
@@ -316,7 +316,7 @@ impl ConnectionHandler for Handler {
         // Check for pending replies to send.
         if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
             let event = result
-                .map(|()| Event::Identification(self.remote_peer_id))
+                .map(|()| Event::Identification)
                 .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
 
             return Poll::Ready(ConnectionHandlerEvent::Custom(event));
