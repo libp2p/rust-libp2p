@@ -463,7 +463,7 @@ where
     }
 }
 
-/// A reference to a bucket in a [`KBucketsTable`].
+/// A reference to a bucket.
 pub struct KBucketRef<'a, TKey, TVal> {
     index: BucketIndex,
     bucket: &'a mut KBucket<TKey, TVal>,
@@ -474,7 +474,7 @@ where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
 {
-    /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+    /// Returns the minimum inclusive and maximum inclusive distance for
     /// this bucket.
     pub fn range(&self) -> (Distance, Distance) {
         self.index.range()

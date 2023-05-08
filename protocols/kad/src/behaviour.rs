@@ -2513,7 +2513,7 @@ pub enum KademliaEvent {
         is_new_peer: bool,
         /// The full list of known addresses of `peer`.
         addresses: Addresses,
-        /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+        /// Returns the minimum inclusive and maximum inclusive distance for
         /// the bucket of the peer.
         bucket_range: (Distance, Distance),
         /// The ID of the peer that was evicted from the routing table to make
@@ -2596,7 +2596,7 @@ pub enum InboundRequest {
         num_closer_peers: usize,
         num_provider_peers: usize,
     },
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request.
+    /// A peer sent an add provider request.
     /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
@@ -2607,7 +2607,7 @@ pub enum InboundRequest {
         num_closer_peers: usize,
         present_locally: bool,
     },
-    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request.
+    /// A peer sent a put record request.
     /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
     ///
     /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
