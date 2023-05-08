@@ -209,12 +209,12 @@ pub enum Error {
     BadSignature,
     #[error("Authentication failed")]
     AuthenticationFailed,
-    #[error(transparent)]
-    InvalidPayload(DecodeError),
+    #[error("failed to decode protobuf ")]
+    InvalidPayload(#[from] DecodeError),
     #[error(transparent)]
     SigningError(#[from] libp2p_identity::SigningError),
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error("failed to decode protobuf")]
-pub struct DecodeError(#[source] quick_protobuf::Error);
+#[error(transparent)]
+pub struct DecodeError(quick_protobuf::Error);

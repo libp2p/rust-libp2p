@@ -128,5 +128,5 @@ pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, UpgradeInfo};
 
 #[derive(Debug, thiserror::Error)]
-#[error("failed to decode protobuf")]
-pub struct DecodeError(#[source] quick_protobuf::Error);
+#[error(transparent)]
+pub struct DecodeError(quick_protobuf::Error);
