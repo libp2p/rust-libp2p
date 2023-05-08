@@ -10,8 +10,13 @@
   We encourage users to use `StreamProtocol` when implementing `UpgradeInfo`.
   See [PR 3746].
 
+- Make the `ed25519` feature explicitly opt-in.
+  Previously, this would be active by default.
+  See [PR XXXX].
+
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.51.3
 
