@@ -6,6 +6,11 @@
 - Hide internals of `Connection` and expose only `AsyncRead` and `AsyncWrite`.
   See [PR 3829].
 
+- Remove `Event::CircuitReqReceiveFailed` and `Event::InboundCircuitReqFailed` variants.
+  These variants are no longer constructed.
+  See [PR 3605].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3829]: https://github.com/libp2p/rust-libp2p/pull/3829
 
