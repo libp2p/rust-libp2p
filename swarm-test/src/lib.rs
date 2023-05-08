@@ -22,10 +22,9 @@ use async_trait::async_trait;
 use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
-    Multiaddr, Transport,
+    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
