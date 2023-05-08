@@ -12,7 +12,7 @@
 
 - Remove deprecated banning API from `Swarm`.
   Users should migrate to `libp2p::allow_block_list`.
-  See [PR XXXX].
+  See [PR 3886].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
