@@ -25,8 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol,
+    AddressScore, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
@@ -492,7 +492,7 @@ pub enum Event {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ConnectionHandlerUpgrErr<UpgradeError>,
+        error: StreamUpgradeError<UpgradeError>,
     },
 }
 

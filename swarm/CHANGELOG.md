@@ -23,13 +23,20 @@
   See changelog for `0.42` on how to migrate.
   See [PR 3884].
 
+- Remove `ConnectionHandlerUpgrErr::Timer` variant.
+  This variant was never constructed and thus dead code.
+  See [PR 3605].
+
+- Flatten `ConnectionHandlerUpgrErr` and rename to `StreamUpgradeError`.
+  See [PR 3882].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
-[PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
+[PR 3882]: https://github.com/libp2p/rust-libp2p/pull/3882
 [PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
-[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
-[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+[PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 
 ## 0.42.2
 
