@@ -33,8 +33,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use log::trace;
 use std::collections::VecDeque;
@@ -325,7 +325,7 @@ pub enum KademliaHandlerEvent<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(ConnectionHandlerUpgrErr<io::Error>),
+    Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -361,8 +361,8 @@ impl error::Error for KademliaHandlerQueryErr {
     }
 }
 
-impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
+impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
+    fn from(err: StreamUpgradeError<io::Error>) -> Self {
         KademliaHandlerQueryErr::Upgrade(err)
     }
 }

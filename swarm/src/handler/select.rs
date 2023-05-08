@@ -19,14 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    InboundUpgradeSend, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, KeepAlive,
+    ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
-use libp2p_core::upgrade::{SelectUpgrade, UpgradeError};
+use libp2p_core::upgrade::SelectUpgrade;
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
@@ -110,47 +110,32 @@ where
         match self {
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: StreamUpgradeError::Apply(Either::Left(err)),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: StreamUpgradeError::Apply(err),
+            }),
+            DialUpgradeError {
+                info: Either::Right(info),
+                error: StreamUpgradeError::Apply(Either::Right(err)),
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: StreamUpgradeError::Apply(err),
             }),
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+                error: e,
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: e.map_upgrade_err(|_| panic!("already handled above")),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: e,
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: e.map_upgrade_err(|_| panic!("already handled above")),
             }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-            }),
-            _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
         }
     }
 }
