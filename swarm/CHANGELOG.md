@@ -22,8 +22,7 @@
   This variant was never constructed and thus dead code.
   See [PR 3605].
 
-- Deprecate `ConnectionHandlerUpgrErr` in favor of `StreamUpgradeError`.
-  This new type features a flat interface which should be easier to use.
+- Flatten `ConnectionHandlerUpgrErr` and rename to `StreamUpgradeError`.
   See [PR 3882].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
