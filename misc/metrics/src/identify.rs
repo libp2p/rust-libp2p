@@ -148,7 +148,7 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 libp2p_identify::PROTOCOL_NAME,
                                 libp2p_identify::PUSH_PROTOCOL_NAME,
                                 #[cfg(feature = "kad")]
-                                libp2p_kad::protocol::DEFAULT_PROTO_NAME,
+                                libp2p_kad::PROTOCOL_NAME,
                                 #[cfg(feature = "ping")]
                                 libp2p_ping::PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
