@@ -29,7 +29,7 @@
 - Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
   See [PR 3807].
 
-- Add `GlobalOnly` `Transport` implementation.
+- Add `global_only::Transport` that refuses to dial IP addresses from private ranges.
   See [PR 3814].
   
 - Deprecate `OptionalUpgrade` without replacement.
