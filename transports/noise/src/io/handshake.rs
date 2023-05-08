@@ -140,8 +140,8 @@ where
 {
     let msg = recv(state).await?;
     let mut reader = BytesReader::from_bytes(&msg[..]);
-    let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..])
-        .map_err(DecodeError)?;
+    let pb =
+        proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]).map_err(DecodeError)?;
 
     state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
