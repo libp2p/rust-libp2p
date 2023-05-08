@@ -69,8 +69,6 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use snow::params::NoiseParams;
-use std::fmt;
-use std::fmt::Formatter;
 use std::pin::Pin;
 
 /// The configuration for the noise handshake.
@@ -218,17 +216,12 @@ pub enum Error {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub struct DecodeError(String);
-
-impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+#[error("failed to decode protobuf")]
+pub struct DecodeError(#[source] quick_protobuf::Error);
 
 impl From<quick_protobuf::Error> for DecodeError {
     fn from(e: quick_protobuf::Error) -> Self {
-        Self(e.to_string())
+        Self(e)
     }
 }
 
