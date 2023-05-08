@@ -161,30 +161,14 @@ where
     }
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { info, error }: ListenUpgradeError<
+        ListenUpgradeError { error, .. }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(Event::InboundTimeout(info))
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The local peer merely doesn't support the protocol(s) requested.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                // An event is reported to permit user code to react to the fact that
-                // the local peer does not support the requested protocol(s).
-                self.pending_events
-                    .push_back(Event::InboundUnsupportedProtocols(info));
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
-            }
-        }
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+            error,
+        )));
     }
 }
 
@@ -214,11 +198,6 @@ where
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
-    /// An inbound request timed out while waiting for the request
-    /// or sending the response.
-    InboundTimeout(RequestId),
-    /// An inbound request failed to negotiate a mutually supported protocol.
-    InboundUnsupportedProtocols(RequestId),
 }
 
 impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
@@ -253,14 +232,6 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 .finish(),
             Event::OutboundUnsupportedProtocols(request_id) => f
                 .debug_tuple("Event::OutboundUnsupportedProtocols")
-                .field(request_id)
-                .finish(),
-            Event::InboundTimeout(request_id) => f
-                .debug_tuple("Event::InboundTimeout")
-                .field(request_id)
-                .finish(),
-            Event::InboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("Event::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
         }

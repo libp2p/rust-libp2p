@@ -212,45 +212,12 @@ impl Handler {
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    },
-                ));
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    },
-                ));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The remote merely doesn't support the DCUtR protocol.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                self.keep_alive = KeepAlive::No;
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    },
-                ));
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| {
-                    e.map_err(|e| match e {
-                        Either::Left(e) => Either::Left(e),
-                        Either::Right(v) => void::unreachable(v),
-                    })
-                }));
-            }
-        }
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
+            match error {
+                Either::Left(e) => Either::Left(e),
+                Either::Right(v) => void::unreachable(v),
+            },
+        )));
     }
 
     fn on_dial_upgrade_error(

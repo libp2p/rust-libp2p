@@ -30,8 +30,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
 use log::error;
 use void::Void;
@@ -108,14 +107,7 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout => {}
-                    ConnectionHandlerUpgrErr::Timer => {}
-                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
-                        libp2p_core::UpgradeError::Select(_) => {}
-                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
-                    },
-                }
+                void::unreachable(error)
             }
         }
     }

@@ -526,7 +526,7 @@ impl ConnectionHandler for Handler {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
+                        error: ConnectionHandlerUpgrErr::Timeout,
                         ..
                     }) => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout");

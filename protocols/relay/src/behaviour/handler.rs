@@ -163,10 +163,6 @@ pub enum Event {
         inbound_circuit_req: inbound_hop::CircuitReq,
         endpoint: ConnectedPoint,
     },
-    /// Receiving an inbound circuit request failed.
-    CircuitReqReceiveFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -251,10 +247,6 @@ impl fmt::Debug for Event {
             } => f
                 .debug_struct("Event::CircuitReqReceived")
                 .field("endpoint", endpoint)
-                .finish(),
-            Event::CircuitReqReceiveFailed { error } => f
-                .debug_struct("Event::CircuitReqReceiveFailed")
-                .field("error", error)
                 .finish(),
             Event::CircuitReqDenied {
                 circuit_id,
@@ -471,41 +463,16 @@ impl Handler {
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError {
+            error: inbound_hop::UpgradeError::Fatal(error),
+            ..
+        }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        let non_fatal_error = match error {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )),
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::ProtocolError(e),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
-                ));
-                return;
-            }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                inbound_hop::UpgradeError::Fatal(error),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(Either::Left(error)),
-                ));
-                return;
-            }
-        };
-
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::CircuitReqReceiveFailed {
-                error: non_fatal_error,
-            },
+        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
+            upgrade::UpgradeError::Apply(Either::Left(error)),
         ));
     }
 
@@ -522,10 +489,6 @@ impl Handler {
         let (non_fatal_error, status) = match error {
             ConnectionHandlerUpgrErr::Timeout => (
                 ConnectionHandlerUpgrErr::Timeout,
-                proto::Status::CONNECTION_FAILED,
-            ),
-            ConnectionHandlerUpgrErr::Timer => (
-                ConnectionHandlerUpgrErr::Timer,
                 proto::Status::CONNECTION_FAILED,
             ),
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
