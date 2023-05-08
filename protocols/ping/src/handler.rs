@@ -61,7 +61,6 @@ impl Config {
     ///   * [`Config::with_interval`] 15s
     ///   * [`Config::with_timeout`] 20s
     ///   * [`Config::with_max_failures`] 1
-    ///   * [`Config::with_keep_alive`] false
     ///
     /// These settings have the following effect:
     ///
