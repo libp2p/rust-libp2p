@@ -33,9 +33,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
+    PollParameters, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -170,7 +169,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {

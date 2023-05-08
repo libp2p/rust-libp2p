@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::warn;
@@ -103,7 +103,7 @@ pub enum Event {
     /// We actively pushed our identification information to the remote.
     IdentificationPushed,
     /// Failed to identify the remote, or to reply to an identification request.
-    IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
+    IdentificationError(StreamUpgradeError<UpgradeError>),
 }
 
 impl Handler {
@@ -201,13 +201,7 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        use libp2p_core::upgrade::UpgradeError;
-
-        let err = err.map_upgrade_err(|e| match e {
-            UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
-            UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
-        });
+        let err = err.map_upgrade_err(|e| e.into_inner());
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
                 err,
@@ -324,11 +318,9 @@ impl ConnectionHandler for Handler {
 
         // Check for pending replies to send.
         if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
-            let event = result.map(Event::Identification).unwrap_or_else(|err| {
-                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                    libp2p_core::UpgradeError::Apply(err),
-                ))
-            });
+            let event = result
+                .map(Event::Identification)
+                .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
 
             return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }

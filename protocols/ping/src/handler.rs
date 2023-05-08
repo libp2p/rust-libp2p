@@ -23,13 +23,12 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -238,14 +237,14 @@ impl Handler {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            StreamUpgradeError::NegotiationFailed => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
+            StreamUpgradeError::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
