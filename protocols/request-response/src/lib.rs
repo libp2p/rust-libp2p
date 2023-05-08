@@ -857,20 +857,6 @@ where
                         error: OutboundFailure::Timeout,
                     }));
             }
-            handler::Event::InboundTimeout(request_id) => {
-                // Note: `Event::InboundTimeout` is emitted both for timing
-                // out to receive the request and for timing out sending the response. In the former
-                // case the request is never added to `pending_outbound_responses` and thus one can
-                // not assert the request_id to be present before removing it.
-                self.remove_pending_outbound_response(&peer, connection, request_id);
-
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::Timeout,
-                    }));
-            }
             handler::Event::OutboundUnsupportedProtocols(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
@@ -883,17 +869,6 @@ where
                         peer,
                         request_id,
                         error: OutboundFailure::UnsupportedProtocols,
-                    }));
-            }
-            handler::Event::InboundUnsupportedProtocols(request_id) => {
-                // Note: No need to call `self.remove_pending_outbound_response`,
-                // `Event::Request` was never emitted for this request and
-                // thus request was never added to `pending_outbound_responses`.
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::UnsupportedProtocols,
                     }));
             }
         }

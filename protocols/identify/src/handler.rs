@@ -39,7 +39,7 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// Protocol handler for sending and receiving identification requests.
@@ -89,7 +89,7 @@ pub struct Handler {
 #[derive(Debug)]
 pub struct InEvent {
     /// The addresses that the peer is listening on.
-    pub listen_addrs: Vec<Multiaddr>,
+    pub listen_addrs: HashSet<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
     pub supported_protocols: Vec<StreamProtocol>,
@@ -246,7 +246,7 @@ impl ConnectionHandler for Handler {
             public_key: self.public_key.clone(),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
-            listen_addrs,
+            listen_addrs: Vec::from_iter(listen_addrs),
             protocols: supported_protocols,
             observed_addr: self.observed_addr.clone(),
         };

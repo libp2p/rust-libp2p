@@ -273,10 +273,24 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
+                Poll::Ready(Some((
+                    info,
+                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error))),
+                ))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
+                    continue;
+                }
+                Poll::Ready(Some((
+                    _,
+                    Err(ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e))),
+                ))) => {
+                    log::debug!("failed to upgrade inbound stream: {e}");
+                    continue;
+                }
+                Poll::Ready(Some((_, Err(ConnectionHandlerUpgrErr::Timeout)))) => {
+                    log::debug!("inbound stream upgrade timed out");
                     continue;
                 }
             }

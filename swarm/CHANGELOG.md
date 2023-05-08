@@ -14,6 +14,12 @@
   Users should migrate to `libp2p::allow_block_list`.
   See [PR 3886].
 
+- Remove `ConnectionHandlerUpgrErr::Timer` variant.
+  This variant was never constructed and thus dead code.
+  See [PR 3605].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865

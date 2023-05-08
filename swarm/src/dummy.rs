@@ -133,7 +133,6 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-                ConnectionHandlerUpgrErr::Timer => unreachable!(),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
                     unreachable!("Denied upgrade does not support any protocols")
