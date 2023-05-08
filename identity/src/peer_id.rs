@@ -307,7 +307,6 @@ mod tests {
             .parse()
             .unwrap();
 
-        #[allow(deprecated)]
         let peer_id = PeerId::try_from_multiaddr(&address).unwrap();
 
         assert_eq!(
@@ -322,7 +321,6 @@ mod tests {
     fn no_panic_on_extract_peer_id_from_multi_address_if_not_present() {
         let address = "/memory/1234".to_string().parse().unwrap();
 
-        #[allow(deprecated)]
         let maybe_empty = PeerId::try_from_multiaddr(&address);
 
         assert!(maybe_empty.is_none());
