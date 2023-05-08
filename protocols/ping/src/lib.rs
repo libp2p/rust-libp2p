@@ -34,9 +34,6 @@
 //! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
 //! by an application, e.g. to collect statistics.
 //!
-//! > **Note**: The ping protocol does not keep otherwise idle connections alive
-//! > by default, see [`Config::with_keep_alive`] for changing this behaviour.
-//!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
