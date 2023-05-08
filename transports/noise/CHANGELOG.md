@@ -1,8 +1,11 @@
-## 0.42.0 - unreleased
+## 0.43.0 - unreleased
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove deprecated APIs. See [PR 3511].
+
+[PR 3511]: https://github.com/libp2p/rust-libp2p/pull/3511
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.42.2
