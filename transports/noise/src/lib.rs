@@ -218,15 +218,3 @@ pub enum Error {
 #[derive(Debug, thiserror::Error)]
 #[error("failed to decode protobuf")]
 pub struct DecodeError(#[source] quick_protobuf::Error);
-
-impl From<quick_protobuf::Error> for DecodeError {
-    fn from(e: quick_protobuf::Error) -> Self {
-        Self(e)
-    }
-}
-
-impl From<quick_protobuf::Error> for Error {
-    fn from(e: quick_protobuf::Error) -> Self {
-        Error::InvalidPayload(e.into())
-    }
-}
