@@ -16,9 +16,13 @@
 - Remove `SingletonMuxer`.
   See [PR 3883].
 
+- Add `global_only::Transport` that refuses to dial IP addresses from private ranges.
+  See [PR 3814].
+
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
+[PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
 
 ## 0.39.2
 
@@ -29,15 +33,11 @@
 - Deprecate `{In,Out}boundUpgradeExt`, as they are not used in rust-libp2p.
   See [PR 3807].
 
-- Add `global_only::Transport` that refuses to dial IP addresses from private ranges.
-  See [PR 3814].
-  
 - Deprecate `OptionalUpgrade` without replacement.
   See [PR 3806].
 
 [PR 3747]: https://github.com/libp2p/rust-libp2p/pull/3747
 [PR 3807]: https://github.com/libp2p/rust-libp2p/pull/3807
-[PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
 [PR 3806]: https://github.com/libp2p/rust-libp2p/pull/3806
 
 ## 0.39.1
