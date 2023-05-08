@@ -19,8 +19,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 use crate::connection::{Connection, ConnectionId, PendingPoint};
-#[allow(deprecated)]
-use crate::IntoConnectionHandler;
 use crate::{
     connection::{
         Connected, ConnectionError, IncomingInfo, PendingConnectionError,
@@ -493,7 +491,7 @@ where
         obtained_peer_id: PeerId,
         endpoint: &ConnectedPoint,
         connection: NewConnection,
-        handler: <THandler as IntoConnectionHandler>::Handler,
+        handler: THandler,
     ) {
         let connection = connection.extract();
 
