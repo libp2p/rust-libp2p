@@ -33,13 +33,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    #[cfg(not(all(
-        feature = "ecdsa",
-        feature = "rsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        not(target_arch = "wasm32")
-    )))]
+    #[allow(dead_code)]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
@@ -166,6 +160,7 @@ pub struct OtherVariantError {
 }
 
 impl OtherVariantError {
+    #[allow(dead_code)] // This is used but the cfg is too complicated to write ..
     pub(crate) fn new(actual: KeyType) -> OtherVariantError {
         OtherVariantError { actual }
     }

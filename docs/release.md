@@ -22,9 +22,10 @@ The next unreleased version is tagged with ` - unreleased`, for example: `0.17.0
 In case there isn't a version with an ` - unreleased` postfix yet, add one for the next version.
 The next version number depends on the impact of your change (breaking vs non-breaking, see above).
 
-If you are making a non-breaking change, please also bump the version number in the `Cargo.toml` manifest.
-In case another crate _depends_ on the new features or APIs that you are adding, you may need to bump the dependency declaration in that `Cargo.toml` file as well.
-Don't worry if you don't get this one right, we will flag it in the PR if necessary :)
+If you are making a non-breaking change, please also bump the version number:
+
+- in the `Cargo.toml` manifest of the respective crate
+- in the `[workspace.dependencies]` section of the workspace `Cargo.toml` manifest
 
 For breaking changes, a changelog entry itself is sufficient.
 Bumping the version in the `Cargo.toml` file would lead to many merge conflicts once we decide to merge them.

@@ -30,7 +30,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailu
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
+    ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -65,7 +65,7 @@ pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
-    Handler(ConnectionHandlerUpgrErr<Void>),
+    Handler(StreamUpgradeError<Void>),
 }
 
 pub struct Behaviour {
@@ -133,7 +133,6 @@ impl Behaviour {
                         handler: NotifyHandler::One(connection_id),
                         event: Either::Left(handler::relayed::Command::Connect {
                             obs_addrs: self.observed_addreses(),
-                            attempt: 1,
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
@@ -190,7 +189,6 @@ impl Behaviour {
                 handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {
-                    attempt: attempt + 1,
                     obs_addrs: self.observed_addreses(),
                 }),
             })

@@ -24,8 +24,10 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use libp2p_swarm::StreamProtocol;
+
 pub mod client;
 mod protocol;
 pub mod server;
 
-pub const PROTOCOL_NAME: &[u8; 11] = b"/perf/1.0.0";
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");

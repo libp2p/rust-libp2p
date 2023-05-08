@@ -6,7 +6,7 @@ use futures::prelude::*;
 
 use libp2p::{
     core::{
-        upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName},
+        upgrade::{read_length_prefixed, write_length_prefixed},
         Multiaddr,
     },
     identity,
@@ -16,11 +16,12 @@ use libp2p::{
     multiaddr::Protocol,
     noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, StreamUpgradeError, Swarm, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 
 use libp2p::core::upgrade::Version;
+use libp2p::StreamProtocol;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
 use std::iter;
@@ -49,8 +50,8 @@ pub(crate) async fn new(
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
-        .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
-        .multiplex(yamux::YamuxConfig::default())
+        .authenticate(noise::Config::new(&id_keys)?)
+        .multiplex(yamux::Config::default())
         .boxed();
 
     // Build the Swarm, connecting the lower layer transport logic with the
@@ -61,7 +62,10 @@ pub(crate) async fn new(
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
             request_response: request_response::Behaviour::new(
                 FileExchangeCodec(),
-                iter::once((FileExchangeProtocol(), ProtocolSupport::Full)),
+                iter::once((
+                    StreamProtocol::new("/file-exchange/1"),
+                    ProtocolSupport::Full,
+                )),
                 Default::default(),
             ),
         },
@@ -212,7 +216,7 @@ impl EventLoop {
 
     async fn handle_event(
         &mut self,
-        event: SwarmEvent<ComposedEvent, Either<ConnectionHandlerUpgrErr<io::Error>, io::Error>>,
+        event: SwarmEvent<ComposedEvent, Either<StreamUpgradeError<io::Error>, io::Error>>,
     ) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
@@ -468,31 +472,20 @@ pub(crate) enum Event {
 
 // Simple file exchange protocol
 
-#[derive(Debug, Clone)]
-struct FileExchangeProtocol();
 #[derive(Clone)]
 struct FileExchangeCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FileRequest(String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FileResponse(Vec<u8>);
-impl ProtocolName for FileExchangeProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/file-exchange/1".as_bytes()
-    }
-}
 
 #[async_trait]
 impl request_response::Codec for FileExchangeCodec {
-    type Protocol = FileExchangeProtocol;
+    type Protocol = StreamProtocol;
     type Request = FileRequest;
     type Response = FileResponse;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &FileExchangeProtocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
     {
@@ -507,7 +500,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn read_response<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -524,7 +517,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         FileRequest(data): FileRequest,
     ) -> io::Result<()>
@@ -539,7 +532,7 @@ impl request_response::Codec for FileExchangeCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &FileExchangeProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         FileResponse(data): FileResponse,
     ) -> io::Result<()>

@@ -21,8 +21,8 @@
 //! This module provides a `Sink` and `Stream` for length-delimited
 //! Noise protocol messages in form of [`NoiseFramed`].
 
-use crate::io::NoiseOutput;
-use crate::{NoiseError, Protocol, PublicKey};
+use crate::io::Output;
+use crate::{protocol::PublicKey, Error};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;
@@ -89,17 +89,15 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     /// transitioning to transport mode because the handshake is incomplete,
     /// an error is returned. Similarly if the remote's static DH key, if
     /// present, cannot be parsed.
-    pub(crate) fn into_transport<C>(
-        self,
-    ) -> Result<(Option<PublicKey<C>>, NoiseOutput<T>), NoiseError>
-    where
-        C: Protocol<C> + AsRef<[u8]>,
-    {
-        let dh_remote_pubkey = self
-            .session
-            .get_remote_static()
-            .map(C::public_from_bytes)
-            .transpose()?;
+    pub(crate) fn into_transport(self) -> Result<(PublicKey, Output<T>), Error> {
+        let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
+            Error::Io(io::Error::new(
+                io::ErrorKind::Other,
+                "expect key to always be present at end of XX session",
+            ))
+        })?;
+
+        let dh_remote_pubkey = PublicKey::from_slice(dh_remote_pubkey)?;
 
         let io = NoiseFramed {
             session: self.session.into_transport_mode()?,
@@ -111,7 +109,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             decrypt_buffer: self.decrypt_buffer,
         };
 
-        Ok((dh_remote_pubkey, NoiseOutput::new(io)))
+        Ok((dh_remote_pubkey, Output::new(io)))
     }
 }
 

@@ -1,3 +1,12 @@
+## 0.10.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+- Remove deprecated items. See [PR 3700].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3700]: https://github.com/libp2p/rust-libp2p/pull/3700
+
 ## 0.9.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

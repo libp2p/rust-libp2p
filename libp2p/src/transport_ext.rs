@@ -58,7 +58,7 @@ pub trait TransportExt: Transport {
     /// let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
     ///     .upgrade(upgrade::Version::V1)
     ///     .authenticate(
-    ///         noise::NoiseAuthenticated::xx(&id_keys)
+    ///         noise::Config::new(&id_keys)
     ///             .expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
     ///     .multiplex(mplex::MplexConfig::new())

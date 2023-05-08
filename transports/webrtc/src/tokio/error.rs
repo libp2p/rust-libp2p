@@ -29,7 +29,7 @@ pub enum Error {
     #[error("IO error")]
     Io(#[from] std::io::Error),
     #[error("failed to authenticate peer")]
-    Authentication(#[from] libp2p_noise::NoiseError),
+    Authentication(#[from] libp2p_noise::Error),
 
     // Authentication errors.
     #[error("invalid peer ID (expected {expected}, got {got})")]

@@ -34,12 +34,12 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// Protocol handler for sending and receiving identification requests.
@@ -64,9 +64,6 @@ pub struct Handler {
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
 
-    /// Whether the handler should keep the connection alive.
-    keep_alive: KeepAlive,
-
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
 
@@ -89,10 +86,10 @@ pub struct Handler {
 #[derive(Debug)]
 pub struct InEvent {
     /// The addresses that the peer is listening on.
-    pub listen_addrs: Vec<Multiaddr>,
+    pub listen_addrs: HashSet<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<String>,
+    pub supported_protocols: Vec<StreamProtocol>,
 
     /// The protocol w.r.t. the information requested.
     pub protocol: Protocol,
@@ -111,7 +108,7 @@ pub enum Event {
     /// We received a request for identification.
     Identify,
     /// Failed to identify the remote, or to reply to an identification request.
-    IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
+    IdentificationError(StreamUpgradeError<UpgradeError>),
 }
 
 impl Handler {
@@ -132,7 +129,6 @@ impl Handler {
             reply_streams: VecDeque::new(),
             pending_replies: FuturesUnordered::new(),
             trigger_next_identify: Delay::new(initial_delay),
-            keep_alive: KeepAlive::Yes,
             interval,
             public_key,
             protocol_version,
@@ -190,7 +186,6 @@ impl Handler {
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
-                self.keep_alive = KeepAlive::No;
             }
             future::Either::Right(()) => self
                 .events
@@ -205,18 +200,11 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        use libp2p_core::upgrade::UpgradeError;
-
-        let err = err.map_upgrade_err(|e| match e {
-            UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
-            UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
-        });
+        let err = err.map_upgrade_err(|e| e.into_inner());
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
                 err,
             )));
-        self.keep_alive = KeepAlive::No;
         self.trigger_next_identify.reset(self.interval);
     }
 }
@@ -246,7 +234,7 @@ impl ConnectionHandler for Handler {
             public_key: self.public_key.clone(),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
-            listen_addrs,
+            listen_addrs: Vec::from_iter(listen_addrs),
             protocols: supported_protocols,
             observed_addr: self.observed_addr.clone(),
         };
@@ -274,7 +262,19 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.inbound_identify_push.is_some() {
+            return KeepAlive::Yes;
+        }
+
+        if !self.pending_replies.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        if !self.reply_streams.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        KeepAlive::No
     }
 
     fn poll(
@@ -317,9 +317,7 @@ impl ConnectionHandler for Handler {
                 Event::Identification(peer_id),
             )),
             Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                    libp2p_core::upgrade::UpgradeError::Apply(err),
-                )),
+                Event::IdentificationError(StreamUpgradeError::Apply(err)),
             )),
             Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }
