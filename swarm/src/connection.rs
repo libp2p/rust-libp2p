@@ -32,8 +32,9 @@ pub use supported_protocols::SupportedProtocols;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
     FullyNegotiatedOutbound, ListenUpgradeError, ProtocolSupport, ProtocolsAdded, ProtocolsChange,
+    UpgradeInfoSend,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{
     ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
