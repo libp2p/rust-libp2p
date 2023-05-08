@@ -1931,8 +1931,6 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(_) => {}
         }
     }
 
