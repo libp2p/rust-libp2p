@@ -6,8 +6,13 @@
 - Remove deprecated symbols related to upgrades.
   See [PR 3867].
 
+- Remove deprecated `identity` module and features.
+  You should depend on `libp2p-identity` instead.
+  See [PR XXXX].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 - Enforce protocol names to be valid UTF8 strings as required by the [spec].
   We delete the `ProtocolName` trait and replace it with a requirement for `AsRef<str>`.
