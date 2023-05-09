@@ -8,23 +8,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Cross Behaviour communication
-
-| Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
-|----------------------|--------|-------------------|---------------------------------------------------|---------------------------------------------------|-----------------------------------------------|
-| Developer ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
-
-Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
-communicate with each other, i.e. cannot make use of information known by another
-`NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
-Kademlia to learn protocols supported by a remote peer from Identify.
-
-This roadmap item contains exchanging standard information about remote peers (e.g. supported
-protocols) between `NetworkBehaviour` implementations.
-
-Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
-would deserve its own roadmap item.
-
 ## Kademlia client mode
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
@@ -136,3 +119,20 @@ work before that.
 Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
 cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
 management generic allows users to build advanced and efficient abstractions on top of rust-libp2p.
+
+### Cross Behaviour communication
+
+| Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
+|----------------------|--------|-------------------|---------------------------------------------------|---------------------------------------------------|-----------------------------------------------|
+| Developer ergonomics | Done   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
+
+Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
+communicate with each other, i.e. cannot make use of information known by another
+`NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
+Kademlia to learn protocols supported by a remote peer from Identify.
+
+This roadmap item contains exchanging standard information about remote peers (e.g. supported
+protocols) between `NetworkBehaviour` implementations.
+
+Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
+would deserve its own roadmap item.
