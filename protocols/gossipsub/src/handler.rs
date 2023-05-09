@@ -553,7 +553,10 @@ impl ConnectionHandler for Handler {
                     }) => {
                         log::debug!("Protocol negotiation failed: {e}")
                     }
-                    ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                    ConnectionEvent::AddressChange(_)
+                    | ConnectionEvent::ListenUpgradeError(_)
+                    | ConnectionEvent::LocalProtocolsChange(_)
+                    | ConnectionEvent::RemoteProtocolsChange(_) => {}
                 }
             }
             Handler::Disabled(_) => {}

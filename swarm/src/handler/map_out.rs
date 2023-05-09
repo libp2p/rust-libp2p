@@ -81,6 +81,9 @@ where
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         })
     }
 

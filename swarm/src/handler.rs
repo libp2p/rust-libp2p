@@ -47,16 +47,23 @@ mod pending;
 mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
-
-use instant::Instant;
-use libp2p_core::Multiaddr;
-use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Duration};
-
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::ConnectionHandlerSelect;
+
+use crate::StreamProtocol;
+use ::either::Either;
+use instant::Instant;
+use libp2p_core::Multiaddr;
+use once_cell::sync::Lazy;
+use smallvec::SmallVec;
+use std::collections::hash_map::RandomState;
+use std::collections::hash_set::{Difference, Intersection};
+use std::collections::HashSet;
+use std::iter::Peekable;
+use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -209,6 +216,10 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     DialUpgradeError(DialUpgradeError<OOI, OP>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
+    /// The local [`ConnectionHandler`] added or removed support for one or more protocols.
+    LocalProtocolsChange(ProtocolsChange<'a>),
+    /// The remote [`ConnectionHandler`] now supports a different set of protocols.
+    RemoteProtocolsChange(ProtocolsChange<'a>),
 }
 
 impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
@@ -222,6 +233,8 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
             }
             ConnectionEvent::FullyNegotiatedInbound(_)
             | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
             | ConnectionEvent::ListenUpgradeError(_) => false,
         }
     }
@@ -234,6 +247,8 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
             }
             ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_)
             | ConnectionEvent::DialUpgradeError(_) => false,
         }
     }
@@ -264,6 +279,122 @@ pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
 /// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
+#[derive(Clone)]
+pub enum ProtocolsChange<'a> {
+    Added(ProtocolsAdded<'a>),
+    Removed(ProtocolsRemoved<'a>),
+}
+
+impl<'a> ProtocolsChange<'a> {
+    /// Compute the [`ProtocolsChange`] that results from adding `to_add` to `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. `to_add` is a subset of `existing_protocols`.
+    pub(crate) fn add(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_add: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_added_protocols = to_add.difference(existing_protocols).peekable();
+
+        actually_added_protocols.peek()?;
+
+        Some(ProtocolsChange::Added(ProtocolsAdded {
+            protocols: actually_added_protocols,
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`] that results from removing `to_remove` from `existing_protocols`.
+    ///
+    /// Returns `None` if the change is a no-op, i.e. none of the protocols in `to_remove` are in `existing_protocols`.
+    pub(crate) fn remove(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        to_remove: &'a HashSet<StreamProtocol>,
+    ) -> Option<Self> {
+        let mut actually_removed_protocols = existing_protocols.intersection(to_remove).peekable();
+
+        actually_removed_protocols.peek()?;
+
+        Some(ProtocolsChange::Removed(ProtocolsRemoved {
+            protocols: Either::Right(actually_removed_protocols),
+        }))
+    }
+
+    /// Compute the [`ProtocolsChange`]s required to go from `existing_protocols` to `new_protocols`.
+    pub(crate) fn from_full_sets(
+        existing_protocols: &'a HashSet<StreamProtocol>,
+        new_protocols: &'a HashSet<StreamProtocol>,
+    ) -> SmallVec<[Self; 2]> {
+        if existing_protocols == new_protocols {
+            return SmallVec::new();
+        }
+
+        let mut changes = SmallVec::new();
+
+        let mut added_protocols = new_protocols.difference(existing_protocols).peekable();
+        let mut removed_protocols = existing_protocols.difference(new_protocols).peekable();
+
+        if added_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Added(ProtocolsAdded {
+                protocols: added_protocols,
+            }));
+        }
+
+        if removed_protocols.peek().is_some() {
+            changes.push(ProtocolsChange::Removed(ProtocolsRemoved {
+                protocols: Either::Left(removed_protocols),
+            }));
+        }
+
+        changes
+    }
+}
+
+/// An [`Iterator`] over all protocols that have been added.
+#[derive(Clone)]
+pub struct ProtocolsAdded<'a> {
+    protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
+}
+
+impl<'a> ProtocolsAdded<'a> {
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
+        ProtocolsAdded {
+            protocols: protocols.difference(&EMPTY_HASHSET).peekable(),
+        }
+    }
+}
+
+/// An [`Iterator`] over all protocols that have been removed.
+#[derive(Clone)]
+pub struct ProtocolsRemoved<'a> {
+    protocols: Either<
+        Peekable<Difference<'a, StreamProtocol, RandomState>>,
+        Peekable<Intersection<'a, StreamProtocol, RandomState>>,
+    >,
+}
+
+impl<'a> ProtocolsRemoved<'a> {
+    #[cfg(test)]
+    pub(crate) fn from_set(protocols: &'a HashSet<StreamProtocol, RandomState>) -> Self {
+        ProtocolsRemoved {
+            protocols: Either::Left(protocols.difference(&EMPTY_HASHSET).peekable()),
+        }
+    }
+}
+
+impl<'a> Iterator for ProtocolsAdded<'a> {
+    type Item = &'a StreamProtocol;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
+}
+
+impl<'a> Iterator for ProtocolsRemoved<'a> {
+    type Item = &'a StreamProtocol;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.protocols.next()
+    }
 }
 
 /// [`ConnectionEvent`] variant that informs the handler
@@ -357,7 +488,7 @@ impl<TUpgrade, TInfo> SubstreamProtocol<TUpgrade, TInfo> {
 }
 
 /// Event produced by a handler.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr> {
     /// Request a new outbound substream to be opened with the remote.
     OutboundSubstreamRequest {
@@ -374,9 +505,19 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// the connection, return [`KeepAlive::No`] in
     /// [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
+    /// We learned something about the protocols supported by the remote.
+    ReportRemoteProtocols(ProtocolSupport),
 
     /// Other event.
     Custom(TCustom),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProtocolSupport {
+    /// The remote now supports these additional protocols.
+    Added(HashSet<StreamProtocol>),
+    /// The remote no longer supports these protocols.
+    Removed(HashSet<StreamProtocol>),
 }
 
 /// Event produced by a handler.
@@ -400,6 +541,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 
@@ -420,6 +564,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 
@@ -437,6 +584,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 
@@ -454,6 +604,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             }
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
+            ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
+                ConnectionHandlerEvent::ReportRemoteProtocols(support)
+            }
         }
     }
 }
@@ -558,3 +711,7 @@ impl Ord for KeepAlive {
         }
     }
 }
+
+/// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
+/// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
+static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);

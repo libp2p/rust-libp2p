@@ -362,6 +362,16 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
+            ConnectionEvent::LocalProtocolsChange(change) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                }
+            }
+            ConnectionEvent::RemoteProtocolsChange(change) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    inner.on_connection_event(ConnectionEvent::RemoteProtocolsChange(change));
+                }
+            }
         }
     }
 }
