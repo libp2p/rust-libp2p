@@ -21,7 +21,8 @@
 mod as_client;
 mod as_server;
 
-use crate::protocol::{AutoNatCodec, AutoNatProtocol, DialRequest, DialResponse, ResponseError};
+use crate::protocol::{AutoNatCodec, DialRequest, DialResponse, ResponseError};
+use crate::DEFAULT_PROTOCOL_NAME;
 use as_client::AsClient;
 pub use as_client::{OutboundProbeError, OutboundProbeEvent};
 use as_server::AsServer;
@@ -42,7 +43,7 @@ use libp2p_swarm::{
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     iter,
     task::{Context, Poll},
     time::Duration,
@@ -170,7 +171,7 @@ pub struct Behaviour {
     config: Config,
 
     // Additional peers apart from the currently connected ones, that may be used for probes.
-    servers: Vec<PeerId>,
+    servers: HashSet<PeerId>,
 
     // Assumed NAT status.
     nat_status: NatStatus,
@@ -218,7 +219,7 @@ pub struct Behaviour {
 
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
-        let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
+        let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
         let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
         let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
@@ -227,7 +228,7 @@ impl Behaviour {
             inner,
             schedule_probe: Delay::new(config.boot_delay),
             config,
-            servers: Vec::new(),
+            servers: HashSet::new(),
             ongoing_inbound: HashMap::default(),
             ongoing_outbound: HashMap::default(),
             connected: HashMap::default(),
@@ -266,7 +267,7 @@ impl Behaviour {
     /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
     /// establish before sending the dial-request.
     pub fn add_server(&mut self, peer: PeerId, address: Option<Multiaddr>) {
-        self.servers.push(peer);
+        self.servers.insert(peer);
         if let Some(addr) = address {
             self.inner.add_address(&peer, addr);
         }

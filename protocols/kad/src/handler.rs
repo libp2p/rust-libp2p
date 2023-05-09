@@ -22,7 +22,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use crate::record::{self, Record};
+use crate::record_priv::{self, Record};
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
@@ -33,8 +33,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use log::trace;
 use std::collections::VecDeque;
@@ -67,8 +67,7 @@ pub struct KademliaHandler<TUserData> {
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    requested_streams:
-        VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
+    pending_messages: VecDeque<(KadRequestMsg, Option<TUserData>)>,
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState<TUserData>>,
@@ -255,7 +254,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// this key.
     GetProvidersReq {
         /// The key for which providers are requested.
-        key: record::Key,
+        key: record_priv::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -281,7 +280,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// The peer announced itself as a provider of a key.
     AddProvider {
         /// The key for which the peer is a provider of the associated value.
-        key: record::Key,
+        key: record_priv::Key,
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
     },
@@ -289,7 +288,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Request to get a value from the dht records
     GetRecord {
         /// Key for which we should look in the dht
-        key: record::Key,
+        key: record_priv::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -314,7 +313,7 @@ pub enum KademliaHandlerEvent<TUserData> {
     /// Response to a request to store a record.
     PutRecordRes {
         /// The key of the stored record.
-        key: record::Key,
+        key: record_priv::Key,
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
@@ -326,7 +325,7 @@ pub enum KademliaHandlerEvent<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(ConnectionHandlerUpgrErr<io::Error>),
+    Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -362,8 +361,8 @@ impl error::Error for KademliaHandlerQueryErr {
     }
 }
 
-impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
+impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
+    fn from(err: StreamUpgradeError<io::Error>) -> Self {
         KademliaHandlerQueryErr::Upgrade(err)
     }
 }
@@ -403,7 +402,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// this key.
     GetProvidersReq {
         /// Identifier being searched.
-        key: record::Key,
+        key: record_priv::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -426,7 +425,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// succeeded.
     AddProvider {
         /// Key for which we should add providers.
-        key: record::Key,
+        key: record_priv::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -434,7 +433,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
-        key: record::Key,
+        key: record_priv::Key,
         /// Custom data. Passed back in the out event when the results arrive.
         user_data: TUserData,
     },
@@ -459,7 +458,7 @@ pub enum KademliaHandlerIn<TUserData> {
     /// Response to a `PutRecord`.
     PutRecordRes {
         /// Key of the value that was put.
-        key: record::Key,
+        key: record_priv::Key,
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
@@ -499,7 +498,7 @@ where
             inbound_substreams: Default::default(),
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
-            requested_streams: Default::default(),
+            pending_messages: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unconfirmed,
         }
@@ -507,19 +506,22 @@ where
 
     fn on_fully_negotiated_outbound(
         &mut self,
-        FullyNegotiatedOutbound {
-            protocol,
-            info: (msg, user_data),
-        }: FullyNegotiatedOutbound<
+        FullyNegotiatedOutbound { protocol, info: () }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        self.outbound_substreams
-            .push(OutboundSubstreamState::PendingSend(
-                protocol, msg, user_data,
-            ));
+        if let Some((msg, user_data)) = self.pending_messages.pop_front() {
+            self.outbound_substreams
+                .push(OutboundSubstreamState::PendingSend(
+                    protocol, msg, user_data,
+                ));
+        } else {
+            debug_assert!(false, "Requested outbound stream without message")
+        }
+
         self.num_requested_outbound_streams -= 1;
+
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
@@ -587,9 +589,7 @@ where
     fn on_dial_upgrade_error(
         &mut self,
         DialUpgradeError {
-            info: (_, user_data),
-            error,
-            ..
+            info: (), error, ..
         }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -597,10 +597,12 @@ where
     ) {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
-        if let Some(user_data) = user_data {
+
+        if let Some((_, Some(user_data))) = self.pending_messages.pop_front() {
             self.outbound_substreams
                 .push(OutboundSubstreamState::ReportError(error.into(), user_data));
         }
+
         self.num_requested_outbound_streams -= 1;
     }
 }
@@ -614,8 +616,7 @@ where
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
-    // Message of the request to send to the remote, and user data if we expect an answer.
-    type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
+    type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -645,10 +646,7 @@ where
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
@@ -656,10 +654,7 @@ where
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
@@ -674,24 +669,15 @@ where
             ),
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, None),
-                ));
+                self.pending_messages.push_back((msg, None));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.requested_streams.push_back(SubstreamProtocol::new(
-                    self.config.protocol_config.clone(),
-                    (msg, Some(user_data)),
-                ));
+                self.pending_messages.push_back((msg, Some(user_data)));
             }
             KademliaHandlerIn::GetRecordRes {
                 record,
@@ -750,19 +736,24 @@ where
 
         let num_in_progress_outbound_substreams =
             self.outbound_substreams.len() + self.num_requested_outbound_streams;
-        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS {
-            if let Some(protocol) = self.requested_streams.pop_front() {
-                self.num_requested_outbound_streams += 1;
-                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
-            }
+        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS
+            && self.num_requested_outbound_streams < self.pending_messages.len()
+        {
+            self.num_requested_outbound_streams += 1;
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(self.config.protocol_config.clone(), ()),
+            });
         }
 
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            // We destroyed all substreams in this function.
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
-        } else {
-            self.keep_alive = KeepAlive::Yes;
-        }
+        let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
+        self.keep_alive = match (no_streams, self.keep_alive) {
+            // No open streams. Preserve the existing idle timeout.
+            (true, k @ KeepAlive::Until(_)) => k,
+            // No open streams. Set idle timeout.
+            (true, _) => KeepAlive::Until(Instant::now() + self.config.idle_timeout),
+            // Keep alive for open streams.
+            (false, _) => KeepAlive::Yes,
+        };
 
         Poll::Pending
     }
@@ -786,7 +777,10 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
@@ -825,7 +819,7 @@ where
 {
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
+        (),
         KademliaHandlerEvent<TUserData>,
         io::Error,
     >;
@@ -961,7 +955,7 @@ where
 {
     type Item = ConnectionHandlerEvent<
         KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
+        (),
         KademliaHandlerEvent<TUserData>,
         io::Error,
     >;

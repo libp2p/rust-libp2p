@@ -23,13 +23,12 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -238,14 +237,14 @@ impl Handler {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            StreamUpgradeError::NegotiationFailed => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
+            StreamUpgradeError::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
@@ -257,12 +256,12 @@ impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
     type Error = Failure;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<StreamProtocol>, ()> {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
@@ -279,7 +278,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result, Self::Error>>
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<StreamProtocol>, (), crate::Result, Self::Error>>
     {
         match self.state {
             State::Inactive { reported: true } => {
@@ -411,7 +410,10 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

@@ -110,8 +110,8 @@ where
     let transport = transport
         .and_then(move |socket, _| pnet.handshake(socket))
         .upgrade(Version::V1)
-        .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .authenticate(libp2p_noise::Config::new(&identity).unwrap())
+        .multiplex(libp2p_yamux::Config::default())
         .boxed();
     SwarmBuilder::with_tokio_executor(
         transport,

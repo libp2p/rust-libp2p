@@ -43,8 +43,9 @@ use void::Void;
 mod error;
 mod handshake;
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::structs::Exchange;
+    pub(crate) use self::structs::Exchange;
 }
 
 /// `PlainText1Config` is an insecure connection handshake for testing purposes only.
@@ -77,11 +78,11 @@ mod proto {
 pub struct PlainText1Config;
 
 impl UpgradeInfo for PlainText1Config {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/plaintext/1.0.0")
+        iter::once("/plaintext/1.0.0")
     }
 }
 
@@ -113,11 +114,11 @@ pub struct PlainText2Config {
 }
 
 impl UpgradeInfo for PlainText2Config {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/plaintext/2.0.0")
+        iter::once("/plaintext/2.0.0")
     }
 }
 

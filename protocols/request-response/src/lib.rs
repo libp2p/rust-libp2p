@@ -58,18 +58,15 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod codec;
-pub mod handler;
+mod codec;
+mod handler;
 
-pub use codec::{Codec, ProtocolName};
-
-#[allow(deprecated)]
-pub use codec::RequestResponseCodec;
-
+pub use codec::Codec;
 pub use handler::ProtocolSupport;
 
+use crate::handler::protocol::RequestProtocol;
 use futures::channel::oneshot;
-use handler::{Handler, RequestProtocol};
+use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -86,37 +83,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use libp2p::request_response::Behaviour instead."
-)]
-pub type RequestResponse<TCodec> = Behaviour<TCodec>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Config`"
-)]
-pub type RequestResponseConfig = Config;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
-)]
-pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
-)]
-pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
-    Message<TRequest, TResponse, TChannelResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -451,7 +417,7 @@ where
 
     /// Adds a known address for a peer that can be used for
     /// dialing attempts by the `Swarm`, i.e. is returned
-    /// by [`NetworkBehaviour::addresses_of_peer`].
+    /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
@@ -891,20 +857,6 @@ where
                         error: OutboundFailure::Timeout,
                     }));
             }
-            handler::Event::InboundTimeout(request_id) => {
-                // Note: `Event::InboundTimeout` is emitted both for timing
-                // out to receive the request and for timing out sending the response. In the former
-                // case the request is never added to `pending_outbound_responses` and thus one can
-                // not assert the request_id to be present before removing it.
-                self.remove_pending_outbound_response(&peer, connection, request_id);
-
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::Timeout,
-                    }));
-            }
             handler::Event::OutboundUnsupportedProtocols(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
@@ -917,17 +869,6 @@ where
                         peer,
                         request_id,
                         error: OutboundFailure::UnsupportedProtocols,
-                    }));
-            }
-            handler::Event::InboundUnsupportedProtocols(request_id) => {
-                // Note: No need to call `self.remove_pending_outbound_response`,
-                // `Event::Request` was never emitted for this request and
-                // thus request was never added to `pending_outbound_responses`.
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::UnsupportedProtocols,
                     }));
             }
         }

@@ -31,7 +31,7 @@ use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
-use crate::record::{
+use crate::record_priv::{
     self,
     store::{self, RecordStore},
     ProviderRecord, Record,
@@ -47,8 +47,8 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -56,8 +56,8 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use std::vec;
-use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
 
 pub use crate::query::QueryStats;
@@ -148,7 +148,7 @@ pub enum KademliaBucketInserts {
 /// This can be used for e.g. signature verification or validating
 /// the accompanying [`Key`].
 ///
-/// [`Key`]: crate::record::Key
+/// [`Key`]: crate::record_priv::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KademliaStoreInserts {
     /// Whenever a (provider) record is received,
@@ -228,7 +228,7 @@ impl KademliaConfig {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
-    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
+    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self
     }
@@ -411,7 +411,7 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+    pub fn protocol_names(&self) -> &[StreamProtocol] {
         self.protocol_config.protocol_names()
     }
 
@@ -684,7 +684,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: record::Key) -> QueryId {
+    pub fn get_record(&mut self, key: record_priv::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
                 self.store.remove(&key);
@@ -835,7 +835,7 @@ where
     /// This is a _local_ operation. However, it also has the effect that
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
-    pub fn remove_record(&mut self, key: &record::Key) {
+    pub fn remove_record(&mut self, key: &record_priv::Key) {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
                 self.store.remove(key)
@@ -905,7 +905,7 @@ where
     ///
     /// The results of the (repeated) provider announcements sent by this node are
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
-    pub fn start_providing(&mut self, key: record::Key) -> Result<QueryId, store::Error> {
+    pub fn start_providing(&mut self, key: record_priv::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
         // acquired on demand when returning a `ProviderRecord` for the local node.
@@ -933,7 +933,7 @@ where
     ///
     /// This is a local operation. The local node will still be considered as a
     /// provider for the key by other nodes until these provider records expire.
-    pub fn stop_providing(&mut self, key: &record::Key) {
+    pub fn stop_providing(&mut self, key: &record_priv::Key) {
         self.store
             .remove_provider(key, self.kbuckets.local_key().preimage());
     }
@@ -942,7 +942,7 @@ where
     ///
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
-    pub fn get_providers(&mut self, key: record::Key) -> QueryId {
+    pub fn get_providers(&mut self, key: record_priv::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
             .providers(&key)
@@ -1031,7 +1031,7 @@ where
     }
 
     /// Collects all peers who are known to be providers of the value for a given `Multihash`.
-    fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
+    fn provider_peers(&mut self, key: &record_priv::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
         let listen_addresses = &self.listen_addresses;
@@ -1088,7 +1088,7 @@ where
     }
 
     /// Starts an iterative `ADD_PROVIDER` query for the given key.
-    fn start_add_provider(&mut self, key: record::Key, context: AddProviderContext) {
+    fn start_add_provider(&mut self, key: record_priv::Key, context: AddProviderContext) {
         let info = QueryInfo::AddProvider {
             context,
             key: key.clone(),
@@ -1426,7 +1426,7 @@ where
                         get_closest_peers_stats,
                     },
             } => {
-                let mk_result = |key: record::Key| {
+                let mk_result = |key: record_priv::Key| {
                     if success.len() >= quorum.get() {
                         Ok(PutRecordOk { key })
                     } else {
@@ -1725,7 +1725,7 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
+    fn provider_received(&mut self, key: record_priv::Key, provider: KadPeer) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
                 key,
@@ -1903,9 +1903,7 @@ where
         };
 
         match error {
-            #[allow(deprecated)]
-            DialError::Banned
-            | DialError::LocalPeerId { .. }
+            DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
@@ -1931,8 +1929,6 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(_) => {}
         }
     }
 
@@ -2517,7 +2513,7 @@ pub enum KademliaEvent {
         is_new_peer: bool,
         /// The full list of known addresses of `peer`.
         addresses: Addresses,
-        /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+        /// Returns the minimum inclusive and maximum inclusive distance for
         /// the bucket of the peer.
         bucket_range: (Distance, Distance),
         /// The ID of the peer that was evicted from the routing table to make
@@ -2600,7 +2596,7 @@ pub enum InboundRequest {
         num_closer_peers: usize,
         num_provider_peers: usize,
     },
-    /// A peer sent a [`KademliaHandlerIn::AddProvider`] request.
+    /// A peer sent an add provider request.
     /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
@@ -2611,7 +2607,7 @@ pub enum InboundRequest {
         num_closer_peers: usize,
         present_locally: bool,
     },
-    /// A peer sent a [`KademliaHandlerIn::PutRecord`] request.
+    /// A peer sent a put record request.
     /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
     ///
     /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
@@ -2676,22 +2672,22 @@ pub enum GetRecordOk {
 pub enum GetRecordError {
     #[error("the record was not found")]
     NotFound {
-        key: record::Key,
+        key: record_priv::Key,
         closest_peers: Vec<PeerId>,
     },
     #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
-        key: record::Key,
+        key: record_priv::Key,
         records: Vec<PeerRecord>,
         quorum: NonZeroUsize,
     },
     #[error("the request timed out")]
-    Timeout { key: record::Key },
+    Timeout { key: record_priv::Key },
 }
 
 impl GetRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &record_priv::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2701,7 +2697,7 @@ impl GetRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> record_priv::Key {
         match self {
             GetRecordError::QuorumFailed { key, .. } => key,
             GetRecordError::Timeout { key, .. } => key,
@@ -2716,7 +2712,7 @@ pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 /// The successful result of [`Kademlia::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
-    pub key: record::Key,
+    pub key: record_priv::Key,
 }
 
 /// The error result of [`Kademlia::put_record`].
@@ -2724,14 +2720,14 @@ pub struct PutRecordOk {
 pub enum PutRecordError {
     #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
-        key: record::Key,
+        key: record_priv::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
     },
     #[error("the request timed out")]
     Timeout {
-        key: record::Key,
+        key: record_priv::Key,
         /// [`PeerId`]s of the peers the record was successfully stored on.
         success: Vec<PeerId>,
         quorum: NonZeroUsize,
@@ -2740,7 +2736,7 @@ pub enum PutRecordError {
 
 impl PutRecordError {
     /// Gets the key of the record for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &record_priv::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2749,7 +2745,7 @@ impl PutRecordError {
 
     /// Extracts the key of the record for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> record_priv::Key {
         match self {
             PutRecordError::QuorumFailed { key, .. } => key,
             PutRecordError::Timeout { key, .. } => key,
@@ -2818,7 +2814,7 @@ pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 #[derive(Debug, Clone)]
 pub enum GetProvidersOk {
     FoundProviders {
-        key: record::Key,
+        key: record_priv::Key,
         /// The new set of providers discovered.
         providers: HashSet<PeerId>,
     },
@@ -2832,14 +2828,14 @@ pub enum GetProvidersOk {
 pub enum GetProvidersError {
     #[error("the request timed out")]
     Timeout {
-        key: record::Key,
+        key: record_priv::Key,
         closest_peers: Vec<PeerId>,
     },
 }
 
 impl GetProvidersError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &record_priv::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2847,7 +2843,7 @@ impl GetProvidersError {
 
     /// Extracts the key for which the operation failed,
     /// consuming the error.
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> record_priv::Key {
         match self {
             GetProvidersError::Timeout { key, .. } => key,
         }
@@ -2860,26 +2856,26 @@ pub type AddProviderResult = Result<AddProviderOk, AddProviderError>;
 /// The successful result of publishing a provider record.
 #[derive(Debug, Clone)]
 pub struct AddProviderOk {
-    pub key: record::Key,
+    pub key: record_priv::Key,
 }
 
 /// The possible errors when publishing a provider record.
 #[derive(Debug, Clone, Error)]
 pub enum AddProviderError {
     #[error("the request timed out")]
-    Timeout { key: record::Key },
+    Timeout { key: record_priv::Key },
 }
 
 impl AddProviderError {
     /// Gets the key for which the operation failed.
-    pub fn key(&self) -> &record::Key {
+    pub fn key(&self) -> &record_priv::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
     }
 
     /// Extracts the key for which the operation failed,
-    pub fn into_key(self) -> record::Key {
+    pub fn into_key(self) -> record_priv::Key {
         match self {
             AddProviderError::Timeout { key, .. } => key,
         }
@@ -2978,7 +2974,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Kademlia::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
-        key: record::Key,
+        key: record_priv::Key,
         /// The number of providers found so far.
         providers_found: usize,
         /// Current index of events.
@@ -2988,7 +2984,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Kademlia::start_providing`].
     AddProvider {
         /// The record key.
-        key: record::Key,
+        key: record_priv::Key,
         /// The current phase of the query.
         phase: AddProviderPhase,
         /// The execution context of the query.
@@ -3009,7 +3005,7 @@ pub enum QueryInfo {
     /// A (repeated) query initiated by [`Kademlia::get_record`].
     GetRecord {
         /// The key to look for.
-        key: record::Key,
+        key: record_priv::Key,
         /// Current index of events.
         step: ProgressStep,
         /// Did we find at least one record?

@@ -20,15 +20,16 @@
 
 use crate::protocol_stack;
 use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 use once_cell::sync::Lazy;
 use prometheus_client::collector::Collector;
 use prometheus_client::encoding::EncodeLabelSet;
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::ConstFamily;
 use prometheus_client::metrics::gauge::ConstGauge;
 use prometheus_client::registry::{Descriptor, LocalMetric, Registry};
 use prometheus_client::MaybeOwned;
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -61,7 +62,7 @@ static OBSERVED_ADDRESSES_DESCRIPTOR: Lazy<Descriptor> = Lazy::new(|| {
         vec![],
     )
 });
-const ALLOWED_PROTOCOLS: &[&[u8]] = &[
+const ALLOWED_PROTOCOLS: &[StreamProtocol] = &[
     #[cfg(feature = "dcutr")]
     libp2p_dcutr::PROTOCOL_NAME,
     // #[cfg(feature = "gossipsub")]
@@ -70,7 +71,7 @@ const ALLOWED_PROTOCOLS: &[&[u8]] = &[
     libp2p_identify::PROTOCOL_NAME,
     libp2p_identify::PUSH_PROTOCOL_NAME,
     #[cfg(feature = "kad")]
-    libp2p_kad::protocol::DEFAULT_PROTO_NAME,
+    libp2p_kad::PROTOCOL_NAME,
     #[cfg(feature = "ping")]
     libp2p_ping::PROTOCOL_NAME,
     #[cfg(feature = "relay")]
@@ -79,7 +80,7 @@ const ALLOWED_PROTOCOLS: &[&[u8]] = &[
     libp2p_relay::HOP_PROTOCOL_NAME,
 ];
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     peers: Peers,
     error: Counter,
     pushed: Counter,
@@ -88,7 +89,7 @@ pub struct Metrics {
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("identify");
 
         let peers = Peers::default();
@@ -203,7 +204,7 @@ impl Collector for Peers {
                     .protocols
                     .iter()
                     .map(|p| {
-                        if ALLOWED_PROTOCOLS.contains(&p.as_bytes()) {
+                        if ALLOWED_PROTOCOLS.contains(&p) {
                             p.to_string()
                         } else {
                             "unrecognized".to_string()
@@ -243,19 +244,22 @@ impl Collector for Peers {
         }
 
         let count_by_protocols: Box<dyn LocalMetric> =
-            Box::new(RefCell::new(count_by_protocols.into_iter().map(
+            Box::new(ConstFamily::new(count_by_protocols.into_iter().map(
                 |(protocol, count)| ([("protocol", protocol)], ConstGauge::new(count)),
             )));
 
         let count_by_listen_addresses: Box<dyn LocalMetric> =
-            Box::new(RefCell::new(count_by_listen_addresses.into_iter().map(
+            Box::new(ConstFamily::new(count_by_listen_addresses.into_iter().map(
                 |(protocol, count)| ([("listen_address", protocol)], ConstGauge::new(count)),
             )));
 
-        let count_by_observed_addresses: Box<dyn LocalMetric> =
-            Box::new(RefCell::new(count_by_observed_addresses.into_iter().map(
-                |(protocol, count)| ([("observed_address", protocol)], ConstGauge::new(count)),
-            )));
+        let count_by_observed_addresses: Box<dyn LocalMetric> = Box::new(ConstFamily::new(
+            count_by_observed_addresses
+                .into_iter()
+                .map(|(protocol, count)| {
+                    ([("observed_address", protocol)], ConstGauge::new(count))
+                }),
+        ));
 
         Box::new(
             [

@@ -23,6 +23,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::KeyType;
+
 /// An error during decoding of key material.
 #[derive(Debug)]
 pub struct DecodingError {
@@ -31,13 +33,7 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    #[cfg(not(all(
-        feature = "ecdsa",
-        feature = "rsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        not(target_arch = "wasm32")
-    )))]
+    #[allow(dead_code)]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
             msg: format!("cargo feature `{feature_name}` is not enabled"),
@@ -81,6 +77,12 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
         Self {
             msg: format!("decoding {key_type} key from Protobuf is unsupported"),
@@ -150,3 +152,27 @@ impl Error for SigningError {
         self.source.as_ref().map(|s| &**s as &dyn Error)
     }
 }
+
+/// Error produced when failing to convert [`Keypair`](crate::Keypair) to a more concrete keypair.
+#[derive(Debug)]
+pub struct OtherVariantError {
+    actual: KeyType,
+}
+
+impl OtherVariantError {
+    #[allow(dead_code)] // This is used but the cfg is too complicated to write ..
+    pub(crate) fn new(actual: KeyType) -> OtherVariantError {
+        OtherVariantError { actual }
+    }
+}
+
+impl fmt::Display for OtherVariantError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&format!(
+            "Cannot convert to the given type, the actual key type inside is {}",
+            self.actual
+        ))
+    }
+}
+
+impl Error for OtherVariantError {}

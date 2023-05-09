@@ -31,7 +31,8 @@ use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -127,21 +128,21 @@ impl fmt::Display for OutboundSubstreamId {
 }
 
 pub struct PassthroughProtocol {
-    ident: Option<&'static [u8]>,
+    ident: Option<StreamProtocol>,
 }
 
 impl PassthroughProtocol {
-    pub fn new(ident: &'static [u8]) -> Self {
+    pub fn new(ident: StreamProtocol) -> Self {
         Self { ident: Some(ident) }
     }
 }
 
 impl UpgradeInfo for PassthroughProtocol {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = std::option::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.ident.into_iter()
+        self.ident.clone().into_iter()
     }
 }
 
@@ -396,7 +397,9 @@ where
             // TODO: Handle upgrade errors properly
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::DialUpgradeError(_) => {}
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 
@@ -503,18 +506,20 @@ where
 /// A helper struct for substream handlers that can be implemented as async functions.
 ///
 /// This only works for substreams without an `InEvent` because - once constructed - the state of an inner future is opaque.
-pub struct FutureSubstream<TOutEvent, TError> {
+pub(crate) struct FutureSubstream<TOutEvent, TError> {
     future: Fuse<BoxFuture<'static, Result<TOutEvent, TError>>>,
 }
 
 impl<TOutEvent, TError> FutureSubstream<TOutEvent, TError> {
-    pub fn new(future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static) -> Self {
+    pub(crate) fn new(
+        future: impl Future<Output = Result<TOutEvent, TError>> + Send + 'static,
+    ) -> Self {
         Self {
             future: future.boxed().fuse(),
         }
     }
 
-    pub fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
+    pub(crate) fn advance(mut self, cx: &mut Context<'_>) -> Result<Next<Self, TOutEvent>, TError> {
         if self.future.is_terminated() {
             return Ok(Next::Done);
         }

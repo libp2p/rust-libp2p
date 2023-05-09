@@ -45,7 +45,7 @@ pub fn listener_select_proto<R, I>(inner: R, protocols: I) -> ListenerSelectFutu
 where
     R: AsyncRead + AsyncWrite,
     I: IntoIterator,
-    I::Item: AsRef<[u8]>,
+    I::Item: AsRef<str>,
 {
     let protocols = protocols
         .into_iter()
@@ -54,7 +54,7 @@ where
             Err(e) => {
                 log::warn!(
                     "Listener: Ignoring invalid protocol: {} due to {}",
-                    String::from_utf8_lossy(n.as_ref()),
+                    n.as_ref(),
                     e
                 );
                 None
@@ -113,7 +113,7 @@ where
     // The Unpin bound here is required because we produce a `Negotiated<R>` as the output.
     // It also makes the implementation considerably easier to write.
     R: AsyncRead + AsyncWrite + Unpin,
-    N: AsRef<[u8]> + Clone,
+    N: AsRef<str> + Clone,
 {
     type Output = Result<(N, Negotiated<R>), NegotiationError>;
 
@@ -231,10 +231,7 @@ where
                                 log::debug!("Listener: confirming protocol: {}", p);
                                 Message::Protocol(p.clone())
                             } else {
-                                log::debug!(
-                                    "Listener: rejecting protocol: {}",
-                                    String::from_utf8_lossy(p.as_ref())
-                                );
+                                log::debug!("Listener: rejecting protocol: {}", p.as_ref());
                                 Message::NotAvailable
                             };
 
@@ -292,7 +289,7 @@ where
                                 Some(protocol) => {
                                     log::debug!(
                                         "Listener: sent confirmed protocol: {}",
-                                        String::from_utf8_lossy(protocol.as_ref())
+                                        protocol.as_ref()
                                     );
                                     let io = Negotiated::completed(io.into_inner());
                                     return Poll::Ready(Ok((protocol, io)));

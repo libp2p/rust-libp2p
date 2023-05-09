@@ -28,8 +28,9 @@ mod handler;
 mod protocol;
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
-    pub use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
+    pub(crate) use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
 }
 
 pub use behaviour_impl::Behaviour;
@@ -41,26 +42,4 @@ pub mod inbound {
 }
 pub mod outbound {
     pub use crate::protocol::outbound::UpgradeError;
-}
-
-#[deprecated(
-    since = "0.9.0",
-    note = "Use `libp2p_dcutr::inbound::UpgradeError` instead.`"
-)]
-pub type InboundUpgradeError = inbound::UpgradeError;
-
-#[deprecated(
-    since = "0.9.0",
-    note = "Use `libp2p_dcutr::outbound::UpgradeError` instead.`"
-)]
-pub type OutboundUpgradeError = outbound::UpgradeError;
-pub mod behaviour {
-    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Behaviour` instead.`")]
-    pub type Behaviour = crate::Behaviour;
-
-    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Event` instead.`")]
-    pub type Event = crate::Event;
-
-    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Error` instead.`")]
-    pub type UpgradeError = crate::Error;
 }
