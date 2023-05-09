@@ -207,9 +207,6 @@ impl WithPeerId {
     }
 
     /// Build the final [`DialOpts`].
-    ///
-    /// Addresses to dial the peer are retrieved via
-    /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
     pub fn build(self) -> DialOpts {
         DialOpts {
             peer_id: Some(self.peer_id),
@@ -241,7 +238,7 @@ impl WithPeerIdWithAddresses {
     }
 
     /// In addition to the provided addresses, extend the set via
-    /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
+    /// [`NetworkBehaviour::handle_pending_outbound_connection`](crate::behaviour::NetworkBehaviour::handle_pending_outbound_connection).
     pub fn extend_addresses_through_behaviour(mut self) -> Self {
         self.extend_addresses_through_behaviour = true;
         self

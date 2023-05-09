@@ -3,6 +3,14 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Protocol names are now required to be valid UTF8 strings.
+  We delete the `ProtocolName` trait from `libp2p::core` and replace it with a requirement for `AsRef<str>`.
+  At the same time, we introduce `StreamProtocol`, a newtype in `libp2p::swarm`.
+  This newtype enforces additional variants like a leading forward-slash.
+  We encourage users to use `StreamProtocol` when implementing `UpgradeInfo`.
+  See [PR 3746].
+
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.51.3

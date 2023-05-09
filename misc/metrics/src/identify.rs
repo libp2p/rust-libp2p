@@ -20,6 +20,7 @@
 
 use crate::protocol_stack;
 use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 use prometheus_client::encoding::{EncodeLabelSet, EncodeMetric, MetricEncoder};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -134,11 +135,11 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
             }
             libp2p_identify::Event::Received { peer_id, info, .. } => {
                 {
-                    let mut protocols: Vec<String> = info
+                    let mut protocols = info
                         .protocols
                         .iter()
                         .filter(|p| {
-                            let allowed_protocols: &[&[u8]] = &[
+                            let allowed_protocols: &[StreamProtocol] = &[
                                 #[cfg(feature = "dcutr")]
                                 libp2p_dcutr::PROTOCOL_NAME,
                                 // #[cfg(feature = "gossipsub")]
@@ -147,7 +148,7 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 libp2p_identify::PROTOCOL_NAME,
                                 libp2p_identify::PUSH_PROTOCOL_NAME,
                                 #[cfg(feature = "kad")]
-                                libp2p_kad::protocol::DEFAULT_PROTO_NAME,
+                                libp2p_kad::PROTOCOL_NAME,
                                 #[cfg(feature = "ping")]
                                 libp2p_ping::PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
@@ -156,10 +157,10 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 libp2p_relay::HOP_PROTOCOL_NAME,
                             ];
 
-                            allowed_protocols.contains(&p.as_bytes())
+                            allowed_protocols.contains(p)
                         })
-                        .cloned()
-                        .collect();
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>();
 
                     // Signal via an additional label value that one or more
                     // protocols of the remote peer have not been recognized.

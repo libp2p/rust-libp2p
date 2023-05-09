@@ -23,36 +23,24 @@ use async_trait::async_trait;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_request_response::{self as request_response, ProtocolName};
+use libp2p_request_response::{self as request_response};
+use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{BytesReader, Writer};
 use std::{convert::TryFrom, io};
 
-#[derive(Clone, Debug)]
-pub struct AutoNatProtocol;
-
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTOCOL_NAME: &[u8] = b"/libp2p/autonat/1.0.0";
-
-impl ProtocolName for AutoNatProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        DEFAULT_PROTOCOL_NAME
-    }
-}
+pub const DEFAULT_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/libp2p/autonat/1.0.0");
 
 #[derive(Clone)]
 pub struct AutoNatCodec;
 
 #[async_trait]
 impl request_response::Codec for AutoNatCodec {
-    type Protocol = AutoNatProtocol;
+    type Protocol = StreamProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &AutoNatProtocol,
-        io: &mut T,
-    ) -> io::Result<Self::Request>
+    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
     where
         T: AsyncRead + Send + Unpin,
     {
@@ -63,7 +51,7 @@ impl request_response::Codec for AutoNatCodec {
 
     async fn read_response<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
     where
@@ -76,7 +64,7 @@ impl request_response::Codec for AutoNatCodec {
 
     async fn write_request<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Request,
     ) -> io::Result<()>
@@ -89,7 +77,7 @@ impl request_response::Codec for AutoNatCodec {
 
     async fn write_response<T>(
         &mut self,
-        _: &AutoNatProtocol,
+        _: &StreamProtocol,
         io: &mut T,
         data: Self::Response,
     ) -> io::Result<()>
