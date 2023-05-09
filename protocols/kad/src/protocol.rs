@@ -43,11 +43,9 @@ use std::{io, iter};
 use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
-
+pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 /// The default maximum size for a varint length-delimited packet.
-pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
-
+pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {
@@ -258,12 +256,10 @@ where
 }
 
 /// Sink of responses and stream of requests.
-pub type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
-
+pub(crate) type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
 /// Sink of requests and stream of responses.
-pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
-
-pub type KadStreamSink<S, A, B> = stream::AndThen<
+pub(crate) type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
+pub(crate) type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
         stream::ErrInto<Framed<S, UviBytes<io::Cursor<Vec<u8>>>>, io::Error>,
         io::Cursor<Vec<u8>>,
