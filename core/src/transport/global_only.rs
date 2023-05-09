@@ -55,20 +55,6 @@ mod ipv4_global {
     /// updated. This may result in non-reserved addresses being
     /// treated as reserved in code that relies on an outdated version
     /// of this method.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    /// use std::net::Ipv4Addr;
-    ///
-    /// assert_eq!(Ipv4Addr::new(240, 0, 0, 0).is_reserved(), true);
-    /// assert_eq!(Ipv4Addr::new(255, 255, 255, 254).is_reserved(), true);
-    ///
-    /// assert_eq!(Ipv4Addr::new(239, 255, 255, 255).is_reserved(), false);
-    /// // The broadcast address is not considered as reserved for future use by this implementation
-    /// assert_eq!(Ipv4Addr::new(255, 255, 255, 255).is_reserved(), false);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_reserved(a: Ipv4Addr) -> bool {
@@ -81,18 +67,6 @@ mod ipv4_global {
     ///
     /// [IETF RFC 2544]: https://tools.ietf.org/html/rfc2544
     /// [errata 423]: https://www.rfc-editor.org/errata/eid423
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    /// use std::net::Ipv4Addr;
-    ///
-    /// assert_eq!(Ipv4Addr::new(198, 17, 255, 255).is_benchmarking(), false);
-    /// assert_eq!(Ipv4Addr::new(198, 18, 0, 0).is_benchmarking(), true);
-    /// assert_eq!(Ipv4Addr::new(198, 19, 255, 255).is_benchmarking(), true);
-    /// assert_eq!(Ipv4Addr::new(198, 20, 0, 0).is_benchmarking(), false);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_benchmarking(a: Ipv4Addr) -> bool {
@@ -103,17 +77,6 @@ mod ipv4_global {
     /// [IETF RFC 6598] (`100.64.0.0/10`).
     ///
     /// [IETF RFC 6598]: https://tools.ietf.org/html/rfc6598
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    /// use std::net::Ipv4Addr;
-    ///
-    /// assert_eq!(Ipv4Addr::new(100, 64, 0, 0).is_shared(), true);
-    /// assert_eq!(Ipv4Addr::new(100, 127, 255, 255).is_shared(), true);
-    /// assert_eq!(Ipv4Addr::new(100, 128, 0, 0).is_shared(), false);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_shared(a: Ipv4Addr) -> bool {
@@ -129,20 +92,6 @@ mod ipv4_global {
     ///  - `192.168.0.0/16`
     ///
     /// [IETF RFC 1918]: https://tools.ietf.org/html/rfc1918
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::net::Ipv4Addr;
-    ///
-    /// assert_eq!(Ipv4Addr::new(10, 0, 0, 1).is_private(), true);
-    /// assert_eq!(Ipv4Addr::new(10, 10, 10, 10).is_private(), true);
-    /// assert_eq!(Ipv4Addr::new(172, 16, 10, 10).is_private(), true);
-    /// assert_eq!(Ipv4Addr::new(172, 29, 45, 14).is_private(), true);
-    /// assert_eq!(Ipv4Addr::new(172, 32, 0, 2).is_private(), false);
-    /// assert_eq!(Ipv4Addr::new(192, 168, 0, 2).is_private(), true);
-    /// assert_eq!(Ipv4Addr::new(192, 169, 0, 2).is_private(), false);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_private(a: Ipv4Addr) -> bool {
@@ -178,54 +127,6 @@ mod ipv4_global {
     /// [IANA IPv4 Special-Purpose Address Registry]: https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
     /// [unspecified address]: Ipv4Addr::UNSPECIFIED
     /// [broadcast address]: Ipv4Addr::BROADCAST
-
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    ///
-    /// use std::net::Ipv4Addr;
-    ///
-    /// // Most IPv4 addresses are globally reachable:
-    /// assert_eq!(Ipv4Addr::new(80, 9, 12, 3).is_global(), true);
-    ///
-    /// // However some addresses have been assigned a special meaning
-    /// // that makes them not globally reachable. Some examples are:
-    ///
-    /// // The unspecified address (`0.0.0.0`)
-    /// assert_eq!(Ipv4Addr::UNSPECIFIED.is_global(), false);
-    ///
-    /// // Addresses reserved for private use (`10.0.0.0/8`, `172.16.0.0/12`, 192.168.0.0/16)
-    /// assert_eq!(Ipv4Addr::new(10, 254, 0, 0).is_global(), false);
-    /// assert_eq!(Ipv4Addr::new(192, 168, 10, 65).is_global(), false);
-    /// assert_eq!(Ipv4Addr::new(172, 16, 10, 65).is_global(), false);
-    ///
-    /// // Addresses in the shared address space (`100.64.0.0/10`)
-    /// assert_eq!(Ipv4Addr::new(100, 100, 0, 0).is_global(), false);
-    ///
-    /// // The loopback addresses (`127.0.0.0/8`)
-    /// assert_eq!(Ipv4Addr::LOCALHOST.is_global(), false);
-    ///
-    /// // Link-local addresses (`169.254.0.0/16`)
-    /// assert_eq!(Ipv4Addr::new(169, 254, 45, 1).is_global(), false);
-    ///
-    /// // Addresses reserved for documentation (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`)
-    /// assert_eq!(Ipv4Addr::new(192, 0, 2, 255).is_global(), false);
-    /// assert_eq!(Ipv4Addr::new(198, 51, 100, 65).is_global(), false);
-    /// assert_eq!(Ipv4Addr::new(203, 0, 113, 6).is_global(), false);
-    ///
-    /// // Addresses reserved for benchmarking (`198.18.0.0/15`)
-    /// assert_eq!(Ipv4Addr::new(198, 18, 0, 0).is_global(), false);
-    ///
-    /// // Reserved addresses (`240.0.0.0/4`)
-    /// assert_eq!(Ipv4Addr::new(250, 10, 20, 30).is_global(), false);
-    ///
-    /// // The broadcast address (`255.255.255.255`)
-    /// assert_eq!(Ipv4Addr::BROADCAST.is_global(), false);
-    ///
-    /// // For a complete overview see the IANA IPv4 Special-Purpose Address Registry.
-    /// ```
     #[must_use]
     #[inline]
     pub(crate) const fn is_global(a: Ipv4Addr) -> bool {
@@ -276,25 +177,6 @@ mod ipv6_global {
     /// [RFC 4291 section 2.5.3]: https://tools.ietf.org/html/rfc4291#section-2.5.3
     /// [RFC 4291 section 2.5.6]: https://tools.ietf.org/html/rfc4291#section-2.5.6
     /// [loopback address]: Ipv6Addr::LOCALHOST
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    ///
-    /// use std::net::Ipv6Addr;
-    ///
-    /// // The loopback address (`::1`) does not actually have link-local scope.
-    /// assert_eq!(Ipv6Addr::LOCALHOST.is_unicast_link_local(), false);
-    ///
-    /// // Only addresses in `fe80::/10` have link-local scope.
-    /// assert_eq!(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0).is_unicast_link_local(), false);
-    /// assert_eq!(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 0).is_unicast_link_local(), true);
-    ///
-    /// // Addresses outside the stricter `fe80::/64` also have link-local scope.
-    /// assert_eq!(Ipv6Addr::new(0xfe80, 0, 0, 1, 0, 0, 0, 0).is_unicast_link_local(), true);
-    /// assert_eq!(Ipv6Addr::new(0xfe81, 0, 0, 0, 0, 0, 0, 0).is_unicast_link_local(), true);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_unicast_link_local(a: Ipv6Addr) -> bool {
@@ -306,17 +188,6 @@ mod ipv6_global {
     /// This property is defined in [IETF RFC 4193].
     ///
     /// [IETF RFC 4193]: https://tools.ietf.org/html/rfc4193
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    ///
-    /// use std::net::Ipv6Addr;
-    ///
-    /// assert_eq!(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff).is_unique_local(), false);
-    /// assert_eq!(Ipv6Addr::new(0xfc02, 0, 0, 0, 0, 0, 0, 0).is_unique_local(), true);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_unique_local(a: Ipv6Addr) -> bool {
@@ -329,17 +200,6 @@ mod ipv6_global {
     /// This property is defined in [IETF RFC 3849].
     ///
     /// [IETF RFC 3849]: https://tools.ietf.org/html/rfc3849
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    ///
-    /// use std::net::Ipv6Addr;
-    ///
-    /// assert_eq!(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff).is_documentation(), false);
-    /// assert_eq!(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0).is_documentation(), true);
-    /// ```
     #[must_use]
     #[inline]
     const fn is_documentation(a: Ipv6Addr) -> bool {
@@ -373,43 +233,6 @@ mod ipv6_global {
     /// [IANA IPv6 Special-Purpose Address Registry]: https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml
     /// [unspecified address]: Ipv6Addr::UNSPECIFIED
     /// [loopback address]: Ipv6Addr::LOCALHOST
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #![feature(ip)]
-    ///
-    /// use std::net::Ipv6Addr;
-    ///
-    /// // Most IPv6 addresses are globally reachable:
-    /// assert_eq!(Ipv6Addr::new(0x26, 0, 0x1c9, 0, 0, 0xafc8, 0x10, 0x1).is_global(), true);
-    ///
-    /// // However some addresses have been assigned a special meaning
-    /// // that makes them not globally reachable. Some examples are:
-    ///
-    /// // The unspecified address (`::`)
-    /// assert_eq!(Ipv6Addr::UNSPECIFIED.is_global(), false);
-    ///
-    /// // The loopback address (`::1`)
-    /// assert_eq!(Ipv6Addr::LOCALHOST.is_global(), false);
-    ///
-    /// // IPv4-mapped addresses (`::ffff:0:0/96`)
-    /// assert_eq!(Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, 0xc00a, 0x2ff).is_global(), false);
-    ///
-    /// // Addresses reserved for benchmarking (`2001:2::/48`)
-    /// assert_eq!(Ipv6Addr::new(0x2001, 2, 0, 0, 0, 0, 0, 1,).is_global(), false);
-    ///
-    /// // Addresses reserved for documentation (`2001:db8::/32`)
-    /// assert_eq!(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 1).is_global(), false);
-    ///
-    /// // Unique local addresses (`fc00::/7`)
-    /// assert_eq!(Ipv6Addr::new(0xfc02, 0, 0, 0, 0, 0, 0, 1).is_global(), false);
-    ///
-    /// // Unicast addresses with link-local scope (`fe80::/10`)
-    /// assert_eq!(Ipv6Addr::new(0xfe81, 0, 0, 0, 0, 0, 0, 1).is_global(), false);
-    ///
-    /// // For a complete overview see the IANA IPv6 Special-Purpose Address Registry.
-    /// ```
     #[must_use]
     #[inline]
     pub(crate) const fn is_global(a: Ipv6Addr) -> bool {
