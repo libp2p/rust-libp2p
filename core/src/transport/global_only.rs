@@ -228,7 +228,7 @@ mod ipv4_global {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn is_global(a: Ipv4Addr) -> bool {
+    pub(crate) const fn is_global(a: Ipv4Addr) -> bool {
         !(a.octets()[0] == 0 // "This network"
             || is_private(a)
             || is_shared(a)
@@ -412,7 +412,7 @@ mod ipv6_global {
     /// ```
     #[must_use]
     #[inline]
-    pub const fn is_global(a: Ipv6Addr) -> bool {
+    pub(crate) const fn is_global(a: Ipv6Addr) -> bool {
         !(a.is_unspecified()
             || a.is_loopback()
             // IPv4-mapped Address (`::ffff:0:0/96`)
