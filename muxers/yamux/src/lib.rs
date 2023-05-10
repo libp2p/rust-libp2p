@@ -44,7 +44,7 @@ pub struct Muxer<C> {
     control: yamux::Control,
     /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
     ///
-    /// The only way how yamux can make progress is by driving the [`Incoming`] stream. However, the
+    /// The only way how yamux can make progress is by driving the stream. However, the
     /// [`StreamMuxer`] interface is designed to allow a caller to selectively make progress via
     /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the more general
     /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
