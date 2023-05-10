@@ -20,7 +20,7 @@
 
 use super::*;
 
-use crate::kbucket_priv::{Distance, Key, KeyBytes};
+use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
 use libp2p_identity::PeerId;
