@@ -73,6 +73,17 @@ where the latter only have a self-signed TLS certificate. Compared to WebRTC, th
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
 
+## Automate port-forwarding e.g. via UPnP
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3903 |              |            |
+
+Leverage protocols like UPnP to configure port-forwarding on ones router when behind NAT and/or
+firewall. Another technique in addition to hole punching increasing the probability for a node to
+become publicly reachable when behind a firewall and/or NAT.
+
+
 ## Done
 
 ### Alpha QUIC support
