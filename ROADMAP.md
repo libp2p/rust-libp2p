@@ -25,6 +25,14 @@ Kademlia operations.
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
+## Attempt to switch from webrtc-rs to str0m
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
+
+Reduce maintenance burdon and reduce dependency footprint.
+
 ## Optimize Hole punching
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
