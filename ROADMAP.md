@@ -10,9 +10,9 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 ## Kademlia client mode
 
-| Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
-| Optimization | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
+| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
+|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
+| Optimization | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
