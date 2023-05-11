@@ -38,6 +38,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod proto {
+    #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::{
         envelope_proto::*, peer_record_proto::mod_PeerRecord::*, peer_record_proto::PeerRecord,
@@ -126,7 +127,7 @@ pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
-pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
+pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, UpgradeInfo};
 
 #[derive(Debug, thiserror::Error)]
 pub struct DecodeError(String);

@@ -23,12 +23,12 @@ use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 
-pub struct Metrics {
+pub(crate) struct Metrics {
     events: Family<EventLabels, Counter>,
 }
 
 impl Metrics {
-    pub fn new(registry: &mut Registry) -> Self {
+    pub(crate) fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("relay");
 
         let events = Family::default();
@@ -54,7 +54,6 @@ enum EventType {
     ReservationReqDenied,
     ReservationReqDenyFailed,
     ReservationTimedOut,
-    CircuitReqReceiveFailed,
     CircuitReqDenied,
     CircuitReqDenyFailed,
     CircuitReqOutboundConnectFailed,
@@ -75,9 +74,6 @@ impl From<&libp2p_relay::Event> for EventType {
                 EventType::ReservationReqDenyFailed
             }
             libp2p_relay::Event::ReservationTimedOut { .. } => EventType::ReservationTimedOut,
-            libp2p_relay::Event::CircuitReqReceiveFailed { .. } => {
-                EventType::CircuitReqReceiveFailed
-            }
             libp2p_relay::Event::CircuitReqDenied { .. } => EventType::CircuitReqDenied,
             libp2p_relay::Event::CircuitReqOutboundConnectFailed { .. } => {
                 EventType::CircuitReqOutboundConnectFailed

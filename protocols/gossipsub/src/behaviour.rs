@@ -52,7 +52,7 @@ use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
+use crate::protocol::SIGNING_PREFIX;
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
@@ -189,7 +189,7 @@ impl SequenceNumber {
 }
 
 impl PublishConfig {
-    pub fn get_own_id(&self) -> Option<&PeerId> {
+    pub(crate) fn get_own_id(&self) -> Option<&PeerId> {
         match self {
             Self::Signing { author, .. } => Some(author),
             Self::Author(author) => Some(author),
@@ -203,7 +203,7 @@ impl From<MessageAuthenticity> for PublishConfig {
         match authenticity {
             MessageAuthenticity::Signed(keypair) => {
                 let public_key = keypair.public();
-                let key_enc = public_key.to_protobuf_encoding();
+                let key_enc = public_key.encode_protobuf();
                 let key = if key_enc.len() <= 42 {
                     // The public key can be inlined in [`rpc_proto::proto::::Message::from`], so we don't include it
                     // specifically in the [`rpc_proto::proto::Message::key`] field.
@@ -3317,7 +3317,7 @@ where
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
@@ -3330,7 +3330,7 @@ where
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
@@ -3709,7 +3709,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {

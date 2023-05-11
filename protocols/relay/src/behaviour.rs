@@ -21,8 +21,7 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **relay**.
 
 mod handler;
-pub mod rate_limiter;
-
+pub(crate) mod rate_limiter;
 use crate::behaviour::handler::Handler;
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::proto;
@@ -34,9 +33,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
+    PollParameters, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -151,10 +149,6 @@ pub enum Event {
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
-    CircuitReqReceiveFailed {
-        src_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
@@ -175,7 +169,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -520,7 +514,6 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::NegotiateOutboundConnect {
                             circuit_id,
                             inbound_circuit_req,
-                            relay_peer_id: self.local_peer_id,
                             src_peer_id: event_source,
                             src_connection_id: connection,
                         }),
@@ -538,15 +531,6 @@ impl NetworkBehaviour for Behaviour {
                     }
                 };
                 self.queued_actions.push_back(action.into());
-            }
-            handler::Event::CircuitReqReceiveFailed { error } => {
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqReceiveFailed {
-                        src_peer_id: event_source,
-                        error,
-                    })
-                    .into(),
-                );
             }
             handler::Event::CircuitReqDenied {
                 circuit_id,

@@ -56,7 +56,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod connection;
+mod executor;
 mod registry;
+mod stream_protocol;
 #[cfg(test)]
 mod test;
 mod upgrade;
@@ -64,7 +66,6 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
-mod executor;
 pub mod handler;
 pub mod keep_alive;
 
@@ -107,8 +108,6 @@ pub mod derive_prelude {
 }
 
 #[allow(deprecated)]
-pub use crate::connection::ConnectionLimit;
-#[allow(deprecated)]
 pub use behaviour::NetworkBehaviourAction;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
@@ -116,20 +115,17 @@ pub use behaviour::{
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddr, NewListenAddr, NotifyHandler,
     PollParameters, ToSwarm,
 };
-#[allow(deprecated)]
-pub use connection::pool::{ConnectionCounters, ConnectionLimits};
-pub use connection::{ConnectionError, ConnectionId};
+pub use connection::pool::ConnectionCounters;
+pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
 pub use executor::Executor;
-#[allow(deprecated)]
-pub use handler::IntoConnectionHandler;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
+pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
@@ -142,11 +138,11 @@ use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
-    multiaddr::Protocol,
+    multiaddr,
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, ProtocolName, Transport,
+    Endpoint, Multiaddr, Negotiated, Transport,
 };
 use libp2p_identity::PeerId;
 use registry::{AddressIntoIter, Addresses};
@@ -172,8 +168,7 @@ type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::OutEvent
 /// [`ConnectionHandler`] of the [`NetworkBehaviour`] for all the protocols the [`NetworkBehaviour`]
 /// supports.
 #[allow(deprecated)]
-pub type THandler<TBehaviour> =
-    <<TBehaviour as NetworkBehaviour>::ConnectionHandler as IntoConnectionHandler>::Handler;
+pub type THandler<TBehaviour> = <TBehaviour as NetworkBehaviour>::ConnectionHandler;
 
 /// Custom event that can be received by the [`ConnectionHandler`] of the
 /// [`NetworkBehaviour`].
@@ -221,8 +216,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     },
     /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
-    /// A corresponding [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished),
-    /// [`BannedPeer`](SwarmEvent::BannedPeer), or
+    /// A corresponding [`ConnectionEstablished`](SwarmEvent::ConnectionEstablished) or
     /// [`IncomingConnectionError`](SwarmEvent::IncomingConnectionError) event will later be
     /// generated for this connection.
     IncomingConnection {
@@ -253,14 +247,6 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         peer_id: Option<PeerId>,
         /// Error that has been encountered.
         error: DialError,
-    },
-    /// We connected to a peer, but we immediately closed the connection because that peer is banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
-    BannedPeer {
-        /// Identity of the banned peer.
-        peer_id: PeerId,
-        /// Endpoint of the connection that has been closed.
-        endpoint: ConnectedPoint,
     },
     /// One of our listeners has reported a new local listening address.
     NewListenAddr {
@@ -346,9 +332,6 @@ where
     /// List of multiaddresses we're listening on, after account for external IP addresses and
     /// similar mechanisms.
     external_addrs: Addresses,
-
-    /// List of nodes for which we deny any incoming connection.
-    banned_peers: HashSet<PeerId>,
 
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
@@ -558,22 +541,6 @@ where
             return Err(e);
         }
 
-        if let Some(peer_id) = peer_id {
-            // Check if peer is banned.
-            if self.banned_peers.contains(&peer_id) {
-                #[allow(deprecated)]
-                let error = DialError::Banned;
-                self.behaviour
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                        peer_id: Some(peer_id),
-                        error: &error,
-                        connection_id,
-                    }));
-
-                return Err(error);
-            }
-        }
-
         let addresses = {
             let mut addresses_from_opts = dial_opts.get_addresses();
 
@@ -651,27 +618,15 @@ where
             })
             .collect();
 
-        match self.pool.add_outgoing(
+        self.pool.add_outgoing(
             dials,
             peer_id,
             dial_opts.role_override(),
             dial_opts.dial_concurrency_override(),
             connection_id,
-        ) {
-            Ok(()) => Ok(()),
-            Err(connection_limit) => {
-                #[allow(deprecated)]
-                let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                        peer_id,
-                        error: &error,
-                        connection_id,
-                    }));
+        );
 
-                Err(error)
-            }
-        }
+        Ok(())
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
@@ -740,27 +695,6 @@ where
         }
     }
 
-    /// Bans a peer by its peer ID.
-    ///
-    /// Any incoming connection and any dialing attempt will immediately be rejected.
-    /// This function has no effect if the peer is already banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
-    pub fn ban_peer_id(&mut self, peer_id: PeerId) {
-        if self.banned_peers.insert(peer_id) {
-            // Note that established connections to the now banned peer are closed but not
-            // added to [`Swarm::banned_peer_connections`]. They have been previously reported
-            // as open to the behaviour and need be reported as closed once closing the
-            // connection finishes.
-            self.pool.disconnect(peer_id);
-        }
-    }
-
-    /// Unbans a peer.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
-    pub fn unban_peer_id(&mut self, peer_id: PeerId) {
-        self.banned_peers.remove(&peer_id);
-    }
-
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
     /// Returns `Ok(())` if there was one or more established connections to the peer.
@@ -816,11 +750,6 @@ where
                 concurrent_dial_errors,
                 established_in,
             } => {
-                if self.banned_peers.contains(&peer_id) {
-                    #[allow(deprecated)]
-                    return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
-                }
-
                 let handler = match endpoint.clone() {
                     ConnectedPoint::Dialer {
                         address,
@@ -886,7 +815,7 @@ where
                     .listen_protocol()
                     .upgrade()
                     .protocol_info()
-                    .map(|p| p.protocol_name().to_owned())
+                    .map(|p| p.as_ref().as_bytes().to_vec())
                     .collect();
                 let other_established_connection_ids = self
                     .pool
@@ -1087,33 +1016,19 @@ where
                     }
                 }
 
-                match self.pool.add_incoming(
+                self.pool.add_incoming(
                     upgrade,
                     IncomingInfo {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
                     },
                     connection_id,
-                ) {
-                    Ok(()) => {
-                        return Some(SwarmEvent::IncomingConnection {
-                            local_addr,
-                            send_back_addr,
-                        });
-                    }
-                    Err(connection_limit) => {
-                        #[allow(deprecated)]
-                        let error = ListenError::ConnectionLimit(connection_limit);
-                        self.behaviour
-                            .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
-                                local_addr: &local_addr,
-                                send_back_addr: &send_back_addr,
-                                error: &error,
-                                connection_id,
-                            }));
-                        log::debug!("Incoming connection rejected: {:?}", connection_limit);
-                    }
-                };
+                );
+
+                Some(SwarmEvent::IncomingConnection {
+                    local_addr,
+                    send_back_addr,
+                })
             }
             TransportEvent::NewAddress {
                 listener_id,
@@ -1129,10 +1044,10 @@ where
                         listener_id,
                         addr: &listen_addr,
                     }));
-                return Some(SwarmEvent::NewListenAddr {
+                Some(SwarmEvent::NewListenAddr {
                     listener_id,
                     address: listen_addr,
-                });
+                })
             }
             TransportEvent::AddressExpired {
                 listener_id,
@@ -1151,10 +1066,10 @@ where
                         listener_id,
                         addr: &listen_addr,
                     }));
-                return Some(SwarmEvent::ExpiredListenAddr {
+                Some(SwarmEvent::ExpiredListenAddr {
                     listener_id,
                     address: listen_addr,
-                });
+                })
             }
             TransportEvent::ListenerClosed {
                 listener_id,
@@ -1172,11 +1087,11 @@ where
                         listener_id,
                         reason: reason.as_ref().copied(),
                     }));
-                return Some(SwarmEvent::ListenerClosed {
+                Some(SwarmEvent::ListenerClosed {
                     listener_id,
                     addresses: addrs.to_vec(),
                     reason,
-                });
+                })
             }
             TransportEvent::ListenerError { listener_id, error } => {
                 self.behaviour
@@ -1184,10 +1099,9 @@ where
                         listener_id,
                         err: &error,
                     }));
-                return Some(SwarmEvent::ListenerError { listener_id, error });
+                Some(SwarmEvent::ListenerError { listener_id, error })
             }
         }
-        None
     }
 
     fn handle_behaviour_event(
@@ -1523,8 +1437,6 @@ pub struct SwarmBuilder<TBehaviour> {
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
     pool_config: PoolConfig,
-    #[allow(deprecated)]
-    connection_limits: ConnectionLimits,
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
@@ -1545,7 +1457,6 @@ where
             transport,
             behaviour,
             pool_config: PoolConfig::new(Some(Box::new(executor))),
-            connection_limits: Default::default(),
         }
     }
 
@@ -1627,7 +1538,6 @@ where
             transport,
             behaviour,
             pool_config: PoolConfig::new(None),
-            connection_limits: Default::default(),
         }
     }
 
@@ -1667,13 +1577,6 @@ where
         self
     }
 
-    /// Configures the connection limits.
-    #[allow(deprecated)]
-    pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
-        self.connection_limits = limits;
-        self
-    }
-
     /// Configures an override for the substream upgrade protocol to use.
     ///
     /// The subtream upgrade protocol is the multistream-select protocol
@@ -1708,12 +1611,11 @@ where
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
-            pool: Pool::new(self.local_peer_id, self.pool_config, self.connection_limits),
+            pool: Pool::new(self.local_peer_id, self.pool_config),
             behaviour: self.behaviour,
             supported_protocols: Default::default(),
             listened_addrs: HashMap::new(),
             external_addrs: Addresses::default(),
-            banned_peers: HashSet::new(),
             pending_event: None,
         }
     }
@@ -1722,23 +1624,11 @@ where
 /// Possible errors when trying to establish or upgrade an outbound connection.
 #[derive(Debug)]
 pub enum DialError {
-    /// The peer is currently banned.
-    #[deprecated(note = "Use `libp2p::allow_block_list` instead.", since = "0.42.1")]
-    Banned,
-    /// The configured limit for simultaneous outgoing connections
-    /// has been reached.
-    #[deprecated(
-        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
-        since = "0.42.1"
-    )]
-    #[allow(deprecated)]
-    ConnectionLimit(ConnectionLimit),
     /// The peer identity obtained on the connection matches the local peer.
     LocalPeerId {
         endpoint: ConnectedPoint,
     },
-    /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
-    /// for the peer to dial.
+    /// No addresses have been provided by [`NetworkBehaviour::handle_pending_outbound_connection`] and [`DialOpts`].
     NoAddresses,
     /// The provided [`dial_opts::PeerCondition`] evaluated to false and thus
     /// the dial was aborted.
@@ -1762,8 +1652,6 @@ pub enum DialError {
 impl From<PendingOutboundConnectionError> for DialError {
     fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 DialError::WrongPeerId { obtained, endpoint }
@@ -1777,15 +1665,11 @@ impl From<PendingOutboundConnectionError> for DialError {
 impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId { endpoint } => write!(
                 f,
                 "Dial error: tried to dial local peer id at {endpoint:?}."
             ),
-            #[allow(deprecated)]
-            DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(f, "Dial error: condition {c:?} for dialing peer was false.")
             }
@@ -1832,12 +1716,8 @@ fn print_error_chain(f: &mut fmt::Formatter<'_>, e: &dyn error::Error) -> fmt::R
 impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(err) => Some(err),
             DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
-            #[allow(deprecated)]
-            DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
             DialError::InvalidPeerId { .. } => None,
@@ -1851,14 +1731,6 @@ impl error::Error for DialError {
 /// Possible errors when upgrading an inbound connection.
 #[derive(Debug)]
 pub enum ListenError {
-    /// The configured limit for simultaneous outgoing connections
-    /// has been reached.
-    #[deprecated(
-        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
-        since = "0.42.1"
-    )]
-    #[allow(deprecated)]
-    ConnectionLimit(ConnectionLimit),
     /// Pending connection attempt has been aborted.
     Aborted,
     /// The peer identity obtained on the connection did not match the one that was expected.
@@ -1881,10 +1753,6 @@ impl From<PendingInboundConnectionError> for ListenError {
     fn from(error: PendingInboundConnectionError) -> Self {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
-            #[allow(deprecated)]
-            PendingInboundConnectionError::ConnectionLimit(inner) => {
-                ListenError::ConnectionLimit(inner)
-            }
             PendingInboundConnectionError::Aborted => ListenError::Aborted,
             PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
                 ListenError::WrongPeerId { obtained, endpoint }
@@ -1899,8 +1767,6 @@ impl From<PendingInboundConnectionError> for ListenError {
 impl fmt::Display for ListenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[allow(deprecated)]
-            ListenError::ConnectionLimit(_) => write!(f, "Listen error"),
             ListenError::Aborted => write!(
                 f,
                 "Listen error: Pending connection attempt has been aborted."
@@ -1925,8 +1791,6 @@ impl fmt::Display for ListenError {
 impl error::Error for ListenError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            #[allow(deprecated)]
-            ListenError::ConnectionLimit(err) => Some(err),
             ListenError::WrongPeerId { .. } => None,
             ListenError::Transport(err) => Some(err),
             ListenError::Aborted => None,
@@ -2015,13 +1879,13 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(Protocol::P2p(hash)) = addr.iter().last() {
+    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
         if &hash != peer.as_ref() {
             return Err(addr);
         }
         Ok(addr)
     } else {
-        Ok(addr.with(Protocol::P2p(peer.into())))
+        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
     }
 }
 
@@ -2032,8 +1896,7 @@ mod tests {
     use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
-    use futures::future::poll_fn;
-    use futures::{executor, future, ready};
+    use futures::{executor, future};
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
@@ -2067,7 +1930,7 @@ mod tests {
             .authenticate(plaintext::PlainText2Config {
                 local_public_key: local_public_key.clone(),
             })
-            .multiplex(yamux::YamuxConfig::default())
+            .multiplex(yamux::Config::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         match ThreadPool::new().ok() {
@@ -2117,136 +1980,6 @@ mod tests {
                 == 0
             && !swarm1.is_connected(swarm2.local_peer_id())
             && !swarm2.is_connected(swarm1.local_peer_id())
-    }
-
-    /// Establishes multiple connections between two peers,
-    /// after which one peer bans the other.
-    ///
-    /// The test expects both behaviours to be notified via calls to [`NetworkBehaviour::on_swarm_event`]
-    /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
-    /// while unbanned.
-    ///
-    /// While the ban is in effect, further dials occur. For these connections no
-    /// [`FromSwarm::ConnectionEstablished`], [`FromSwarm::ConnectionClosed`]
-    /// calls should be registered.
-    #[test]
-    #[allow(deprecated)]
-    fn test_connect_disconnect_ban() {
-        let _ = env_logger::try_init();
-
-        // Since the test does not try to open any substreams, we can
-        // use keep alive protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
-
-        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-
-        swarm1.listen_on(addr1).unwrap();
-        swarm2.listen_on(addr2.clone()).unwrap();
-
-        let swarm1_id = *swarm1.local_peer_id();
-
-        #[derive(Debug)]
-        enum Stage {
-            /// Waiting for the peers to connect. Banning has not occurred.
-            Connecting,
-            /// Ban occurred.
-            Banned,
-            // Ban is in place and a dial is ongoing.
-            BannedDial,
-            // Mid-ban dial was registered and the peer was unbanned.
-            Unbanned,
-            // There are dial attempts ongoing for the no longer banned peers.
-            Reconnecting,
-        }
-
-        let num_connections = 10;
-
-        for _ in 0..num_connections {
-            swarm1.dial(addr2.clone()).unwrap();
-        }
-
-        let mut s1_expected_conns = num_connections;
-        let mut s2_expected_conns = num_connections;
-
-        let mut stage = Stage::Connecting;
-
-        executor::block_on(future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match stage {
-                Stage::Connecting => {
-                    if swarm1.behaviour.assert_connected(s1_expected_conns, 1)
-                        && swarm2.behaviour.assert_connected(s2_expected_conns, 1)
-                    {
-                        // Setup to test that already established connections are correctly closed
-                        // and reported as such after the peer is banned.
-                        swarm2.ban_peer_id(swarm1_id);
-                        stage = Stage::Banned;
-                    }
-                }
-                Stage::Banned => {
-                    if swarm1.behaviour.assert_disconnected(s1_expected_conns, 1)
-                        && swarm2.behaviour.assert_disconnected(s2_expected_conns, 1)
-                    {
-                        // Setup to test that new connections of banned peers are not reported.
-                        swarm1.dial(addr2.clone()).unwrap();
-                        s1_expected_conns += 1;
-                        stage = Stage::BannedDial;
-                    }
-                }
-                Stage::BannedDial => {
-                    if swarm1.behaviour.assert_disconnected(s1_expected_conns, 2) {
-                        // The banned connection was established. Given the ban, swarm2 closed the
-                        // connection. Check that it was not reported to the behaviour of the
-                        // banning swarm.
-                        assert_eq!(
-                        swarm2.behaviour.on_connection_established.len(),
-                        s2_expected_conns,
-                        "No additional closed connections should be reported for the banned peer"
-                    );
-
-                        // Setup to test that the banned connection is not reported upon closing
-                        // even if the peer is unbanned.
-                        swarm2.unban_peer_id(swarm1_id);
-                        stage = Stage::Unbanned;
-                    }
-                }
-                Stage::Unbanned => {
-                    if swarm1.network_info().num_peers() == 0
-                        && swarm2.network_info().num_peers() == 0
-                    {
-                        // The banned connection has closed. Check that it was not reported.
-                        assert_eq!(
-                            swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
-                            "No additional closed connections should be reported for the banned peer"
-                        );
-
-                        // Setup to test that a ban lifted does not affect future connections.
-                        for _ in 0..num_connections {
-                            swarm1.dial(addr2.clone()).unwrap();
-                        }
-                        s1_expected_conns += num_connections;
-                        s2_expected_conns += num_connections;
-                        stage = Stage::Reconnecting;
-                    }
-                }
-                Stage::Reconnecting => {
-                    if swarm1.behaviour.on_connection_established.len() == s1_expected_conns
-                        && swarm2.behaviour.assert_connected(s2_expected_conns, 2)
-                    {
-                        return Poll::Ready(());
-                    }
-                }
-            }
-
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
-            }
-        }))
     }
 
     /// Establishes multiple connections between two peers,
@@ -2537,178 +2270,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn max_outgoing() {
-        use rand::Rng;
-
-        let outgoing_limit = rand::thread_rng().gen_range(1..10);
-
-        let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
-        let mut network = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-            .connection_limits(limits)
-            .build();
-
-        let addr: Multiaddr = "/memory/1234".parse().unwrap();
-
-        let target = PeerId::random();
-        for _ in 0..outgoing_limit {
-            network
-                .dial(
-                    DialOpts::peer_id(target)
-                        .addresses(vec![addr.clone()])
-                        .build(),
-                )
-                .expect("Unexpected connection limit.");
-        }
-
-        match network
-            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
-            .expect_err("Unexpected dialing success.")
-        {
-            #[allow(deprecated)]
-            DialError::ConnectionLimit(limit) => {
-                assert_eq!(limit.current, outgoing_limit);
-                assert_eq!(limit.limit, outgoing_limit);
-            }
-            e => panic!("Unexpected error: {e:?}"),
-        }
-
-        let info = network.network_info();
-        assert_eq!(info.num_peers(), 0);
-        assert_eq!(
-            info.connection_counters().num_pending_outgoing(),
-            outgoing_limit
-        );
-    }
-
-    #[test]
-    fn max_established_incoming() {
-        #[derive(Debug, Clone)]
-        struct Limit(u32);
-
-        impl Arbitrary for Limit {
-            fn arbitrary(g: &mut Gen) -> Self {
-                Self(g.gen_range(1..10))
-            }
-        }
-
-        #[allow(deprecated)]
-        fn limits(limit: u32) -> ConnectionLimits {
-            ConnectionLimits::default().with_max_established_incoming(Some(limit))
-        }
-
-        fn prop(limit: Limit) {
-            let limit = limit.0;
-
-            #[allow(deprecated)]
-            let mut network1 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-                .connection_limits(limits(limit))
-                .build();
-            #[allow(deprecated)]
-            let mut network2 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-                .connection_limits(limits(limit))
-                .build();
-
-            let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
-            let listen_addr = async_std::task::block_on(poll_fn(|cx| {
-                match ready!(network1.poll_next_unpin(cx)).unwrap() {
-                    SwarmEvent::NewListenAddr { address, .. } => Poll::Ready(address),
-                    e => panic!("Unexpected network event: {e:?}"),
-                }
-            }));
-
-            // Spawn and block on the dialer.
-            async_std::task::block_on({
-                let mut n = 0;
-                network2.dial(listen_addr.clone()).unwrap();
-
-                let mut expected_closed = false;
-                let mut network_1_established = false;
-                let mut network_2_established = false;
-                let mut network_1_limit_reached = false;
-                let mut network_2_limit_reached = false;
-                poll_fn(move |cx| {
-                    loop {
-                        let mut network_1_pending = false;
-                        let mut network_2_pending = false;
-
-                        match network1.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::IncomingConnection { .. })) => {}
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
-                                network_1_established = true;
-                            }
-                            #[allow(deprecated)]
-                            Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                                error: ListenError::ConnectionLimit(err),
-                                ..
-                            })) => {
-                                assert_eq!(err.limit, limit);
-                                assert_eq!(err.limit, err.current);
-                                let info = network1.network_info();
-                                let counters = info.connection_counters();
-                                assert_eq!(counters.num_established_incoming(), limit);
-                                assert_eq!(counters.num_established(), limit);
-                                network_1_limit_reached = true;
-                            }
-                            Poll::Pending => {
-                                network_1_pending = true;
-                            }
-                            e => panic!("Unexpected network event: {e:?}"),
-                        }
-
-                        match network2.poll_next_unpin(cx) {
-                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
-                                network_2_established = true;
-                            }
-                            Poll::Ready(Some(SwarmEvent::ConnectionClosed { .. })) => {
-                                assert!(expected_closed);
-                                let info = network2.network_info();
-                                let counters = info.connection_counters();
-                                assert_eq!(counters.num_established_outgoing(), limit);
-                                assert_eq!(counters.num_established(), limit);
-                                network_2_limit_reached = true;
-                            }
-                            Poll::Pending => {
-                                network_2_pending = true;
-                            }
-                            e => panic!("Unexpected network event: {e:?}"),
-                        }
-
-                        if network_1_pending && network_2_pending {
-                            return Poll::Pending;
-                        }
-
-                        if network_1_established && network_2_established {
-                            network_1_established = false;
-                            network_2_established = false;
-
-                            if n <= limit {
-                                // Dial again until the limit is exceeded.
-                                n += 1;
-                                network2.dial(listen_addr.clone()).unwrap();
-
-                                if n == limit {
-                                    // The the next dialing attempt exceeds the limit, this
-                                    // is the connection we expected to get closed.
-                                    expected_closed = true;
-                                }
-                            } else {
-                                panic!("Expect networks not to establish connections beyond the limit.")
-                            }
-                        }
-
-                        if network_1_limit_reached && network_2_limit_reached {
-                            return Poll::Ready(());
-                        }
-                    }
-                })
-            });
-        }
-
-        quickcheck(prop as fn(_));
-    }
-
-    #[test]
     fn invalid_peer_id() {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
@@ -2728,7 +2289,7 @@ mod tests {
             }));
 
         let other_id = PeerId::random();
-        let other_addr = address.with(Protocol::P2p(other_id.into()));
+        let other_addr = address.with(multiaddr::Protocol::P2p(other_id.into()));
 
         swarm2.dial(other_addr.clone()).unwrap();
 
@@ -2876,7 +2437,7 @@ mod tests {
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
                     .into_iter()
-                    .map(|addr| addr.with(Protocol::P2p(target.into())))
+                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target.into())))
                     .collect::<Vec<_>>();
 
                 assert_eq!(expected_addresses, failed_addresses);

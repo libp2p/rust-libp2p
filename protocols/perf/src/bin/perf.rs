@@ -30,7 +30,6 @@ use libp2p_core::{
     multiaddr::Protocol, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr,
     Transport as _,
 };
-use libp2p_dns::TokioDnsConfig;
 use libp2p_identity::PeerId;
 use libp2p_perf::RunParams;
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
@@ -124,10 +123,10 @@ async fn server(secret_key_seed: u8) -> Result<()> {
         let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1Lazy)
             .authenticate(
-                libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                libp2p_noise::Config::new(&local_key)
                     .expect("Signing libp2p-noise static DH keypair failed."),
             )
-            .multiplex(libp2p_yamux::YamuxConfig::default());
+            .multiplex(libp2p_yamux::Config::default());
 
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);
@@ -135,7 +134,7 @@ async fn server(secret_key_seed: u8) -> Result<()> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
+        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -621,10 +620,10 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
         let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1Lazy)
             .authenticate(
-                libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                libp2p_noise::Config::new(&local_key)
                     .expect("Signing libp2p-noise static DH keypair failed."),
             )
-            .multiplex(libp2p_yamux::YamuxConfig::default());
+            .multiplex(libp2p_yamux::Config::default());
 
         let quic = {
             let mut config = libp2p_quic::Config::new(&local_key);
@@ -632,7 +631,7 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
+        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),

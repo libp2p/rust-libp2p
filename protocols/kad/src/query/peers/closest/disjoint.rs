@@ -30,7 +30,7 @@ use std::{
 
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
-pub struct ClosestDisjointPeersIter {
+pub(crate) struct ClosestDisjointPeersIter {
     config: ClosestPeersIterConfig,
     target: KeyBytes,
 
@@ -51,7 +51,7 @@ pub struct ClosestDisjointPeersIter {
 
 impl ClosestDisjointPeersIter {
     /// Creates a new iterator with a default configuration.
-    pub fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
+    pub(crate) fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
     {
@@ -63,7 +63,7 @@ impl ClosestDisjointPeersIter {
     }
 
     /// Creates a new iterator with the given configuration.
-    pub fn with_config<I, T>(
+    pub(crate) fn with_config<I, T>(
         config: ClosestPeersIterConfig,
         target: T,
         known_closest_peers: I,
@@ -108,7 +108,7 @@ impl ClosestDisjointPeersIter {
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
-    pub fn on_failure(&mut self, peer: &PeerId) -> bool {
+    pub(crate) fn on_failure(&mut self, peer: &PeerId) -> bool {
         let mut updated = false;
 
         if let Some(PeerState {
@@ -151,7 +151,7 @@ impl ClosestDisjointPeersIter {
     /// If the iterator is finished, it is not currently waiting for a
     /// result from `peer`, or a result for `peer` has already been reported,
     /// calling this function has no effect and `false` is returned.
-    pub fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
+    pub(crate) fn on_success<I>(&mut self, peer: &PeerId, closer_peers: I) -> bool
     where
         I: IntoIterator<Item = PeerId>,
     {
@@ -190,11 +190,11 @@ impl ClosestDisjointPeersIter {
         updated
     }
 
-    pub fn is_waiting(&self, peer: &PeerId) -> bool {
+    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
         self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
-    pub fn next(&mut self, now: Instant) -> PeersIterState<'_> {
+    pub(crate) fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         let mut state = None;
 
         // Ensure querying each iterator at most once.
@@ -290,7 +290,7 @@ impl ClosestDisjointPeersIter {
     /// Finishes all paths containing one of the given peers.
     ///
     /// See [`crate::query::Query::try_finish`] for details.
-    pub fn finish_paths<'a, I>(&mut self, peers: I) -> bool
+    pub(crate) fn finish_paths<'a, I>(&mut self, peers: I) -> bool
     where
         I: IntoIterator<Item = &'a PeerId>,
     {
@@ -304,14 +304,14 @@ impl ClosestDisjointPeersIter {
     }
 
     /// Immediately transitions the iterator to [`PeersIterState::Finished`].
-    pub fn finish(&mut self) {
+    pub(crate) fn finish(&mut self) {
         for iter in &mut self.iters {
             iter.finish();
         }
     }
 
     /// Checks whether the iterator has finished.
-    pub fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.iters.iter().all(|i| i.is_finished())
     }
 
@@ -323,7 +323,7 @@ impl ClosestDisjointPeersIter {
     ///       `num_results` closest benign peers, but as it can not
     ///       differentiate benign from faulty paths it as well returns faulty
     ///       peers and thus overall returns more than `num_results` peers.
-    pub fn into_result(self) -> impl Iterator<Item = PeerId> {
+    pub(crate) fn into_result(self) -> impl Iterator<Item = PeerId> {
         let result_per_path = self
             .iters
             .into_iter()
@@ -609,7 +609,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone)]
-    struct PeerVec(pub Vec<Key<PeerId>>);
+    struct PeerVec(Vec<Key<PeerId>>);
 
     impl Arbitrary for PeerVec {
         fn arbitrary(g: &mut Gen) -> Self {

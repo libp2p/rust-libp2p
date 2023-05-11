@@ -41,7 +41,7 @@ use thiserror::Error;
 use yamux::ConnectionError;
 
 /// A Yamux connection.
-pub struct Yamux<S> {
+pub struct Muxer<S> {
     /// The [`futures::stream::Stream`] of incoming substreams.
     incoming: S,
     /// Handle to control the connection.
@@ -62,13 +62,13 @@ pub struct Yamux<S> {
 
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
 
-impl<S> fmt::Debug for Yamux<S> {
+impl<S> fmt::Debug for Muxer<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Yamux")
     }
 }
 
-impl<C> Yamux<Incoming<C>>
+impl<C> Muxer<Incoming<C>>
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -77,7 +77,7 @@ where
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
 
-        Yamux {
+        Self {
             incoming: Incoming {
                 stream: yamux::into_stream(conn).err_into().boxed(),
                 _marker: std::marker::PhantomData,
@@ -89,7 +89,7 @@ where
     }
 }
 
-impl<C> Yamux<LocalIncoming<C>>
+impl<C> Muxer<LocalIncoming<C>>
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
@@ -98,7 +98,7 @@ where
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
 
-        Yamux {
+        Self {
             incoming: LocalIncoming {
                 stream: yamux::into_stream(conn).err_into().boxed_local(),
                 _marker: std::marker::PhantomData,
@@ -110,14 +110,12 @@ where
     }
 }
 
-pub type YamuxResult<T> = Result<T, YamuxError>;
-
-impl<S> StreamMuxer for Yamux<S>
+impl<S> StreamMuxer for Muxer<S>
 where
-    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
+    S: Stream<Item = Result<yamux::Stream, Error>> + Unpin,
 {
     type Substream = yamux::Stream;
-    type Error = YamuxError;
+    type Error = Error;
 
     fn poll_inbound(
         mut self: Pin<&mut Self>,
@@ -138,7 +136,7 @@ where
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         Pin::new(&mut self.control)
             .poll_open_stream(cx)
-            .map_err(YamuxError)
+            .map_err(Error)
     }
 
     fn poll(
@@ -165,11 +163,8 @@ where
         Poll::Pending
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        if let Poll::Ready(()) = Pin::new(&mut self.control)
-            .poll_close(c)
-            .map_err(YamuxError)?
-        {
+    fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<Result<(), Error>> {
+        if let Poll::Ready(()) = Pin::new(&mut self.control).poll_close(c).map_err(Error)? {
             return Poll::Ready(Ok(()));
         }
 
@@ -184,15 +179,15 @@ where
     }
 }
 
-impl<S> Yamux<S>
+impl<S> Muxer<S>
 where
-    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
+    S: Stream<Item = Result<yamux::Stream, Error>> + Unpin,
 {
-    fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<yamux::Stream, YamuxError>> {
+    fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<yamux::Stream, Error>> {
         self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
             let stream = maybe_stream
                 .transpose()?
-                .ok_or(YamuxError(ConnectionError::Closed))?;
+                .ok_or(Error(ConnectionError::Closed))?;
 
             Ok(stream)
         })
@@ -201,7 +196,7 @@ where
 
 /// The yamux configuration.
 #[derive(Debug, Clone)]
-pub struct YamuxConfig {
+pub struct Config {
     inner: yamux::Config,
     mode: Option<yamux::Mode>,
 }
@@ -248,9 +243,9 @@ impl WindowUpdateMode {
 
 /// The yamux configuration for upgrading I/O resources which are ![`Send`].
 #[derive(Clone)]
-pub struct YamuxLocalConfig(YamuxConfig);
+pub struct LocalConfig(Config);
 
-impl YamuxConfig {
+impl Config {
     /// Creates a new `YamuxConfig` in client mode, regardless of whether
     /// it will be used for an inbound or outbound upgrade.
     pub fn client() -> Self {
@@ -294,106 +289,106 @@ impl YamuxConfig {
         self
     }
 
-    /// Converts the config into a [`YamuxLocalConfig`] for use with upgrades
+    /// Converts the config into a [`LocalConfig`] for use with upgrades
     /// of I/O streams that are ![`Send`].
-    pub fn into_local(self) -> YamuxLocalConfig {
-        YamuxLocalConfig(self)
+    pub fn into_local(self) -> LocalConfig {
+        LocalConfig(self)
     }
 }
 
-impl Default for YamuxConfig {
+impl Default for Config {
     fn default() -> Self {
         let mut inner = yamux::Config::default();
         // For conformity with mplex, read-after-close on a multiplexed
         // connection is never permitted and not configurable.
         inner.set_read_after_close(false);
-        YamuxConfig { inner, mode: None }
+        Config { inner, mode: None }
     }
 }
 
-impl UpgradeInfo for YamuxConfig {
-    type Info = &'static [u8];
+impl UpgradeInfo for Config {
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+        iter::once("/yamux/1.0.0")
     }
 }
 
-impl UpgradeInfo for YamuxLocalConfig {
-    type Info = &'static [u8];
+impl UpgradeInfo for LocalConfig {
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/yamux/1.0.0")
+        iter::once("/yamux/1.0.0")
     }
 }
 
-impl<C> InboundUpgrade<C> for YamuxConfig
+impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = Yamux<Incoming<C>>;
+    type Output = Muxer<Incoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
         let mode = self.mode.unwrap_or(yamux::Mode::Server);
-        future::ready(Ok(Yamux::new(io, self.inner, mode)))
+        future::ready(Ok(Muxer::new(io, self.inner, mode)))
     }
 }
 
-impl<C> InboundUpgrade<C> for YamuxLocalConfig
+impl<C> InboundUpgrade<C> for LocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
-    type Output = Yamux<LocalIncoming<C>>;
+    type Output = Muxer<LocalIncoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
         let cfg = self.0;
         let mode = cfg.mode.unwrap_or(yamux::Mode::Server);
-        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
+        future::ready(Ok(Muxer::local(io, cfg.inner, mode)))
     }
 }
 
-impl<C> OutboundUpgrade<C> for YamuxConfig
+impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = Yamux<Incoming<C>>;
+    type Output = Muxer<Incoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
         let mode = self.mode.unwrap_or(yamux::Mode::Client);
-        future::ready(Ok(Yamux::new(io, self.inner, mode)))
+        future::ready(Ok(Muxer::new(io, self.inner, mode)))
     }
 }
 
-impl<C> OutboundUpgrade<C> for YamuxLocalConfig
+impl<C> OutboundUpgrade<C> for LocalConfig
 where
     C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
-    type Output = Yamux<LocalIncoming<C>>;
+    type Output = Muxer<LocalIncoming<C>>;
     type Error = io::Error;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
         let cfg = self.0;
         let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
-        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
+        future::ready(Ok(Muxer::local(io, cfg.inner, mode)))
     }
 }
 
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error("yamux error: {0}")]
-pub struct YamuxError(#[from] yamux::ConnectionError);
+pub struct Error(#[from] yamux::ConnectionError);
 
-impl From<YamuxError> for io::Error {
-    fn from(err: YamuxError) -> Self {
+impl From<Error> for io::Error {
+    fn from(err: Error) -> Self {
         match err.0 {
             yamux::ConnectionError::Io(e) => e,
             e => io::Error::new(io::ErrorKind::Other, e),
@@ -403,7 +398,7 @@ impl From<YamuxError> for io::Error {
 
 /// The [`futures::stream::Stream`] of incoming substreams.
 pub struct Incoming<T> {
-    stream: BoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: BoxStream<'static, Result<yamux::Stream, Error>>,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -415,7 +410,7 @@ impl<T> fmt::Debug for Incoming<T> {
 
 /// The [`futures::stream::Stream`] of incoming substreams (`!Send`).
 pub struct LocalIncoming<T> {
-    stream: LocalBoxStream<'static, Result<yamux::Stream, YamuxError>>,
+    stream: LocalBoxStream<'static, Result<yamux::Stream, Error>>,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -426,7 +421,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
 }
 
 impl<T> Stream for Incoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = Result<yamux::Stream, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
@@ -440,7 +435,7 @@ impl<T> Stream for Incoming<T> {
 impl<T> Unpin for Incoming<T> {}
 
 impl<T> Stream for LocalIncoming<T> {
-    type Item = Result<yamux::Stream, YamuxError>;
+    type Item = Result<yamux::Stream, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)

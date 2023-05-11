@@ -37,7 +37,7 @@ use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
 impl UpgradeInfo for MplexConfig {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {

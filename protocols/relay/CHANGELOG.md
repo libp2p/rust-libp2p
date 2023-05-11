@@ -1,3 +1,30 @@
+## 0.16.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+- Hide internals of `Connection` and expose only `AsyncRead` and `AsyncWrite`.
+  See [PR 3829].
+
+- Remove `Event::CircuitReqReceiveFailed` and `Event::InboundCircuitReqFailed` variants.
+  These variants are no longer constructed.
+  See [PR 3605].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3829]: https://github.com/libp2p/rust-libp2p/pull/3829
+
+## 0.15.2
+
+- Send correct `PeerId` in outbound STOP message to client.
+  See [PR 3767].
+
+- As a relay, when forwarding data between relay-connection-source and -destination and vice versa, flush write side when read currently has no more data available.
+  See [PR 3765].
+
+[PR 3767]: https://github.com/libp2p/rust-libp2p/pull/3767
+[PR 3765]: https://github.com/libp2p/rust-libp2p/pull/3765
+
 ## 0.15.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

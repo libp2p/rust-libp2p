@@ -27,7 +27,7 @@
 //! is used to send messages to remote peers.
 
 use crate::proto;
-use crate::record::{self, Record};
+use crate::record_priv::{self, Record};
 use asynchronous_codec::Framed;
 use bytes::BytesMut;
 use codec::UviBytes;
@@ -36,17 +36,16 @@ use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
+use libp2p_swarm::StreamProtocol;
 use quick_protobuf::{BytesReader, Writer};
-use std::{borrow::Cow, convert::TryFrom, time::Duration};
+use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
-pub const DEFAULT_PROTO_NAME: &[u8] = b"/ipfs/kad/1.0.0";
-
+pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
 /// The default maximum size for a varint length-delimited packet.
-pub const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
-
+pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub enum KadConnectionType {
@@ -139,20 +138,20 @@ impl From<KadPeer> for proto::Peer {
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
-    protocol_names: Vec<Cow<'static, [u8]>>,
+    protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
-    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+    pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
     }
 
     /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) {
+    pub fn set_protocol_names(&mut self, names: Vec<StreamProtocol>) {
         self.protocol_names = names;
     }
 
@@ -165,14 +164,14 @@ impl KademliaProtocolConfig {
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_names: iter::once(Cow::Borrowed(DEFAULT_PROTO_NAME)).collect(),
+            protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
 
 impl UpgradeInfo for KademliaProtocolConfig {
-    type Info = Cow<'static, [u8]>;
+    type Info = StreamProtocol;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -257,12 +256,10 @@ where
 }
 
 /// Sink of responses and stream of requests.
-pub type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
-
+pub(crate) type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
 /// Sink of requests and stream of responses.
-pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
-
-pub type KadStreamSink<S, A, B> = stream::AndThen<
+pub(crate) type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
+pub(crate) type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
         stream::ErrInto<Framed<S, UviBytes<io::Cursor<Vec<u8>>>>, io::Error>,
         io::Cursor<Vec<u8>>,
@@ -291,13 +288,13 @@ pub enum KadRequestMsg {
     /// this key.
     GetProviders {
         /// Identifier being searched.
-        key: record::Key,
+        key: record_priv::Key,
     },
 
     /// Indicates that this list of providers is known for this key.
     AddProvider {
         /// Key for which we should add providers.
-        key: record::Key,
+        key: record_priv::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -305,7 +302,7 @@ pub enum KadRequestMsg {
     /// Request to get a value from the dht records.
     GetValue {
         /// The key we are searching for.
-        key: record::Key,
+        key: record_priv::Key,
     },
 
     /// Request to put a value into the dht records.
@@ -343,7 +340,7 @@ pub enum KadResponseMsg {
     /// Response to a `PutValue`.
     PutValue {
         /// The key of the record.
-        key: record::Key,
+        key: record_priv::Key,
         /// Value of the record.
         value: Vec<u8>,
     },
@@ -447,11 +444,11 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
             Ok(KadRequestMsg::PutValue { record })
         }
         proto::MessageType::GET_VALUE => Ok(KadRequestMsg::GetValue {
-            key: record::Key::from(message.key),
+            key: record_priv::Key::from(message.key),
         }),
         proto::MessageType::FIND_NODE => Ok(KadRequestMsg::FindNode { key: message.key }),
         proto::MessageType::GET_PROVIDERS => Ok(KadRequestMsg::GetProviders {
-            key: record::Key::from(message.key),
+            key: record_priv::Key::from(message.key),
         }),
         proto::MessageType::ADD_PROVIDER => {
             // TODO: for now we don't parse the peer properly, so it is possible that we get
@@ -463,7 +460,7 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
                 .find_map(|peer| KadPeer::try_from(peer).ok());
 
             if let Some(provider) = provider {
-                let key = record::Key::from(message.key);
+                let key = record_priv::Key::from(message.key);
                 Ok(KadRequestMsg::AddProvider { key, provider })
             } else {
                 Err(invalid_data("AddProvider message with no valid peer."))
@@ -527,7 +524,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
         }
 
         proto::MessageType::PUT_VALUE => {
-            let key = record::Key::from(message.key);
+            let key = record_priv::Key::from(message.key);
             let rec = message
                 .record
                 .ok_or_else(|| invalid_data("received PutValue message with no record"))?;
@@ -545,7 +542,7 @@ fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Erro
 }
 
 fn record_from_proto(record: proto::Record) -> Result<Record, io::Error> {
-    let key = record::Key::from(record.key);
+    let key = record_priv::Key::from(record.key);
     let value = record.value;
 
     let publisher = if !record.publisher.is_empty() {

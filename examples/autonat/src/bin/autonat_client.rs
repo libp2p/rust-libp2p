@@ -63,9 +63,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
-        .multiplex(yamux::YamuxConfig::default())
+        .upgrade(Version::V1Lazy)
+        .authenticate(noise::Config::new(&local_key)?)
+        .multiplex(yamux::Config::default())
         .boxed();
 
     let behaviour = Behaviour::new(local_key.public());

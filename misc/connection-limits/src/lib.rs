@@ -365,7 +365,7 @@ mod tests {
     use super::*;
     use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     #[test]
     fn max_outgoing() {

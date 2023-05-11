@@ -1,8 +1,31 @@
-## 0.44.3 - unreleased
+## 0.45.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+- Remove deprecated items. See [PR 3862].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3862]: https://github.com/libp2p/rust-libp2p/pull/3862
+
+## 0.44.4
+
+- Deprecate `metrics`, `protocol`, `subscription_filter`, `time_cache` modules to make them private. See [PR 3777].
+- Honor the `gossipsub::Config::support_floodsub` in all cases.
+  Previously, it was ignored when a custom protocol id was set via `gossipsub::Config::protocol_id`.
+  See [PR 3837].
+
+[PR 3777]: https://github.com/libp2p/rust-libp2p/pull/3777
+[PR 3837]: https://github.com/libp2p/rust-libp2p/pull/3837
+
+## 0.44.3
 
 - Fix erroneously duplicate message IDs. See [PR 3716].
 
+- Gracefully disable handler on stream errors. Deprecate a few variants of `HandlerError`.
+  See [PR 3625].
+
 [PR 3716]: https://github.com/libp2p/rust-libp2p/pull/3716
+[PR 3625]: https://github.com/libp2p/rust-libp2p/pull/3325
 
 ## 0.44.2
 

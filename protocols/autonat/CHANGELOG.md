@@ -1,3 +1,17 @@
+## 0.11.0 - unreleased
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+
+## 0.10.2
+
+- Store server `PeerId`s in `HashSet` to avoid duplicates and lower memory consumption.
+  See [PR 3736].
+
+[PR 3736]: https://github.com/libp2p/rust-libp2p/pull/3736
+
 ## 0.10.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

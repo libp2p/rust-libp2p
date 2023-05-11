@@ -21,6 +21,7 @@
 use async_trait::async_trait;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p_request_response as request_response;
+use libp2p_swarm::StreamProtocol;
 use std::io;
 
 use crate::RunParams;
@@ -33,7 +34,7 @@ pub struct Codec {}
 #[async_trait]
 impl request_response::Codec for Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
-    type Protocol = &'static [u8; 11];
+    type Protocol = StreamProtocol;
     /// The type of inbound and outbound requests.
     type Request = RunParams;
     /// The type of inbound and outbound responses.
