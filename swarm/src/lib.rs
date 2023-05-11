@@ -58,6 +58,7 @@
 mod connection;
 mod executor;
 mod registry;
+mod stream;
 mod stream_protocol;
 #[cfg(test)]
 mod test;
@@ -125,6 +126,7 @@ pub use handler::{
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
+pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
 use crate::handler::UpgradeInfoSend;
@@ -1379,7 +1381,7 @@ where
 ///
 /// Note: This stream is infinite and it is guaranteed that
 /// [`Stream::poll_next`] will never return `Poll::Ready(None)`.
-impl<TBehaviour> Stream for Swarm<TBehaviour>
+impl<TBehaviour> futures::Stream for Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
