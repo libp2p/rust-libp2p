@@ -64,7 +64,7 @@ mod handler;
 pub use codec::Codec;
 pub use handler::ProtocolSupport;
 
-use crate::handler::protocol::RequestProtocol;
+use crate::handler::OutboundMessage;
 use futures::channel::oneshot;
 use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -317,7 +317,7 @@ where
     codec: TCodec,
     /// Pending events to return from `poll`.
     pending_events:
-        VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, RequestProtocol<TCodec>>>,
+        VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, OutboundMessage<TCodec>>>,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
@@ -325,7 +325,7 @@ where
     addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
-    pending_outbound_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
+    pending_outbound_requests: HashMap<PeerId, SmallVec<[OutboundMessage<TCodec>; 10]>>,
 }
 
 impl<TCodec> Behaviour<TCodec>
@@ -376,11 +376,10 @@ where
     /// > [`Behaviour::remove_address`].
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> RequestId {
         let request_id = self.next_request_id();
-        let request = RequestProtocol {
+        let request = OutboundMessage {
             request_id,
-            codec: self.codec.clone(),
-            protocols: self.outbound_protocols.clone(),
             request,
+            protocols: self.outbound_protocols.clone(),
         };
 
         if let Some(request) = self.try_send_request(peer, request) {
@@ -494,8 +493,8 @@ where
     fn try_send_request(
         &mut self,
         peer: &PeerId,
-        request: RequestProtocol<TCodec>,
-    ) -> Option<RequestProtocol<TCodec>> {
+        request: OutboundMessage<TCodec>,
+    ) -> Option<OutboundMessage<TCodec>> {
         if let Some(connections) = self.connected.get_mut(peer) {
             if connections.is_empty() {
                 return Some(request);
