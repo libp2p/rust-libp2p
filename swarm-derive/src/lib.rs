@@ -24,6 +24,7 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
+use quote::ToTokens;
 use syn::punctuated::Punctuated;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
@@ -859,6 +860,8 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
     };
+    let mut is_out_event = false;
+    // let mut token = TokenStream::new();
 
     for attr in ast
         .attrs
@@ -897,6 +900,19 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
             }
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
+                if meta.path().is_ident("out_event") {
+                    is_out_event = true;
+
+                    let meta_token_stream = meta.to_token_stream();
+                    let input = syn::parse2::<syn::DeriveInput>(meta_token_stream.into()).unwrap();
+                    let warning = proc_macro_warning::Warning::new_deprecated("test")
+                        .old("foo")
+                        .new("bar")
+                        .span(input.ident.span())
+                        .build();
+
+                    let token: TokenStream = quote::quote!(#warning).into();
+                }
                 match meta {
                     Meta::Path(_) => unimplemented!(),
                     Meta::List(_) => unimplemented!(),
