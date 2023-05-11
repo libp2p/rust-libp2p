@@ -41,7 +41,6 @@ pub(crate) struct Metrics {
 
     dial_attempt: Counter,
     outgoing_connection_error: Family<OutgoingConnectionErrorLabels, Counter>,
-    connected_to_banned_peer: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
@@ -104,13 +103,6 @@ impl Metrics {
             outgoing_connection_error.clone(),
         );
 
-        let connected_to_banned_peer = Family::default();
-        sub_registry.register(
-            "connected_to_banned_peer",
-            "Number of connection attempts to banned peer",
-            connected_to_banned_peer.clone(),
-        );
-
         let connections_established = Family::default();
         sub_registry.register(
             "connections_established",
@@ -145,7 +137,6 @@ impl Metrics {
             listener_error,
             dial_attempt,
             outgoing_connection_error,
-            connected_to_banned_peer,
             connections_establishment_duration,
         }
     }
@@ -223,12 +214,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                             };
                         }
                     }
-                    #[allow(deprecated)]
-                    libp2p_swarm::DialError::Banned => record(OutgoingConnectionError::Banned),
-                    #[allow(deprecated)]
-                    libp2p_swarm::DialError::ConnectionLimit(_) => {
-                        record(OutgoingConnectionError::ConnectionLimit)
-                    }
                     libp2p_swarm::DialError::LocalPeerId { .. } => {
                         record(OutgoingConnectionError::LocalPeerId)
                     }
@@ -249,14 +234,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         record(OutgoingConnectionError::Denied)
                     }
                 };
-            }
-            #[allow(deprecated)]
-            libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
-                self.connected_to_banned_peer
-                    .get_or_create(&AddressLabels {
-                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
-                    })
-                    .inc();
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
                 self.new_listen_addr
@@ -339,8 +316,6 @@ enum PeerStatus {
 
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum OutgoingConnectionError {
-    Banned,
-    ConnectionLimit,
     LocalPeerId,
     NoAddresses,
     DialPeerConditionFalse,
@@ -365,7 +340,6 @@ enum IncomingConnectionError {
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
-    ConnectionLimit,
     Denied,
 }
 
@@ -373,10 +347,6 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
     fn from(error: &libp2p_swarm::ListenError) -> Self {
         match error {
             libp2p_swarm::ListenError::WrongPeerId { .. } => IncomingConnectionError::WrongPeerId,
-            #[allow(deprecated)]
-            libp2p_swarm::ListenError::ConnectionLimit(_) => {
-                IncomingConnectionError::ConnectionLimit
-            }
             libp2p_swarm::ListenError::LocalPeerId { .. } => IncomingConnectionError::LocalPeerId,
             libp2p_swarm::ListenError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),

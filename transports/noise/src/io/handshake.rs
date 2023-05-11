@@ -27,45 +27,13 @@ mod proto {
 }
 
 use crate::io::{framed::NoiseFramed, Output};
-use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
-
+use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
 use crate::Error;
-use crate::LegacyConfig;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
-
-/// The identity of the remote established during a handshake.
-#[deprecated(
-    note = "This type will be made private in the future. Use `libp2p_noise::Config::new` instead to use the noise protocol."
-)]
-pub enum RemoteIdentity<C> {
-    /// The remote provided no identifying information.
-    ///
-    /// The identity of the remote is unknown and must be obtained through
-    /// a different, out-of-band channel.
-    Unknown,
-
-    /// The remote provided a static DH public key.
-    ///
-    /// The static DH public key is authentic in the sense that a successful
-    /// handshake implies that the remote possesses a corresponding secret key.
-    ///
-    /// > **Note**: To rule out active attacks like a MITM, trust in the public key must
-    /// > still be established, e.g. by comparing the key against an expected or
-    /// > otherwise known public key.
-    StaticDhKey(PublicKey<C>),
-
-    /// The remote provided a public identity key in addition to a static DH
-    /// public key and the latter is authentic w.r.t. the former.
-    ///
-    /// > **Note**: To rule out active attacks like a MITM, trust in the public key must
-    /// > still be established, e.g. by comparing the key against an expected or
-    /// > otherwise known public key.
-    IdentityKey(identity::PublicKey),
-}
 
 //////////////////////////////////////////////////////////////////////////////
 // Internal
@@ -81,8 +49,6 @@ pub(crate) struct State<T> {
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
-    /// Legacy configuration parameters.
-    legacy: LegacyConfig,
 }
 
 impl<T> State<T> {
@@ -97,14 +63,12 @@ impl<T> State<T> {
         session: snow::HandshakeState,
         identity: KeypairIdentity,
         expected_remote_key: Option<identity::PublicKey>,
-        legacy: LegacyConfig,
     ) -> Self {
         Self {
             identity,
             io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey: expected_remote_key,
-            legacy,
         }
     }
 }
@@ -112,23 +76,22 @@ impl<T> State<T> {
 impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
-    pub(crate) fn finish<C>(self) -> Result<(RemoteIdentity<C>, Output<T>), Error>
-    where
-        C: Protocol<C> + AsRef<[u8]>,
-    {
+    pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
         let (pubkey, io) = self.io.into_transport()?;
-        let remote = match (self.id_remote_pubkey, pubkey) {
-            (_, None) => RemoteIdentity::Unknown,
-            (None, Some(dh_pk)) => RemoteIdentity::StaticDhKey(dh_pk),
-            (Some(id_pk), Some(dh_pk)) => {
-                if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
-                    RemoteIdentity::IdentityKey(id_pk)
-                } else {
-                    return Err(Error::BadSignature);
-                }
-            }
-        };
-        Ok((remote, io))
+
+        let id_pk = self
+            .id_remote_pubkey
+            .ok_or_else(|| Error::AuthenticationFailed)?;
+
+        let is_valid_signature = self.dh_remote_pubkey_sig.as_ref().map_or(false, |s| {
+            id_pk.verify(&[STATIC_KEY_DOMAIN.as_bytes(), pubkey.as_ref()].concat(), s)
+        });
+
+        if !is_valid_signature {
+            return Err(Error::BadSignature);
+        }
+
+        Ok((id_pk, io))
     }
 }
 
@@ -170,60 +133,16 @@ where
     Ok(())
 }
 
-/// A future for receiving a Noise handshake message with a payload
-/// identifying the remote.
-///
-/// In case `expected_key` is passed, this function will fail if the received key does not match the expected key.
-/// In case the remote does not send us a key, the expected key is assumed to be the remote's key.
+/// A future for receiving a Noise handshake message with a payload identifying the remote.
 pub(crate) async fn recv_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
     let msg = recv(state).await?;
-
     let mut reader = BytesReader::from_bytes(&msg[..]);
-    let mut pb_result = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]);
+    let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..])?;
 
-    if pb_result.is_err() && state.legacy.recv_legacy_handshake {
-        // NOTE: This is support for legacy handshake payloads. As long as
-        // the frame length is less than 256 bytes, which is the case for
-        // all protobuf payloads not containing RSA keys, there is no room
-        // for misinterpretation, since if a two-bytes length prefix is present
-        // the first byte will be 0, which is always an unexpected protobuf tag
-        // value because the fields in the .proto file start with 1 and decoding
-        // thus expects a non-zero first byte. We will therefore always correctly
-        // fall back to the legacy protobuf parsing in these cases (again, not
-        // considering RSA keys, for which there may be a probabilistically
-        // very small chance of misinterpretation).
-        pb_result = pb_result.or_else(|e| {
-            if msg.len() > 2 {
-                let mut buf = [0, 0];
-                buf.copy_from_slice(&msg[..2]);
-                // If there is a second length it must be 2 bytes shorter than the
-                // frame length, because each length is encoded as a `u16`.
-                if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
-                    log::debug!("Attempting fallback legacy protobuf decoding.");
-                    let mut reader = BytesReader::from_bytes(&msg[2..]);
-                    proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[2..])
-                } else {
-                    Err(e)
-                }
-            } else {
-                Err(e)
-            }
-        });
-    }
-    let pb = pb_result?;
-
-    if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::try_decode_protobuf(&pb.identity_key)?;
-        if let Some(ref k) = state.id_remote_pubkey {
-            if k != &pk {
-                return Err(Error::UnexpectedKey);
-            }
-        }
-        state.id_remote_pubkey = Some(pk);
-    }
+    state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
     if !pb.identity_sig.is_empty() {
         state.dh_remote_pubkey_sig = Some(pb.identity_sig);
@@ -242,43 +161,9 @@ where
         ..Default::default()
     };
 
-    if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
-    }
+    pb.identity_sig = state.identity.signature.clone();
 
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.get_size());
-        msg.extend_from_slice(&(pb.get_size() as u16).to_be_bytes());
-        msg
-    } else {
-        Vec::with_capacity(pb.get_size())
-    };
-
-    let mut writer = Writer::new(&mut msg);
-    pb.write_message(&mut writer).expect("Encoding to succeed");
-    state.io.send(&msg).await?;
-
-    Ok(())
-}
-
-/// Send a Noise handshake message with a payload identifying the local node to the remote.
-pub(crate) async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), Error>
-where
-    T: AsyncWrite + Unpin,
-{
-    let mut pb = proto::NoiseHandshakePayload::default();
-
-    if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
-    }
-
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.get_size());
-        msg.extend_from_slice(&(pb.get_size() as u16).to_be_bytes());
-        msg
-    } else {
-        Vec::with_capacity(pb.get_size())
-    };
+    let mut msg = Vec::with_capacity(pb.get_size());
 
     let mut writer = Writer::new(&mut msg);
     pb.write_message(&mut writer).expect("Encoding to succeed");

@@ -29,11 +29,8 @@ either = "1.8.0"
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.10"
-libp2p-mplex = { workspace = true }
-libp2p-yamux = { workspace = true }
-libp2p-noise = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["async-std"] }
-libp2p-tcp = { workspace = true, features = ["async-io"] }
+libp2p-swarm-test = { path = "../../swarm-test" }
+libp2p-swarm = { workspace = true, features = ["macros"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

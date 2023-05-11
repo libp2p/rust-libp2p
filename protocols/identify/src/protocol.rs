@@ -28,7 +28,7 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::ConnectionId;
+use libp2p_swarm::StreamProtocol;
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
@@ -37,16 +37,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
+pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
 
-pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
-
-/// The type of the Substream protocol.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Protocol {
-    Identify(ConnectionId),
-    Push,
-}
+pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/push/1.0.0");
 
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
@@ -84,13 +77,13 @@ pub struct Info {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub protocols: Vec<String>,
+    pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
 }
 
 impl UpgradeInfo for Identify {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -122,7 +115,7 @@ where
 }
 
 impl<T> UpgradeInfo for Push<T> {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -177,7 +170,7 @@ where
         publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols,
+        protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
     };
 
     let mut framed_io = FramedWrite::new(
@@ -249,7 +242,17 @@ impl TryFrom<proto::Identify> for Info {
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
-            protocols: msg.protocols,
+            protocols: msg
+                .protocols
+                .into_iter()
+                .filter_map(|p| match StreamProtocol::try_from_owned(p) {
+                    Ok(p) => Some(p),
+                    Err(e) => {
+                        debug!("Received invalid protocol from peer: {e}");
+                        None
+                    }
+                })
+                .collect(),
             observed_addr,
         };
 
@@ -274,97 +277,7 @@ pub enum UpgradeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::channel::oneshot;
-    use libp2p_core::{
-        upgrade::{self, apply_inbound, apply_outbound},
-        Transport,
-    };
     use libp2p_identity as identity;
-    use libp2p_tcp as tcp;
-
-    #[test]
-    fn correct_transfer() {
-        // We open a server and a client, send info from the server to the client, and check that
-        // they were successfully received.
-        let send_pubkey = identity::Keypair::generate_ed25519().public();
-        let recv_pubkey = send_pubkey.clone();
-
-        let (tx, rx) = oneshot::channel();
-
-        let bg_task = async_std::task::spawn(async move {
-            let mut transport = tcp::async_io::Transport::default().boxed();
-
-            transport
-                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-                .unwrap();
-
-            let addr = transport
-                .next()
-                .await
-                .expect("some event")
-                .into_new_address()
-                .expect("listen address");
-            tx.send(addr).unwrap();
-
-            let socket = transport
-                .next()
-                .await
-                .expect("some event")
-                .into_incoming()
-                .unwrap()
-                .0
-                .await
-                .unwrap();
-
-            let sender = apply_inbound(socket, Identify).await.unwrap();
-
-            send(
-                sender,
-                Info {
-                    public_key: send_pubkey,
-                    protocol_version: "proto_version".to_owned(),
-                    agent_version: "agent_version".to_owned(),
-                    listen_addrs: vec![
-                        "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                        "/ip6/::1/udp/1000".parse().unwrap(),
-                    ],
-                    protocols: vec!["proto1".to_string(), "proto2".to_string()],
-                    observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                },
-            )
-            .await
-            .unwrap();
-        });
-
-        async_std::task::block_on(async move {
-            let mut transport = tcp::async_io::Transport::default();
-
-            let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(socket, Identify, upgrade::Version::V1)
-                .await
-                .unwrap();
-            assert_eq!(
-                info.observed_addr,
-                "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
-            );
-            assert_eq!(info.public_key, recv_pubkey);
-            assert_eq!(info.protocol_version, "proto_version");
-            assert_eq!(info.agent_version, "agent_version");
-            assert_eq!(
-                info.listen_addrs,
-                &[
-                    "/ip4/80.81.82.83/tcp/500".parse().unwrap(),
-                    "/ip6/::1/udp/1000".parse().unwrap()
-                ]
-            );
-            assert_eq!(
-                info.protocols,
-                &["proto1".to_string(), "proto2".to_string()]
-            );
-
-            bg_task.await;
-        });
-    }
 
     #[test]
     fn skip_invalid_multiaddr() {

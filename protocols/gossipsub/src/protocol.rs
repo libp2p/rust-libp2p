@@ -18,21 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{ValidationMode, Version};
+use crate::config::ValidationMode;
 use crate::handler::HandlerEvent;
+use crate::rpc_proto::proto;
 use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
 use crate::ValidationError;
-use crate::{rpc_proto::proto, Config};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
+use libp2p_swarm::StreamProtocol;
 use log::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
@@ -41,94 +42,52 @@ use void::Void;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
 
+pub(crate) const GOSSIPSUB_1_1_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.1.0"),
+    kind: PeerKind::Gossipsubv1_1,
+};
+pub(crate) const GOSSIPSUB_1_0_0_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/meshsub/1.0.0"),
+    kind: PeerKind::Gossipsub,
+};
+pub(crate) const FLOODSUB_PROTOCOL: ProtocolId = ProtocolId {
+    protocol: StreamProtocol::new("/floodsub/1.0.0"),
+    kind: PeerKind::Floodsub,
+};
+
 /// Implementation of [`InboundUpgrade`] and [`OutboundUpgrade`] for the Gossipsub protocol.
 #[derive(Debug, Clone)]
 pub struct ProtocolConfig {
     /// The Gossipsub protocol id to listen on.
-    protocol_ids: Vec<ProtocolId>,
+    pub(crate) protocol_ids: Vec<ProtocolId>,
     /// The maximum transmit size for a packet.
-    max_transmit_size: usize,
+    pub(crate) max_transmit_size: usize,
     /// Determines the level of validation to be done on incoming messages.
-    validation_mode: ValidationMode,
+    pub(crate) validation_mode: ValidationMode,
 }
 
-impl ProtocolConfig {
-    /// Builds a new [`ProtocolConfig`].
-    ///
-    /// Sets the maximum gossip transmission size.
-    pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
-        let mut protocol_ids = match gossipsub_config.custom_id_version() {
-            Some(v) => match v {
-                Version::V1_0 => vec![ProtocolId::new(
-                    gossipsub_config.protocol_id(),
-                    PeerKind::Gossipsub,
-                    false,
-                )],
-                Version::V1_1 => vec![ProtocolId::new(
-                    gossipsub_config.protocol_id(),
-                    PeerKind::Gossipsubv1_1,
-                    false,
-                )],
-            },
-            None => {
-                vec![
-                    ProtocolId::new(
-                        gossipsub_config.protocol_id(),
-                        PeerKind::Gossipsubv1_1,
-                        true,
-                    ),
-                    ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
-                ]
-            }
-        };
-
-        // add floodsub support if enabled.
-        if gossipsub_config.support_floodsub() {
-            protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
-        }
-
-        ProtocolConfig {
-            protocol_ids,
-            max_transmit_size: gossipsub_config.max_transmit_size(),
-            validation_mode: gossipsub_config.validation_mode().clone(),
+impl Default for ProtocolConfig {
+    fn default() -> Self {
+        Self {
+            max_transmit_size: 65536,
+            validation_mode: ValidationMode::Strict,
+            protocol_ids: vec![GOSSIPSUB_1_1_0_PROTOCOL, GOSSIPSUB_1_0_0_PROTOCOL],
         }
     }
 }
 
 /// The protocol ID
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProtocolId {
     /// The RPC message type/name.
-    pub protocol_id: Vec<u8>,
+    pub protocol: StreamProtocol,
     /// The type of protocol we support
     pub kind: PeerKind,
 }
 
-/// An RPC protocol ID.
-impl ProtocolId {
-    pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
-        let protocol_id = match kind {
-            PeerKind::Gossipsubv1_1 => match prefix {
-                true => format!("/{}/{}", id, "1.1.0"),
-                false => id.to_string(),
-            },
-            PeerKind::Gossipsub => match prefix {
-                true => format!("/{}/{}", id, "1.0.0"),
-                false => id.to_string(),
-            },
-            PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
-            // NOTE: This is used for informing the behaviour of unsupported peers. We do not
-            // advertise this variant.
-            PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),
-        }
-        .into_bytes();
-        ProtocolId { protocol_id, kind }
-    }
-}
-
-impl ProtocolName for ProtocolId {
-    fn protocol_name(&self) -> &[u8] {
-        &self.protocol_id
+impl AsRef<str> for ProtocolId {
+    fn as_ref(&self) -> &str {
+        self.protocol.as_ref()
     }
 }
 
@@ -554,8 +513,8 @@ impl Decoder for GossipsubCodec {
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::IdentTopic as Topic;
     use crate::{Behaviour, ConfigBuilder};
+    use crate::{IdentTopic as Topic, Version};
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
 
@@ -654,21 +613,14 @@ mod tests {
 
     #[test]
     fn support_floodsub_with_custom_protocol() {
-        let gossipsub_config = ConfigBuilder::default()
+        let protocol_config = ConfigBuilder::default()
             .protocol_id("/foosub", Version::V1_1)
             .support_floodsub()
             .build()
-            .unwrap();
+            .unwrap()
+            .protocol_config();
 
-        let protocol_config = ProtocolConfig::new(&gossipsub_config);
-
-        assert_eq!(
-            String::from_utf8_lossy(&protocol_config.protocol_ids[0].protocol_id),
-            "/foosub"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&protocol_config.protocol_ids[1].protocol_id),
-            "/floodsub/1.0.0"
-        );
+        assert_eq!(protocol_config.protocol_ids[0].protocol, "/foosub");
+        assert_eq!(protocol_config.protocol_ids[1].protocol, "/floodsub/1.0.0");
     }
 }

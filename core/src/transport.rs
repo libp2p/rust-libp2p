@@ -37,6 +37,7 @@ use std::{
 pub mod and_then;
 pub mod choice;
 pub mod dummy;
+pub mod global_only;
 pub mod map;
 pub mod map_err;
 pub mod memory;
