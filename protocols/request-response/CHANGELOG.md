@@ -8,9 +8,14 @@
   These variants are no longer constructed.
   See [PR 3605].
 
+- Don't close connections if individual streams fail. 
+  Log the error instead.
+  See [PR XXXX].
+
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.24.1
 

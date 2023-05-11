@@ -39,7 +39,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
-    fmt, io,
+    fmt,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -65,8 +65,6 @@ where
     substream_timeout: Duration,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
-    /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<StreamUpgradeError<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -107,7 +105,6 @@ where
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
-            pending_error: None,
             inbound_request_id,
         }
     }
@@ -151,21 +148,22 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(info));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
+            StreamUpgradeError::Apply(e) => {
+                log::debug!("outbound stream {info} failed: {e}");
+            }
+            StreamUpgradeError::Io(e) => {
+                log::debug!("outbound stream {info} failed: {e}");
             }
         }
     }
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError { error, info }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        self.pending_error = Some(StreamUpgradeError::Apply(error));
+        log::debug!("inbound stream {info} failed: {error}");
     }
 }
 
