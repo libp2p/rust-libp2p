@@ -56,8 +56,6 @@ struct Opts {
     upload_bytes: Option<usize>,
     #[arg(long)]
     download_bytes: Option<usize>,
-    #[arg(long)]
-    n_times: Option<usize>,
 
     /// Run in server mode.
     #[clap(long)]
@@ -97,7 +95,6 @@ async fn main() -> Result<()> {
             transport: None,
             upload_bytes: None,
             download_bytes: None,
-            n_times: None,
             run_server: true,
             secret_key_seed: Some(secret_key_seed),
         } => server(secret_key_seed).await?,
@@ -106,18 +103,10 @@ async fn main() -> Result<()> {
             transport: Some(transport),
             upload_bytes,
             download_bytes,
-            n_times,
             run_server: false,
             secret_key_seed: None,
         } => {
-            client(
-                server_ip_address,
-                transport,
-                upload_bytes,
-                download_bytes,
-                n_times,
-            )
-            .await?;
+            client(server_ip_address, transport, upload_bytes, download_bytes).await?;
         }
         _ => panic!("invalid command line arguments: {opts:?}"),
     };
@@ -205,13 +194,11 @@ async fn client(
     transport: Transport,
     upload_bytes: Option<usize>,
     download_bytes: Option<usize>,
-    n_times: Option<usize>,
 ) -> Result<()> {
     let benchmarks: Vec<Box<dyn Benchmark>> = if upload_bytes.is_some() {
         vec![Box::new(Custom {
             upload_bytes: upload_bytes.unwrap(),
             download_bytes: download_bytes.unwrap(),
-            n_times: n_times.unwrap(),
         })]
     } else {
         vec![
@@ -275,7 +262,6 @@ trait Benchmark: Send + Sync + 'static {
 struct Custom {
     upload_bytes: usize,
     download_bytes: usize,
-    n_times: usize,
 }
 
 #[async_trait]
@@ -291,41 +277,39 @@ impl Benchmark for Custom {
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
-        for _ in 0..self.n_times {
-            let start = Instant::now();
+        let start = Instant::now();
 
-            swarm.behaviour_mut().perf(
-                server_peer_id,
-                RunParams {
-                    to_send: self.upload_bytes,
-                    to_receive: self.download_bytes,
-                },
-            )?;
+        swarm.behaviour_mut().perf(
+            server_peer_id,
+            RunParams {
+                to_send: self.upload_bytes,
+                to_receive: self.download_bytes,
+            },
+        )?;
 
-            loop {
-                match swarm.next().await.unwrap() {
-                    SwarmEvent::ConnectionEstablished {
-                        peer_id, endpoint, ..
-                    } => {
-                        info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                    }
-                    SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                        info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-                    }
-                    SwarmEvent::Behaviour(libp2p_perf::client::Event {
-                        id: _,
-                        result: Ok(()),
-                    }) => break,
-                    e => panic!("{e:?}"),
-                };
-            }
-
-            latencies.push(start.elapsed().as_secs_f64());
+        loop {
+            match swarm.next().await.unwrap() {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id, endpoint, ..
+                } => {
+                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                }
+                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                }
+                SwarmEvent::Behaviour(libp2p_perf::client::Event {
+                    id: _,
+                    result: Ok(()),
+                }) => break,
+                e => panic!("{e:?}"),
+            };
         }
 
+        latencies.push(start.elapsed().as_secs_f64());
+
         info!(
-            "Finished: Sent {} perf requests on single connection uploading {} and download {} bytes each",
-            self.n_times, self.upload_bytes, self.download_bytes
+            "Finished: Sent perf request on single connection uploading {} and download {} bytes each",
+            self.upload_bytes, self.download_bytes
         );
 
         println!(
