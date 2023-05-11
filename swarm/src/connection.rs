@@ -35,11 +35,9 @@ use crate::handler::{
     UpgradeInfoSend,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{
-    ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
-};
+use crate::{ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
-use futures::FutureExt;
+use futures::{FutureExt, TryFutureExt};
 use futures::StreamExt;
 use futures_timer::Delay;
 use instant::Instant;
@@ -504,7 +502,7 @@ where
         Self {
             user_data: Some(user_data),
             timeout,
-            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), effective_version),
+            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), effective_version).map_ok(Stream::new),
         }
     }
 }
