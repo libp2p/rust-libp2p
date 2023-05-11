@@ -1380,7 +1380,7 @@ where
 /// connection and listener status. See [`SwarmEvent`] for details.
 ///
 /// Note: This stream is infinite and it is guaranteed that
-/// [`Stream::poll_next`] will never return `Poll::Ready(None)`.
+/// [`futures::Stream::poll_next`] will never return `Poll::Ready(None)`.
 impl<TBehaviour> futures::Stream for Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
