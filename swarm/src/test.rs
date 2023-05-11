@@ -41,9 +41,9 @@ where
     TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
-    /// invocation of `new_handler`.
+    /// invocation of [`NetworkBehaviour::handle_established_inbound_connection`] and [`NetworkBehaviour::handle_established_outbound_connection`]
     pub(crate) handler_proto: THandler,
-    /// The addresses to return from `addresses_of_peer`.
+    /// The addresses to return from [`NetworkBehaviour::handle_established_outbound_connection`].
     pub(crate) addresses: HashMap<PeerId, Vec<Multiaddr>>,
     /// The next action to return from `poll`.
     ///
@@ -233,29 +233,6 @@ where
                 .iter()
                 .filter(|(peer_id, _, _, _)| *peer_id == peer)
                 .count()
-    }
-
-    /// Checks that when the expected number of closed connection notifications are received, a
-    /// given number of expected disconnections have been received as well.
-    ///
-    /// Returns if the first condition is met.
-    pub(crate) fn assert_disconnected(
-        &self,
-        expected_closed_connections: usize,
-        expected_disconnections: usize,
-    ) -> bool {
-        if self.on_connection_closed.len() == expected_closed_connections {
-            assert_eq!(
-                self.on_connection_closed
-                    .iter()
-                    .filter(|(.., remaining_established)| { *remaining_established == 0 })
-                    .count(),
-                expected_disconnections
-            );
-            return true;
-        }
-
-        false
     }
 
     /// Checks that when the expected number of established connection notifications are received,

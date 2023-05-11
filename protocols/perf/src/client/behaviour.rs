@@ -28,8 +28,8 @@ use std::{
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionHandlerUpgrErr,
-    ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent,
+    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
+    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use void::Void;
@@ -41,7 +41,7 @@ use super::{RunId, RunParams, RunStats};
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
+    pub result: Result<RunStats, StreamUpgradeError<Void>>,
 }
 
 #[derive(Default)]

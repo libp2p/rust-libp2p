@@ -47,7 +47,7 @@ pub struct Behaviour {
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
-    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::addresses_of_peer`].
+    /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
     discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
 
     /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.

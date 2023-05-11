@@ -27,10 +27,10 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
     SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
@@ -526,20 +526,17 @@ impl ConnectionHandler for Handler {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
+                        error: StreamUpgradeError::Timeout,
                         ..
                     }) => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: StreamUpgradeError::Apply(e),
                         ..
                     }) => void::unreachable(e),
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::Failed,
-                            )),
+                        error: StreamUpgradeError::NegotiationFailed,
                         ..
                     }) => {
                         // The protocol is not supported
@@ -551,15 +548,15 @@ impl ConnectionHandler for Handler {
                         });
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::ProtocolError(e),
-                            )),
+                        error: StreamUpgradeError::Io(e),
                         ..
                     }) => {
                         log::debug!("Protocol negotiation failed: {e}")
                     }
-                    ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                    ConnectionEvent::AddressChange(_)
+                    | ConnectionEvent::ListenUpgradeError(_)
+                    | ConnectionEvent::LocalProtocolsChange(_)
+                    | ConnectionEvent::RemoteProtocolsChange(_) => {}
                 }
             }
             Handler::Disabled(_) => {}
