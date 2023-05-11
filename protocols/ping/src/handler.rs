@@ -27,7 +27,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -390,15 +390,15 @@ impl ConnectionHandler for Handler {
     }
 }
 
-type PingFuture = BoxFuture<'static, Result<(NegotiatedSubstream, Duration), io::Error>>;
-type PongFuture = BoxFuture<'static, Result<NegotiatedSubstream, io::Error>>;
+type PingFuture = BoxFuture<'static, Result<(Stream, Duration), io::Error>>;
+type PongFuture = BoxFuture<'static, Result<Stream, io::Error>>;
 
 /// The current state w.r.t. outbound pings.
 enum OutboundState {
     /// A new substream is being negotiated for the ping protocol.
     OpenStream,
     /// The substream is idle, waiting to send the next ping.
-    Idle(NegotiatedSubstream),
+    Idle(Stream),
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
 }
