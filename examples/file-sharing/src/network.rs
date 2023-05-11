@@ -16,7 +16,7 @@ use libp2p::{
     multiaddr::Protocol,
     noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{NetworkBehaviour, StreamUpgradeError, Swarm, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 
@@ -216,7 +216,7 @@ impl EventLoop {
 
     async fn handle_event(
         &mut self,
-        event: SwarmEvent<ComposedEvent, Either<StreamUpgradeError<io::Error>, io::Error>>,
+        event: SwarmEvent<ComposedEvent, Either<void::Void, io::Error>>,
     ) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(

@@ -1594,6 +1594,7 @@ dependencies = [
  "futures",
  "libp2p",
  "multiaddr",
+ "void",
 ]
 
 [[package]]
@@ -2965,6 +2966,7 @@ dependencies = [
  "libp2p-yamux",
  "rand 0.8.5",
  "smallvec",
+ "void",
 ]
 
 [[package]]

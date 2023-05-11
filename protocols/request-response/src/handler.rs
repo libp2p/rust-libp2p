@@ -241,7 +241,7 @@ where
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = Event<TCodec>;
-    type Error = StreamUpgradeError<io::Error>;
+    type Error = void::Void;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
@@ -295,12 +295,6 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
     {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(ConnectionHandlerEvent::Custom(event));
