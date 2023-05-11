@@ -31,7 +31,7 @@ We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate usin
 |--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
 | Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
 
-Reduce maintenance burdon and reduce dependency footprint.
+Reduce maintenance burden and reduce dependency footprint.
 
 ## Optimize Hole punching
 
