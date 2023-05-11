@@ -41,7 +41,6 @@ pub struct Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = void::Void;
     type ToBehaviour = Event;
-    type Error = ConnectionHandlerUpgrErr<std::io::Error>;
     type Error = StreamUpgradeError<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -71,7 +70,7 @@ impl ConnectionHandler for Handler {
     > {
         if !self.reported {
             self.reported = true;
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+            return Poll::Ready(ConnectionHandlerEvent::Custom(
                 Event::DirectConnectionEstablished,
             ));
         }

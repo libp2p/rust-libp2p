@@ -76,9 +76,7 @@ where
         >,
     > {
         self.inner.poll(cx).map(|ev| match ev {
-            ConnectionHandlerEvent::NotifyBehaviour(ev) => {
-                ConnectionHandlerEvent::NotifyBehaviour((self.map)(ev))
-            }
+            ConnectionHandlerEvent::Custom(ev) => ConnectionHandlerEvent::Custom((self.map)(ev)),
             ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }

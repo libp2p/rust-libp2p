@@ -261,7 +261,7 @@ where
                     requested_substreams.push(SubstreamRequested::new(user_data, timeout, upgrade));
                     continue; // Poll handler until exhausted.
                 }
-                Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
+                Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {

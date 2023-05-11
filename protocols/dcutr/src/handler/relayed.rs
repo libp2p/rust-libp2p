@@ -171,13 +171,12 @@ impl Handler {
                     ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
                 };
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundConnectRequest {
-                            inbound_connect: Box::new(inbound_connect),
-                            remote_addr,
-                        },
-                    ));
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+                    Event::InboundConnectRequest {
+                        inbound_connect: Box::new(inbound_connect),
+                        remote_addr,
+                    },
+                ));
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
             future::Either::Right(output) => void::unreachable(output),
@@ -198,12 +197,11 @@ impl Handler {
             self.endpoint.is_listener(),
             "A connection dialer never initiates a connection upgrade."
         );
-        self.queued_events
-            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::OutboundConnectNegotiated {
-                    remote_addrs: obs_addrs,
-                },
-            ));
+        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+            Event::OutboundConnectNegotiated {
+                remote_addrs: obs_addrs,
+            },
+        ));
     }
 
     fn on_listen_upgrade_error(
@@ -344,7 +342,7 @@ impl ConnectionHandler for Handler {
             self.inbound_connect = None;
             match result {
                 Ok(addresses) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(
                         Event::InboundConnectNegotiated(addresses),
                     ));
                 }

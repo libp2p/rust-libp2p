@@ -174,13 +174,13 @@ impl Handler {
             future::Either::Left(remote_info) => {
                 self.update_supported_protocols_for_remote(&remote_info);
                 self.events
-                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
             }
-            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::IdentificationPushed,
-            )),
+            future::Either::Right(()) => self
+                .events
+                .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
         }
     }
 
@@ -254,7 +254,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             InEvent::AddressesChanged(addresses) => {
                 self.external_addresses = addresses;
