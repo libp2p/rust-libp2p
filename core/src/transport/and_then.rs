@@ -105,6 +105,28 @@ where
         Ok(future)
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dialed_fut = self
+            .transport
+            .dial_with_new_port(addr.clone())
+            .map_err(|err| err.map(Either::Left))?;
+        let future = AndThenFuture {
+            inner: Either::Left(Box::pin(dialed_fut)),
+            args: Some((
+                self.fun.clone(),
+                ConnectedPoint::Dialer {
+                    address: addr,
+                    role_override: Endpoint::Dialer,
+                },
+            )),
+            _marker: PhantomPinned,
+        };
+        Ok(future)
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }

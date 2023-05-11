@@ -396,6 +396,33 @@ where
         request_id
     }
 
+    /// TODO: Document
+    pub fn send_request_with_new_port(
+        &mut self,
+        peer: &PeerId,
+        request: TCodec::Request,
+    ) -> RequestId {
+        let request_id = self.next_request_id();
+        let request = RequestProtocol {
+            request_id,
+            codec: self.codec.clone(),
+            protocols: self.outbound_protocols.clone(),
+            request,
+        };
+
+        if let Some(request) = self.try_send_request(peer, request) {
+            self.pending_events.push_back(ToSwarm::Dial {
+                opts: DialOpts::peer_id(*peer).use_new_port().build(),
+            });
+            self.pending_outbound_requests
+                .entry(*peer)
+                .or_default()
+                .push(request);
+        }
+
+        request_id
+    }
+
     /// Initiates sending a response to an inbound request.
     ///
     /// If the [`ResponseChannel`] is already closed due to a timeout or the

@@ -300,7 +300,7 @@ impl<'a> AsClient<'a> {
                 return Err(OutboundProbeError::NoServer);
             }
         };
-        let request_id = self.inner.send_request(
+        let request_id = self.inner.send_request_with_new_port(
             &server,
             DialRequest {
                 peer_id: self.local_peer_id,

@@ -333,6 +333,32 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         }
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        match addr.iter().next() {
+            Some(Protocol::Ip4(a)) => {
+                if !ipv4_global::is_global(a) {
+                    debug!("Not dialing non global IP address {:?}.", a);
+                    return Err(TransportError::MultiaddrNotSupported(addr));
+                }
+                self.inner.dial_with_new_port(addr)
+            }
+            Some(Protocol::Ip6(a)) => {
+                if !ipv6_global::is_global(a) {
+                    debug!("Not dialing non global IP address {:?}.", a);
+                    return Err(TransportError::MultiaddrNotSupported(addr));
+                }
+                self.inner.dial_with_new_port(addr)
+            }
+            _ => {
+                debug!("Not dialing unsupported Multiaddress {:?}.", addr);
+                Err(TransportError::MultiaddrNotSupported(addr))
+            }
+        }
+    }
+
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.address_translation(listen, observed)
     }

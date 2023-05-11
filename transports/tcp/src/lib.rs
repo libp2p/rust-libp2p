@@ -508,6 +508,45 @@ where
         self.dial(addr)
     }
 
+    // TODO: deduplicate with `dial`
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
+            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+                return Err(TransportError::MultiaddrNotSupported(addr));
+            }
+            socket_addr
+        } else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+        log::debug!("WITH_NEW_PORT dialing {}", socket_addr);
+
+        let socket = self
+            .create_socket(&socket_addr)
+            .map_err(TransportError::Other)?;
+
+        socket
+            .set_nonblocking(true)
+            .map_err(TransportError::Other)?;
+
+        Ok(async move {
+            // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
+            // do the `connect` call within the [`Future`].
+            match socket.connect(&socket_addr.into()) {
+                Ok(()) => {}
+                Err(err) if err.raw_os_error() == Some(libc::EINPROGRESS) => {}
+                Err(err) if err.kind() == io::ErrorKind::WouldBlock => {}
+                Err(err) => return Err(err),
+            };
+
+            let stream = T::new_stream(socket.into()).await?;
+            Ok(stream)
+        }
+        .boxed())
+    }
+
     /// When port reuse is disabled and hence ephemeral local ports are
     /// used for outgoing connections, the returned address is the
     /// `observed` address with the port replaced by the port of the

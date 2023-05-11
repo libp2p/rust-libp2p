@@ -84,6 +84,20 @@ where
         }
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let map = self.map.clone();
+        match self.transport.dial_with_new_port(addr) {
+            Ok(future) => Ok(MapErrDial {
+                inner: future,
+                map: Some(map),
+            }),
+            Err(err) => Err(err.map(map)),
+        }
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }

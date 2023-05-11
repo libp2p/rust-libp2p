@@ -214,6 +214,13 @@ where
         self.transport.dial_as_listener(addr)
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.transport.dial_with_new_port(addr)
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }

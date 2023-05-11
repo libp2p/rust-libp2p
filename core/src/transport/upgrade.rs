@@ -350,6 +350,13 @@ where
         self.0.dial_as_listener(addr)
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial_with_new_port(addr)
+    }
+
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.0.listen_on(addr)
     }
@@ -422,6 +429,20 @@ where
         let future = self
             .inner
             .dial_as_listener(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))?;
+        Ok(DialUpgradeFuture {
+            future: Box::pin(future),
+            upgrade: future::Either::Left(Some(self.upgrade.clone())),
+        })
+    }
+
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self
+            .inner
+            .dial_with_new_port(addr)
             .map_err(|err| err.map(TransportUpgradeError::Transport))?;
         Ok(DialUpgradeFuture {
             future: Box::pin(future),

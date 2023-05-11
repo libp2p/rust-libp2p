@@ -134,6 +134,14 @@ pub trait Transport {
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
+    ///
+    fn dial_with_new_port(
+        &mut self,
+        _addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        unimplemented!()
+    }
+
     /// Poll for [`TransportEvent`]s.
     ///
     /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the lowest

@@ -202,6 +202,23 @@ impl<P: Provider> Transport for GenTransport<P> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+
+        let socket_family = socket_addr.ip().into();
+        let mut dialer = Dialer::new::<P>(self.quinn_config.clone(), socket_family)?;
+        let dialer_state = &mut dialer.state;
+
+        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
+    }
+
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

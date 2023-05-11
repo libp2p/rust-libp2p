@@ -96,6 +96,21 @@ where
         })
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial_with_new_port(addr.clone())?;
+        let p = ConnectedPoint::Dialer {
+            address: addr,
+            role_override: Endpoint::Dialer,
+        };
+        Ok(MapFuture {
+            inner: future,
+            args: Some((self.fun.clone(), p)),
+        })
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }

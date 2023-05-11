@@ -599,10 +599,15 @@ where
             .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
-                    let dial = match dial_opts.role_override() {
-                        Endpoint::Dialer => self.transport.dial(address.clone()),
-                        Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
+                    let dial = if dial_opts.use_new_port() {
+                        self.transport.dial_with_new_port(address.clone())
+                    } else {
+                        match dial_opts.role_override() {
+                            Endpoint::Dialer => self.transport.dial(address.clone()),
+                            Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
+                        }
                     };
+
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))

@@ -120,6 +120,20 @@ where
         })
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let dial = self
+            .inner
+            .dial_with_new_port(addr)
+            .map_err(|err| err.map(TransportTimeoutError::Other))?;
+        Ok(Timeout {
+            inner: dial,
+            timer: Delay::new(self.outgoing_timeout),
+        })
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.address_translation(server, observed)
     }

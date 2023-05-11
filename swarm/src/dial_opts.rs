@@ -46,6 +46,7 @@ pub struct DialOpts {
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
     connection_id: ConnectionId,
+    use_new_port: bool,
 }
 
 impl DialOpts {
@@ -66,6 +67,7 @@ impl DialOpts {
             condition: Default::default(),
             role_override: Endpoint::Dialer,
             dial_concurrency_factor_override: Default::default(),
+            use_new_port: false,
         }
     }
 
@@ -147,6 +149,10 @@ impl DialOpts {
     pub(crate) fn role_override(&self) -> Endpoint {
         self.role_override
     }
+
+    pub(crate) fn use_new_port(&self) -> bool {
+        self.use_new_port
+    }
 }
 
 impl From<Multiaddr> for DialOpts {
@@ -167,6 +173,7 @@ pub struct WithPeerId {
     condition: PeerCondition,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    use_new_port: bool,
 }
 
 impl WithPeerId {
@@ -192,6 +199,7 @@ impl WithPeerId {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            use_new_port: self.use_new_port,
         }
     }
 
@@ -206,6 +214,12 @@ impl WithPeerId {
         self
     }
 
+    /// TODO: Document
+    pub fn use_new_port(mut self) -> Self {
+        self.use_new_port = true;
+        self
+    }
+
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts {
@@ -216,6 +230,7 @@ impl WithPeerId {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
+            use_new_port: self.use_new_port,
         }
     }
 }
@@ -228,6 +243,7 @@ pub struct WithPeerIdWithAddresses {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    use_new_port: bool,
 }
 
 impl WithPeerIdWithAddresses {
@@ -262,6 +278,12 @@ impl WithPeerIdWithAddresses {
         self
     }
 
+    ///
+    pub fn use_new_port(mut self) -> Self {
+        self.use_new_port = true;
+        self
+    }
+
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts {
@@ -272,6 +294,7 @@ impl WithPeerIdWithAddresses {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
+            use_new_port: self.use_new_port,
         }
     }
 }
@@ -316,6 +339,7 @@ impl WithoutPeerIdWithAddress {
             role_override: self.role_override,
             dial_concurrency_factor_override: None,
             connection_id: ConnectionId::next(),
+            use_new_port: false,
         }
     }
 }

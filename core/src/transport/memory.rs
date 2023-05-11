@@ -237,6 +237,13 @@ impl Transport for MemoryTransport {
         self.dial(addr)
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
+        self.dial(addr)
+    }
+
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }

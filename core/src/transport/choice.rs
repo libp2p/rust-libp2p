@@ -107,6 +107,29 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let addr = match self.0.dial_with_new_port(addr) {
+            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(Either::Left(err)))
+            }
+        };
+
+        let addr = match self.1.dial_with_new_port(addr) {
+            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::Other(err)) => {
+                return Err(TransportError::Other(Either::Right(err)))
+            }
+        };
+
+        Err(TransportError::MultiaddrNotSupported(addr))
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if let Some(addr) = self.0.address_translation(server, observed) {
             Some(addr)

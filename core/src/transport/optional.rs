@@ -95,6 +95,17 @@ where
         }
     }
 
+    fn dial_with_new_port(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
+            inner.dial_with_new_port(addr)
+        } else {
+            Err(TransportError::MultiaddrNotSupported(addr))
+        }
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if let Some(inner) = &self.0 {
             inner.address_translation(server, observed)
