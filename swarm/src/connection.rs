@@ -120,7 +120,7 @@ where
     handler: THandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<
-        SubstreamUpgrade<
+        StreamUpgrade<
             THandler::InboundOpenInfo,
             <THandler::InboundProtocol as InboundUpgradeSend>::Output,
             <THandler::InboundProtocol as InboundUpgradeSend>::Error,
@@ -128,7 +128,7 @@ where
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
-        SubstreamUpgrade<
+        StreamUpgrade<
             THandler::OutboundOpenInfo,
             <THandler::OutboundProtocol as OutboundUpgradeSend>::Output,
             <THandler::OutboundProtocol as OutboundUpgradeSend>::Error,
@@ -398,7 +398,7 @@ where
                     Poll::Ready(substream) => {
                         let (user_data, timeout, upgrade) = requested_substream.extract();
 
-                        negotiating_out.push(SubstreamUpgrade::new_outbound(
+                        negotiating_out.push(StreamUpgrade::new_outbound(
                             substream,
                             user_data,
                             timeout,
@@ -417,7 +417,7 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
+                        negotiating_in.push(StreamUpgrade::new_inbound(substream, protocol));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -472,13 +472,13 @@ impl<'a> IncomingInfo<'a> {
     }
 }
 
-struct SubstreamUpgrade<UserData, TOk, TErr> {
+struct StreamUpgrade<UserData, TOk, TErr> {
     user_data: Option<UserData>,
     timeout: Delay,
     upgrade: BoxFuture<'static, Result<TOk, StreamUpgradeError<TErr>>>,
 }
 
-impl<UserData, TOk, TErr> SubstreamUpgrade<UserData, TOk, TErr> {
+impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_outbound<Upgrade>(
         substream: SubstreamBox,
         user_data: UserData,
@@ -526,7 +526,7 @@ impl<UserData, TOk, TErr> SubstreamUpgrade<UserData, TOk, TErr> {
     }
 }
 
-impl<UserData, TOk, TErr> SubstreamUpgrade<UserData, TOk, TErr> {
+impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
@@ -568,9 +568,9 @@ fn to_stream_upgrade_error<T>(e: NegotiationError) -> StreamUpgradeError<T> {
     }
 }
 
-impl<UserData, TOk, TErr> Unpin for SubstreamUpgrade<UserData, TOk, TErr> {}
+impl<UserData, TOk, TErr> Unpin for StreamUpgrade<UserData, TOk, TErr> {}
 
-impl<UserData, TOk, TErr> Future for SubstreamUpgrade<UserData, TOk, TErr> {
+impl<UserData, TOk, TErr> Future for StreamUpgrade<UserData, TOk, TErr> {
     type Output = (UserData, Result<TOk, StreamUpgradeError<TErr>>);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
