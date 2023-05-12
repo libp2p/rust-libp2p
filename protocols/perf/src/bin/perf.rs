@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{net::Ipv4Addr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
@@ -48,7 +48,7 @@ mod schema {
 #[clap(name = "libp2p perf client")]
 struct Opts {
     #[arg(long)]
-    server_ip_address: Option<Ipv4Addr>,
+    server_address: Option<SocketAddr>,
     #[arg(long)]
     transport: Option<Transport>,
     #[arg(long)]
@@ -90,22 +90,22 @@ async fn main() -> Result<()> {
     let opts = Opts::parse();
     match opts {
         Opts {
-            server_ip_address: None,
+            server_address: Some(server_address),
             transport: None,
             upload_bytes: None,
             download_bytes: None,
             run_server: true,
             secret_key_seed: Some(secret_key_seed),
-        } => server(secret_key_seed).await?,
+        } => server(server_address, secret_key_seed).await?,
         Opts {
-            server_ip_address: Some(server_ip_address),
+            server_address: Some(server_address),
             transport: Some(transport),
             upload_bytes,
             download_bytes,
             run_server: false,
             secret_key_seed: None,
         } => {
-            client(server_ip_address, transport, upload_bytes, download_bytes).await?;
+            client(server_address, transport, upload_bytes, download_bytes).await?;
         }
         _ => panic!("invalid command line arguments: {opts:?}"),
     };
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn server(secret_key_seed: u8) -> Result<()> {
+async fn server(server_address: SocketAddr, secret_key_seed: u8) -> Result<()> {
     // Create a random PeerId
     let local_key = generate_ed25519(secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
@@ -152,11 +152,20 @@ async fn server(secret_key_seed: u8) -> Result<()> {
     .build();
 
     swarm
-        .listen_on("/ip4/0.0.0.0/tcp/4001".parse().unwrap())
+        .listen_on(
+            Multiaddr::empty()
+                .with(server_address.ip().into())
+                .with(Protocol::Tcp(server_address.port())),
+        )
         .unwrap();
 
     swarm
-        .listen_on("/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap())
+        .listen_on(
+            Multiaddr::empty()
+                .with(server_address.ip().into())
+                .with(Protocol::Udp(server_address.port()))
+                .with(Protocol::QuicV1),
+        )
         .unwrap();
 
     tokio::spawn(async move {
@@ -189,7 +198,7 @@ async fn server(secret_key_seed: u8) -> Result<()> {
 }
 
 async fn client(
-    server_ip_address: Ipv4Addr,
+    server_address: SocketAddr,
     transport: Transport,
     upload_bytes: Option<usize>,
     download_bytes: Option<usize>,
@@ -210,11 +219,11 @@ async fn client(
 
     let address = match transport {
         Transport::Tcp => Multiaddr::empty()
-            .with(Protocol::Ip4(server_ip_address))
-            .with(Protocol::Tcp(4001)),
+            .with(server_address.ip().into())
+            .with(Protocol::Tcp(server_address.port())),
         Transport::QuicV1 => Multiaddr::empty()
-            .with(Protocol::Ip4(server_ip_address))
-            .with(Protocol::Udp(4001))
+            .with(server_address.ip().into())
+            .with(Protocol::Udp(server_address.port()))
             .with(Protocol::QuicV1),
     };
 
