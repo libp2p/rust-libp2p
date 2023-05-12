@@ -4,6 +4,11 @@
   See [PR 3715].
 - Remove deprecated `RequestResponse` prefixed items. See [PR 3702].
 
+- Remove `InboundFailure::UnsupportedProtocols` and `InboundFailure::InboundTimeout`.
+  These variants are no longer constructed.
+  See [PR 3605].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
 
