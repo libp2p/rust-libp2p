@@ -177,7 +177,7 @@ pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
-pub use libp2p_swarm::StreamProtocol;
+pub use libp2p_swarm::{Stream, StreamProtocol};
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
