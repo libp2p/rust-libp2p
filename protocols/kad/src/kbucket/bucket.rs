@@ -26,8 +26,7 @@
 //! > of the `KBucketsTable` and in particular the public `Entry` API.
 
 use super::*;
-pub use crate::K_VALUE;
-
+pub(crate) use crate::K_VALUE;
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
 pub(crate) struct PendingNode<TKey, TVal> {
@@ -130,7 +129,7 @@ pub(crate) struct KBucket<TKey, TVal> {
 /// The result of inserting an entry into a bucket.
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InsertResult<TKey> {
+pub(crate) enum InsertResult<TKey> {
     /// The entry has been successfully inserted.
     Inserted,
     /// The entry is pending insertion because the relevant bucket is currently full.
@@ -152,12 +151,12 @@ pub enum InsertResult<TKey> {
 /// The result of applying a pending node to a bucket, possibly
 /// replacing an existing node.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AppliedPending<TKey, TVal> {
+pub(crate) struct AppliedPending<TKey, TVal> {
     /// The key of the inserted pending node.
-    pub inserted: Node<TKey, TVal>,
+    pub(crate) inserted: Node<TKey, TVal>,
     /// The node that has been evicted from the bucket to make room for the
     /// pending node, if any.
-    pub evicted: Option<Node<TKey, TVal>>,
+    pub(crate) evicted: Option<Node<TKey, TVal>>,
 }
 
 impl<TKey, TVal> KBucket<TKey, TVal>

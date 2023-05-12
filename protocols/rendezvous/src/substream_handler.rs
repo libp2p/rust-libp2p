@@ -397,7 +397,9 @@ where
             // TODO: Handle upgrade errors properly
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::DialUpgradeError(_) => {}
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 

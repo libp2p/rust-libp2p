@@ -40,9 +40,6 @@ use std::{
 use thiserror::Error;
 use yamux::ConnectionError;
 
-#[deprecated(note = "Import the `yamux` module instead and refer to this type as `yamux::Muxer`.")]
-pub type Yamux<S> = Muxer<S>;
-
 /// A Yamux connection.
 pub struct Muxer<S> {
     /// The [`futures::stream::Stream`] of incoming substreams.
@@ -112,9 +109,6 @@ where
         }
     }
 }
-
-#[deprecated(note = "Use `Result<T, yamux::Error>` instead.")]
-pub type YamuxResult<T> = Result<T, Error>;
 
 impl<S> StreamMuxer for Muxer<S>
 where
@@ -200,9 +194,6 @@ where
     }
 }
 
-#[deprecated(note = "Import the `yamux` module and refer to this type as `yamux::Config` instead.")]
-pub type YamuxConfig = Config;
-
 /// The yamux configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -249,11 +240,6 @@ impl WindowUpdateMode {
         WindowUpdateMode(yamux::WindowUpdateMode::OnRead)
     }
 }
-
-#[deprecated(
-    note = "Import the `yamux` module and refer to this type as `yamux::LocalConfig` instead."
-)]
-pub type YamuxLocalConfig = LocalConfig;
 
 /// The yamux configuration for upgrading I/O resources which are ![`Send`].
 #[derive(Clone)]
@@ -395,9 +381,6 @@ where
         future::ready(Ok(Muxer::local(io, cfg.inner, mode)))
     }
 }
-
-#[deprecated(note = "Import the `yamux` module and refer to this type as `yamux::Error` instead.")]
-pub type YamuxError = Error;
 
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]

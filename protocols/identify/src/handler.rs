@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    self, Identify, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError,
-};
+use crate::protocol::{Identify, InboundPush, Info, OutboundPush, Push, UpgradeError};
 use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -32,15 +30,16 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol, SupportedProtocols,
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::collections::{HashSet, VecDeque};
-use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
+use std::collections::HashSet;
+use std::{io, task::Context, task::Poll, time::Duration};
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -55,17 +54,11 @@ pub struct Handler {
         [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
     >,
 
-    /// Streams awaiting `BehaviourInfo` to then send identify requests.
-    reply_streams: VecDeque<NegotiatedSubstream>,
-
     /// Pending identification replies, awaiting being sent.
-    pending_replies: FuturesUnordered<BoxFuture<'static, Result<PeerId, UpgradeError>>>,
+    pending_replies: FuturesUnordered<BoxFuture<'static, Result<(), UpgradeError>>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
-
-    /// Whether the handler should keep the connection alive.
-    keep_alive: KeepAlive,
 
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
@@ -83,19 +76,17 @@ pub struct Handler {
 
     /// Address observed by or for the remote.
     observed_addr: Multiaddr,
+
+    local_supported_protocols: SupportedProtocols,
+    remote_supported_protocols: HashSet<StreamProtocol>,
+    external_addresses: HashSet<Multiaddr>,
 }
 
 /// An event from `Behaviour` with the information requested by the `Handler`.
 #[derive(Debug)]
-pub struct InEvent {
-    /// The addresses that the peer is listening on.
-    pub listen_addrs: HashSet<Multiaddr>,
-
-    /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub supported_protocols: Vec<StreamProtocol>,
-
-    /// The protocol w.r.t. the information requested.
-    pub protocol: Protocol,
+pub enum InEvent {
+    AddressesChanged(HashSet<Multiaddr>),
+    Push,
 }
 
 /// Event produced by the `Handler`.
@@ -105,17 +96,16 @@ pub enum Event {
     /// We obtained identification information from the remote.
     Identified(Info),
     /// We replied to an identification request from the remote.
-    Identification(PeerId),
+    Identification,
     /// We actively pushed our identification information to the remote.
     IdentificationPushed,
-    /// We received a request for identification.
-    Identify,
     /// Failed to identify the remote, or to reply to an identification request.
     IdentificationError(StreamUpgradeError<UpgradeError>),
 }
 
 impl Handler {
     /// Creates a new `Handler`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         initial_delay: Duration,
         interval: Duration,
@@ -124,20 +114,22 @@ impl Handler {
         protocol_version: String,
         agent_version: String,
         observed_addr: Multiaddr,
+        external_addresses: HashSet<Multiaddr>,
     ) -> Self {
         Self {
             remote_peer_id,
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
-            reply_streams: VecDeque::new(),
             pending_replies: FuturesUnordered::new(),
             trigger_next_identify: Delay::new(initial_delay),
-            keep_alive: KeepAlive::Yes,
             interval,
             public_key,
             protocol_version,
             agent_version,
             observed_addr,
+            local_supported_protocols: SupportedProtocols::default(),
+            remote_supported_protocols: HashSet::default(),
+            external_addresses,
         }
     }
 
@@ -152,16 +144,10 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(substream) => {
-                self.events
-                    .push(ConnectionHandlerEvent::Custom(Event::Identify));
-                if !self.reply_streams.is_empty() {
-                    warn!(
-                        "New inbound identify request from {} while a previous one \
-                         is still pending. Queueing the new one.",
-                        self.remote_peer_id,
-                    );
-                }
-                self.reply_streams.push_back(substream);
+                let info = self.build_info();
+
+                self.pending_replies
+                    .push(crate::protocol::send(substream, info).boxed());
             }
             future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
@@ -186,11 +172,11 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(remote_info) => {
+                self.update_supported_protocols_for_remote(&remote_info);
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
-                self.keep_alive = KeepAlive::No;
             }
             future::Either::Right(()) => self
                 .events
@@ -210,8 +196,48 @@ impl Handler {
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
                 err,
             )));
-        self.keep_alive = KeepAlive::No;
         self.trigger_next_identify.reset(self.interval);
+    }
+
+    fn build_info(&mut self) -> Info {
+        Info {
+            public_key: self.public_key.clone(),
+            protocol_version: self.protocol_version.clone(),
+            agent_version: self.agent_version.clone(),
+            listen_addrs: Vec::from_iter(self.external_addresses.iter().cloned()),
+            protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
+            observed_addr: self.observed_addr.clone(),
+        }
+    }
+
+    fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
+        let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
+
+        let remote_added_protocols = new_remote_protocols
+            .difference(&self.remote_supported_protocols)
+            .cloned()
+            .collect::<HashSet<_>>();
+        let remote_removed_protocols = self
+            .remote_supported_protocols
+            .difference(&new_remote_protocols)
+            .cloned()
+            .collect::<HashSet<_>>();
+
+        if !remote_added_protocols.is_empty() {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Added(remote_added_protocols),
+                ));
+        }
+
+        if !remote_removed_protocols.is_empty() {
+            self.events
+                .push(ConnectionHandlerEvent::ReportRemoteProtocols(
+                    ProtocolSupport::Removed(remote_removed_protocols),
+                ));
+        }
+
+        self.remote_supported_protocols = new_remote_protocols;
     }
 }
 
@@ -228,47 +254,31 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
-    fn on_behaviour_event(
-        &mut self,
-        InEvent {
-            listen_addrs,
-            supported_protocols,
-            protocol,
-        }: Self::InEvent,
-    ) {
-        let info = Info {
-            public_key: self.public_key.clone(),
-            protocol_version: self.protocol_version.clone(),
-            agent_version: self.agent_version.clone(),
-            listen_addrs: Vec::from_iter(listen_addrs),
-            protocols: supported_protocols,
-            observed_addr: self.observed_addr.clone(),
-        };
-
-        match protocol {
-            Protocol::Push => {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        match event {
+            InEvent::AddressesChanged(addresses) => {
+                self.external_addresses = addresses;
+            }
+            InEvent::Push => {
+                let info = self.build_info();
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(Either::Right(Push::outbound(info)), ()),
                     });
             }
-            Protocol::Identify(_) => {
-                let substream = self
-                    .reply_streams
-                    .pop_front()
-                    .expect("A BehaviourInfo reply should have a matching substream.");
-                let peer = self.remote_peer_id;
-                let fut = Box::pin(async move {
-                    protocol::send(substream, info).await?;
-                    Ok(peer)
-                });
-                self.pending_replies.push(fut);
-            }
         }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.inbound_identify_push.is_some() {
+            return KeepAlive::Yes;
+        }
+
+        if !self.pending_replies.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        KeepAlive::No
     }
 
     fn poll(
@@ -277,20 +287,17 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
     > {
-        if !self.events.is_empty() {
-            return Poll::Ready(self.events.remove(0));
+        if let Some(event) = self.events.pop() {
+            return Poll::Ready(event);
         }
 
         // Poll the future that fires when we need to identify the node again.
-        match Future::poll(Pin::new(&mut self.trigger_next_identify), cx) {
-            Poll::Pending => {}
-            Poll::Ready(()) => {
-                self.trigger_next_identify.reset(self.interval);
-                let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
-                };
-                return Poll::Ready(ev);
-            }
+        if let Poll::Ready(()) = self.trigger_next_identify.poll_unpin(cx) {
+            self.trigger_next_identify.reset(self.interval);
+            let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
+            };
+            return Poll::Ready(ev);
         }
 
         if let Some(Poll::Ready(res)) = self
@@ -301,20 +308,21 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(info) = res {
+                self.update_supported_protocols_for_remote(&info);
                 return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
             }
         }
 
         // Check for pending replies to send.
-        match self.pending_replies.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::Identification(peer_id),
-            )),
-            Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::IdentificationError(StreamUpgradeError::Apply(err)),
-            )),
-            Poll::Ready(None) | Poll::Pending => Poll::Pending,
+        if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
+            let event = result
+                .map(|()| Event::Identification)
+                .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
+
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }
+
+        Poll::Pending
     }
 
     fn on_connection_event(
@@ -336,7 +344,12 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            ConnectionEvent::LocalProtocolsChange(change) => {
+                self.local_supported_protocols.on_protocols_change(change);
+            }
         }
     }
 }

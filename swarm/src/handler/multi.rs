@@ -205,6 +205,20 @@ where
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
+            ConnectionEvent::LocalProtocolsChange(supported_protocols) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::LocalProtocolsChange(
+                        supported_protocols.clone(),
+                    ));
+                }
+            }
+            ConnectionEvent::RemoteProtocolsChange(supported_protocols) => {
+                for h in self.handlers.values_mut() {
+                    h.on_connection_event(ConnectionEvent::RemoteProtocolsChange(
+                        supported_protocols.clone(),
+                    ));
+                }
+            }
         }
     }
 
