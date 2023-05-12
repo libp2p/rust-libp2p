@@ -47,8 +47,6 @@ mod proto {
 
 /// Multi-address re-export.
 pub use multiaddr;
-use std::fmt;
-use std::fmt::Formatter;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
@@ -130,16 +128,5 @@ pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError, UpgradeInfo};
 
 #[derive(Debug, thiserror::Error)]
-pub struct DecodeError(String);
-
-impl From<quick_protobuf::Error> for DecodeError {
-    fn from(e: quick_protobuf::Error) -> Self {
-        Self(e.to_string())
-    }
-}
-
-impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
+#[error(transparent)]
+pub struct DecodeError(quick_protobuf::Error);
