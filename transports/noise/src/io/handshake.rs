@@ -28,7 +28,7 @@ mod proto {
 
 use crate::io::{framed::NoiseFramed, Output};
 use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
-use crate::Error;
+use crate::{DecodeError, Error};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
@@ -140,7 +140,8 @@ where
 {
     let msg = recv(state).await?;
     let mut reader = BytesReader::from_bytes(&msg[..]);
-    let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..])?;
+    let pb =
+        proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]).map_err(DecodeError)?;
 
     state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
