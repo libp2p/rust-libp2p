@@ -42,6 +42,9 @@
   
   See [PR 3651].
 
+- Deprecate the `NegotiatedSubstream` type and replace it with `Stream`.
+  See [PR 3912].
+
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
@@ -51,6 +54,7 @@
 [PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
 [PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
+[PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
 
 ## 0.42.2
 

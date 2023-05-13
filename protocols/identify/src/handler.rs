@@ -55,7 +55,7 @@ pub struct Handler {
     >,
 
     /// Pending identification replies, awaiting being sent.
-    pending_replies: FuturesUnordered<BoxFuture<'static, Result<PeerId, UpgradeError>>>,
+    pending_replies: FuturesUnordered<BoxFuture<'static, Result<(), UpgradeError>>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -96,7 +96,7 @@ pub enum Event {
     /// We obtained identification information from the remote.
     Identified(Info),
     /// We replied to an identification request from the remote.
-    Identification(PeerId),
+    Identification,
     /// We actively pushed our identification information to the remote.
     IdentificationPushed,
     /// Failed to identify the remote, or to reply to an identification request.
@@ -144,14 +144,10 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(substream) => {
-                let peer_id = self.remote_peer_id;
                 let info = self.build_info();
 
-                self.pending_replies.push(Box::pin(async move {
-                    crate::protocol::send(substream, info).await?;
-
-                    Ok(peer_id)
-                }));
+                self.pending_replies
+                    .push(crate::protocol::send(substream, info).boxed());
             }
             future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
@@ -320,7 +316,7 @@ impl ConnectionHandler for Handler {
         // Check for pending replies to send.
         if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
             let event = result
-                .map(Event::Identification)
+                .map(|()| Event::Identification)
                 .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
 
             return Poll::Ready(ConnectionHandlerEvent::Custom(event));
