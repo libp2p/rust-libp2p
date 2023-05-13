@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[allow(deprecated)]
-use crate::connection::ConnectionLimit;
 use crate::transport::TransportError;
 use crate::Multiaddr;
 use crate::{ConnectedPoint, PeerId};
@@ -90,15 +88,6 @@ pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TTransErr),
 
-    /// The connection was dropped because the connection limit
-    /// for a peer has been reached.
-    #[deprecated(
-        note = "Use `libp2p::connection_limits` instead and handle `{Dial,Listen}Error::Denied::cause`.",
-        since = "0.42.1"
-    )]
-    #[allow(deprecated)]
-    ConnectionLimit(ConnectionLimit),
-
     /// Pending connection attempt has been aborted.
     Aborted,
 
@@ -117,10 +106,6 @@ impl<T> PendingConnectionError<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
         match self {
             PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(l) => {
-                PendingConnectionError::ConnectionLimit(l)
-            }
             PendingConnectionError::Aborted => PendingConnectionError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 PendingConnectionError::WrongPeerId { obtained, endpoint }
@@ -145,10 +130,6 @@ where
                     "Pending connection: Transport error on connection: {err}"
                 )
             }
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {l}.")
-            }
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 write!(
                     f,
@@ -172,8 +153,6 @@ where
             PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::LocalPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
-            #[allow(deprecated)]
-            PendingConnectionError::ConnectionLimit(..) => None,
         }
     }
 }

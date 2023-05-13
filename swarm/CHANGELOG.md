@@ -7,8 +7,54 @@
   This type enforces invariants on protocol names, such as leading forward slashes and correct UTF8 encoding.
   See [PR 3746].
 
-[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+- Return a bool from `ExternalAddresses::on_swarm_event` and `ListenAddresses::on_swarm_event` indicating whether any state was changed.
+  See [PR 3865].
+
+- Remove deprecated banning API from `Swarm`.
+  Users should migrate to `libp2p::allow_block_list`.
+  See [PR 3886].
+
+- Remove `ConnectionHandlerUpgrErr::Timer` variant.
+  This variant was never constructed and thus dead code.
+  See [PR 3605].
+
+- Remove deprecated `IntoConnectionHandler` and all its implementations.
+  This also removes the `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` methods.
+  See changelog for `0.42` on how to migrate.
+  See [PR 3884].
+
+- Remove `ConnectionHandlerUpgrErr::Timer` variant.
+  This variant was never constructed and thus dead code.
+  See [PR 3605].
+
+- Flatten `ConnectionHandlerUpgrErr` and rename to `StreamUpgradeError`.
+  See [PR 3882].
+
+- Remove deprecated `ConnectionLimits`.
+  Users should migrate to `libp2p::connection_limits::Behaviour`.
+  See [PR 3885].
+
+- Allow `ConnectionHandler`s to report and learn about the supported protocols on a connection.
+  The newly introduced API elements are:
+  - `ConnectionHandlerEvent::ReportRemoteProtocols`
+  - `ConnectionEvent::LocalProtocolsChange`
+  - `ConnectionEvent::RemoteProtocolsChange`
+  
+  See [PR 3651].
+
+- Deprecate the `NegotiatedSubstream` type and replace it with `Stream`.
+  See [PR 3912].
+
+[PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
+[PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+[PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
+[PR 3882]: https://github.com/libp2p/rust-libp2p/pull/3882
+[PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
+[PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
+[PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
+[PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
 
 ## 0.42.2
 
