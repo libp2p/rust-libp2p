@@ -39,8 +39,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NegotiatedSubstream,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandler, THandlerInEvent,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
+    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
@@ -391,7 +391,7 @@ enum ConnectionState {
     },
     Operational {
         read_buffer: Bytes,
-        substream: NegotiatedSubstream,
+        substream: Stream,
         /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
         ///
         /// This is flagged as "dead-code" by the compiler because we never read from it here.
@@ -425,7 +425,7 @@ impl ConnectionState {
     }
 
     pub(crate) fn new_outbound(
-        substream: NegotiatedSubstream,
+        substream: Stream,
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
