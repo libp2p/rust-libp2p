@@ -24,7 +24,6 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use quote::ToTokens;
 use syn::punctuated::Punctuated;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
@@ -55,6 +54,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
+        deprecation_tokenstream,
     } = match parse_attributes(ast) {
         Ok(attrs) => attrs,
         Err(e) => return e,
@@ -732,6 +732,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote! {
+        #deprecation_tokenstream
+
         #out_event_definition
 
         impl #impl_generics #trait_to_impl for #name #ty_generics
@@ -852,6 +854,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 struct BehaviourAttributes {
     prelude_path: syn::Path,
     user_specified_out_event: Option<syn::Type>,
+    deprecation_tokenstream: proc_macro2::TokenStream,
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
@@ -859,6 +862,7 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
+        deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
     let mut is_out_event = false;
     // let mut token = TokenStream::new();
@@ -902,16 +906,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
                 if meta.path().is_ident("out_event") {
                     is_out_event = true;
-
-                    let meta_token_stream = meta.to_token_stream();
-                    let input = syn::parse2::<syn::DeriveInput>(meta_token_stream.into()).unwrap();
-                    let warning = proc_macro_warning::Warning::new_deprecated("test")
-                        .old("foo")
-                        .new("bar")
-                        .span(input.ident.span())
-                        .build();
-
-                    let token: TokenStream = quote::quote!(#warning).into();
                 }
                 match meta {
                     Meta::Path(_) => unimplemented!(),
@@ -940,6 +934,16 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
                 continue;
             }
         }
+    }
+
+    if is_out_event {
+        let warning = proc_macro_warning::Warning::new_deprecated("out_event")
+            .old("out_event")
+            .new("to_swarm")
+            .span(ast.ident.span())
+            .build();
+
+        attributes.deprecation_tokenstream = quote::quote! { #warning }.into();
     }
 
     Ok(attributes)
