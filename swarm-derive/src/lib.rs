@@ -942,7 +942,7 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
             .span(ast.ident.span())
             .build();
 
-        attributes.deprecation_tokenstream = quote::quote! { #warning }.into();
+        attributes.deprecation_tokenstream = quote::quote! { #warning };
     }
 
     Ok(attributes)
