@@ -439,7 +439,7 @@ where
     #[cfg(test)]
     fn poll_noop_waker(
         &mut self,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
         Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
 }
@@ -1069,8 +1069,8 @@ mod tests {
     }
 
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
-        type InEvent = Void;
-        type OutEvent = Void;
+        type FromBehaviour = Void;
+        type ToBehaviour = Void;
         type Error = Void;
         type InboundProtocol = ManyProtocolsUpgrade;
         type OutboundProtocol = DeniedUpgrade;
@@ -1114,7 +1114,7 @@ mod tests {
             }
         }
 
-        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             void::unreachable(event)
         }
 
@@ -1129,7 +1129,7 @@ mod tests {
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                Self::OutEvent,
+                Self::ToBehaviour,
                 Self::Error,
             >,
         > {
