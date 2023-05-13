@@ -865,7 +865,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
     let mut is_out_event = false;
-    // let mut token = TokenStream::new();
 
     for attr in ast
         .attrs
