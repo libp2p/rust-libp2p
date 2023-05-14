@@ -699,7 +699,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
         };
 
-
         quote!{
             match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
                 #generate_event_match_arm
