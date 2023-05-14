@@ -38,30 +38,6 @@
 #![allow(dead_code)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod handler_priv;
-#[deprecated(
-    note = "The `handler` module will be made private in the future and should not be depended on."
-)]
-pub mod handler {
-    pub use super::handler_priv::*;
-}
-
-mod kbucket_priv;
-#[deprecated(
-    note = "The `kbucket` module will be made private in the future and should not be depended on."
-)]
-pub mod kbucket {
-    pub use super::kbucket_priv::*;
-}
-
-mod protocol_priv;
-#[deprecated(
-    note = "The `protocol` module will be made private in the future and should not be depended on."
-)]
-pub mod protocol {
-    pub use super::protocol_priv::*;
-}
-
 mod record_priv;
 #[deprecated(
     note = "The `record` module will be made private in the future and should not be depended on."
@@ -72,7 +48,10 @@ pub mod record {
 
 mod addresses;
 mod behaviour;
+mod handler;
 mod jobs;
+mod kbucket;
+mod protocol;
 mod query;
 
 mod proto {
@@ -97,11 +76,12 @@ pub use behaviour::{
     Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
     KademliaStoreInserts, ProgressStep, Quorum,
 };
-pub use kbucket_priv::{EntryView, KBucketRef, Key as KBucketKey};
+pub use kbucket::{EntryView, KBucketRef, Key as KBucketKey};
 pub use protocol::KadConnectionType;
 pub use query::QueryId;
 pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
 
+use libp2p_swarm::StreamProtocol;
 use std::num::NonZeroUsize;
 
 /// The `k` parameter of the Kademlia specification.
@@ -129,6 +109,8 @@ pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 ///
 /// The current value is `3`.
 pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
+
+pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 
 /// Constant shared across tests for the [`Multihash`](libp2p_core::multihash::Multihash) type.
 #[cfg(test)]

@@ -84,7 +84,7 @@ const NUM_BUCKETS: usize = 256;
 
 /// A `KBucketsTable` represents a Kademlia routing table.
 #[derive(Debug, Clone)]
-pub struct KBucketsTable<TKey, TVal> {
+pub(crate) struct KBucketsTable<TKey, TVal> {
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
     /// The buckets comprising the routing table.
@@ -154,7 +154,7 @@ where
     /// The given `pending_timeout` specifies the duration after creation of
     /// a [`PendingEntry`] after which it becomes eligible for insertion into
     /// a full bucket, replacing the least-recently (dis)connected node.
-    pub fn new(local_key: TKey, pending_timeout: Duration) -> Self {
+    pub(crate) fn new(local_key: TKey, pending_timeout: Duration) -> Self {
         KBucketsTable {
             local_key,
             buckets: (0..NUM_BUCKETS)
@@ -165,13 +165,13 @@ where
     }
 
     /// Returns the local key.
-    pub fn local_key(&self) -> &TKey {
+    pub(crate) fn local_key(&self) -> &TKey {
         &self.local_key
     }
 
     /// Returns an `Entry` for the given key, representing the state of the entry
     /// in the routing table.
-    pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
+    pub(crate) fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
         let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
         if let Some(i) = index {
             let bucket = &mut self.buckets[i.get()];
@@ -188,7 +188,7 @@ where
     ///
     /// The buckets are ordered by proximity to the `local_key`, i.e. the first
     /// bucket is the closest bucket (containing at most one key).
-    pub fn iter(&mut self) -> impl Iterator<Item = KBucketRef<'_, TKey, TVal>> + '_ {
+    pub(crate) fn iter(&mut self) -> impl Iterator<Item = KBucketRef<'_, TKey, TVal>> + '_ {
         let applied_pending = &mut self.applied_pending;
         self.buckets.iter_mut().enumerate().map(move |(i, b)| {
             if let Some(applied) = b.apply_pending() {
@@ -204,7 +204,7 @@ where
     /// Returns the bucket for the distance to the given key.
     ///
     /// Returns `None` if the given key refers to the local key.
-    pub fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal>>
+    pub(crate) fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal>>
     where
         K: AsRef<KeyBytes>,
     {
@@ -232,13 +232,16 @@ where
     /// buckets are updated accordingly. The fact that a pending entry was applied is
     /// recorded in the `KBucketsTable` in the form of `AppliedPending` results, which must be
     /// consumed by calling this function.
-    pub fn take_applied_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
+    pub(crate) fn take_applied_pending(&mut self) -> Option<AppliedPending<TKey, TVal>> {
         self.applied_pending.pop_front()
     }
 
     /// Returns an iterator over the keys closest to `target`, ordered by
     /// increasing distance.
-    pub fn closest_keys<'a, T>(&'a mut self, target: &'a T) -> impl Iterator<Item = TKey> + 'a
+    pub(crate) fn closest_keys<'a, T>(
+        &'a mut self,
+        target: &'a T,
+    ) -> impl Iterator<Item = TKey> + 'a
     where
         T: AsRef<KeyBytes>,
     {
@@ -256,7 +259,7 @@ where
 
     /// Returns an iterator over the nodes closest to the `target` key, ordered by
     /// increasing distance.
-    pub fn closest<'a, T>(
+    pub(crate) fn closest<'a, T>(
         &'a mut self,
         target: &'a T,
     ) -> impl Iterator<Item = EntryView<TKey, TVal>> + 'a
@@ -286,7 +289,7 @@ where
     ///
     /// The number of nodes between the local node and the target are
     /// calculated by backtracking from the target towards the local key.
-    pub fn count_nodes_between<T>(&mut self, target: &T) -> usize
+    pub(crate) fn count_nodes_between<T>(&mut self, target: &T) -> usize
     where
         T: AsRef<KeyBytes>,
     {
@@ -460,7 +463,7 @@ where
     }
 }
 
-/// A reference to a bucket in a [`KBucketsTable`].
+/// A reference to a bucket.
 pub struct KBucketRef<'a, TKey, TVal> {
     index: BucketIndex,
     bucket: &'a mut KBucket<TKey, TVal>,
@@ -471,7 +474,7 @@ where
     TKey: Clone + AsRef<KeyBytes>,
     TVal: Clone,
 {
-    /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
+    /// Returns the minimum inclusive and maximum inclusive distance for
     /// this bucket.
     pub fn range(&self) -> (Distance, Distance) {
         self.index.range()

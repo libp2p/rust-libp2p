@@ -34,9 +34,6 @@
 //! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
 //! by an application, e.g. to collect statistics.
 //!
-//! > **Note**: The ping protocol does not keep otherwise idle connections alive
-//! > by default, see [`Config::with_keep_alive`] for changing this behaviour.
-//!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
 
@@ -57,24 +54,6 @@ use std::{
     collections::VecDeque,
     task::{Context, Poll},
 };
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Config instead.")]
-pub type PingConfig = Config;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Event instead.")]
-pub type PingEvent = Event;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Success instead.")]
-pub type PingSuccess = Success;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Failure instead.")]
-pub type PingFailure = Failure;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Result instead.")]
-pub type PingResult = Result;
-
-#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Behaviour instead.")]
-pub type Ping = Behaviour;
 
 pub use self::protocol::PROTOCOL_NAME;
 
@@ -119,7 +98,7 @@ impl Default for Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -154,7 +133,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
             let Event { result, peer } = &e;
 

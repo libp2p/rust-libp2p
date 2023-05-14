@@ -98,10 +98,13 @@ impl<P: Provider> Transport for GenTransport<P> {
     type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or(TransportError::MultiaddrNotSupported(addr))?;
-        let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
             socket_addr,
@@ -120,7 +123,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         // New outbound connections will use the bidirectional (listener) endpoint.
         self.dialer.remove(&socket_addr.ip().into());
 
-        Ok(listener_id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -772,8 +775,9 @@ mod test {
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let id = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            let id = ListenerId::next();
+            transport
+                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
 
             // Copy channel to use it later.
@@ -866,8 +870,11 @@ mod test {
         .await;
 
         // Start listening so that the dialer and driver are dropped.
-        let _ = transport
-            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        transport
+            .listen_on(
+                ListenerId::next(),
+                "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+            )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
 

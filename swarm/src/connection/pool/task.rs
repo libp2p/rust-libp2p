@@ -77,7 +77,7 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     Notify {
         id: ConnectionId,
         peer_id: PeerId,
-        event: THandler::OutEvent,
+        event: THandler::ToBehaviour,
     },
     /// A connection closed, possibly due to an error.
     ///
@@ -171,7 +171,7 @@ pub(crate) async fn new_for_established_connection<THandler>(
     connection_id: ConnectionId,
     peer_id: PeerId,
     mut connection: crate::connection::Connection<THandler>,
-    mut command_receiver: mpsc::Receiver<Command<THandler::InEvent>>,
+    mut command_receiver: mpsc::Receiver<Command<THandler::FromBehaviour>>,
     mut events: mpsc::Sender<EstablishedConnectionEvent<THandler>>,
 ) where
     THandler: ConnectionHandler,

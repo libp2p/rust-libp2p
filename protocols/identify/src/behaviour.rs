@@ -234,7 +234,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     #[allow(deprecated)]
     fn handle_established_inbound_connection(
@@ -300,9 +300,9 @@ impl NetworkBehaviour for Behaviour {
                     score: AddressScore::Finite(1),
                 });
             }
-            handler::Event::Identification(peer) => {
+            handler::Event::Identification => {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id: peer }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
             }
             handler::Event::IdentificationPushed => {
                 self.events
@@ -319,7 +319,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

@@ -39,8 +39,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NegotiatedSubstream,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandler, THandlerInEvent,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
+    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
@@ -156,7 +156,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -293,7 +293,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
         }
@@ -391,7 +391,7 @@ enum ConnectionState {
     },
     Operational {
         read_buffer: Bytes,
-        substream: NegotiatedSubstream,
+        substream: Stream,
         /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
         ///
         /// This is flagged as "dead-code" by the compiler because we never read from it here.
@@ -425,7 +425,7 @@ impl ConnectionState {
     }
 
     pub(crate) fn new_outbound(
-        substream: NegotiatedSubstream,
+        substream: Stream,
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
