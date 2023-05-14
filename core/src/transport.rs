@@ -31,7 +31,7 @@ use std::{
     error::Error,
     fmt,
     pin::Pin,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 
@@ -56,7 +56,7 @@ pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
-static NEXT_LISTENER_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -248,7 +248,7 @@ pub trait Transport {
 
 /// The ID of a single listener.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ListenerId(u64);
+pub struct ListenerId(usize);
 
 impl ListenerId {
     #[deprecated(note = "Renamed to ` ListenerId::next`.")]
