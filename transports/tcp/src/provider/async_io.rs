@@ -32,14 +32,15 @@ use std::task::{Context, Poll};
 ///
 /// ```rust
 /// # use libp2p_tcp as tcp;
-/// # use libp2p_core::Transport;
+/// # use libp2p_core::{Transport, transport::ListenerId};
 /// # use futures::future;
 /// # use std::pin::Pin;
 /// #
 /// # #[async_std::main]
 /// # async fn main() {
 /// let mut transport = tcp::async_io::Transport::new(tcp::Config::default());
-/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+/// let id = ListenerId::next();
+/// transport.listen_on(id, "/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
 ///
 /// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
 ///

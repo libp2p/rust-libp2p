@@ -27,6 +27,7 @@ use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
 use libp2p_core::muxing::StreamMuxerExt;
+use libp2p_core::transport::ListenerId;
 use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
@@ -100,7 +101,9 @@ fn run(
     payload: &Vec<u8>,
     listen_addr: &Multiaddr,
 ) {
-    receiver_trans.listen_on(listen_addr.clone()).unwrap();
+    receiver_trans
+        .listen_on(ListenerId::next(), listen_addr.clone())
+        .unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);
     let payload_len = payload.len();

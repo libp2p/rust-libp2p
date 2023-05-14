@@ -122,7 +122,11 @@ where
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
         let proto = match inner_addr.pop() {
             Some(p @ Protocol::Wss(_)) => {
@@ -139,10 +143,10 @@ where
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
         };
-        match self.transport.lock().listen_on(inner_addr) {
-            Ok(id) => {
+        match self.transport.lock().listen_on(id, inner_addr) {
+            Ok(()) => {
                 self.listener_protos.insert(id, proto);
-                Ok(id)
+                Ok(())
             }
             Err(e) => Err(e.map(Error::Transport)),
         }

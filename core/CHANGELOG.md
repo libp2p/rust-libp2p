@@ -1,11 +1,15 @@
 ## 0.40.0 - unreleased
 
+- Allow `ListenerId` to be user-controlled, i.e. to be provided on `Transport::listen_on`.
+  See [PR 3567].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 
 - Remove deprecated symbols related to upgrades.
   See [PR 3867].
 
+[PR 3567]: https://github.com/libp2p/rust-libp2p/pull/3567
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
 

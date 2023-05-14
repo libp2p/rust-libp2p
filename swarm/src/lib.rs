@@ -474,7 +474,8 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = self.transport.listen_on(addr)?;
+        let id = ListenerId::next();
+        self.transport.listen_on(id, addr)?;
         self.behaviour
             .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
                 listener_id: id,
@@ -2222,7 +2223,9 @@ mod tests {
                 let mut transports = Vec::new();
                 for _ in 0..num_listen_addrs {
                     let mut transport = transport::MemoryTransport::default().boxed();
-                    transport.listen_on("/memory/0".parse().unwrap()).unwrap();
+                    transport
+                        .listen_on(ListenerId::next(), "/memory/0".parse().unwrap())
+                        .unwrap();
 
                     match transport.select_next_some().await {
                         TransportEvent::NewAddress { listen_addr, .. } => {
