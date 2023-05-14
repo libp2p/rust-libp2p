@@ -544,3 +544,9 @@ fn custom_out_event_no_type_parameters() {
     require_net_behaviour::<Behaviour<String>>();
     require_net_behaviour::<Behaviour<()>>();
 }
+
+#[test]
+fn ui() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/ui/fail/*.rs");
+}
