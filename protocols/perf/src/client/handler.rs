@@ -56,7 +56,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -86,8 +86,8 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Command;
-    type OutEvent = Event;
+    type FromBehaviour = Command;
+    type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -98,7 +98,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, command: Self::InEvent) {
+    fn on_behaviour_event(&mut self, command: Self::FromBehaviour) {
         self.requested_streams.push_back(command);
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -168,7 +168,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

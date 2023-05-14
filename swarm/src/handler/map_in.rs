@@ -45,12 +45,12 @@ impl<TConnectionHandler, TMap, TNewIn> ConnectionHandler
     for MapInEvent<TConnectionHandler, TNewIn, TMap>
 where
     TConnectionHandler: ConnectionHandler,
-    TMap: Fn(TNewIn) -> Option<TConnectionHandler::InEvent>,
+    TMap: Fn(TNewIn) -> Option<TConnectionHandler::FromBehaviour>,
     TNewIn: Debug + Send + 'static,
     TMap: Send + 'static,
 {
-    type InEvent = TNewIn;
-    type OutEvent = TConnectionHandler::OutEvent;
+    type FromBehaviour = TNewIn;
+    type ToBehaviour = TConnectionHandler::ToBehaviour;
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
@@ -78,7 +78,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

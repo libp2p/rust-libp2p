@@ -39,11 +39,13 @@
   - `ConnectionHandlerEvent::ReportRemoteProtocols`
   - `ConnectionEvent::LocalProtocolsChange`
   - `ConnectionEvent::RemoteProtocolsChange`
-  
+
   See [PR 3651].
 
 - Deprecate the `NegotiatedSubstream` type and replace it with `Stream`.
   See [PR 3912].
+
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
 
 - Remove deprecated `NetworkBehaviourAction`
   See [PR XXXX].
@@ -58,6 +60,7 @@
 [PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.42.2

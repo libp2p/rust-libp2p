@@ -17,6 +17,8 @@ proc-macro = true
 heck = "0.4"
 quote = "1.0"
 syn = { version = "2.0.15", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+proc-macro-warning = "0.3.1"
+proc-macro2 = "1.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

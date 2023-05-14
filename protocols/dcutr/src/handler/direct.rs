@@ -39,8 +39,8 @@ pub struct Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = void::Void;
-    type OutEvent = Event;
+    type FromBehaviour = void::Void;
+    type ToBehaviour = Event;
     type Error = StreamUpgradeError<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -51,7 +51,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _: Self::FromBehaviour) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No
@@ -64,7 +64,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

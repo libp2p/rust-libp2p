@@ -599,8 +599,8 @@ impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
 {
-    type InEvent = KademliaHandlerIn<TUserData>;
-    type OutEvent = KademliaHandlerEvent<TUserData>;
+    type FromBehaviour = KademliaHandlerIn<TUserData>;
+    type ToBehaviour = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -701,7 +701,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

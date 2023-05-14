@@ -225,7 +225,7 @@ impl EnabledHandler {
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
-            <Handler as ConnectionHandler>::OutEvent,
+            <Handler as ConnectionHandler>::ToBehaviour,
             <Handler as ConnectionHandler>::Error,
         >,
     > {
@@ -393,8 +393,8 @@ impl EnabledHandler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = HandlerIn;
-    type OutEvent = HandlerEvent;
+    type FromBehaviour = HandlerIn;
+    type ToBehaviour = HandlerEvent;
     type Error = Void;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
@@ -457,7 +457,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

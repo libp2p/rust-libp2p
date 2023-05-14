@@ -33,7 +33,7 @@ where
     R: NetworkBehaviour,
 {
     type ConnectionHandler = Either<THandler<L>, THandler<R>>;
-    type OutEvent = Either<L::OutEvent, R::OutEvent>;
+    type ToSwarm = Either<L::ToSwarm, R::ToSwarm>;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -156,7 +156,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
