@@ -16,9 +16,13 @@
 - Remove `SingletonMuxer`.
   See [PR 3883].
 
+- Add `global_only::Transport` that refuses to dial IP addresses from private ranges.
+  See [PR 3814].
+
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
+[PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
 
 ## 0.39.2
 

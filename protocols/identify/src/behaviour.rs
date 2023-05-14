@@ -300,9 +300,9 @@ impl NetworkBehaviour for Behaviour {
                     score: AddressScore::Finite(1),
                 });
             }
-            handler::Event::Identification(peer) => {
+            handler::Event::Identification => {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id: peer }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
             }
             handler::Event::IdentificationPushed => {
                 self.events

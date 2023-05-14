@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamUpgradeError,
     SubstreamProtocol,
 };
 use log::trace;
@@ -116,20 +116,16 @@ pub struct KademliaHandlerConfig {
 /// State of an active outbound substream.
 enum OutboundSubstreamState<TUserData> {
     /// Waiting to send a message to the remote.
-    PendingSend(
-        KadOutStreamSink<NegotiatedSubstream>,
-        KadRequestMsg,
-        Option<TUserData>,
-    ),
+    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<TUserData>),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<NegotiatedSubstream>, Option<TUserData>),
+    PendingFlush(KadOutStreamSink<Stream>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<NegotiatedSubstream>, TUserData),
+    WaitingAnswer(KadOutStreamSink<Stream>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
     ReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    Closing(KadOutStreamSink<NegotiatedSubstream>),
+    Closing(KadOutStreamSink<Stream>),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -142,24 +138,16 @@ enum InboundSubstreamState<TUserData> {
         /// Whether it is the first message to be awaited on this stream.
         first: bool,
         connection_id: UniqueConnecId,
-        substream: KadInStreamSink<NegotiatedSubstream>,
+        substream: KadInStreamSink<Stream>,
     },
     /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
-    WaitingBehaviour(
-        UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
-        Option<Waker>,
-    ),
+    WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
     /// Waiting to send an answer back to the remote.
-    PendingSend(
-        UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
-        KadResponseMsg,
-    ),
+    PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    PendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
+    PendingFlush(UniqueConnecId, KadInStreamSink<Stream>),
     /// The substream is being closed.
-    Closing(KadInStreamSink<NegotiatedSubstream>),
+    Closing(KadInStreamSink<Stream>),
     /// The substream was cancelled in favor of a new one.
     Cancelled,
 
@@ -813,7 +801,7 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-impl<TUserData> Stream for OutboundSubstreamState<TUserData>
+impl<TUserData> futures::Stream for OutboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
@@ -949,7 +937,7 @@ where
     }
 }
 
-impl<TUserData> Stream for InboundSubstreamState<TUserData>
+impl<TUserData> futures::Stream for InboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {

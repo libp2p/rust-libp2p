@@ -26,7 +26,7 @@ use futures::{future::BoxFuture, prelude::*};
 use instant::{Duration, SystemTime};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::convert::TryInto;
 use std::iter;
 use thiserror::Error;
@@ -46,12 +46,12 @@ impl upgrade::UpgradeInfo for Upgrade {
     }
 }
 
-impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
+impl upgrade::InboundUpgrade<Stream> for Upgrade {
     type Output = Req;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
@@ -126,7 +126,7 @@ pub enum Req {
 }
 
 pub struct ReservationReq {
-    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
@@ -183,7 +183,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
 }
 
 impl CircuitReq {
@@ -191,7 +191,7 @@ impl CircuitReq {
         self.dst
     }
 
-    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
+    pub async fn accept(mut self) -> Result<(Stream, Bytes), UpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,

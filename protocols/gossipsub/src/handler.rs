@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
     SubstreamProtocol,
 };
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::Stream;
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -143,9 +143,9 @@ pub enum DisabledHandler {
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
-    WaitingInput(Framed<NegotiatedSubstream, GossipsubCodec>),
+    WaitingInput(Framed<Stream, GossipsubCodec>),
     /// The substream is being closed.
-    Closing(Framed<NegotiatedSubstream, GossipsubCodec>),
+    Closing(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -153,11 +153,11 @@ enum InboundSubstreamState {
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
-    WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
+    WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, proto::RPC),
+    PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
+    PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -185,7 +185,7 @@ impl Handler {
 impl EnabledHandler {
     fn on_fully_negotiated_inbound(
         &mut self,
-        (substream, peer_kind): (Framed<NegotiatedSubstream, GossipsubCodec>, PeerKind),
+        (substream, peer_kind): (Framed<Stream, GossipsubCodec>, PeerKind),
     ) {
         // update the known kind of peer
         if self.peer_kind.is_none() {
