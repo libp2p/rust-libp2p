@@ -2580,7 +2580,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "log",
- "prometheus-client 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prometheus-client",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
@@ -2717,7 +2717,7 @@ dependencies = [
  "libp2p-relay",
  "libp2p-swarm",
  "once_cell",
- "prometheus-client 0.20.0 (git+https://github.com/mxinden/client_rust.git?branch=const-family)",
+ "prometheus-client",
 ]
 
 [[package]]
@@ -3337,7 +3337,7 @@ dependencies = [
  "hyper",
  "libp2p",
  "log",
- "prometheus-client 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "prometheus-client",
  "tokio",
 ]
 
@@ -3987,25 +3987,14 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e227aeb6c2cfec819e999c4773b35f8c7fa37298a203ff46420095458eee567e"
+checksum = "38974b1966bd5b6c7c823a20c1e07d5b84b171db20bac601e9b529720f7299f8"
 dependencies = [
  "dtoa",
  "itoa",
  "parking_lot 0.12.1",
- "prometheus-client-derive-encode 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "prometheus-client"
-version = "0.20.0"
-source = "git+https://github.com/mxinden/client_rust.git?branch=const-family#3589d590b25302985fa9a483a8d55a142417fb0f"
-dependencies = [
- "dtoa",
- "itoa",
- "parking_lot 0.12.1",
- "prometheus-client-derive-encode 0.4.1 (git+https://github.com/mxinden/client_rust.git?branch=const-family)",
+ "prometheus-client-derive-encode",
 ]
 
 [[package]]
@@ -4013,16 +4002,6 @@ name = "prometheus-client-derive-encode"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b6a5217beb0ad503ee7fa752d451c905113d70721b937126158f3106a48cc1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "prometheus-client-derive-encode"
-version = "0.4.1"
-source = "git+https://github.com/mxinden/client_rust.git?branch=const-family#3589d590b25302985fa9a483a8d55a142417fb0f"
 dependencies = [
  "proc-macro2",
  "quote",
