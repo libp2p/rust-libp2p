@@ -56,18 +56,12 @@ mod proto {
 /// > Builder pattern one can still do an upgrade *manually*:
 ///
 /// ```
-/// # use libp2p_core::transport::{ Transport, memory::MemoryTransport };
+/// # use libp2p_core::transport::{ Transport, memory::MemoryTransport, upgrade::Version };
 /// # use libp2p_plaintext::PlainText1Config;
 /// #
 /// MemoryTransport::default()
-///   .and_then(move |io, endpoint| {
-///     libp2p_core::upgrade::apply(
-///       io,
-///       PlainText1Config{},
-///       endpoint,
-///       libp2p_core::transport::upgrade::Version::V1,
-///     )
-///   })
+///   .upgrade(Version::V1)
+///   .authenticate(PlainText1Config {})
 ///   .map(|plaintext, _endpoint| {
 ///     unimplemented!();
 ///     // let peer_id = somehow_derive_peer_id();
