@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM rust:1.67.0
+FROM rust:1.67.0 as builder
 
 # Run with access to the target cache to speed up builds
 WORKDIR /workspace
@@ -11,5 +11,7 @@ RUN --mount=type=cache,target=./target \
 RUN --mount=type=cache,target=./target \
     mv ./target/debug/ping /usr/local/bin/testplan
 
+FROM gcr.io/distroless/cc
+COPY --from=builder /usr/local/bin/testplan /usr/local/bin/testplan
 ENV RUST_BACKTRACE=1
 ENTRYPOINT ["testplan"]
