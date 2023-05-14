@@ -66,6 +66,7 @@ async fn periodic_identify() {
             assert_eq!(s2_info.agent_version, "b");
             assert!(!s2_info.protocols.is_empty());
 
+            // Cannot assert observed address of dialer because memory transport uses ephemeral, outgoing ports.
             // assert_eq!(
             //     s2_info.observed_addr,
             //     swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))
