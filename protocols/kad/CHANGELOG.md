@@ -3,7 +3,11 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove deprecated public modules `handler`, `protocol` and `kbucket`.
+  See [PR 3896].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3896]: https://github.com/libp2p/rust-libp2p/pull/3896
 
 ## 0.43.3
 

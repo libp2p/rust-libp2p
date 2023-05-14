@@ -8,28 +8,11 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Cross Behaviour communication
-
-| Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
-|----------------------|--------|-------------------|---------------------------------------------------|---------------------------------------------------|-----------------------------------------------|
-| Developer ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
-
-Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
-communicate with each other, i.e. cannot make use of information known by another
-`NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
-Kademlia to learn protocols supported by a remote peer from Identify.
-
-This roadmap item contains exchanging standard information about remote peers (e.g. supported
-protocols) between `NetworkBehaviour` implementations.
-
-Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
-would deserve its own roadmap item.
-
 ## Kademlia client mode
 
-| Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
-| Optimization | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
+| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
+|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
+| Optimization | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
@@ -41,6 +24,14 @@ Kademlia operations.
 | Connectivity | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
+
+## Attempt to switch from webrtc-rs to str0m
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
+
+Reduce maintenance burden and reduce dependency footprint.
 
 ## Optimize Hole punching
 
@@ -90,6 +81,17 @@ where the latter only have a self-signed TLS certificate. Compared to WebRTC, th
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
 
+## Automate port-forwarding e.g. via UPnP
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3903 |              |            |
+
+Leverage protocols like UPnP to configure port-forwarding on ones router when behind NAT and/or
+firewall. Another technique in addition to hole punching increasing the probability for a node to
+become publicly reachable when behind a firewall and/or NAT.
+
+
 ## Done
 
 ### Alpha QUIC support
@@ -136,3 +138,20 @@ work before that.
 Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
 cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
 management generic allows users to build advanced and efficient abstractions on top of rust-libp2p.
+
+### Cross Behaviour communication
+
+| Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
+|----------------------|--------|-------------------|---------------------------------------------------|---------------------------------------------------|-----------------------------------------------|
+| Developer ergonomics | Done   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
+
+Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
+communicate with each other, i.e. cannot make use of information known by another
+`NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
+Kademlia to learn protocols supported by a remote peer from Identify.
+
+This roadmap item contains exchanging standard information about remote peers (e.g. supported
+protocols) between `NetworkBehaviour` implementations.
+
+Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
+would deserve its own roadmap item.
