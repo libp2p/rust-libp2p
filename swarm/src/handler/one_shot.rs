@@ -121,8 +121,8 @@ where
     SubstreamProtocol<TInbound, ()>: Clone,
     TEvent: Debug + Send + 'static,
 {
-    type InEvent = TOutbound;
-    type OutEvent = TEvent;
+    type FromBehaviour = TOutbound;
+    type ToBehaviour = TEvent;
     type Error = StreamUpgradeError<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
@@ -133,7 +133,7 @@ where
         self.listen_protocol.clone()
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         self.send_request(event);
     }
 
@@ -148,7 +148,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

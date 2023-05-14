@@ -408,7 +408,7 @@ impl EventLoop {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ComposedEvent")]
+#[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
     request_response: request_response::Behaviour<FileExchangeCodec>,
     kademlia: Kademlia<MemoryStore>,

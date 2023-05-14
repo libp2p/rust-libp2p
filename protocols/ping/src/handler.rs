@@ -229,8 +229,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Void;
-    type OutEvent = crate::Result;
+    type FromBehaviour = Void;
+    type ToBehaviour = crate::Result;
     type Error = Failure;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;

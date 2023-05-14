@@ -242,8 +242,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = InEvent;
-    type OutEvent = Event;
+    type FromBehaviour = InEvent;
+    type ToBehaviour = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
     type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
@@ -254,7 +254,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             InEvent::AddressesChanged(addresses) => {
                 self.external_addresses = addresses;

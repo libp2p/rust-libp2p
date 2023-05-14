@@ -354,8 +354,8 @@ where
     TInboundSubstreamHandler: Send + 'static,
     TOutboundSubstreamHandler: Send + 'static,
 {
-    type InEvent = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
-    type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
+    type FromBehaviour = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
+    type ToBehaviour = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
     type Error = Void;
     type InboundProtocol = PassthroughProtocol;
     type OutboundProtocol = PassthroughProtocol;
@@ -402,7 +402,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             InEvent::NewSubstream { open_info } => self.new_substreams.push_back(open_info),
             InEvent::NotifyInboundSubstream { id, message } => {
@@ -456,7 +456,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
