@@ -92,8 +92,6 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
-    #[allow(deprecated)]
-    pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
@@ -108,8 +106,6 @@ pub mod derive_prelude {
     pub use libp2p_identity::PeerId;
 }
 
-#[allow(deprecated)]
-pub use behaviour::NetworkBehaviourAction;
 pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
     ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
