@@ -1,7 +1,7 @@
 ## 0.40.0 - unreleased
 
 - Allow `ListenerId` to be user-controlled.
-  See [PR 3567]
+  See [PR 3567].
 
 - Raise MSRV to 1.65.
   See [PR 3715].
