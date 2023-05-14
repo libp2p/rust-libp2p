@@ -179,8 +179,8 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = Either<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
+    type FromBehaviour = Either<TProto1::FromBehaviour, TProto2::FromBehaviour>;
+    type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -201,7 +201,7 @@ where
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             Either::Left(event) => self.proto1.on_behaviour_event(event),
             Either::Right(event) => self.proto2.on_behaviour_event(event),
@@ -222,7 +222,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

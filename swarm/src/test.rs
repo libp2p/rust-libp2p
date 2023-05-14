@@ -37,7 +37,7 @@ use std::task::{Context, Poll};
 pub(crate) struct MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
-    THandler::OutEvent: Clone,
+    THandler::ToBehaviour: Clone,
     TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
@@ -48,13 +48,13 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub(crate) next_action: Option<ToSwarm<TOutEvent, THandler::InEvent>>,
+    pub(crate) next_action: Option<ToSwarm<TOutEvent, THandler::FromBehaviour>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
-    THandler::OutEvent: Clone,
+    THandler::ToBehaviour: Clone,
     TOutEvent: Send + 'static,
 {
     pub(crate) fn new(handler_proto: THandler) -> Self {
@@ -69,11 +69,11 @@ where
 impl<THandler, TOutEvent> NetworkBehaviour for MockBehaviour<THandler, TOutEvent>
 where
     THandler: ConnectionHandler + Clone,
-    THandler::OutEvent: Clone,
+    THandler::ToBehaviour: Clone,
     TOutEvent: Send + 'static,
 {
     type ConnectionHandler = THandler;
-    type OutEvent = TOutEvent;
+    type ToSwarm = TOutEvent;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -114,7 +114,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
@@ -381,7 +381,7 @@ where
     THandlerOutEvent<TInner>: Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
-    type OutEvent = TInner::OutEvent;
+    type ToSwarm = TInner::ToSwarm;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -558,7 +558,7 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }
