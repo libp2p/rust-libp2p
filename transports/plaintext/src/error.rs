@@ -41,7 +41,7 @@ pub enum PlainTextError {
 }
 
 #[derive(Debug)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(pub(crate) quick_protobuf::Error);
 
 impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -87,9 +87,9 @@ impl From<IoError> for PlainTextError {
     }
 }
 
-impl From<quick_protobuf::Error> for PlainTextError {
-    fn from(err: quick_protobuf::Error) -> PlainTextError {
-        PlainTextError::InvalidPayload(DecodeError(err))
+impl From<DecodeError> for PlainTextError {
+    fn from(err: DecodeError) -> PlainTextError {
+        PlainTextError::InvalidPayload(err)
     }
 }
 

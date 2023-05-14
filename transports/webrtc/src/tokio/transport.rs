@@ -80,9 +80,11 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let id = ListenerId::new();
-
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let socket_addr =
             parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
@@ -93,7 +95,7 @@ impl libp2p_core::Transport for Transport {
                 .map_err(|e| TransportError::Other(Error::Io(e)))?,
         );
 
-        Ok(id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -596,8 +598,12 @@ mod tests {
         // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let listener = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap())
+            let listener = ListenerId::next();
+            transport
+                .listen_on(
+                    listener,
+                    "/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap(),
+                )
                 .unwrap();
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {

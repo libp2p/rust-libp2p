@@ -37,8 +37,8 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, NegotiatedSubstream,
-    StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -77,7 +77,7 @@ pub enum In {
         dst_peer_id: PeerId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
-        dst_stream: NegotiatedSubstream,
+        dst_stream: Stream,
         dst_pending_data: Bytes,
     },
 }
@@ -193,7 +193,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
-        dst_stream: NegotiatedSubstream,
+        dst_stream: Stream,
         dst_pending_data: Bytes,
     },
     /// Negotiating an outbound substream for an inbound circuit request failed.
@@ -340,7 +340,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -546,8 +546,8 @@ enum ReservationRequestFuture {
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
 impl ConnectionHandler for Handler {
-    type InEvent = In;
-    type OutEvent = Event;
+    type FromBehaviour = In;
+    type ToBehaviour = Event;
     type Error = StreamUpgradeError<
         Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
     >;
@@ -567,7 +567,7 @@ impl ConnectionHandler for Handler {
         )
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::AcceptReservationReq {
                 inbound_reservation_req,
@@ -671,7 +671,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -914,10 +914,10 @@ pub struct OutboundOpenInfo {
 
 pub(crate) struct CircuitParts {
     circuit_id: CircuitId,
-    src_stream: NegotiatedSubstream,
+    src_stream: Stream,
     src_pending_data: Bytes,
     dst_peer_id: PeerId,
     dst_handler_notifier: oneshot::Sender<()>,
-    dst_stream: NegotiatedSubstream,
+    dst_stream: Stream,
     dst_pending_data: Bytes,
 }

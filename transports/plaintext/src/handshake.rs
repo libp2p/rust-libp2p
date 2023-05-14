@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::PlainTextError;
+use crate::error::{DecodeError, PlainTextError};
 use crate::proto::Exchange;
 use crate::PlainText2Config;
 
@@ -74,7 +74,7 @@ impl HandshakeContext<Local> {
         exchange_bytes: BytesMut,
     ) -> Result<HandshakeContext<Remote>, PlainTextError> {
         let mut reader = BytesReader::from_bytes(&exchange_bytes);
-        let prop = Exchange::from_reader(&mut reader, &exchange_bytes)?;
+        let prop = Exchange::from_reader(&mut reader, &exchange_bytes).map_err(DecodeError)?;
 
         let public_key = PublicKey::try_decode_protobuf(&prop.pubkey.unwrap_or_default())?;
         let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;

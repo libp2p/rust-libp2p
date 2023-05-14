@@ -237,8 +237,8 @@ impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: Codec + Send + Clone + 'static,
 {
-    type InEvent = RequestProtocol<TCodec>;
-    type OutEvent = Event<TCodec>;
+    type FromBehaviour = RequestProtocol<TCodec>;
+    type ToBehaviour = Event<TCodec>;
     type Error = void::Void;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
@@ -279,7 +279,7 @@ where
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
-    fn on_behaviour_event(&mut self, request: Self::InEvent) {
+    fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
         self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
     }
@@ -291,8 +291,9 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
-    {
+    ) -> Poll<
+        ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::ToBehaviour, Self::Error>,
+    > {
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(ConnectionHandlerEvent::Custom(event));

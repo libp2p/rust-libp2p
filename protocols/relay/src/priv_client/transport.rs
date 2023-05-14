@@ -70,7 +70,7 @@ use thiserror::Error;
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
@@ -85,7 +85,7 @@ use thiserror::Error;
 ///        .with(Protocol::Memory(40)) // Relay address.
 ///        .with(Protocol::P2p(relay_id.into())) // Relay peer id.
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
-///    transport.listen_on(relay_addr).unwrap();
+///    transport.listen_on(ListenerId::next(), relay_addr).unwrap();
 ///    ```
 pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
@@ -111,7 +111,11 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Connection, Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
             RelayedMultiaddr {
                 relay_peer_id: None,
@@ -138,7 +142,6 @@ impl libp2p_core::Transport for Transport {
                 to_listener,
             });
 
-        let listener_id = ListenerId::new();
         let listener = Listener {
             listener_id,
             queued_events: Default::default(),
@@ -146,7 +149,7 @@ impl libp2p_core::Transport for Transport {
             is_closed: false,
         };
         self.listeners.push(listener);
-        Ok(listener_id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
