@@ -278,7 +278,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
     Dial { opts: DialOpts },
 
-    /// Instructs the `Swarm` to listen on the provided address
+    /// Instructs the [`Swarm`] to listen on the provided address
     ListenOn { id: ListenerId, address: Multiaddr },
 
     /// Instructs the `Swarm` to remove the listener
