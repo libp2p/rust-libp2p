@@ -281,7 +281,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// Instructs the [`Swarm`] to listen on the provided address
     ListenOn { id: ListenerId, address: Multiaddr },
 
-    /// Instructs the `Swarm` to remove the listener
+    /// Instructs the [`Swarm`] to remove the listener
     RemoveListener { id: ListenerId },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
