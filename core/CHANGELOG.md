@@ -1,6 +1,6 @@
 ## 0.40.0 - unreleased
 
-- Allow `ListenerId` to be user-controlled.
+- Allow `ListenerId` to be user-controlled, i.e. to be provided on `Transport::listen_on`.
   See [PR 3567].
 
 - Raise MSRV to 1.65.
