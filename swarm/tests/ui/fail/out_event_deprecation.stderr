@@ -1,6 +1,6 @@
-error: use of deprecated constant `out_event::_w`:
-               It is deprecated to out_event.
-               Please instead to_swarm.
+error: use of deprecated constant `out_event_renamed_to_to_swarm::_w`:
+               It is deprecated to use the out_event attribute `#[behaviour(out_event = ...)]`.
+               Please instead use the to_swarm attribute `#[behaviour(to_swarm = ...)]`.
  --> tests/ui/fail/out_event_deprecation.rs:7:8
   |
 7 | struct Foo {

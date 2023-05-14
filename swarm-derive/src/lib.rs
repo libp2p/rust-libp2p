@@ -936,9 +936,9 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
     }
 
     if is_out_event {
-        let warning = proc_macro_warning::Warning::new_deprecated("out_event")
-            .old("out_event")
-            .new("to_swarm")
+        let warning = proc_macro_warning::Warning::new_deprecated("out_event_renamed_to_to_swarm")
+            .old("use the out_event attribute `#[behaviour(out_event = ...)]`")
+            .new("use the to_swarm attribute `#[behaviour(to_swarm = ...)]`")
             .span(ast.ident.span())
             .build();
 
