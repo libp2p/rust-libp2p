@@ -12,6 +12,7 @@
 
 - Remove deprecated `mplex` module.
   You can still depend on `libp2p-mplex` directly but we strongly encourage to migrate to `yamux`.
+  This also removes `mplex` from the `development_transport` and `tokio_development_transport` functions.
   See [PR 3920].
 
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
