@@ -279,7 +279,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     Dial { opts: DialOpts },
 
     /// Instructs the `Swarm` to listen on the provided address
-    ListenOn { address: Multiaddr },
+    ListenOn { id: ListenerId, address: Multiaddr },
 
     /// Instructs the `Swarm` to remove the listener
     RemoveListener { id: ListenerId },
@@ -351,7 +351,7 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
-            ToSwarm::ListenOn { address } => ToSwarm::ListenOn { address },
+            ToSwarm::ListenOn { id, address } => ToSwarm::ListenOn { id, address },
             ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
@@ -382,7 +382,7 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
-            ToSwarm::ListenOn { address } => ToSwarm::ListenOn { address },
+            ToSwarm::ListenOn { id, address } => ToSwarm::ListenOn { id, address },
             ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,

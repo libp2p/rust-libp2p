@@ -706,8 +706,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
                 }
-                std::task::Poll::Ready(#network_behaviour_action::ListenOn { address }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::ListenOn { address });
+                std::task::Poll::Ready(#network_behaviour_action::ListenOn { id, address }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ListenOn { id, address });
                 }
                 std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id });

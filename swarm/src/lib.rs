@@ -1121,8 +1121,8 @@ where
                     }
                 }
             }
-            ToSwarm::ListenOn { address } => {
-                self.listen_on(address).ok()?;
+            ToSwarm::ListenOn { id, address } => {
+                self.transport.listen_on(id, address).ok()?;
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
