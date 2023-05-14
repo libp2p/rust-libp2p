@@ -45,8 +45,8 @@
 - Deprecate the `NegotiatedSubstream` type and replace it with `Stream`.
   See [PR 3912].
 
-- Remove deprecated `NetworkBehaviourAction`
-  See [PR XXXX].
+- Remove deprecated `NetworkBehaviourAction` type.
+  See [PR 3919].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
@@ -58,7 +58,7 @@
 [PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3919]: https://github.com/libp2p/rust-libp2p/pull/3919
 
 ## 0.42.2
 
