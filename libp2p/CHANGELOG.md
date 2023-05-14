@@ -12,11 +12,11 @@
 
 - Remove deprecated `mplex` module.
   You can still depend on `libp2p-mplex` directly but we strongly encourage to migrate to `yamux`.
-  See [PR XXXX].
+  See [PR 3920].
 
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
 
 ## 0.51.3
 
