@@ -354,8 +354,7 @@ impl ConnectionHandler for Handler {
                 }
                 None => {
                     self.outbound = Some(OutboundState::OpenStream);
-                    let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
-                        .with_timeout(self.config.timeout);
+                    let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
                     return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol,
                     });
