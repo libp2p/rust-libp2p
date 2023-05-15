@@ -130,6 +130,12 @@ pub enum Failure {
     },
 }
 
+impl Failure {
+    fn other(e: impl std::error::Error + Send + 'static) -> Self {
+        Self::Other { error: Box::new(e) }
+    }
+}
+
 impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -327,8 +333,7 @@ impl ConnectionHandler for Handler {
                         })));
                     }
                     Poll::Ready(Err(e)) => {
-                        self.pending_errors
-                            .push_front(Failure::Other { error: Box::new(e) });
+                        self.pending_errors.push_front(e);
                     }
                 },
                 Some(OutboundState::Idle(stream)) => match self.timer.poll_unpin(cx) {
@@ -338,8 +343,9 @@ impl ConnectionHandler for Handler {
                     }
                     Poll::Ready(()) => {
                         self.timer.reset(self.config.timeout);
-                        self.outbound =
-                            Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
+                        self.outbound = Some(OutboundState::Ping(
+                            protocol::send_ping(stream).map_err(Failure::other).boxed(),
+                        ));
                     }
                 },
                 Some(OutboundState::OpenStream) => {
@@ -381,7 +387,9 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 self.timer.reset(self.config.timeout);
-                self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
+                self.outbound = Some(OutboundState::Ping(
+                    protocol::send_ping(stream).map_err(Failure::other).boxed(),
+                ));
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
@@ -394,7 +402,7 @@ impl ConnectionHandler for Handler {
     }
 }
 
-type PingFuture = BoxFuture<'static, Result<(Stream, Duration), io::Error>>;
+type PingFuture = BoxFuture<'static, Result<(Stream, Duration), Failure>>;
 type PongFuture = BoxFuture<'static, Result<Stream, io::Error>>;
 
 /// The current state w.r.t. outbound pings.
