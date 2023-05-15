@@ -25,6 +25,7 @@ use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::{
     parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
     Token,
@@ -864,7 +865,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         user_specified_out_event: None,
         deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
-    let mut is_out_event = false;
 
     for attr in ast
         .attrs
@@ -904,7 +904,13 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
                 if meta.path().is_ident("out_event") {
-                    is_out_event = true;
+                    let warning = proc_macro_warning::FormattedWarning::new_deprecated(
+                        "out_event_renamed_to_to_swarm",
+                        "The `out_event` attribute has been renamed to `to_swarm`.",
+                        meta.span(),
+                    );
+
+                    attributes.deprecation_tokenstream = quote::quote! { #warning };
                 }
                 match meta {
                     Meta::Path(_) => unimplemented!(),
@@ -933,16 +939,6 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
                 continue;
             }
         }
-    }
-
-    if is_out_event {
-        let warning = proc_macro_warning::Warning::new_deprecated("out_event_renamed_to_to_swarm")
-            .old("use the out_event attribute `#[behaviour(out_event = ...)]`")
-            .new("use the to_swarm attribute `#[behaviour(to_swarm = ...)]`")
-            .span(ast.ident.span())
-            .build();
-
-        attributes.deprecation_tokenstream = quote::quote! { #warning };
     }
 
     Ok(attributes)

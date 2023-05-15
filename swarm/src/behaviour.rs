@@ -257,9 +257,6 @@ pub trait PollParameters {
     fn local_peer_id(&self) -> &PeerId;
 }
 
-#[deprecated(note = "Use `ToSwarm` instead.")]
-pub type NetworkBehaviourAction<TOutEvent, TInEvent> = ToSwarm<TOutEvent, TInEvent>;
-
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
 ///
 /// [`Swarm`]: super::Swarm
