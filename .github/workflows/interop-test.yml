@@ -12,13 +12,13 @@ concurrency:
 jobs:
   run-multidim-interop:
     name: Run multidimensional interoperability tests
-    runs-on: ubuntu-22.04
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v2
       - name: Build image
         run: docker buildx build --load -t rust-libp2p-head . -f interop-tests/Dockerfile
-      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@482e8ac2e5d91c69d7f432d325337e2ddca39cf9
+      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
         with:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/ping-version.json
