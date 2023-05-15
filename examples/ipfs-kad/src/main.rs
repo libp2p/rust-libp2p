@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
+    // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
     let transport = development_transport(local_key).await?;
 
     // Create a swarm to manage peers and events.

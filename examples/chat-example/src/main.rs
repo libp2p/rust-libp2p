@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(id_keys.public());
     println!("Local peer id: {local_peer_id}");
 
-    // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
