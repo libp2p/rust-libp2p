@@ -107,24 +107,8 @@ impl Keypair {
     }
 
     #[cfg(feature = "ed25519")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ed25519` instead."
-    )]
-    pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::Keypair, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "secp256k1")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_secp256k1` instead."
-    )]
-    pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -133,24 +117,8 @@ impl Keypair {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
-    )]
-    pub fn into_rsa(self) -> Option<rsa::Keypair> {
-        self.try_into().ok()
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::Keypair, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "ecdsa")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
-    )]
-    pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "ecdsa")]
@@ -481,24 +449,8 @@ impl PublicKey {
     }
 
     #[cfg(feature = "ed25519")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ed25519` instead."
-    )]
-    pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::PublicKey, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "secp256k1")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_secp256k1` instead."
-    )]
-    pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -507,36 +459,13 @@ impl PublicKey {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_rsa` instead."
-    )]
-    pub fn into_rsa(self) -> Option<rsa::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::PublicKey, OtherVariantError> {
         self.try_into()
     }
 
     #[cfg(feature = "ecdsa")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ecdsa` instead."
-    )]
-    pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ecdsa")]
     pub fn try_into_ecdsa(self) -> Result<ecdsa::PublicKey, OtherVariantError> {
         self.try_into()
-    }
-
-    /// Encode the public key into a protobuf structure for storage or
-    /// exchange with other nodes.
-    #[deprecated(note = "Renamed to `PublicKey::encode_protobuf`.")]
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        Self::encode_protobuf(self)
     }
 
     /// Encode the public key into a protobuf structure for storage or
@@ -568,15 +497,6 @@ impl PublicKey {
             feature = "rsa"
         )))]
         unreachable!()
-    }
-
-    /// Decode a public key from a protobuf structure, e.g. read from storage
-    /// or received from another node.
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
-    )]
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_protobuf(bytes)
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
