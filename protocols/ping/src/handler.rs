@@ -409,7 +409,10 @@ enum OutboundState {
 
 /// A wrapper around [`protocol::send_ping`] that enforces a time out.
 async fn send_ping(stream: Stream, timeout: Duration) -> Result<(Stream, Duration), Failure> {
-    match future::select(protocol::send_ping(stream), Delay::new(timeout)).await {
+    let ping = protocol::send_ping(stream);
+    futures::pin_mut!(ping);
+
+    match future::select(ping, Delay::new(timeout)).await {
         Either::Left((Ok((stream, rtt)), _)) => Ok((stream, rtt)),
         Either::Left((Err(e), _)) => Err(Failure::other(e)),
         Either::Right(((), _)) => Err(Failure::Timeout),
