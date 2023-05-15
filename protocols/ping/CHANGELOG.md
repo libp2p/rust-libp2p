@@ -2,10 +2,16 @@
 
 - Raise MSRV to 1.65.
   See [PR 3715].
+
 - Remove deprecated items. See [PR 3702].
+
+- Don't close connections on ping failures.
+  This also removes the `max_failures` config option.
+  See [PR XXXX].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.42.0
 

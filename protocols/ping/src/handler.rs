@@ -35,7 +35,6 @@ use std::collections::VecDeque;
 use std::{
     error::Error,
     fmt, io,
-    num::NonZeroU32,
     task::{Context, Poll},
     time::Duration,
 };
@@ -46,13 +45,8 @@ use void::Void;
 pub struct Config {
     /// The timeout of an outbound ping.
     timeout: Duration,
-    /// The duration between the last successful outbound or inbound ping
-    /// and the next outbound ping.
+    /// The duration between outbound pings.
     interval: Duration,
-    /// The maximum number of failed outbound pings before the associated
-    /// connection is deemed unhealthy, indicating to the `Swarm` that it
-    /// should be closed.
-    max_failures: NonZeroU32,
 }
 
 impl Config {
@@ -60,23 +54,16 @@ impl Config {
     ///
     ///   * [`Config::with_interval`] 15s
     ///   * [`Config::with_timeout`] 20s
-    ///   * [`Config::with_max_failures`] 1
     ///
     /// These settings have the following effect:
     ///
     ///   * A ping is sent every 15 seconds on a healthy connection.
     ///   * Every ping sent must yield a response within 20 seconds in order to
     ///     be successful.
-    ///   * A single ping failure is sufficient for the connection to be subject
-    ///     to being closed.
-    ///   * The connection may be closed at any time as far as the ping protocol
-    ///     is concerned, i.e. the ping protocol itself does not keep the
-    ///     connection alive.
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(20),
             interval: Duration::from_secs(15),
-            max_failures: NonZeroU32::new(1).expect("1 != 0"),
         }
     }
 
@@ -89,13 +76,6 @@ impl Config {
     /// Sets the ping interval.
     pub fn with_interval(mut self, d: Duration) -> Self {
         self.interval = d;
-        self
-    }
-
-    /// Sets the maximum number of consecutive ping failures upon which the remote
-    /// peer is considered unreachable and the connection closed.
-    pub fn with_max_failures(mut self, n: NonZeroU32) -> Self {
-        self.max_failures = n;
         self
     }
 }
@@ -148,8 +128,6 @@ impl Error for Failure {
 
 /// Protocol handler that handles pinging the remote at a regular period
 /// and answering ping queries.
-///
-/// If the remote doesn't respond, produces an error that closes the connection.
 pub struct Handler {
     /// Configuration options.
     config: Config,
@@ -233,7 +211,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
     type ToBehaviour = Result<Duration, Failure>;
-    type Error = Failure;
+    type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -295,19 +273,12 @@ impl ConnectionHandler for Handler {
 
                 self.failures += 1;
 
-                // Note: For backward-compatibility, with configured
-                // `max_failures == 1`, the first failure is always "free"
-                // and silent. This allows peers who still use a new substream
+                // Note: For backward-compatibility the first failure is always "free"
+                // and silent. This allows peers who use a new substream
                 // for each ping to have successful ping exchanges with peers
                 // that use a single substream, since every successful ping
-                // resets `failures` to `0`, while at the same time emitting
-                // events only for `max_failures - 1` failures, as before.
-                if self.failures > 1 || self.config.max_failures.get() > 1 {
-                    if self.failures >= self.config.max_failures.get() {
-                        log::debug!("Too many failures ({}). Closing connection.", self.failures);
-                        return Poll::Ready(ConnectionHandlerEvent::Close(error));
-                    }
-
+                // resets `failures` to `0`.
+                if self.failures > 1 {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
                 }
             }
