@@ -100,21 +100,21 @@ impl NetworkBehaviour for Behaviour {
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
-        _: PeerId,
+        peer: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone()))
+        Ok(Handler::new(self.config.clone(), peer))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
-        _: PeerId,
+        peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone()))
+        Ok(Handler::new(self.config.clone(), peer))
     }
 
     fn on_connection_handler_event(
@@ -132,14 +132,6 @@ impl NetworkBehaviour for Behaviour {
         _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(e) = self.events.pop_back() {
-            let Event { result, peer } = &e;
-
-            match result {
-                Ok(Success::Ping { .. }) => log::debug!("Ping sent to {:?}", peer),
-                Ok(Success::Pong) => log::debug!("Ping received from {:?}", peer),
-                _ => {}
-            }
-
             Poll::Ready(ToSwarm::GenerateEvent(e))
         } else {
             Poll::Pending
