@@ -1118,7 +1118,14 @@ where
                 }
             }
             ToSwarm::ListenOn { id, address } => {
-                self.transport.listen_on(id, address).ok()?;
+                if let Err(e) = self.transport.listen_on(id, address) {
+                    self.behaviour.on_swarm_event(FromSwarm::ListenerError(
+                        behaviour::ListenerError {
+                            listener_id: id,
+                            err: &e,
+                        },
+                    ));
+                }
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
