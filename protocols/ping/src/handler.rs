@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{protocol, PROTOCOL_NAME};
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Either};
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
@@ -163,9 +163,8 @@ impl Error for Failure {
 pub struct Handler {
     /// Configuration options.
     config: Config,
-    /// The timer used for the delay to the next ping as well as
-    /// the ping timeout.
-    timer: Delay,
+    /// The timer used for the delay to the next ping.
+    interval: Delay,
     /// Outbound ping failures that are pending to be processed by `poll()`.
     pending_errors: VecDeque<Failure>,
     /// The number of consecutive ping failures that occurred.
@@ -200,7 +199,7 @@ impl Handler {
     pub fn new(config: Config) -> Self {
         Handler {
             config,
-            timer: Delay::new(Duration::new(0, 0)),
+            interval: Delay::new(Duration::new(0, 0)),
             pending_errors: VecDeque::with_capacity(2),
             failures: 0,
             outbound: None,
@@ -317,16 +316,12 @@ impl ConnectionHandler for Handler {
             match self.outbound.take() {
                 Some(OutboundState::Ping(mut ping)) => match ping.poll_unpin(cx) {
                     Poll::Pending => {
-                        if self.timer.poll_unpin(cx).is_ready() {
-                            self.pending_errors.push_front(Failure::Timeout);
-                        } else {
-                            self.outbound = Some(OutboundState::Ping(ping));
-                            break;
-                        }
+                        self.outbound = Some(OutboundState::Ping(ping));
+                        break;
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
                         self.failures = 0;
-                        self.timer.reset(self.config.interval);
+                        self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
                         return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
                             rtt,
@@ -336,15 +331,14 @@ impl ConnectionHandler for Handler {
                         self.pending_errors.push_front(e);
                     }
                 },
-                Some(OutboundState::Idle(stream)) => match self.timer.poll_unpin(cx) {
+                Some(OutboundState::Idle(stream)) => match self.interval.poll_unpin(cx) {
                     Poll::Pending => {
                         self.outbound = Some(OutboundState::Idle(stream));
                         break;
                     }
                     Poll::Ready(()) => {
-                        self.timer.reset(self.config.timeout);
                         self.outbound = Some(OutboundState::Ping(
-                            protocol::send_ping(stream).map_err(Failure::other).boxed(),
+                            send_ping(stream, self.config.timeout).boxed(),
                         ));
                     }
                 },
@@ -385,9 +379,8 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.timer.reset(self.config.timeout);
                 self.outbound = Some(OutboundState::Ping(
-                    protocol::send_ping(stream).map_err(Failure::other).boxed(),
+                    send_ping(stream, self.config.timeout).boxed(),
                 ));
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
@@ -412,4 +405,13 @@ enum OutboundState {
     Idle(Stream),
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
+}
+
+/// A wrapper around [`protocol::send_ping`] that enforces a time out.
+async fn send_ping(stream: Stream, timeout: Duration) -> Result<(Stream, Duration), Failure> {
+    match future::select(protocol::send_ping(stream), Delay::new(timeout)).await {
+        Either::Left((Ok((stream, rtt)), _)) => Ok((stream, rtt)),
+        Either::Left((Err(e), _)) => Err(Failure::other(e)),
+        Either::Right(((), _)) => Err(Failure::Timeout),
+    }
 }
