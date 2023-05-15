@@ -3,7 +3,12 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Remove `WsConfig::use_deflate` option.
+  This allows us to remove the dependency on the `zlib` shared library.
+  See [PR XXXX].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.41.0
 
