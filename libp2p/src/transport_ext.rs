@@ -43,7 +43,7 @@ pub trait TransportExt: Transport {
     /// # Example
     ///
     /// ```
-    /// use libp2p_mplex as mplex;
+    /// use libp2p_yamux as yamux;
     /// use libp2p_noise as noise;
     /// use libp2p_tcp as tcp;
     /// use libp2p::{
@@ -61,7 +61,7 @@ pub trait TransportExt: Transport {
     ///         noise::Config::new(&id_keys)
     ///             .expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
-    ///     .multiplex(mplex::MplexConfig::new())
+    ///     .multiplex(yamux::Config::default())
     ///     .boxed();
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
