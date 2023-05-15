@@ -10,9 +10,12 @@
   These variants are no longer constructed.
   See [PR 3605].
 
+- Remove deprecated items. See [PR 3948].
+
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3829]: https://github.com/libp2p/rust-libp2p/pull/3829
+[PR 3948]: https://github.com/libp2p/rust-libp2p/pull/3948
 
 ## 0.15.2
 
