@@ -221,6 +221,7 @@ impl Handler {
             }
             // Note: This timeout only covers protocol negotiation.
             StreamUpgradeError::Timeout => Failure::Timeout,
+            StreamUpgradeError::Apply(e) => void::unreachable(e),
             e => Failure::Other { error: Box::new(e) },
         };
 
