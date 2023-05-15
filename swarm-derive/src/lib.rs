@@ -21,44 +21,48 @@
 #![recursion_limit = "256"]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod syn_ext;
+
+use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
-    Token,
-};
+use syn::spanned::Spanned;
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    build(&ast)
+    build(&ast).unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// The actual implementation.
-fn build(ast: &DeriveInput) -> TokenStream {
+fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
+        Data::Enum(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on enums",
+        )),
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on union",
+        )),
     }
 }
 
 /// The version for structs
-fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
+fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
         deprecation_tokenstream,
-    } = match parse_attributes(ast) {
-        Ok(attrs) => attrs,
-        Err(e) => return e,
-    };
+    } = parse_attributes(ast)?;
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
@@ -848,7 +852,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
     };
 
-    final_quote.into()
+    Ok(final_quote.into())
 }
 
 struct BehaviourAttributes {
@@ -858,91 +862,47 @@ struct BehaviourAttributes {
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
-fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
+fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
         deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
-    let mut is_out_event = false;
 
     for attr in ast
         .attrs
         .iter()
         .filter(|attr| attr.path().is_ident("behaviour"))
     {
-        let nested = attr
-            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-            .expect("`parse_args_with` never fails when parsing nested meta");
+        let nested = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
 
         for meta in nested {
             if meta.path().is_ident("prelude") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`prelude` value must be a quoted path",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.prelude_path = syn::parse_str(&value)?;
 
                 continue;
             }
 
             if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
                 if meta.path().is_ident("out_event") {
-                    is_out_event = true;
-                }
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
+                    let warning = proc_macro_warning::FormattedWarning::new_deprecated(
+                        "out_event_renamed_to_to_swarm",
+                        "The `out_event` attribute has been renamed to `to_swarm`.",
+                        meta.span(),
+                    );
 
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.user_specified_out_event =
-                            Some(syn::parse_str(&s.value()).unwrap());
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`to_swarm` value must be a quoted type",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
+                    attributes.deprecation_tokenstream = quote::quote! { #warning };
                 }
+
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.user_specified_out_event = Some(syn::parse_str(&value)?);
 
                 continue;
             }
         }
-    }
-
-    if is_out_event {
-        let warning = proc_macro_warning::Warning::new_deprecated("out_event_renamed_to_to_swarm")
-            .old("use the out_event attribute `#[behaviour(out_event = ...)]`")
-            .new("use the to_swarm attribute `#[behaviour(to_swarm = ...)]`")
-            .span(ast.ident.span())
-            .build();
-
-        attributes.deprecation_tokenstream = quote::quote! { #warning };
     }
 
     Ok(attributes)
