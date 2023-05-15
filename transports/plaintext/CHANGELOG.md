@@ -5,10 +5,10 @@
 
 - Remove `Plaintext1Config`.
   Use `Plaintext2Config` instead.
-  See [PR XXXX.
+  See [PR 3915].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3915]: https://github.com/libp2p/rust-libp2p/pull/3915
 
 ## 0.39.1
 
