@@ -59,11 +59,9 @@ fn ping_pong() {
 }
 
 fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
-    let success = e.result.expect("a ping success");
+    let rtt = e.result.expect("a ping success");
 
-    if let ping::Success::Ping { rtt } = success {
-        assert!(rtt < Duration::from_millis(50))
-    }
+    assert!(rtt < Duration::from_millis(50))
 }
 
 /// Tests that the connection is closed upon a configurable
@@ -102,8 +100,7 @@ async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<Behaviour>
     loop {
         match swarm.next_swarm_event().await {
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                result: Ok(ping::Success::Ping { .. }),
-                ..
+                result: Ok(_rtt), ..
             })) => {
                 failure_count = 0; // there may be an occasional success
             }

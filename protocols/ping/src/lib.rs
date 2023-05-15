@@ -43,19 +43,20 @@ mod handler;
 mod protocol;
 
 use handler::Handler;
-pub use handler::{Config, Failure, Success};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use std::time::Duration;
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
 };
 
 pub use self::protocol::PROTOCOL_NAME;
+pub use handler::{Config, Failure};
 
 /// A [`NetworkBehaviour`] that responds to inbound pings and
 /// periodically sends outbound pings on every established connection.
@@ -74,7 +75,7 @@ pub struct Event {
     /// The peer ID of the remote.
     pub peer: PeerId,
     /// The result of an inbound or outbound ping.
-    pub result: Result<Success, Failure>,
+    pub result: Result<Duration, Failure>,
 }
 
 impl Behaviour {

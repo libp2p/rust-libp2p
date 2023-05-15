@@ -249,19 +249,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         match event {
                             ping::Event {
                                 peer,
-                                result: Result::Ok(ping::Success::Ping { rtt }),
+                                result: Result::Ok(rtt),
                             } => {
                                 println!(
                                     "ping: rtt to {} is {} ms",
                                     peer.to_base58(),
                                     rtt.as_millis()
                                 );
-                            }
-                            ping::Event {
-                                peer,
-                                result: Result::Ok(ping::Success::Pong),
-                            } => {
-                                println!("ping: pong from {}", peer.to_base58());
                             }
                             ping::Event {
                                 peer,

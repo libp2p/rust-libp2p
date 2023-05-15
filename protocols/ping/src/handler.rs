@@ -106,17 +106,6 @@ impl Default for Config {
     }
 }
 
-/// The successful result of processing an inbound or outbound ping.
-#[derive(Debug)]
-pub enum Success {
-    /// Received a ping and sent back a pong.
-    Pong,
-    /// Sent a ping and received back a pong.
-    ///
-    /// Includes the round-trip time.
-    Ping { rtt: Duration },
-}
-
 /// An outbound ping failure.
 #[derive(Debug)]
 pub enum Failure {
@@ -243,7 +232,7 @@ impl Handler {
 
 impl ConnectionHandler for Handler {
     type FromBehaviour = Void;
-    type ToBehaviour = Result<Success, Failure>;
+    type ToBehaviour = Result<Duration, Failure>;
     type Error = Failure;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -267,7 +256,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             ReadyUpgrade<StreamProtocol>,
             (),
-            Result<Success, Failure>,
+            Result<Duration, Failure>,
             Self::Error,
         >,
     > {
@@ -295,7 +284,6 @@ impl ConnectionHandler for Handler {
 
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
                 }
             }
         }
@@ -337,9 +325,7 @@ impl ConnectionHandler for Handler {
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
-                            rtt,
-                        })));
+                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(rtt)));
                     }
                     Poll::Ready(Err(e)) => {
                         self.pending_errors.push_front(e);
