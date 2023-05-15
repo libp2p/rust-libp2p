@@ -683,7 +683,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type ConnectionHandler = Handler<TCodec>;
-    type OutEvent = Event<TCodec::Request, TCodec::Response>;
+    type ToSwarm = Event<TCodec::Request, TCodec::Response>;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -878,7 +878,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {

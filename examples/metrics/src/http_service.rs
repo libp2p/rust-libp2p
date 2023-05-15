@@ -33,7 +33,7 @@ const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;v
 
 pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
-    let addr = ([127, 0, 0, 1], 0).into();
+    let addr = ([127, 0, 0, 1], 8080).into();
 
     // Use the tokio runtime to run the hyper server.
     let rt = tokio::runtime::Runtime::new()?;

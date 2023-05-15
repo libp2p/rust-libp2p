@@ -198,10 +198,14 @@ where
         BoxFuture<'static, Result<Self::Output, Self::Error>>,
     >;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         self.inner
             .lock()
-            .listen_on(addr)
+            .listen_on(id, addr)
             .map_err(|e| e.map(DnsErr::Transport))
     }
 
@@ -599,8 +603,9 @@ mod tests {
 
             fn listen_on(
                 &mut self,
+                _: ListenerId,
                 _: Multiaddr,
-            ) -> Result<ListenerId, TransportError<Self::Error>> {
+            ) -> Result<(), TransportError<Self::Error>> {
                 unreachable!()
             }
 

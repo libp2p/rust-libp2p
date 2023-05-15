@@ -198,7 +198,11 @@ impl Transport for ExtTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
             if is_not_supported_error(&err) {
                 TransportError::MultiaddrNotSupported(addr)
@@ -206,7 +210,6 @@ impl Transport for ExtTransport {
                 TransportError::Other(JsErr::from(err))
             }
         })?;
-        let listener_id = ListenerId::new();
         let listen = Listen {
             listener_id,
             iterator: SendWrapper::new(iter),
@@ -215,7 +218,7 @@ impl Transport for ExtTransport {
             is_closed: false,
         };
         self.listeners.push(listen);
-        Ok(listener_id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {

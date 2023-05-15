@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "MyBehaviourEvent")]
+    #[behaviour(to_swarm = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: gossipsub::Behaviour,
         identify: identify::Behaviour,
