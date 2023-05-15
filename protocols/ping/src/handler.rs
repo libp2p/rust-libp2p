@@ -230,7 +230,7 @@ impl Handler {
                 return;
             }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
-            e => Failure::Other { error: Box::new(e) },
+            StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
 
         self.pending_errors.push_front(error);
