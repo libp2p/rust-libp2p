@@ -55,7 +55,7 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-//!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "mplex", "yamux", "websocket", "ping", "macros"] }
+//!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!    ```
