@@ -1,7 +1,7 @@
 ## 0.13.0 - unreleased
 
 - Previously `libp2p-metrics::identify` would increase a counter / gauge / histogram on each
-  received identify information. These metrics are missleading, as e.g. they depend on the identify
+  received identify information. These metrics are misleading, as e.g. they depend on the identify
   interval and don't represent the set of currently connected peers. With this change, identify
   information is tracked for the currently connected peers only. Instead of an increase on each
   received identify information, metrics represent the status quo (Gauge).
