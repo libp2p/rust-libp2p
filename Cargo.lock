@@ -2475,7 +2475,7 @@ dependencies = [
  "libp2p-noise",
  "log",
  "multiaddr",
- "multihash",
+ "multihash 0.18.1",
  "multistream-select",
  "once_cell",
  "parking_lot 0.12.1",
@@ -2646,7 +2646,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "multiaddr",
- "multihash",
+ "multihash 0.18.1",
  "p256 0.13.2",
  "quick-protobuf",
  "quickcheck-ext",
@@ -3131,7 +3131,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-swarm",
  "log",
- "multihash",
+ "multihash 0.18.1",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck",
@@ -3401,7 +3401,7 @@ dependencies = [
  "data-encoding",
  "log",
  "multibase",
- "multihash",
+ "multihash 0.17.0",
  "percent-encoding",
  "serde",
  "static_assertions",
@@ -3425,6 +3425,17 @@ name = "multihash"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "835d6ff01d610179fbce3de1694d007e500bf33a7f29689838941d6bf783ae40"
+dependencies = [
+ "core2",
+ "multihash-derive",
+ "unsigned-varint",
+]
+
+[[package]]
+name = "multihash"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfd8a792c1694c6da4f68db0a9d707c72bd260994da179e6030a5dcee00bb815"
 dependencies = [
  "arbitrary",
  "core2",
