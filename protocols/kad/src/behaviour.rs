@@ -1960,7 +1960,7 @@ where
     TStore: RecordStore + Send + 'static,
 {
     type ConnectionHandler = KademliaHandler<QueryId>;
-    type OutEvent = KademliaEvent;
+    type ToSwarm = KademliaEvent;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -2301,7 +2301,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.

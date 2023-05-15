@@ -40,8 +40,8 @@ impl PendingConnectionHandler {
 }
 
 impl ConnectionHandler for PendingConnectionHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
+    type FromBehaviour = Void;
+    type ToBehaviour = Void;
     type Error = Void;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
@@ -52,7 +52,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         void::unreachable(v)
     }
 
@@ -67,7 +67,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

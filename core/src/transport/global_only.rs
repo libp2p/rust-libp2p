@@ -276,8 +276,12 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
     type ListenerUpgrade = <T as crate::Transport>::ListenerUpgrade;
     type Dial = <T as crate::Transport>::Dial;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.inner.listen_on(addr)
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.inner.listen_on(id, addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {

@@ -209,7 +209,7 @@ where
     }
 
     /// Notifies the connection handler of an event.
-    pub(crate) fn on_behaviour_event(&mut self, event: THandler::InEvent) {
+    pub(crate) fn on_behaviour_event(&mut self, event: THandler::FromBehaviour) {
         self.handler.on_behaviour_event(event);
     }
 
@@ -224,7 +224,7 @@ where
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
         let Self {
             requested_substreams,
             muxing,
@@ -439,7 +439,7 @@ where
     #[cfg(test)]
     fn poll_noop_waker(
         &mut self,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
         Pin::new(self).poll(&mut Context::from_waker(futures::task::noop_waker_ref()))
     }
 }
@@ -995,8 +995,8 @@ mod tests {
     }
 
     impl ConnectionHandler for MockConnectionHandler {
-        type InEvent = Void;
-        type OutEvent = Void;
+        type FromBehaviour = Void;
+        type ToBehaviour = Void;
         type Error = Void;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
@@ -1037,7 +1037,7 @@ mod tests {
             }
         }
 
-        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             void::unreachable(event)
         }
 
@@ -1052,7 +1052,7 @@ mod tests {
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                Self::OutEvent,
+                Self::ToBehaviour,
                 Self::Error,
             >,
         > {
@@ -1069,8 +1069,8 @@ mod tests {
     }
 
     impl ConnectionHandler for ConfigurableProtocolConnectionHandler {
-        type InEvent = Void;
-        type OutEvent = Void;
+        type FromBehaviour = Void;
+        type ToBehaviour = Void;
         type Error = Void;
         type InboundProtocol = ManyProtocolsUpgrade;
         type OutboundProtocol = DeniedUpgrade;
@@ -1114,7 +1114,7 @@ mod tests {
             }
         }
 
-        fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
             void::unreachable(event)
         }
 
@@ -1129,7 +1129,7 @@ mod tests {
             ConnectionHandlerEvent<
                 Self::OutboundProtocol,
                 Self::OutboundOpenInfo,
-                Self::OutEvent,
+                Self::ToBehaviour,
                 Self::Error,
             >,
         > {

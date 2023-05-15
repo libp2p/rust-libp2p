@@ -9,9 +9,12 @@
   This newtype enforces additional variants like a leading forward-slash.
   We encourage users to use `StreamProtocol` when implementing `UpgradeInfo`.
   See [PR 3746].
+  
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
 
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 
 ## 0.51.3
 

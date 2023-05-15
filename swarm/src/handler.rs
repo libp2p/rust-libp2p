@@ -99,10 +99,10 @@ use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Durati
 /// When a connection is closed gracefully, the substreams used by the handler may still
 /// continue reading data until the remote closes its side of the connection.
 pub trait ConnectionHandler: Send + 'static {
-    /// Custom event that can be received from the outside.
-    type InEvent: fmt::Debug + Send + 'static;
-    /// Custom event that can be produced by the handler and that will be returned to the outside.
-    type OutEvent: fmt::Debug + Send + 'static;
+    /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
+    type FromBehaviour: fmt::Debug + Send + 'static;
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::Custom`].
+    type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
@@ -153,7 +153,7 @@ pub trait ConnectionHandler: Send + 'static {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     >;
@@ -162,7 +162,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where
         Self: Sized,
-        TMap: Fn(&TNewIn) -> Option<&Self::InEvent>,
+        TMap: Fn(&TNewIn) -> Option<&Self::FromBehaviour>,
     {
         MapInEvent::new(self, map)
     }
@@ -171,7 +171,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn map_out_event<TMap, TNewOut>(self, map: TMap) -> MapOutEvent<Self, TMap>
     where
         Self: Sized,
-        TMap: FnMut(Self::OutEvent) -> TNewOut,
+        TMap: FnMut(Self::ToBehaviour) -> TNewOut,
     {
         MapOutEvent::new(self, map)
     }
@@ -190,7 +190,7 @@ pub trait ConnectionHandler: Send + 'static {
     }
 
     /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
-    fn on_behaviour_event(&mut self, _event: Self::InEvent);
+    fn on_behaviour_event(&mut self, _event: Self::FromBehaviour);
 
     fn on_connection_event(
         &mut self,
