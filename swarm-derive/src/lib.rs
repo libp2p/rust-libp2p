@@ -23,13 +23,13 @@
 
 mod syn_ext;
 
+use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
-use crate::syn_ext::{RequireStrLit};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
