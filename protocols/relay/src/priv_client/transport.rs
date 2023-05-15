@@ -424,6 +424,7 @@ impl From<Error> for TransportError<Error> {
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub(crate) enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
+    #[allow(dead_code)]
     DialReq {
         request_id: RequestId,
         relay_addr: Multiaddr,
