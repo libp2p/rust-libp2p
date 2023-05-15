@@ -280,13 +280,8 @@ where
 
         let future = async move {
             loop {
-                match Self::dial_once(
-                    transport.clone(),
-                    addr,
-                    tls_config.clone(),
-                    role_override,
-                )
-                .await
+                match Self::dial_once(transport.clone(), addr, tls_config.clone(), role_override)
+                    .await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
