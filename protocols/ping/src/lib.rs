@@ -57,9 +57,6 @@ use std::{
 
 pub use self::protocol::PROTOCOL_NAME;
 
-/// The result of an inbound or outbound ping.
-pub type Result = std::result::Result<Success, Failure>;
-
 /// A [`NetworkBehaviour`] that responds to inbound pings and
 /// periodically sends outbound pings on every established connection.
 ///
@@ -77,7 +74,7 @@ pub struct Event {
     /// The peer ID of the remote.
     pub peer: PeerId,
     /// The result of an inbound or outbound ping.
-    pub result: Result,
+    pub result: Result<Success, Failure>,
 }
 
 impl Behaviour {
