@@ -220,7 +220,10 @@ impl Handler {
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            StreamUpgradeError::Timeout => Failure::Timeout,
+            StreamUpgradeError::Timeout => {
+                debug_assert!(false, "ReadyUpgrade cannot time out");
+                return;
+            }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             e => Failure::Other { error: Box::new(e) },
         };
