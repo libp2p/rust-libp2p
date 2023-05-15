@@ -2722,6 +2722,7 @@ dependencies = [
 name = "libp2p-metrics"
 version = "0.13.0"
 dependencies = [
+ "instant",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
