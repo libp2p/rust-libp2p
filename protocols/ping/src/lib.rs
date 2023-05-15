@@ -103,7 +103,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 
@@ -113,7 +113,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 
@@ -146,10 +146,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
             FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ConnectionClosed(_)
