@@ -2856,7 +2856,6 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "unsigned-varint",
- "void",
 ]
 
 [[package]]
