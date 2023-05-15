@@ -16,7 +16,7 @@ js-sys = "0.3.61"
 libp2p-core = { workspace = true }
 parity-send-wrapper = "0.1.0"
 wasm-bindgen = "0.2.42"
-wasm-bindgen-futures = "0.4.34"
+wasm-bindgen-futures = "0.4.35"
 
 [features]
 websocket = []
