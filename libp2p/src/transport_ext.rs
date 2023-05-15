@@ -61,7 +61,7 @@ pub trait TransportExt: Transport {
     ///         noise::Config::new(&id_keys)
     ///             .expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
-    ///     .multiplex(yamux::Config::new())
+    ///     .multiplex(yamux::Config::default())
     ///     .boxed();
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
