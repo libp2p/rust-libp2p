@@ -1603,6 +1603,7 @@ dependencies = [
  "futures",
  "libp2p",
  "multiaddr",
+ "void",
 ]
 
 [[package]]
@@ -2978,8 +2979,10 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
+ "log",
  "rand 0.8.5",
  "smallvec",
+ "void",
 ]
 
 [[package]]
