@@ -118,11 +118,6 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
 }
 
 impl Behaviour {
-    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::new instead.")]
-    pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
-        new(local_peer_id)
-    }
-
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
