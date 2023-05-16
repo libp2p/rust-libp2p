@@ -116,7 +116,6 @@ pub struct Kademlia<TStore> {
 
     /// The record storage.
     store: TStore,
-    mode: Mode,
 }
 
 /// The configurable strategies for the insertion of peers
@@ -183,7 +182,6 @@ pub struct KademliaConfig {
     connection_idle_timeout: Duration,
     kbucket_inserts: KademliaBucketInserts,
     caching: KademliaCaching,
-    mode: Mode,
 }
 
 impl Default for KademliaConfig {
@@ -201,7 +199,6 @@ impl Default for KademliaConfig {
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: KademliaBucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
-            mode: Mode::Server,
         }
     }
 }
@@ -402,14 +399,6 @@ impl KademliaConfig {
         self.caching = c;
         self
     }
-
-    /// Sets the mode.
-    ///
-    /// The default is [`Mode::Server`].
-    pub fn set_mode(&mut self, m: Mode) -> &mut Self {
-        self.mode = m;
-        self
-    }
 }
 
 impl<TStore> Kademlia<TStore>
@@ -464,7 +453,6 @@ where
             connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
-            mode: config.mode,
         }
     }
 
@@ -2005,7 +1993,7 @@ where
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
-                allow_listening: self.mode == Mode::Server,
+                allow_listening: false, // We dialed the remote, which might happen on ephemeral port. Disable listening because we cannot guarantee that the remote will be able to connect back to us on the observed address.
                 idle_timeout: self.connection_idle_timeout,
             },
             ConnectedPoint::Dialer {
@@ -3205,14 +3193,4 @@ pub enum RoutingUpdate {
     /// peer ID is deemed invalid (e.g. refers to the local
     /// peer ID).
     Failed,
-}
-
-/// The kademlia mode.
-///
-/// In server mode, a node accepts inbound kademlia messages and is therefore available to the wider network.
-/// In client mode, a node merely issues requests to the network.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Mode {
-    Client,
-    Server,
 }

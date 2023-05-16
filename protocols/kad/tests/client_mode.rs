@@ -1,14 +1,14 @@
 use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_kad::store::MemoryStore;
-use libp2p_kad::{Kademlia, KademliaConfig, KademliaEvent, Mode};
+use libp2p_kad::{Kademlia, KademliaConfig, KademliaEvent};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]
-async fn connection_to_node_in_client_mode_does_not_update_routing_table() {
-    let mut client = Swarm::new_ephemeral(MyBehaviour::client);
-    let mut server = Swarm::new_ephemeral(MyBehaviour::server);
+async fn connection_from_client_to_server_does_not_update_routing_table() {
+    let mut client = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 
     server.listen().await;
     client.connect(&mut server).await;
@@ -28,12 +28,12 @@ async fn connection_to_node_in_client_mode_does_not_update_routing_table() {
 
 #[async_std::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    let mut server1 = Swarm::new_ephemeral(MyBehaviour::server);
-    let mut server2 = Swarm::new_ephemeral(MyBehaviour::server);
+    let _ = env_logger::try_init();
 
-    server1.listen().await;
+    let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
+
     server2.listen().await;
-
     server1.connect(&mut server2).await;
 
     let server1_peer_id = *server1.local_peer_id();
@@ -45,10 +45,21 @@ async fn two_servers_add_each_other_to_routing_table() {
     match libp2p_swarm_test::drive(&mut server1, &mut server2).await {
         (
             [Identify(_), Identify(_), Kad(RoutingUpdated { peer: peer1, .. })],
-            [Identify(_), Identify(_), Kad(UnroutablePeer { peer: peer2, .. })]
-            | [Identify(_), Kad(UnroutablePeer { peer: peer2, .. }), Identify(_)], // Unroutable because server2 did not dial.
+            [Identify(_), Identify(_)],
         ) => {
             assert_eq!(peer1, server2_peer_id);
+        }
+        other => panic!("Unexpected events: {other:?}"),
+    }
+
+    server1.listen().await;
+    server2.connect(&mut server1).await;
+
+    match libp2p_swarm_test::drive(&mut server2, &mut server1).await {
+        (
+            [Identify(_), Kad(RoutingUpdated { peer: peer2, .. }), Identify(_)],
+            [Identify(_), Identify(_)],
+        ) => {
             assert_eq!(peer2, server1_peer_id);
         }
         other => panic!("Unexpected events: {other:?}"),
@@ -63,18 +74,7 @@ struct MyBehaviour {
 }
 
 impl MyBehaviour {
-    fn client(k: identity::Keypair) -> Self {
-        let mut config = KademliaConfig::default();
-        config.set_mode(Mode::Client);
-
-        Self::with_config(k, config)
-    }
-
-    fn server(k: identity::Keypair) -> Self {
-        Self::with_config(k, KademliaConfig::default())
-    }
-
-    fn with_config(k: identity::Keypair, config: KademliaConfig) -> MyBehaviour {
+    fn new(k: identity::Keypair) -> Self {
         let local_peer_id = k.public().to_peer_id();
 
         Self {
@@ -82,7 +82,11 @@ impl MyBehaviour {
                 "/test/1.0.0".to_owned(),
                 k.public(),
             )),
-            kad: Kademlia::with_config(local_peer_id, MemoryStore::new(local_peer_id), config),
+            kad: Kademlia::with_config(
+                local_peer_id,
+                MemoryStore::new(local_peer_id),
+                KademliaConfig::default(),
+            ),
         }
     }
 }
