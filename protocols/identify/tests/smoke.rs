@@ -1,4 +1,3 @@
-use futures::prelude::*;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
 use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
@@ -7,8 +6,10 @@ use std::iter;
 
 #[async_std::test]
 async fn periodic_identify() {
+    let _ = env_logger::try_init();
+
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(
+        Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -16,7 +17,7 @@ async fn periodic_identify() {
     let swarm1_peer_id = *swarm1.local_peer_id();
 
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        identify::Behaviour::new(
+        Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string()),
         )
@@ -27,44 +28,53 @@ async fn periodic_identify() {
     let (swarm2_memory_listen, swarm2_tcp_listen_addr) = swarm2.listen().await;
     swarm2.connect(&mut swarm1).await;
 
-    // nb. Either swarm may receive the `Identified` event first, upon which
-    // it will permit the connection to be closed, as defined by
-    // `Handler::connection_keep_alive`. Hence the test succeeds if
-    // either `Identified` event arrives correctly.
-    loop {
-        match future::select(swarm1.next_behaviour_event(), swarm2.next_behaviour_event())
-            .await
-            .factor_second()
-            .0
-        {
-            future::Either::Left(identify::Event::Received { info, .. }) => {
-                assert_eq!(info.public_key.to_peer_id(), swarm2_peer_id);
-                assert_eq!(info.protocol_version, "c");
-                assert_eq!(info.agent_version, "d");
-                assert!(!info.protocols.is_empty());
-                assert_eq!(
-                    info.observed_addr,
-                    swarm1_memory_listen.with(Protocol::P2p(swarm1_peer_id.into()))
-                );
-                assert!(info.listen_addrs.contains(&swarm2_tcp_listen_addr));
-                assert!(info.listen_addrs.contains(&swarm2_memory_listen));
-                return;
-            }
-            future::Either::Right(identify::Event::Received { info, .. }) => {
-                assert_eq!(info.public_key.to_peer_id(), swarm1_peer_id);
-                assert_eq!(info.protocol_version, "a");
-                assert_eq!(info.agent_version, "b");
-                assert!(!info.protocols.is_empty());
-                assert_eq!(
-                    info.observed_addr,
-                    swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))
-                );
-                assert!(info.listen_addrs.contains(&swarm1_tcp_listen_addr));
-                assert!(info.listen_addrs.contains(&swarm1_memory_listen));
-                return;
-            }
-            _ => {}
+    use identify::Event::Received;
+    use identify::Event::Sent;
+
+    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
+        (
+            [BehaviourEvent::Identify(Received { info: s1_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+            [BehaviourEvent::Identify(Received { info: s2_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+        )
+        | (
+            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s1_info, .. })],
+            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s2_info, .. })],
+        )
+        | (
+            [BehaviourEvent::Identify(Received { info: s1_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s2_info, .. })],
+        )
+        | (
+            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s1_info, .. })],
+            [BehaviourEvent::Identify(Received { info: s2_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+        ) => {
+            assert_eq!(s1_info.public_key.to_peer_id(), swarm2_peer_id);
+            assert_eq!(s1_info.protocol_version, "c");
+            assert_eq!(s1_info.agent_version, "d");
+            assert!(!s1_info.protocols.is_empty());
+            assert_eq!(
+                s1_info.observed_addr,
+                swarm1_memory_listen
+                    .clone()
+                    .with(Protocol::P2p(swarm1_peer_id.into()))
+            );
+            assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
+            assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
+
+            assert_eq!(s2_info.public_key.to_peer_id(), swarm1_peer_id);
+            assert_eq!(s2_info.protocol_version, "a");
+            assert_eq!(s2_info.agent_version, "b");
+            assert!(!s2_info.protocols.is_empty());
+
+            // Cannot assert observed address of dialer because memory transport uses ephemeral, outgoing ports.
+            // assert_eq!(
+            //     s2_info.observed_addr,
+            //     swarm2_memory_listen.with(Protocol::P2p(swarm2_peer_id.into()))
+            // );
+            assert!(s2_info.listen_addrs.contains(&swarm1_tcp_listen_addr));
+            assert!(s2_info.listen_addrs.contains(&swarm1_memory_listen));
         }
+        other => panic!("Unexpected events: {other:?}"),
     }
 }
 

@@ -301,7 +301,7 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
     Ok(relayed_multiaddr)
 }
 
-pub struct Listener {
+pub(crate) struct Listener {
     listener_id: ListenerId,
     /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
@@ -422,8 +422,9 @@ impl From<Error> for TransportError<Error> {
 
 /// Message from the [`Transport`] to the [`Behaviour`](crate::Behaviour)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
-pub enum TransportToBehaviourMsg {
+pub(crate) enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
+    #[allow(dead_code)]
     DialReq {
         request_id: RequestId,
         relay_addr: Multiaddr,
