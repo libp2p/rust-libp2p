@@ -18,28 +18,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::{
+    Behaviour as RequestResponseBehaviour, Codec, Config, Event, Handler, ProtocolSupport,
+    RequestId, ResponseChannel,
+};
 use async_trait::async_trait;
 use futures::prelude::*;
-use std::{
-    io, marker::PhantomData,
-    task::{Context, Poll},
-};
-use serde::{Serialize, de::DeserializeOwned};
-use crate::{
-    Behaviour as RequestResponseBehaviour,
-    Codec, Config, ProtocolSupport, Handler,
-    Event, RequestId, ResponseChannel,
+use libp2p_core::{
+    upgrade::{read_length_prefixed, write_length_prefixed},
+    Endpoint, Multiaddr,
 };
 use libp2p_identity::PeerId;
-use libp2p_core::{
-    Endpoint, Multiaddr,
-    upgrade::{read_length_prefixed, write_length_prefixed},
-};
 use libp2p_swarm::{
-    StreamProtocol,
-    behaviour::{FromSwarm},
-    ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
+    StreamProtocol, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
+use serde::{de::DeserializeOwned, Serialize};
+use std::{
+    io,
+    marker::PhantomData,
+    task::{Context, Poll},
 };
 
 const REQUEST_MAXIMUM: usize = 1_000_000;
@@ -58,71 +56,65 @@ pub struct SerdeCodec<Req, Resp> {
 }
 
 pub struct Behaviour<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned + 'static,
-        Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned + 'static,
+    Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
     original: RequestResponseBehaviour<SerdeCodec<Req, Resp>>,
     phantom: PhantomData<(Req, Resp)>,
 }
 
 impl<Req, Resp> SerdeCodec<Req, Resp>
-    where
-        Req: Serialize + DeserializeOwned,
-        Resp: Serialize + DeserializeOwned,
+where
+    Req: Serialize + DeserializeOwned,
+    Resp: Serialize + DeserializeOwned,
 {
     pub(crate) fn json() -> Self {
-        SerdeCodec { format: SerdeFormat::JSON, phantom: PhantomData }
+        SerdeCodec {
+            format: SerdeFormat::JSON,
+            phantom: PhantomData,
+        }
     }
 
     pub(crate) fn cbor() -> Self {
-        SerdeCodec { format: SerdeFormat::CBOR, phantom: PhantomData }
+        SerdeCodec {
+            format: SerdeFormat::CBOR,
+            phantom: PhantomData,
+        }
     }
 
     fn val_to_vec<S: Serialize>(&self, val: &S) -> io::Result<Vec<u8>> {
         match self.format {
-            SerdeFormat::JSON => {
-                serde_json::to_vec(val)
-                    .map_err(|_| io::ErrorKind::Other.into())
-            },
-            SerdeFormat::CBOR => {
-                serde_cbor::to_vec(val)
-                    .map_err(|_| io::ErrorKind::Other.into())
-            },
+            SerdeFormat::JSON => serde_json::to_vec(val).map_err(|_| io::ErrorKind::Other.into()),
+            SerdeFormat::CBOR => serde_cbor::to_vec(val).map_err(|_| io::ErrorKind::Other.into()),
         }
     }
 
     fn val_from_slice<D: DeserializeOwned>(&self, vec: &[u8]) -> io::Result<D> {
         match self.format {
             SerdeFormat::JSON => {
-                serde_json::from_slice(vec)
-                    .map_err(|_| io::ErrorKind::Other.into())
-            },
+                serde_json::from_slice(vec).map_err(|_| io::ErrorKind::Other.into())
+            }
             SerdeFormat::CBOR => {
-                serde_cbor::from_slice(vec)
-                    .map_err(|_| io::ErrorKind::Other.into())
-            },
+                serde_cbor::from_slice(vec).map_err(|_| io::ErrorKind::Other.into())
+            }
         }
     }
 }
 
 #[async_trait]
 impl<Req, Resp> Codec for SerdeCodec<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     type Protocol = StreamProtocol;
     type Request = Req;
     type Response = Resp;
 
-    async fn read_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-    ) -> io::Result<Req>
-        where
-            T: AsyncRead + Unpin + Send
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+    where
+        T: AsyncRead + Unpin + Send,
     {
         let vec = read_length_prefixed(io, REQUEST_MAXIMUM).await?;
 
@@ -138,8 +130,8 @@ impl<Req, Resp> Codec for SerdeCodec<Req, Resp>
         _: &Self::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
-        where
-            T: AsyncRead + Unpin + Send
+    where
+        T: AsyncRead + Unpin + Send,
     {
         let vec = read_length_prefixed(io, RESPONSE_MAXIMUM).await?;
 
@@ -156,8 +148,8 @@ impl<Req, Resp> Codec for SerdeCodec<Req, Resp>
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         let data = self.val_to_vec(&req)?;
         write_length_prefixed(io, data).await?;
@@ -172,8 +164,8 @@ impl<Req, Resp> Codec for SerdeCodec<Req, Resp>
         io: &mut T,
         res: Self::Response,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         let data = self.val_to_vec(&res)?;
         write_length_prefixed(io, data).await?;
@@ -184,23 +176,23 @@ impl<Req, Resp> Codec for SerdeCodec<Req, Resp>
 }
 
 impl<Req, Resp> Behaviour<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     pub(crate) fn new<I>(
         codec: SerdeCodec<Req, Resp>,
         protocols: I,
-        cfg: Config) -> Behaviour<Req, Resp>
-        where
-            I: IntoIterator<Item=(<SerdeCodec<Req, Resp> as Codec>::Protocol, ProtocolSupport)>,
+        cfg: Config,
+    ) -> Behaviour<Req, Resp>
+    where
+        I: IntoIterator<Item = (<SerdeCodec<Req, Resp> as Codec>::Protocol, ProtocolSupport)>,
     {
         Behaviour {
             original: RequestResponseBehaviour::new(codec, protocols, cfg),
             phantom: PhantomData,
         }
     }
-
 
     /// Initiates sending a request.
     ///
@@ -229,11 +221,7 @@ impl<Req, Resp> Behaviour<Req, Resp>
     ///
     /// The provided `ResponseChannel` is obtained from an inbound
     /// [`Message::Request`].
-    pub fn send_response(
-        &mut self,
-        ch: ResponseChannel<Resp>,
-        rs: Resp,
-    ) -> Result<(), Resp> {
+    pub fn send_response(&mut self, ch: ResponseChannel<Resp>, rs: Resp) -> Result<(), Resp> {
         ch.sender.send(rs)
     }
 
@@ -319,11 +307,8 @@ where
         _connection_id: ConnectionId,
         _event: THandlerOutEvent<Self>,
     ) {
-        self.original.on_connection_handler_event(
-            _peer_id,
-            _connection_id,
-            _event,
-        );
+        self.original
+            .on_connection_handler_event(_peer_id, _connection_id, _event);
     }
 
     fn poll(
@@ -334,5 +319,3 @@ where
         self.original.poll(cx, params)
     }
 }
-
-

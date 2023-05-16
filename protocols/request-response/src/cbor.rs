@@ -18,17 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use crate::serde_codec::{Behaviour};
+pub use crate::serde_codec::Behaviour;
 
-use crate::{Codec, Config, ProtocolSupport};
 use crate::serde_codec::SerdeCodec;
-use serde::{Serialize, de::DeserializeOwned};
+use crate::{Codec, Config, ProtocolSupport};
+use serde::{de::DeserializeOwned, Serialize};
 
 pub fn new_behaviour<I, Req, Resp>(protocols: I, cfg: Config) -> Behaviour<Req, Resp>
-    where
-        I: IntoIterator<Item=(<SerdeCodec<Req, Resp> as Codec>::Protocol, ProtocolSupport)>,
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    I: IntoIterator<Item = (<SerdeCodec<Req, Resp> as Codec>::Protocol, ProtocolSupport)>,
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     let codec: SerdeCodec<Req, Resp> = SerdeCodec::cbor();
 

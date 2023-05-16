@@ -58,11 +58,11 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+pub mod cbor;
 mod codec;
 mod handler;
-mod serde_codec;
 pub mod json;
-pub mod cbor;
+mod serde_codec;
 
 pub use codec::Codec;
 pub use handler::ProtocolSupport;
