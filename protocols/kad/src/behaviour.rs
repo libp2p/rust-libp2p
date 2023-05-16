@@ -1984,7 +1984,7 @@ where
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
-                allow_listening: self.mode == Mode::Server,
+                allow_listening: true, // If somebody dialed us, they can definitely include us in their routing table.
                 idle_timeout: self.connection_idle_timeout,
             },
             ConnectedPoint::Listener {
