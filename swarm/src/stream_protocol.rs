@@ -1,6 +1,7 @@
 use either::Either;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// Identifies a protocol for a stream.
@@ -39,7 +40,7 @@ impl StreamProtocol {
         }
 
         Ok(StreamProtocol {
-            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
+            inner: Either::Right(Arc::from(protocol)),
         })
     }
 }
@@ -77,6 +78,14 @@ impl PartialEq for StreamProtocol {
 impl Hash for StreamProtocol {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ref().hash(state)
+    }
+}
+
+impl FromStr for StreamProtocol {
+    type Err = InvalidProtocol;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from_owned(s.into())
     }
 }
 
