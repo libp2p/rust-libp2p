@@ -39,7 +39,7 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
         ExternalAddrExpired, FromSwarm,
     },
-    ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, NewExternalAddrCandidate,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
@@ -214,7 +214,7 @@ pub struct Behaviour {
     probe_id: ProbeId,
 
     listen_addresses: ListenAddresses,
-    external_addresses: ExternalAddresses,
+    other_candidates: HashSet<Multiaddr>,
 }
 
 impl Behaviour {
@@ -240,7 +240,7 @@ impl Behaviour {
             pending_actions: VecDeque::new(),
             probe_id: ProbeId(0),
             listen_addresses: Default::default(),
-            external_addresses: Default::default(),
+            other_candidates: Default::default(),
         }
     }
 
@@ -294,7 +294,7 @@ impl Behaviour {
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
             listen_addresses: &self.listen_addresses,
-            external_addresses: &self.external_addresses,
+            other_candidates: &self.other_candidates,
         }
     }
 
@@ -532,7 +532,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
@@ -566,8 +565,12 @@ impl NetworkBehaviour for Behaviour {
                     .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
                 self.as_client().on_expired_address(addr);
             }
-            external_addr @ FromSwarm::NewExternalAddrCandidate(_) => {
-                self.inner.on_swarm_event(external_addr);
+            FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr },
+                    ));
+                self.other_candidates.insert(addr.to_owned());
                 self.as_client().on_new_address();
             }
             listen_failure @ FromSwarm::ListenFailure(_) => {

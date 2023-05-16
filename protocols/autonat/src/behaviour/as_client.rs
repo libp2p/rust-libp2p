@@ -30,7 +30,7 @@ use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
-use libp2p_swarm::{ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm};
+use libp2p_swarm::{ConnectionId, ListenAddresses, PollParameters, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -95,7 +95,7 @@ pub(crate) struct AsClient<'a> {
     pub(crate) last_probe: &'a mut Option<Instant>,
     pub(crate) schedule_probe: &'a mut Delay,
     pub(crate) listen_addresses: &'a ListenAddresses,
-    pub(crate) external_addresses: &'a ExternalAddresses,
+    pub(crate) other_candidates: &'a HashSet<Multiaddr>,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
@@ -187,7 +187,7 @@ impl<'a> AsClient<'a> {
                 self.schedule_probe.reset(self.config.retry_interval);
 
                 let addresses = self
-                    .external_addresses
+                    .other_candidates
                     .iter()
                     .chain(self.listen_addresses.iter())
                     .cloned()

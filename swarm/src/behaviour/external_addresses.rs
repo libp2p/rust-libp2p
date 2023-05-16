@@ -1,4 +1,4 @@
-use crate::behaviour::{ExternalAddrExpired, FromSwarm, NewExternalAddrCandidate};
+use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 use libp2p_core::Multiaddr;
 use std::collections::HashSet;
 
@@ -34,7 +34,7 @@ impl ExternalAddresses {
     /// Returns whether the event changed our set of external addresses.
     pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
         match event {
-            FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr, .. }) => {
+            FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
                 if self.addresses.len() < self.limit {
                     return self.addresses.insert((*addr).clone());
                 }
@@ -80,7 +80,7 @@ mod tests {
     }
 
     fn new_external_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
-        FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr: &MEMORY_ADDR })
+        FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &MEMORY_ADDR })
     }
 
     fn expired_external_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
