@@ -82,13 +82,6 @@ pub use libp2p_mdns as mdns;
 #[cfg(feature = "metrics")]
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
-#[cfg(feature = "mplex")]
-#[deprecated(
-    note = "`mplex` is not recommended anymore. Please use `yamux` instead or depend on `libp2p-mplex` directly if you need it for legacy use cases."
-)]
-pub mod mplex {
-    pub use libp2p_mplex::*;
-}
 #[cfg(feature = "noise")]
 #[doc(inline)]
 pub use libp2p_noise as noise;
@@ -184,7 +177,7 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 ///  * DNS resolution.
 ///  * Noise protocol encryption.
 ///  * Websockets.
-///  * Both Yamux and Mplex for substream multiplexing.
+///  * Yamux for substream multiplexing.
 ///
 /// All async I/O of the transport is based on `async-std`.
 ///
@@ -198,7 +191,6 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
     ),
     feature = "websocket",
     feature = "noise",
-    feature = "mplex",
     feature = "yamux"
 ))]
 #[cfg_attr(
@@ -231,11 +223,7 @@ pub async fn development_transport(
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::Config::new(&keypair).unwrap())
-        .multiplex(core::upgrade::SelectUpgrade::new(
-            yamux::Config::default(),
-            #[allow(deprecated)]
-            mplex::MplexConfig::default(),
-        ))
+        .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }
@@ -245,7 +233,7 @@ pub async fn development_transport(
 ///  * DNS resolution.
 ///  * Noise protocol encryption.
 ///  * Websockets.
-///  * Both Yamux and Mplex for substream multiplexing.
+///  * Yamux for substream multiplexing.
 ///
 /// All async I/O of the transport is based on `tokio`.
 ///
@@ -259,7 +247,6 @@ pub async fn development_transport(
     ),
     feature = "websocket",
     feature = "noise",
-    feature = "mplex",
     feature = "yamux"
 ))]
 #[cfg_attr(
@@ -288,11 +275,7 @@ pub fn tokio_development_transport(
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
         .authenticate(noise::Config::new(&keypair).unwrap())
-        .multiplex(core::upgrade::SelectUpgrade::new(
-            yamux::Config::default(),
-            #[allow(deprecated)]
-            mplex::MplexConfig::default(),
-        ))
+        .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed())
 }

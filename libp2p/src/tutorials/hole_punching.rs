@@ -25,7 +25,7 @@
 //! post](https://blog.ipfs.io/2022-01-20-libp2p-hole-punching/) to familiarize yourself with libp2p's hole
 //! punching mechanism on a conceptual level.
 //!
-//! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
+//! We will be using the [Circuit Relay](crate::relay) and the [Direct Connection
 //! Upgrade through Relay (DCUtR)](crate::dcutr) protocol.
 //!
 //! You will need 3 machines for this tutorial:

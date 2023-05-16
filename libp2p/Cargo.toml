@@ -26,7 +26,6 @@ full = [
     "macros",
     "mdns",
     "metrics",
-    "mplex",
     "noise",
     "perf",
     "ping",
@@ -65,7 +64,6 @@ kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 metrics = ["dep:libp2p-metrics"]
-mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
 perf = ["dep:libp2p-perf"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
@@ -106,7 +104,6 @@ libp2p-identify = { workspace = true, optional = true }
 libp2p-identity = { workspace = true }
 libp2p-kad = { workspace = true, optional = true }
 libp2p-metrics = { workspace = true, optional = true }
-libp2p-mplex = { workspace = true, optional = true }
 libp2p-noise = { workspace = true, optional = true }
 libp2p-ping = { workspace = true, optional = true }
 libp2p-plaintext = { workspace = true, optional = true }
@@ -144,7 +141,6 @@ env_logger = "0.10.0"
 clap = { version = "4.1.6", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
-libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 
