@@ -66,7 +66,7 @@
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
 [PR 3919]: https://github.com/libp2p/rust-libp2p/pull/3919
-[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+[PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
 
 ## 0.42.2
 
