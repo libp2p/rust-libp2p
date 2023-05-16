@@ -7,11 +7,11 @@
 
 - Don't close connections on ping failures.
   This also removes the `max_failures` config option.
-  See [PR XXXX].
+  See [PR 3947].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3947]: https://github.com/libp2p/rust-libp2p/pull/3947
 
 ## 0.42.0
 
