@@ -411,13 +411,7 @@ mod tests {
         dialer
             .dial(
                 DialOpts::unknown_peer_id()
-                    .address(
-                        listener
-                            .external_addresses()
-                            .map(|a| a.addr.clone())
-                            .next()
-                            .unwrap(),
-                    )
+                    .address(listener.external_addresses().next().cloned().unwrap())
                     .build(),
             )
             .unwrap();
@@ -471,12 +465,7 @@ mod tests {
     {
         dialer.dial(
             DialOpts::peer_id(*listener.local_peer_id())
-                .addresses(
-                    listener
-                        .external_addresses()
-                        .map(|a| a.addr.clone())
-                        .collect(),
-                )
+                .addresses(listener.external_addresses().cloned().collect())
                 .build(),
         )
     }

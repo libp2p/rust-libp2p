@@ -24,7 +24,7 @@ use libp2p_autonat::{
 };
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
@@ -74,7 +74,7 @@ async fn test_auto_probe() {
 
     // Artificially add a faulty address.
     let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-    client.add_external_address(unreachable_addr.clone(), AddressScore::Infinite);
+    client.add_external_address(unreachable_addr.clone());
 
     let id = match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Request { probe_id, peer }) => {
@@ -198,7 +198,7 @@ async fn test_confidence() {
         client.listen().await;
     } else {
         let unreachable_addr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-        client.add_external_address(unreachable_addr, AddressScore::Infinite);
+        client.add_external_address(unreachable_addr);
     }
 
     for i in 0..MAX_CONFIDENCE + 1 {

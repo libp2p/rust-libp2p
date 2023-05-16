@@ -29,8 +29,8 @@ pub use listen_addresses::ListenAddresses;
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::{
-    AddressRecord, ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -221,8 +221,6 @@ pub trait PollParameters {
     type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
     /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
     type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
-    /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
-    type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
@@ -241,13 +239,6 @@ pub trait PollParameters {
         note = "Use `libp2p_swarm::ListenAddresses` instead."
     )]
     fn listened_addresses(&self) -> Self::ListenedAddressesIter;
-
-    /// Returns the list of the addresses nodes can use to reach us.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Use `libp2p_swarm::ExternalAddresses` instead."
-    )]
-    fn external_addresses(&self) -> Self::ExternalAddressesIter;
 
     /// Returns the peer id of the local node.
     #[deprecated(
