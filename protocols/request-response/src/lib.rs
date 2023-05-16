@@ -60,6 +60,9 @@
 
 mod codec;
 mod handler;
+mod serde_codec;
+pub mod json;
+pub mod cbor;
 
 pub use codec::Codec;
 pub use handler::ProtocolSupport;
