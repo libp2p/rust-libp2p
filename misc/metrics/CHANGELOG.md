@@ -5,10 +5,10 @@
 
 - Replace `libp2p_swarm_connections_closed` `Counter` with `libp2p_swarm_connections_duration` `Histogram` which additionally tracks the duration of a connection.
   Note that you can use the `_count` metric of the `Histogram` as a replacement for the `Counter`.
-  See [PR XXX].
+  See [PR 3927].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+[PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
 
 ## 0.12.0
 
