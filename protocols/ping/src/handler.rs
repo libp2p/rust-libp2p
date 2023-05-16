@@ -244,7 +244,9 @@ impl ConnectionHandler for Handler {
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
+                    Failure::Unsupported,
+                )));
             }
             State::Active => {}
         }
@@ -279,7 +281,7 @@ impl ConnectionHandler for Handler {
                 // that use a single substream, since every successful ping
                 // resets `failures` to `0`.
                 if self.failures > 1 {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
 
@@ -296,7 +298,7 @@ impl ConnectionHandler for Handler {
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(rtt)));
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(rtt)));
                     }
                     Poll::Ready(Err(e)) => {
                         self.pending_errors.push_front(e);

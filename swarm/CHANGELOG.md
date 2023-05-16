@@ -50,6 +50,8 @@
 - Remove deprecated `NetworkBehaviourAction` type.
   See [PR 3919].
 
+- Rename `ConnectionHandlerEvent::Custom` to `ConnectionHandlerEvent::NotifyBehaviour`. See [PR 3955].
+
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
@@ -62,6 +64,7 @@
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
 [PR 3919]: https://github.com/libp2p/rust-libp2p/pull/3919
+[PR 3955]: https://github.com/libp2p/rust-libp2p/pull/3955
 
 ## 0.42.2
 
