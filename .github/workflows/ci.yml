@@ -31,9 +31,6 @@ jobs:
     env:
       CRATE: ${{ matrix.crate }}
     steps:
-      - name: Install zlib for `libp2p-websocket` # https://github.com/paritytech/soketto/issues/72
-        run: sudo apt-get install zlib1g-dev --yes
-
       - uses: actions/checkout@v3
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
