@@ -101,7 +101,7 @@ use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Durati
 pub trait ConnectionHandler: Send + 'static {
     /// A type representing the message(s) a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) can send to a [`ConnectionHandler`] via [`ToSwarm::NotifyHandler`](crate::behaviour::ToSwarm::NotifyHandler)
     type FromBehaviour: fmt::Debug + Send + 'static;
-    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::Custom`].
+    /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
     type Error: error::Error + fmt::Debug + Send + 'static;
@@ -508,8 +508,8 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// We learned something about the protocols supported by the remote.
     ReportRemoteProtocols(ProtocolSupport),
 
-    /// Other event.
-    Custom(TCustom),
+    /// Event that is sent to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour).
+    NotifyBehaviour(TCustom),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -539,7 +539,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
                     protocol: protocol.map_info(map),
                 }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(val)
+            }
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -562,7 +564,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
                     protocol: protocol.map_upgrade(map),
                 }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(val)
+            }
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -582,7 +586,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(map(val))
+            }
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -602,7 +608,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }
             }
-            ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(val),
+            ConnectionHandlerEvent::NotifyBehaviour(val) => {
+                ConnectionHandlerEvent::NotifyBehaviour(val)
+            }
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)

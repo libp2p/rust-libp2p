@@ -258,7 +258,9 @@ impl ConnectionHandler for Handler {
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
+                    Failure::Unsupported,
+                )));
             }
             State::Active => {}
         }
@@ -274,7 +276,7 @@ impl ConnectionHandler for Handler {
                 Poll::Ready(Ok(stream)) => {
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(Success::Pong)));
                 }
             }
         }
@@ -299,7 +301,7 @@ impl ConnectionHandler for Handler {
                         return Poll::Ready(ConnectionHandlerEvent::Close(error));
                     }
 
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
 
@@ -318,9 +320,9 @@ impl ConnectionHandler for Handler {
                         self.failures = 0;
                         self.timer.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
-                            rtt,
-                        })));
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(
+                            Success::Ping { rtt },
+                        )));
                     }
                     Poll::Ready(Err(e)) => {
                         self.pending_errors
