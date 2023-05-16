@@ -248,7 +248,9 @@ where
 
         match self.proto2.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(event)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
+                    event,
+                )));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
