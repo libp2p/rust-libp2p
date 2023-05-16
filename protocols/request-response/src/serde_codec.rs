@@ -277,7 +277,10 @@ where
     Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     type ConnectionHandler = Handler<SerdeCodec<Req, Resp>>;
-    type OutEvent = Event<Req, Resp>;
+    type OutEvent = Event<
+        <SerdeCodec<Req, Resp> as Codec>::Request,
+        <SerdeCodec<Req, Resp> as Codec>::Response
+    >;
 
     fn handle_established_inbound_connection(
         &mut self,
