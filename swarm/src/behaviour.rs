@@ -224,37 +224,12 @@ pub trait PollParameters {
     /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
     type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
-    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
-    /// an inbound substream.
-    ///
-    /// The iterator's elements are the ASCII names as reported on the wire.
-    ///
-    /// Note that the list is computed once at initialization and never refreshed.
-    #[deprecated(
-        note = "Use `libp2p_swarm::SupportedProtocols` in your `ConnectionHandler` instead."
-    )]
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
-
-    /// Returns the list of the addresses we're listening on.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Use `libp2p_swarm::ListenAddresses` instead."
-    )]
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter;
-
     /// Returns the list of the addresses nodes can use to reach us.
     #[deprecated(
         since = "0.42.0",
         note = "Use `libp2p_swarm::ExternalAddresses` instead."
     )]
     fn external_addresses(&self) -> Self::ExternalAddressesIter;
-
-    /// Returns the peer id of the local node.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Pass the node's `PeerId` into the behaviour instead."
-    )]
-    fn local_peer_id(&self) -> &PeerId;
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
