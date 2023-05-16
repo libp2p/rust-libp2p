@@ -25,8 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    AddressScore, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -295,10 +295,8 @@ impl NetworkBehaviour for Behaviour {
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
-                self.events.push_back(ToSwarm::ReportObservedAddr {
-                    address: observed,
-                    score: AddressScore::Finite(1),
-                });
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed));
             }
             handler::Event::Identification => {
                 self.events
@@ -405,8 +403,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

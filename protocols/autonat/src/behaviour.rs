@@ -36,8 +36,8 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     behaviour::{
-        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
-        ExpiredListenAddr, FromSwarm,
+        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+        ExternalAddrExpired, FromSwarm,
     },
     ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
@@ -561,12 +561,12 @@ impl NetworkBehaviour for Behaviour {
                     }));
                 self.as_client().on_expired_address(addr);
             }
-            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.inner
-                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
+                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
                 self.as_client().on_expired_address(addr);
             }
-            external_addr @ FromSwarm::NewExternalAddr(_) => {
+            external_addr @ FromSwarm::NewExternalAddrCandidate(_) => {
                 self.inner.on_swarm_event(external_addr);
                 self.as_client().on_new_address();
             }
@@ -580,6 +580,7 @@ impl NetworkBehaviour for Behaviour {
             listener_closed @ FromSwarm::ListenerClosed(_) => {
                 self.inner.on_swarm_event(listener_closed)
             }
+            confirmed @ FromSwarm::ExternalAddrConfirmed(_) => self.inner.on_swarm_event(confirmed),
         }
     }
 

@@ -2431,13 +2431,14 @@ where
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
             FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::NewExternalAddrCandidate(_)
             | FromSwarm::NewListenAddr(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerClosed(_)
             | FromSwarm::ListenerError(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

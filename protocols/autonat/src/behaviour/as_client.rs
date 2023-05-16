@@ -30,9 +30,7 @@ use instant::Instant;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
-use libp2p_swarm::{
-    AddressScore, ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm,
-};
+use libp2p_swarm::{ConnectionId, ExternalAddresses, ListenAddresses, PollParameters, ToSwarm};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -103,7 +101,7 @@ pub(crate) struct AsClient<'a> {
 impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
-        params: &mut impl PollParameters,
+        _: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
         match event {
@@ -147,19 +145,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 }
 
                 if let Ok(address) = response.result {
-                    // Update observed address score if it is finite.
-                    #[allow(deprecated)]
-                    // TODO: Fix once we report `AddressScore` through `FromSwarm` event.
-                    let score = params
-                        .external_addresses()
-                        .find_map(|r| (r.addr == address).then_some(r.score))
-                        .unwrap_or(AddressScore::Finite(0));
-                    if let AddressScore::Finite(finite_score) = score {
-                        actions.push_back(ToSwarm::ReportObservedAddr {
-                            address,
-                            score: AddressScore::Finite(finite_score + 1),
-                        });
-                    }
+                    actions.push_back(ToSwarm::ExternalAddrConfirmed(address));
                 }
 
                 actions

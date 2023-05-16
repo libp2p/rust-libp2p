@@ -77,13 +77,14 @@ pub mod derive_prelude {
     pub use crate::behaviour::ConnectionClosed;
     pub use crate::behaviour::ConnectionEstablished;
     pub use crate::behaviour::DialFailure;
-    pub use crate::behaviour::ExpiredExternalAddr;
     pub use crate::behaviour::ExpiredListenAddr;
+    pub use crate::behaviour::ExternalAddrConfirmed;
+    pub use crate::behaviour::ExternalAddrExpired;
     pub use crate::behaviour::FromSwarm;
     pub use crate::behaviour::ListenFailure;
     pub use crate::behaviour::ListenerClosed;
     pub use crate::behaviour::ListenerError;
-    pub use crate::behaviour::NewExternalAddr;
+    pub use crate::behaviour::NewExternalAddrCandidate;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
@@ -107,10 +108,10 @@ pub mod derive_prelude {
 }
 
 pub use behaviour::{
-    AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
-    ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddr, NewListenAddr, NotifyHandler,
-    PollParameters, ToSwarm,
+    AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
+    ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
+    NotifyHandler, PollParameters, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -125,6 +126,7 @@ pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
+use crate::behaviour::ExternalAddrConfirmed;
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
@@ -664,14 +666,16 @@ where
         let expired = match &result {
             AddAddressResult::Inserted { expired } => {
                 self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddr(NewExternalAddr { addr: &a }));
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr: &a },
+                    ));
                 expired
             }
             AddAddressResult::Updated { expired } => expired,
         };
         for a in expired {
             self.behaviour
-                .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr {
+                .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
                     addr: &a.addr,
                 }));
         }
@@ -687,7 +691,7 @@ where
     pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
         if self.external_addrs.remove(addr) {
             self.behaviour
-                .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
+                .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
             true
         } else {
             false
@@ -1136,35 +1140,53 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            ToSwarm::ReportObservedAddr { address, score } => {
-                // Maps the given `observed_addr`, representing an address of the local
-                // node observed by a remote peer, onto the locally known listen addresses
-                // to yield one or more addresses of the local node that may be publicly
-                // reachable.
-                //
-                // I.e. self method incorporates the view of other peers into the listen
-                // addresses seen by the local node to account for possible IP and port
-                // mappings performed by intermediate network devices in an effort to
-                // obtain addresses for the local peer that are also reachable for peers
-                // other than the peer who reported the `observed_addr`.
-                //
-                // The translation is transport-specific. See [`Transport::address_translation`].
-                let translated_addresses = {
-                    let mut addrs: Vec<_> = self
-                        .listened_addrs
-                        .values()
-                        .flatten()
-                        .filter_map(|server| self.transport.address_translation(server, &address))
-                        .collect();
-
-                    // remove duplicates
-                    addrs.sort_unstable();
-                    addrs.dedup();
-                    addrs
-                };
-                for addr in translated_addresses {
-                    self.add_external_address(addr, score);
-                }
+            // ToSwarm::ReportObservedAddr { address, score } => {
+            //     // Maps the given `observed_addr`, representing an address of the local
+            //     // node observed by a remote peer, onto the locally known listen addresses
+            //     // to yield one or more addresses of the local node that may be publicly
+            //     // reachable.
+            //     //
+            //     // I.e. self method incorporates the view of other peers into the listen
+            //     // addresses seen by the local node to account for possible IP and port
+            //     // mappings performed by intermediate network devices in an effort to
+            //     // obtain addresses for the local peer that are also reachable for peers
+            //     // other than the peer who reported the `observed_addr`.
+            //     //
+            //     // The translation is transport-specific. See [`Transport::address_translation`].
+            //     let translated_addresses = {
+            //         let mut addrs: Vec<_> = self
+            //             .listened_addrs
+            //             .values()
+            //             .flatten()
+            //             .filter_map(|server| self.transport.address_translation(server, &address))
+            //             .collect();
+            //
+            //         // remove duplicates
+            //         addrs.sort_unstable();
+            //         addrs.dedup();
+            //         addrs
+            //     };
+            //     for addr in translated_addresses {
+            //         self.add_external_address(addr, score);
+            //     }
+            // }
+            ToSwarm::NewExternalAddrCandidate(addr) => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr: &addr },
+                    ));
+            }
+            ToSwarm::ExternalAddrConfirmed(addr) => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
+                        addr: &addr,
+                    }));
+            }
+            ToSwarm::ExternalAddrExpired(addr) => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+                        addr: &addr,
+                    }));
             }
             ToSwarm::CloseConnection {
                 peer_id,
