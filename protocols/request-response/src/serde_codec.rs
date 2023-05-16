@@ -273,14 +273,11 @@ impl<Req, Resp> Behaviour<Req, Resp>
 
 impl<Req, Resp> NetworkBehaviour for Behaviour<Req, Resp>
 where
-    Req: Send + Clone + Serialize + DeserializeOwned,
-    Resp: Send + Clone + Serialize + DeserializeOwned,
+    Req: Send + Clone + Serialize + DeserializeOwned + 'static,
+    Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
     type ConnectionHandler = Handler<SerdeCodec<Req, Resp>>;
-    type OutEvent = Event<
-        <SerdeCodec<Req, Resp> as Codec>::Request,
-        <SerdeCodec<Req, Resp> as Codec>::Response
-    >;
+    type OutEvent = Event<Req, Resp>;
 
     fn handle_established_inbound_connection(
         &mut self,
