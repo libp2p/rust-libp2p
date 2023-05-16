@@ -1140,41 +1140,34 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            // ToSwarm::ReportObservedAddr { address, score } => {
-            //     // Maps the given `observed_addr`, representing an address of the local
-            //     // node observed by a remote peer, onto the locally known listen addresses
-            //     // to yield one or more addresses of the local node that may be publicly
-            //     // reachable.
-            //     //
-            //     // I.e. self method incorporates the view of other peers into the listen
-            //     // addresses seen by the local node to account for possible IP and port
-            //     // mappings performed by intermediate network devices in an effort to
-            //     // obtain addresses for the local peer that are also reachable for peers
-            //     // other than the peer who reported the `observed_addr`.
-            //     //
-            //     // The translation is transport-specific. See [`Transport::address_translation`].
-            //     let translated_addresses = {
-            //         let mut addrs: Vec<_> = self
-            //             .listened_addrs
-            //             .values()
-            //             .flatten()
-            //             .filter_map(|server| self.transport.address_translation(server, &address))
-            //             .collect();
-            //
-            //         // remove duplicates
-            //         addrs.sort_unstable();
-            //         addrs.dedup();
-            //         addrs
-            //     };
-            //     for addr in translated_addresses {
-            //         self.add_external_address(addr, score);
-            //     }
-            // }
             ToSwarm::NewExternalAddrCandidate(addr) => {
                 self.behaviour
                     .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                         NewExternalAddrCandidate { addr: &addr },
                     ));
+
+                // Generate more candidates based on address translation.
+                // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
+
+                let translated_addresses = {
+                    let mut addrs: Vec<_> = self
+                        .listened_addrs
+                        .values()
+                        .flatten()
+                        .filter_map(|server| self.transport.address_translation(server, &addr))
+                        .collect();
+
+                    // remove duplicates
+                    addrs.sort_unstable();
+                    addrs.dedup();
+                    addrs
+                };
+                for addr in translated_addresses {
+                    self.behaviour
+                        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                            NewExternalAddrCandidate { addr: &addr },
+                        ));
+                }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
                 self.behaviour
