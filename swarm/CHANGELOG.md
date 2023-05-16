@@ -52,7 +52,7 @@
 
 - Expose `ConnectionId` on `SwarmEvent::{ConnectionEstablished,ConnectionClosed,IncomingConnection,IncomingConnectionError,OutgoingConnectionError,Dialing}`.
   Also emit `SwarmEvent::Dialing` for dials with unknown `PeerId`.
-  See [PR XXX].
+  See [PR 3927].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
