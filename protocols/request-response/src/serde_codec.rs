@@ -265,7 +265,7 @@ where
     Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     type ConnectionHandler = Handler<SerdeCodec<Req, Resp>>;
-    type OutEvent = Event<Req, Resp>;
+    type ToSwarm = Event<Req, Resp>;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -315,7 +315,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.original.poll(cx, params)
     }
 }
