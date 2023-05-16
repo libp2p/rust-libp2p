@@ -26,7 +26,6 @@ use crate::error::PlainTextError;
 
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use futures::future::{self, Ready};
 use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
@@ -38,7 +37,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use void::Void;
 
 mod error;
 mod handshake;
@@ -46,64 +44,6 @@ mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub(crate) use self::structs::Exchange;
-}
-
-/// `PlainText1Config` is an insecure connection handshake for testing purposes only.
-///
-/// > **Note**: Given that `PlainText1Config` has no notion of exchanging peer identity information it is not compatible
-/// > with the `libp2p_core::transport::upgrade::Builder` pattern. See
-/// > [`PlainText2Config`](struct.PlainText2Config.html) if compatibility is needed. Even though not compatible with the
-/// > Builder pattern one can still do an upgrade *manually*:
-///
-/// ```
-/// # use libp2p_core::transport::{ Transport, memory::MemoryTransport };
-/// # use libp2p_plaintext::PlainText1Config;
-/// #
-/// MemoryTransport::default()
-///   .and_then(move |io, endpoint| {
-///     libp2p_core::upgrade::apply(
-///       io,
-///       PlainText1Config{},
-///       endpoint,
-///       libp2p_core::transport::upgrade::Version::V1,
-///     )
-///   })
-///   .map(|plaintext, _endpoint| {
-///     unimplemented!();
-///     // let peer_id = somehow_derive_peer_id();
-///     // return (peer_id, plaintext);
-///   });
-/// ```
-#[derive(Debug, Copy, Clone)]
-pub struct PlainText1Config;
-
-impl UpgradeInfo for PlainText1Config {
-    type Info = &'static str;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once("/plaintext/1.0.0")
-    }
-}
-
-impl<C> InboundUpgrade<C> for PlainText1Config {
-    type Output = C;
-    type Error = Void;
-    type Future = Ready<Result<C, Self::Error>>;
-
-    fn upgrade_inbound(self, i: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(i))
-    }
-}
-
-impl<C> OutboundUpgrade<C> for PlainText1Config {
-    type Output = C;
-    type Error = Void;
-    type Future = Ready<Result<C, Self::Error>>;
-
-    fn upgrade_outbound(self, i: C, _: Self::Info) -> Self::Future {
-        future::ready(Ok(i))
-    }
 }
 
 /// `PlainText2Config` is an insecure connection handshake for testing purposes only, implementing

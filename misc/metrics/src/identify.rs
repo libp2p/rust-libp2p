@@ -203,7 +203,7 @@ impl Collector for Peers {
                     .protocols
                     .iter()
                     .map(|p| {
-                        if ALLOWED_PROTOCOLS.contains(&p) {
+                        if ALLOWED_PROTOCOLS.contains(p) {
                             p.to_string()
                         } else {
                             "unrecognized".to_string()
