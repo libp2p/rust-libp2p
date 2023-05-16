@@ -25,7 +25,7 @@ use crate::substream_handler::{FutureSubstream, Next, PassthroughProtocol, Subst
 use crate::{ErrorCode, Namespace, Registration, Ttl};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, TryFutureExt, TryStreamExt};
-use libp2p_swarm::{NegotiatedSubstream, SubstreamProtocol};
+use libp2p_swarm::SubstreamProtocol;
 use std::task::Context;
 use void::Void;
 
@@ -43,7 +43,7 @@ impl SubstreamHandler for Stream {
         SubstreamProtocol::new(PassthroughProtocol::new(PROTOCOL_IDENT), open_info)
     }
 
-    fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self {
+    fn new(substream: libp2p_swarm::Stream, info: Self::OpenInfo) -> Self {
         let mut stream = Framed::new(substream, RendezvousCodec::default());
         let sent_message = match info {
             OpenInfo::RegisterRequest(new_registration) => Message::Register(new_registration),

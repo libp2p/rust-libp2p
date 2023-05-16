@@ -54,7 +54,7 @@ pub trait SwarmExt {
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
-        <T as NetworkBehaviour>::OutEvent: Debug;
+        <T as NetworkBehaviour>::ToSwarm: Debug;
 
     /// Dial the provided address and wait until a connection has been established.
     ///
@@ -68,7 +68,7 @@ pub trait SwarmExt {
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
         P: Fn(
-            SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>,
+            SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>,
         ) -> Option<E>,
         P: Send;
 
@@ -82,12 +82,12 @@ pub trait SwarmExt {
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
     async fn next_swarm_event(
         &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent;
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm;
 
     async fn loop_on_next(self);
 }
@@ -108,7 +108,7 @@ pub trait SwarmExt {
 /// This function utilizes the [`TryIntoOutput`] trait.
 /// Similar as to the number of expected events, the type of event is inferred based on your usage.
 /// If you match against a [`SwarmEvent`], the first [`SwarmEvent`] will be returned.
-/// If you match against your [`NetworkBehaviour::OutEvent`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
+/// If you match against your [`NetworkBehaviour::ToSwarm`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
 ///
 /// You can implement the [`TryIntoOutput`] for any other type to further customize this behaviour.
 ///
@@ -136,11 +136,11 @@ pub async fn drive<
 ) -> ([Out1; NUM_EVENTS_SWARM_1], [Out2; NUM_EVENTS_SWARM_2])
 where
     TBehaviour2: NetworkBehaviour + Send,
-    TBehaviour2::OutEvent: Debug,
+    TBehaviour2::ToSwarm: Debug,
     TBehaviour1: NetworkBehaviour + Send,
-    TBehaviour1::OutEvent: Debug,
-    SwarmEvent<TBehaviour2::OutEvent, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
-    SwarmEvent<TBehaviour1::OutEvent, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
+    TBehaviour1::ToSwarm: Debug,
+    SwarmEvent<TBehaviour2::ToSwarm, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
+    SwarmEvent<TBehaviour1::ToSwarm, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
     Out1: Debug,
     Out2: Debug,
 {
@@ -199,7 +199,7 @@ impl<TBehaviourOutEvent, THandlerErr> TryIntoOutput<SwarmEvent<TBehaviourOutEven
 impl<B> SwarmExt for Swarm<B>
 where
     B: NetworkBehaviour + Send,
-    <B as NetworkBehaviour>::OutEvent: Debug,
+    <B as NetworkBehaviour>::ToSwarm: Debug,
 {
     type NB = B;
 
@@ -226,7 +226,7 @@ where
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
-        <T as NetworkBehaviour>::OutEvent: Debug,
+        <T as NetworkBehaviour>::ToSwarm: Debug,
     {
         let external_addresses = other
             .external_addresses()
@@ -283,7 +283,7 @@ where
 
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(SwarmEvent<<B as NetworkBehaviour>::OutEvent, THandlerErr<B>>) -> Option<E>,
+        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm, THandlerErr<B>>) -> Option<E>,
         P: Send,
     {
         loop {
@@ -345,7 +345,7 @@ where
 
     async fn next_swarm_event(
         &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>> {
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>> {
         match futures::future::select(
             futures_timer::Delay::new(Duration::from_secs(10)),
             self.select_next_some(),
@@ -361,7 +361,7 @@ where
         }
     }
 
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent {
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm {
         loop {
             if let Ok(event) = self.next_swarm_event().await.try_into_behaviour_event() {
                 return event;

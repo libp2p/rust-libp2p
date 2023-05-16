@@ -31,6 +31,7 @@ use std::{
     error::Error,
     fmt,
     pin::Pin,
+    sync::atomic::{AtomicUsize, Ordering},
     task::{Context, Poll},
 };
 
@@ -54,6 +55,8 @@ pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
+
+static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -109,8 +112,12 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
-    /// Listens on the given [`Multiaddr`] for inbound connections.
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
+    /// Listens on the given [`Multiaddr`] for inbound connections with a provided [`ListenerId`].
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>>;
 
     /// Remove a listener.
     ///
@@ -241,18 +248,25 @@ pub trait Transport {
 
 /// The ID of a single listener.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct ListenerId(u64);
+pub struct ListenerId(usize);
 
 impl ListenerId {
+    #[deprecated(note = "Renamed to ` ListenerId::next`.")]
+    #[allow(clippy::new_without_default)]
     /// Creates a new `ListenerId`.
     pub fn new() -> Self {
-        ListenerId(rand::random())
+        ListenerId::next()
     }
-}
 
-impl Default for ListenerId {
-    fn default() -> Self {
-        Self::new()
+    /// Creates a new `ListenerId`.
+    pub fn next() -> Self {
+        ListenerId(NEXT_LISTENER_ID.fetch_add(1, Ordering::SeqCst))
+    }
+
+    #[deprecated(note = "Use ` ListenerId::next` instead.")]
+    #[allow(clippy::should_implement_trait)]
+    pub fn default() -> Self {
+        Self::next()
     }
 }
 

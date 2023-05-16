@@ -21,43 +21,48 @@
 #![recursion_limit = "256"]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod syn_ext;
+
+use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
-use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
-    Token,
-};
+use syn::spanned::Spanned;
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    build(&ast)
+    build(&ast).unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// The actual implementation.
-fn build(ast: &DeriveInput) -> TokenStream {
+fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
+        Data::Enum(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on enums",
+        )),
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on union",
+        )),
     }
 }
 
 /// The version for structs
-fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
+fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
-    } = match parse_attributes(ast) {
-        Ok(attrs) => attrs,
-        Err(e) => return e,
-    };
+        deprecation_tokenstream,
+    } = parse_attributes(ast)?;
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
@@ -96,11 +101,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     let (out_event_name, out_event_definition, out_event_from_clauses) = {
-        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
-        // struct, we set `Foo` as the out event. If not, the `OutEvent` is
+        // If we find a `#[behaviour(to_swarm = "Foo")]` attribute on the
+        // struct, we set `Foo` as the out event. If not, the `ToSwarm` is
         // generated.
         match user_specified_out_event {
-            // User provided `OutEvent`.
+            // User provided `ToSwarm`.
             Some(name) => {
                 let definition = None;
                 let from_clauses = data_struct
@@ -108,12 +113,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
-                        quote! {#name: From< <#ty as #trait_to_impl>::OutEvent >}
+                        quote! {#name: From< <#ty as #trait_to_impl>::ToSwarm >}
                     })
                     .collect::<Vec<_>>();
                 (name, definition, from_clauses)
             }
-            // User did not provide `OutEvent`. Generate it.
+            // User did not provide `ToSwarm`. Generate it.
             None => {
                 let enum_name_str = ast.ident.to_string() + "Event";
                 let enum_name: syn::Type =
@@ -135,7 +140,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                     let enum_variants = fields
                         .clone()
-                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::OutEvent)});
+                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::ToSwarm)});
 
                     let visibility = &ast.vis;
 
@@ -146,7 +151,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                     let additional_debug = fields
                         .clone()
-                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::OutEvent : ::core::fmt::Debug })
+                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::ToSwarm : ::core::fmt::Debug })
                         .collect::<Vec<_>>();
 
                     let where_clause = {
@@ -168,7 +173,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         .map(|where_clause| quote! {#where_clause, #(#additional_debug),*});
 
                     let match_variants = fields.map(|(variant, _ty)| variant);
-                    let msg = format!("`NetworkBehaviour::OutEvent` produced by {name}.");
+                    let msg = format!("`NetworkBehaviour::ToSwarm` produced by {name}.");
 
                     Some(quote! {
                         #[doc = #msg]
@@ -677,9 +682,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
 
         let generate_event_match_arm =  {
-            // If the `NetworkBehaviour`'s `OutEvent` is generated by the derive macro, wrap the sub
-            // `NetworkBehaviour` `OutEvent` in the variant of the generated `OutEvent`. If the
-            // `NetworkBehaviour`'s `OutEvent` is provided by the user, use the corresponding `From`
+            // If the `NetworkBehaviour`'s `ToSwarm` is generated by the derive macro, wrap the sub
+            // `NetworkBehaviour` `ToSwarm` in the variant of the generated `ToSwarm`. If the
+            // `NetworkBehaviour`'s `ToSwarm` is provided by the user, use the corresponding `From`
             // implementation.
             let into_out_event = if out_event_definition.is_some() {
                 let event_variant: syn::Variant = syn::parse_str(
@@ -731,13 +736,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote! {
+        #deprecation_tokenstream
+
         #out_event_definition
 
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #out_event_reference;
+            type ToSwarm = #out_event_reference;
 
             #[allow(clippy::needless_question_mark)]
             fn handle_pending_inbound_connection(
@@ -795,7 +802,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, #t_handler_in_event<Self>>> {
+            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
                 use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending
@@ -845,19 +852,21 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
     };
 
-    final_quote.into()
+    Ok(final_quote.into())
 }
 
 struct BehaviourAttributes {
     prelude_path: syn::Path,
     user_specified_out_event: Option<syn::Type>,
+    deprecation_tokenstream: proc_macro2::TokenStream,
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
-fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
+fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
+        deprecation_tokenstream: proc_macro2::TokenStream::new(),
     };
 
     for attr in ast
@@ -865,61 +874,31 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         .iter()
         .filter(|attr| attr.path().is_ident("behaviour"))
     {
-        let nested = attr
-            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-            .expect("`parse_args_with` never fails when parsing nested meta");
+        let nested = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
 
         for meta in nested {
             if meta.path().is_ident("prelude") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`prelude` value must be a quoted path",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.prelude_path = syn::parse_str(&value)?;
 
                 continue;
             }
 
-            if meta.path().is_ident("out_event") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
+            if meta.path().is_ident("to_swarm") || meta.path().is_ident("out_event") {
+                if meta.path().is_ident("out_event") {
+                    let warning = proc_macro_warning::FormattedWarning::new_deprecated(
+                        "out_event_renamed_to_to_swarm",
+                        "The `out_event` attribute has been renamed to `to_swarm`.",
+                        meta.span(),
+                    );
 
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.user_specified_out_event =
-                            Some(syn::parse_str(&s.value()).unwrap());
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`out_event` value must be a quoted type",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
+                    attributes.deprecation_tokenstream = quote::quote! { #warning };
                 }
+
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.user_specified_out_event = Some(syn::parse_str(&value)?);
 
                 continue;
             }

@@ -71,7 +71,7 @@ where
     TBehaviour: NetworkBehaviour,
 {
     type ConnectionHandler = ToggleConnectionHandler<THandler<TBehaviour>>;
-    type OutEvent = TBehaviour::OutEvent;
+    type ToSwarm = TBehaviour::ToSwarm;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -182,7 +182,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params)
         } else {
@@ -267,8 +267,8 @@ impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
 {
-    type InEvent = TInner::InEvent;
-    type OutEvent = TInner::OutEvent;
+    type FromBehaviour = TInner::FromBehaviour;
+    type ToBehaviour = TInner::ToBehaviour;
     type Error = TInner::Error;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
@@ -286,7 +286,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         self.inner
             .as_mut()
             .expect("Can't receive events if disabled; QED")
@@ -307,7 +307,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

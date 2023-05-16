@@ -1,11 +1,15 @@
 ## 0.40.0 - unreleased
 
+- Allow `ListenerId` to be user-controlled, i.e. to be provided on `Transport::listen_on`.
+  See [PR 3567].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 
 - Remove deprecated symbols related to upgrades.
   See [PR 3867].
 
+[PR 3567]: https://github.com/libp2p/rust-libp2p/pull/3567
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
 
@@ -19,10 +23,15 @@
 - Add `global_only::Transport` that refuses to dial IP addresses from private ranges.
   See [PR 3814].
 
+- Remove `upgrade::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply}` from public API.
+  These are implementation details that should not be depended on.
+  See [PR 3915].
+
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
 [PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
+[PR 3915]: https://github.com/libp2p/rust-libp2p/pull/3915
 
 ## 0.39.2
 
