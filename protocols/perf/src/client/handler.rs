@@ -146,7 +146,7 @@ impl ConnectionHandler for Handler {
                     .pop_front()
                     .expect("requested stream without pending command");
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::Custom(Event {
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(Event {
                         id,
                         result: Err(error),
                     }));
@@ -179,7 +179,7 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::Custom(event)),
+                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
                 Err(e) => {
                     panic!("{e:?}")
                 }

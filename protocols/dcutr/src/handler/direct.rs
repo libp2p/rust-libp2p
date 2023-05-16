@@ -70,7 +70,7 @@ impl ConnectionHandler for Handler {
     > {
         if !self.reported {
             self.reported = true;
-            return Poll::Ready(ConnectionHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::DirectConnectionEstablished,
             ));
         }
