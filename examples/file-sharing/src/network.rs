@@ -329,7 +329,10 @@ impl EventLoop {
                 }
             }
             SwarmEvent::IncomingConnectionError { .. } => {}
-            SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {peer_id}"),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } => eprintln!("Dialing {peer_id}"),
             e => panic!("{e:?}"),
         }
     }
