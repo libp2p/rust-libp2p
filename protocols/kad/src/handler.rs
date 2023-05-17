@@ -60,7 +60,7 @@ pub struct KademliaHandler {
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active outbound substreams with the state they are in.
-    outbound_substreams: SelectAll<OutboundSubstreamState<QueryId>>,
+    outbound_substreams: SelectAll<OutboundSubstreamState>,
 
     /// Number of outbound streams being upgraded right now.
     num_requested_outbound_streams: usize,
@@ -114,16 +114,16 @@ pub struct KademliaHandlerConfig {
 }
 
 /// State of an active outbound substream.
-enum OutboundSubstreamState<TUserData> {
+enum OutboundSubstreamState {
     /// Waiting to send a message to the remote.
-    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<TUserData>),
+    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<QueryId>),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<Stream>, Option<TUserData>),
+    PendingFlush(KadOutStreamSink<Stream>, Option<QueryId>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<Stream>, TUserData),
+    WaitingAnswer(KadOutStreamSink<Stream>, QueryId),
     /// An error happened on the substream and we should report the error to the user.
-    ReportError(KademliaHandlerQueryErr, TUserData),
+    ReportError(KademliaHandlerQueryErr, QueryId),
     /// The substream is being closed.
     Closing(KadOutStreamSink<Stream>),
     /// The substream is complete and will not perform any more work.
@@ -792,7 +792,7 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-impl futures::Stream for OutboundSubstreamState<QueryId> {
+impl futures::Stream for OutboundSubstreamState {
     type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
