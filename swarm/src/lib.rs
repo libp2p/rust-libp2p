@@ -640,9 +640,10 @@ where
         self.confirmed_external_addr.iter()
     }
 
-    /// Adds an external address record for the local node.
+    /// Add a **confirmed** external address for the local node.
     ///
-    /// TODO
+    /// This function should only be called with addresses that are guaranteed to be reachable.
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
     pub fn add_external_address(&mut self, a: Multiaddr) {
         self.behaviour
             .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
@@ -651,7 +652,9 @@ where
         self.confirmed_external_addr.insert(a);
     }
 
-    /// TODO
+    /// Remove an external address for the local node.
+    ///
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
     pub fn remove_external_address(&mut self, addr: &Multiaddr) {
         self.behaviour
             .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
