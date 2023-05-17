@@ -43,8 +43,7 @@ use std::{
 /// about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
-/// are reported via [`ToSwarm::ReportObservedAddr`] with a
-/// [score](AddressScore) of `1`.
+/// are reported via [`ToSwarm::NewExternalAddrCandidate`].
 pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
