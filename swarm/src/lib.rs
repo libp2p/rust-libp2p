@@ -2458,6 +2458,7 @@ mod tests {
                 peer_id,
                 // multiaddr,
                 error: DialError::Transport(errors),
+                ..
             } => {
                 assert_eq!(target, peer_id.unwrap());
 
