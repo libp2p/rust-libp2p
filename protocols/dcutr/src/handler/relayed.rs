@@ -24,7 +24,6 @@ use crate::protocol;
 use either::Either;
 use futures::future;
 use futures::future::{BoxFuture, FutureExt};
-use instant::Instant;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::ConnectedPoint;
@@ -38,7 +37,6 @@ use libp2p_swarm::{
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 pub enum Command {
     Connect {
@@ -142,7 +140,6 @@ pub struct Handler {
     /// Inbound connect, accepted by the behaviour, pending completion.
     inbound_connect:
         Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>>,
-    keep_alive: KeepAlive,
 }
 
 impl Handler {
@@ -152,7 +149,6 @@ impl Handler {
             pending_error: Default::default(),
             queued_events: Default::default(),
             inbound_connect: Default::default(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(30)),
         }
     }
 
@@ -226,8 +222,6 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        self.keep_alive = KeepAlive::No;
-
         match error {
             StreamUpgradeError::Timeout => {
                 self.queued_events
@@ -310,14 +304,20 @@ impl ConnectionHandler for Handler {
                     );
                 }
             }
-            Command::UpgradeFinishedDontKeepAlive => {
-                self.keep_alive = KeepAlive::No;
-            }
+            Command::UpgradeFinishedDontKeepAlive => {}
         }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if !self.queued_events.is_empty() {
+            return KeepAlive::Yes;
+        }
+
+        if self.inbound_connect.is_some() {
+            return KeepAlive::Yes;
+        }
+
+        KeepAlive::No
     }
 
     fn poll(
