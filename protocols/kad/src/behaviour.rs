@@ -103,7 +103,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn<QueryId>>>,
+    queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn>>,
 
     listen_addresses: ListenAddresses,
 
@@ -1959,7 +1959,7 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandler<QueryId>;
+    type ConnectionHandler = KademliaHandler;
     type ToSwarm = KademliaEvent;
 
     fn handle_established_inbound_connection(
@@ -2907,7 +2907,7 @@ struct QueryInner {
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>,
+    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn); K_VALUE.get()]>,
 }
 
 impl QueryInner {
@@ -3019,7 +3019,7 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
+    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
                 key: peer.to_bytes(),

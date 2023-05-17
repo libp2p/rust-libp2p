@@ -23,6 +23,7 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use crate::record_priv::{self, Record};
+use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
@@ -42,7 +43,6 @@ use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
-
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
 /// Protocol handler that manages substreams for the Kademlia protocol
@@ -52,7 +52,7 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// make.
 ///
 /// It also handles requests made by the remote.
-pub struct KademliaHandler<TUserData> {
+pub struct KademliaHandler {
     /// Configuration for the Kademlia protocol.
     config: KademliaHandlerConfig,
 
@@ -60,17 +60,17 @@ pub struct KademliaHandler<TUserData> {
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active outbound substreams with the state they are in.
-    outbound_substreams: SelectAll<OutboundSubstreamState<TUserData>>,
+    outbound_substreams: SelectAll<OutboundSubstreamState<QueryId>>,
 
     /// Number of outbound streams being upgraded right now.
     num_requested_outbound_streams: usize,
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    pending_messages: VecDeque<(KadRequestMsg, Option<TUserData>)>,
+    pending_messages: VecDeque<(KadRequestMsg, Option<QueryId>)>,
 
     /// List of active inbound substreams with the state they are in.
-    inbound_substreams: SelectAll<InboundSubstreamState<TUserData>>,
+    inbound_substreams: SelectAll<InboundSubstreamState<QueryId>>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -211,7 +211,7 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
-pub enum KademliaHandlerEvent<TUserData> {
+pub enum KademliaHandlerEvent {
     /// The configured protocol name has been confirmed by the peer through
     /// a successfully negotiated substream.
     ///
@@ -235,7 +235,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Results of the request.
         closer_peers: Vec<KadPeer>,
         /// The user data passed to the `FindNodeReq`.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
@@ -254,7 +254,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Known providers for this key.
         provider_peers: Vec<KadPeer>,
         /// The user data passed to the `GetProvidersReq`.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// An error happened when performing a query.
@@ -262,7 +262,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The error that happened.
         error: KademliaHandlerQueryErr,
         /// The user data passed to the query.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// The peer announced itself as a provider of a key.
@@ -288,7 +288,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
         /// The user data passed to the `GetValue`.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Request to put a value in the dht records
@@ -305,7 +305,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 }
 
@@ -357,7 +357,7 @@ impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
 
 /// Event to send to the handler.
 #[derive(Debug)]
-pub enum KademliaHandlerIn<TUserData> {
+pub enum KademliaHandlerIn {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
     ///
@@ -373,7 +373,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier of the node.
         key: Vec<u8>,
         /// Custom user data. Passed back in the out event when the results arrive.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Response to a `FindNodeReq`.
@@ -392,7 +392,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// Identifier being searched.
         key: record_priv::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Response to a `GetProvidersReq`.
@@ -423,7 +423,7 @@ pub enum KademliaHandlerIn<TUserData> {
         /// The key of the record.
         key: record_priv::Key,
         /// Custom data. Passed back in the out event when the results arrive.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Response to a `GetRecord` request.
@@ -440,7 +440,7 @@ pub enum KademliaHandlerIn<TUserData> {
     PutRecord {
         record: Record,
         /// Custom data. Passed back in the out event when the results arrive.
-        user_data: TUserData,
+        user_data: QueryId,
     },
 
     /// Response to a `PutRecord`.
@@ -466,10 +466,7 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-impl<TUserData> KademliaHandler<TUserData>
-where
-    TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
-{
+impl KademliaHandler {
     /// Create a [`KademliaHandler`] using the given configuration.
     pub fn new(
         config: KademliaHandlerConfig,
@@ -595,12 +592,9 @@ where
     }
 }
 
-impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
-where
-    TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
-{
-    type FromBehaviour = KademliaHandlerIn<TUserData>;
-    type ToBehaviour = KademliaHandlerEvent<TUserData>;
+impl ConnectionHandler for KademliaHandler {
+    type FromBehaviour = KademliaHandlerIn;
+    type ToBehaviour = KademliaHandlerEvent;
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -616,7 +610,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
+    fn on_behaviour_event(&mut self, message: KademliaHandlerIn) {
         match message {
             KademliaHandlerIn::Reset(request_id) => {
                 if let Some(state) = self
@@ -773,10 +767,7 @@ where
     }
 }
 
-impl<TUserData> KademliaHandler<TUserData>
-where
-    TUserData: 'static + Clone + Send + Unpin + fmt::Debug,
-{
+impl KademliaHandler {
     fn answer_pending_request(&mut self, request_id: KademliaRequestId, mut msg: KadResponseMsg) {
         for state in self.inbound_substreams.iter_mut() {
             match state.try_answer_with(request_id, msg) {
@@ -801,16 +792,8 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-impl<TUserData> futures::Stream for OutboundSubstreamState<TUserData>
-where
-    TUserData: Unpin,
-{
-    type Item = ConnectionHandlerEvent<
-        KademliaProtocolConfig,
-        (),
-        KademliaHandlerEvent<TUserData>,
-        io::Error,
-    >;
+impl futures::Stream for OutboundSubstreamState<QueryId> {
+    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -941,12 +924,7 @@ impl<TUserData> futures::Stream for InboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
-    type Item = ConnectionHandlerEvent<
-        KademliaProtocolConfig,
-        (),
-        KademliaHandlerEvent<TUserData>,
-        io::Error,
-    >;
+    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -1097,10 +1075,7 @@ where
 }
 
 /// Process a Kademlia message that's supposed to be a response to one of our requests.
-fn process_kad_response<TUserData>(
-    event: KadResponseMsg,
-    user_data: TUserData,
-) -> KademliaHandlerEvent<TUserData> {
+fn process_kad_response(event: KadResponseMsg, user_data: QueryId) -> KademliaHandlerEvent {
     // TODO: must check that the response corresponds to the request
     match event {
         KadResponseMsg::Pong => {
