@@ -1295,6 +1295,10 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     type ListenedAddressesIter = std::iter::Cloned<std::vec::IntoIter<&'a Multiaddr>>;
     type ExternalAddressesIter = AddressIntoIter;
 
+    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
+        self.supported_protocols.iter().cloned()
+    }
+
     fn external_addresses(&self) -> Self::ExternalAddressesIter {
         self.external_addrs.clone().into_iter()
     }
