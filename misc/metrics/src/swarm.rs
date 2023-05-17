@@ -191,7 +191,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         role: endpoint.into(),
                         protocols: protocol_stack::as_string(endpoint.get_remote_address()),
                     },
-                    cause: cause.as_ref().expect("TODO remove see definition").into(),
+                    cause: cause.as_ref().map(Into::into),
                 };
                 self.connections_duration.get_or_create(&labels).observe(
                     self.connections
@@ -311,8 +311,7 @@ struct ConnectionLabels {
 
 #[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
 struct ConnectionClosedLabels {
-    // TODO: Should be Option<ConnectionError>. Needs https://github.com/prometheus/client_rust/pull/137
-    cause: ConnectionError,
+    cause: Option<ConnectionError>,
     #[prometheus(flatten)]
     connection: ConnectionLabels,
 }
