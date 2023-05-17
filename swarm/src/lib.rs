@@ -647,13 +647,15 @@ where
         self.behaviour
             .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
                 addr: &a,
-            }))
+            }));
+        self.confirmed_external_addr.insert(a);
     }
 
     /// TODO
     pub fn remove_external_address(&mut self, addr: &Multiaddr) {
         self.behaviour
-            .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }))
+            .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
+        self.confirmed_external_addr.remove(addr);
     }
 
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
@@ -1128,18 +1130,10 @@ where
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
-                        addr: &addr,
-                    }));
-                self.confirmed_external_addr.insert(addr);
+                self.add_external_address(addr);
             }
             ToSwarm::ExternalAddrExpired(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
-                        addr: &addr,
-                    }));
-                self.confirmed_external_addr.remove(&addr);
+                self.remove_external_address(&addr);
             }
             ToSwarm::CloseConnection {
                 peer_id,
