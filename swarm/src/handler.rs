@@ -619,6 +619,9 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
     }
 }
 
+#[deprecated(note = "Renamed to `StreamUpgradeError`")]
+pub type ConnectionHandlerUpgrErr<TUpgrErr> = StreamUpgradeError<TUpgrErr>;
+
 /// Error that can happen on an outbound substream opening attempt.
 #[derive(Debug)]
 pub enum StreamUpgradeError<TUpgrErr> {
