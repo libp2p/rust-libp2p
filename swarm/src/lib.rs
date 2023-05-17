@@ -186,6 +186,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     ConnectionEstablished {
         /// Identity of the peer that we have connected to.
         peer_id: PeerId,
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// Endpoint of the connection that has been opened.
         endpoint: ConnectedPoint,
         /// Number of established connections to this peer, including the one that has just been
@@ -203,6 +205,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     ConnectionClosed {
         /// Identity of the peer that we have connected to.
         peer_id: PeerId,
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// Endpoint of the connection that has been closed.
         endpoint: ConnectedPoint,
         /// Number of other remaining connections to this same peer.
@@ -217,6 +221,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// [`IncomingConnectionError`](SwarmEvent::IncomingConnectionError) event will later be
     /// generated for this connection.
     IncomingConnection {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// Local connection address.
         /// This address has been earlier reported with a [`NewListenAddr`](SwarmEvent::NewListenAddr)
         /// event.
@@ -229,6 +235,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
     IncomingConnectionError {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// Local connection address.
         /// This address has been earlier reported with a [`NewListenAddr`](SwarmEvent::NewListenAddr)
         /// event.
@@ -240,6 +248,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     },
     /// An error happened on an outbound connection.
     OutgoingConnectionError {
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
         /// If known, [`PeerId`] of the peer we tried to reach.
         peer_id: Option<PeerId>,
         /// Error that has been encountered.
@@ -285,7 +295,13 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
     /// reported if the dialing attempt succeeds, otherwise a
     /// [`OutgoingConnectionError`](SwarmEvent::OutgoingConnectionError) event
     /// is reported.
-    Dialing(PeerId),
+    Dialing {
+        /// Identity of the peer that we are connecting to.
+        peer_id: Option<PeerId>,
+
+        /// Identifier of the connection.
+        connection_id: ConnectionId,
+    },
 }
 
 impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr> {
@@ -661,6 +677,7 @@ where
 
                                 return Some(SwarmEvent::OutgoingConnectionError {
                                     peer_id: Some(peer_id),
+                                    connection_id: id,
                                     error: dial_error,
                                 });
                             }
@@ -689,6 +706,7 @@ where
                                 ));
 
                                 return Some(SwarmEvent::IncomingConnectionError {
+                                    connection_id: id,
                                     send_back_addr,
                                     local_addr,
                                     error: listen_error,
@@ -744,6 +762,7 @@ where
                 self.supported_protocols = supported_protocols;
                 return Some(SwarmEvent::ConnectionEstablished {
                     peer_id,
+                    connection_id: id,
                     num_established,
                     endpoint,
                     concurrent_dial_errors,
@@ -772,6 +791,7 @@ where
 
                 return Some(SwarmEvent::OutgoingConnectionError {
                     peer_id: peer,
+                    connection_id,
                     error,
                 });
             }
@@ -792,6 +812,7 @@ where
                         connection_id: id,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
+                    connection_id: id,
                     local_addr,
                     send_back_addr,
                     error,
@@ -834,6 +855,7 @@ where
                     }));
                 return Some(SwarmEvent::ConnectionClosed {
                     peer_id,
+                    connection_id: id,
                     endpoint,
                     cause: error,
                     num_established,
@@ -896,6 +918,7 @@ where
                             }));
 
                         return Some(SwarmEvent::IncomingConnectionError {
+                            connection_id,
                             local_addr,
                             send_back_addr,
                             error: listen_error,
@@ -913,6 +936,7 @@ where
                 );
 
                 Some(SwarmEvent::IncomingConnection {
+                    connection_id,
                     local_addr,
                     send_back_addr,
                 })
@@ -999,10 +1023,12 @@ where
             ToSwarm::GenerateEvent(event) => return Some(SwarmEvent::Behaviour(event)),
             ToSwarm::Dial { opts } => {
                 let peer_id = opts.get_or_parse_peer_id();
+                let connection_id = opts.connection_id();
                 if let Ok(()) = self.dial(opts) {
-                    if let Ok(Some(peer_id)) = peer_id {
-                        return Some(SwarmEvent::Dialing(peer_id));
-                    }
+                    return Some(SwarmEvent::Dialing {
+                        peer_id: peer_id.ok().flatten(),
+                        connection_id,
+                    });
                 }
             }
             ToSwarm::NotifyHandler {
@@ -2313,6 +2339,7 @@ mod tests {
                 peer_id,
                 // multiaddr,
                 error: DialError::Transport(errors),
+                ..
             } => {
                 assert_eq!(target, peer_id.unwrap());
 

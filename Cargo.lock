@@ -2721,6 +2721,7 @@ dependencies = [
 name = "libp2p-metrics"
 version = "0.13.0"
 dependencies = [
+ "instant",
  "libp2p-core",
  "libp2p-dcutr",
  "libp2p-gossipsub",
@@ -4000,9 +4001,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.21.0"
+version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38974b1966bd5b6c7c823a20c1e07d5b84b171db20bac601e9b529720f7299f8"
+checksum = "78c2f43e8969d51935d2a7284878ae053ba30034cd563f673cde37ba5205685e"
 dependencies = [
  "dtoa",
  "itoa",
