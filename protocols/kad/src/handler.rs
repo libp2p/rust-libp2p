@@ -1083,19 +1083,19 @@ impl futures::Stream for InboundSubstreamState {
 }
 
 /// Process a Kademlia message that's supposed to be a response to one of our requests.
-fn process_kad_response(event: KadResponseMsg, user_data: QueryId) -> KademliaHandlerEvent {
+fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHandlerEvent {
     // TODO: must check that the response corresponds to the request
     match event {
         KadResponseMsg::Pong => {
             // We never send out pings.
             KademliaHandlerEvent::QueryError {
                 error: KademliaHandlerQueryErr::UnexpectedMessage,
-                user_data,
+                user_data: query_id,
             }
         }
         KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
             closer_peers,
-            user_data,
+            user_data: query_id,
         },
         KadResponseMsg::GetProviders {
             closer_peers,
@@ -1103,7 +1103,7 @@ fn process_kad_response(event: KadResponseMsg, user_data: QueryId) -> KademliaHa
         } => KademliaHandlerEvent::GetProvidersRes {
             closer_peers,
             provider_peers,
-            user_data,
+            user_data: query_id,
         },
         KadResponseMsg::GetValue {
             record,
@@ -1111,12 +1111,12 @@ fn process_kad_response(event: KadResponseMsg, user_data: QueryId) -> KademliaHa
         } => KademliaHandlerEvent::GetRecordRes {
             record,
             closer_peers,
-            user_data,
+            user_data: query_id,
         },
         KadResponseMsg::PutValue { key, value, .. } => KademliaHandlerEvent::PutRecordRes {
             key,
             value,
-            user_data,
+            user_data: query_id,
         },
     }
 }
