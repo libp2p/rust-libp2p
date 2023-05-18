@@ -12,9 +12,15 @@
   
 - Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
 
-[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+- Remove deprecated `mplex` module.
+  You can still depend on `libp2p-mplex` directly but we strongly encourage to migrate to `yamux`.
+  This also removes `mplex` from the `development_transport` and `tokio_development_transport` functions.
+  See [PR 3920].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
+[PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
 
 ## 0.51.3
 
