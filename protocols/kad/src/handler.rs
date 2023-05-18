@@ -71,7 +71,7 @@ pub struct KademliaHandler {
     pending_messages: VecDeque<(KadRequestMsg, Option<QueryId>)>,
 
     /// List of active inbound substreams with the state they are in.
-    inbound_substreams: SelectAll<InboundSubstreamState<QueryId>>,
+    inbound_substreams: SelectAll<InboundSubstreamState>,
 
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -133,7 +133,7 @@ enum OutboundSubstreamState {
 }
 
 /// State of an active inbound substream.
-enum InboundSubstreamState<TUserData> {
+enum InboundSubstreamState {
     /// Waiting for a request from the remote.
     WaitingMessage {
         /// Whether it is the first message to be awaited on this stream.
@@ -153,11 +153,11 @@ enum InboundSubstreamState<TUserData> {
     Cancelled,
 
     Poisoned {
-        phantom: PhantomData<TUserData>,
+        phantom: PhantomData<QueryId>,
     },
 }
 
-impl<TUserData> InboundSubstreamState<TUserData> {
+impl InboundSubstreamState {
     fn try_answer_with(
         &mut self,
         id: KademliaRequestId,
@@ -931,10 +931,7 @@ impl futures::Stream for OutboundSubstreamState {
     }
 }
 
-impl<TUserData> futures::Stream for InboundSubstreamState<TUserData>
-where
-    TUserData: Unpin,
-{
+impl futures::Stream for InboundSubstreamState {
     type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
