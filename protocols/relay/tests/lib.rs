@@ -222,7 +222,10 @@ async fn connection_established_to(
 ) {
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
                 break
@@ -419,7 +422,10 @@ async fn wait_for_reservation(
 async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == remote => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
                 return false
