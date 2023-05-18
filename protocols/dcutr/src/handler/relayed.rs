@@ -304,7 +304,6 @@ impl ConnectionHandler for Handler {
                     );
                 }
             }
-            Command::UpgradeFinishedDontKeepAlive => {}
         }
     }
 
