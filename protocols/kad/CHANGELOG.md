@@ -6,11 +6,8 @@
 - Remove deprecated public modules `handler`, `protocol` and `kbucket`.
   See [PR 3896].
 
-- Remove `TUserData` in `KademliaHandler`, `KademliaHandlerEvent`, `KademliaHandlerIn`, `OutboundSubstreamState` and replace with `QueryId`. See [PR 3959].
-
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3896]: https://github.com/libp2p/rust-libp2p/pull/3896
-[PR 3959]: https://github.com/libp2p/rust-libp2p/pull/3959
 
 ## 0.43.3
 
