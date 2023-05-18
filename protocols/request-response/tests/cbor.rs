@@ -20,25 +20,28 @@
 
 //! Integration tests for the `cbor::Behaviour`.
 
+use libp2p_request_response as request_response;
 use libp2p_request_response::cbor::Behaviour;
-use libp2p_request_response::ProtocolSupport;
+use libp2p_request_response::{Config, ProtocolSupport};
 use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt;
+use rand::{self, Rng};
+use serde::{Deserialize, Serialize};
 use std::iter;
 
 #[async_std::test]
 async fn cbor() {
     let protocols = iter::once((StreamProtocol::new("/test_cbor/1"), ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
+    let cfg = Config::default();
 
     let behaviour_1: Behaviour<TestRequest, TestResponse> =
-        request_response::cbor::new_behaviour(protocols.clone(), cfg.clone());
+        Behaviour::new(protocols.clone(), cfg.clone());
 
     let mut swarm1 = Swarm::new_ephemeral(|_| behaviour_1);
     let peer1_id = *swarm1.local_peer_id();
 
     let behaviour_2: Behaviour<TestRequest, TestResponse> =
-        request_response::cbor::new_behaviour(protocols.clone(), cfg.clone());
+        Behaviour::new(protocols.clone(), cfg.clone());
     let mut swarm2 = Swarm::new_ephemeral(|_| behaviour_2);
     let peer2_id = *swarm2.local_peer_id();
 
@@ -127,4 +130,14 @@ async fn cbor() {
 
     async_std::task::spawn(Box::pin(peer1));
     peer2.await;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestRequest {
+    payload: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TestResponse {
+    payload: String,
 }

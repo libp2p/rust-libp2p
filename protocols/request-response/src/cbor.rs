@@ -18,11 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Config, ProtocolSupport};
+use crate::{Config, ProtocolSupport, RequestId, ResponseChannel};
 use async_trait::async_trait;
 use futures::prelude::*;
 use futures::{AsyncRead, AsyncWrite};
 use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{NetworkBehaviour, StreamProtocol};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{io, marker::PhantomData};
@@ -146,5 +148,33 @@ where
                 cfg,
             ),
         }
+    }
+
+    pub fn send_request(&mut self, peer: &PeerId, request: Req) -> RequestId {
+        self.inner.send_request(peer, request)
+    }
+
+    pub fn send_response(&mut self, ch: ResponseChannel<Resp>, rs: Resp) -> Result<(), Resp> {
+        self.inner.send_response(ch, rs)
+    }
+
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
+        self.inner.add_address(peer, address)
+    }
+
+    pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
+        self.inner.remove_address(peer, address)
+    }
+
+    pub fn is_connected(&self, peer: &PeerId) -> bool {
+        self.inner.is_connected(peer)
+    }
+
+    pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+        self.inner.is_pending_outbound(peer, request_id)
+    }
+
+    pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+        self.inner.is_pending_inbound(peer, request_id)
     }
 }
