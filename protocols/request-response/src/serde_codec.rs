@@ -61,7 +61,6 @@ where
     Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
     original: RequestResponseBehaviour<SerdeCodec<Req, Resp>>,
-    phantom: PhantomData<(Req, Resp)>,
 }
 
 impl<Req, Resp> SerdeCodec<Req, Resp>
@@ -76,12 +75,12 @@ where
         }
     }
 
-    pub(crate) fn cbor() -> Self {
+    /*pub(crate) fn cbor() -> Self {
         SerdeCodec {
             format: SerdeFormat::CBOR,
             phantom: PhantomData,
         }
-    }
+    }*/
 
     fn val_to_vec<S: Serialize>(&self, val: &S) -> io::Result<Vec<u8>> {
         match self.format {
@@ -190,7 +189,6 @@ where
     {
         Behaviour {
             original: RequestResponseBehaviour::new(codec, protocols, cfg),
-            phantom: PhantomData,
         }
     }
 

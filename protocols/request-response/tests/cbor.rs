@@ -18,53 +18,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Integration tests for the `json::Behaviour`.
+//! Integration tests for the `cbor::Behaviour`.
 
-use libp2p_request_response as request_response;
-use libp2p_request_response::cbor::Behaviour;
-use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::{StreamProtocol, Swarm};
-use libp2p_swarm_test::SwarmExt;
-use rand::{self, Rng};
-use serde::{Deserialize, Serialize};
 use std::iter;
-
-#[async_std::test]
-async fn json() {
-    run_test(|| {
-        let protocols = iter::once((StreamProtocol::new("/test_json/1"), ProtocolSupport::Full));
-        let cfg = request_response::Config::default();
-
-        let behaviour: Behaviour<TestRequest, TestResponse> =
-            request_response::json::new_behaviour(protocols, cfg);
-
-        Swarm::new_ephemeral(|_| behaviour)
-    })
-    .await;
-}
+use libp2p_swarm::{StreamProtocol, Swarm};
+use libp2p_request_response::ProtocolSupport;
+use libp2p_request_response::cbor::Behaviour;
+use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]
 async fn cbor() {
-    run_test(|| {
-        let protocols = iter::once((StreamProtocol::new("/test_cbor/1"), ProtocolSupport::Full));
-        let cfg = request_response::Config::default();
+    let protocols = iter::once((StreamProtocol::new("/test_cbor/1"), ProtocolSupport::Full));
+    let cfg = request_response::Config::default();
 
-        let behaviour: Behaviour<TestRequest, TestResponse> =
-            request_response::cbor::new_behaviour(protocols, cfg);
+    let behaviour_1: Behaviour<TestRequest, TestResponse> =
+        request_response::cbor::new_behaviour(protocols.clone(), cfg.clone());
 
-        Swarm::new_ephemeral(|_| behaviour)
-    })
-    .await;
-}
-
-async fn run_test<F>(mut supplier: F)
-where
-    F: FnMut() -> Swarm<Behaviour<TestRequest, TestResponse>>,
-{
-    let mut swarm1 = supplier();
+    let mut swarm1 = Swarm::new_ephemeral(|_| behaviour_1);
     let peer1_id = *swarm1.local_peer_id();
 
-    let mut swarm2 = supplier();
+    let behaviour_2: Behaviour<TestRequest, TestResponse> =
+        request_response::cbor::new_behaviour(protocols.clone(), cfg.clone());
+    let mut swarm2 = Swarm::new_ephemeral(|_| behaviour_2);
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -84,12 +59,12 @@ where
         loop {
             match swarm1.next_swarm_event().await.try_into_behaviour_event() {
                 Ok(request_response::Event::Message {
-                    peer,
-                    message:
-                        request_response::Message::Request {
-                            request, channel, ..
-                        },
-                }) => {
+                       peer,
+                       message:
+                       request_response::Message::Request {
+                           request, channel, ..
+                       },
+                   }) => {
                     assert_eq!(&request, &expected_req);
                     assert_eq!(&peer, &peer2_id);
                     swarm1
@@ -128,10 +103,10 @@ where
                 request_response::Event::Message {
                     peer,
                     message:
-                        request_response::Message::Response {
-                            request_id,
-                            response,
-                        },
+                    request_response::Message::Response {
+                        request_id,
+                        response,
+                    },
                 } => {
                     count += 1;
                     assert_eq!(&response, &expected_resp);
@@ -152,14 +127,4 @@ where
 
     async_std::task::spawn(Box::pin(peer1));
     peer2.await;
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct TestRequest {
-    payload: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct TestResponse {
-    payload: String,
 }

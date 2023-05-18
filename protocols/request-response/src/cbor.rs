@@ -18,19 +18,129 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub use crate::serde_codec::Behaviour;
-
-use crate::serde_codec::SerdeCodec;
-use crate::{Codec, Config, ProtocolSupport};
+use std::{
+    io,
+    marker::PhantomData,
+};
+use futures::{AsyncRead, AsyncWrite};
+use async_trait::async_trait;
+use libp2p_swarm::{NetworkBehaviour, StreamProtocol};
+use crate::{Config, ProtocolSupport};
 use serde::{de::DeserializeOwned, Serialize};
+use futures::prelude::*;
+use libp2p_core::upgrade::{
+    read_length_prefixed, write_length_prefixed,
+};
 
-pub fn new_behaviour<I, Req, Resp>(protocols: I, cfg: Config) -> Behaviour<Req, Resp>
-where
-    I: IntoIterator<Item = (<SerdeCodec<Req, Resp> as Codec>::Protocol, ProtocolSupport)>,
-    Req: Send + Clone + Serialize + DeserializeOwned,
-    Resp: Send + Clone + Serialize + DeserializeOwned,
+#[derive(Debug, Clone)]
+pub struct Codec<Req, Resp> {
+    phantom: PhantomData<(Req, Resp)>,
+}
+
+const REQUEST_SIZE_MAXIMUM: usize = 1_000_000;
+const RESPONSE_SIZE_MAXIMUM: usize = 500_000_000;
+
+pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
+
+#[derive(NetworkBehaviour)]
+#[behaviour(
+    to_swarm = "OutEvent<Req, Resp>",
+    prelude = "libp2p_swarm::derive_prelude"
+)]
+pub struct Behaviour<Req, Resp>
+    where
+        Req: Send + Clone + Serialize + DeserializeOwned + 'static,
+        Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
-    let codec: SerdeCodec<Req, Resp> = SerdeCodec::cbor();
+    inner: crate::Behaviour<Codec<Req, Resp>>,
+}
 
-    Behaviour::new(codec, protocols, cfg)
+#[async_trait]
+impl<Req, Resp> crate::Codec for Codec<Req, Resp>
+    where
+        Req: Send + Clone + Serialize + DeserializeOwned,
+        Resp: Send + Clone + Serialize + DeserializeOwned,
+{
+    type Protocol = StreamProtocol;
+    type Request = Req;
+    type Response = Resp;
+
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+        where
+            T: AsyncRead + Unpin + Send,
+    {
+        let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+
+        Ok(serde_json::from_slice(vec.as_slice())?)
+    }
+
+    async fn read_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+        where
+            T: AsyncRead + Unpin + Send,
+    {
+        let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
+
+        if vec.is_empty() {
+            return Err(io::ErrorKind::UnexpectedEof.into());
+        }
+
+        Ok(serde_json::from_slice(vec.as_slice())?)
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+    {
+        let data = serde_json::to_vec(&req)?;
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        resp: Self::Response,
+    ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+    {
+        let data = serde_json::to_vec(&resp)?;
+        write_length_prefixed(io, data).await?;
+        io.close().await?;
+
+        Ok(())
+    }
+}
+
+impl<Req, Resp> Behaviour<Req, Resp>
+    where
+        Req: Send + Clone + Serialize + DeserializeOwned,
+        Resp: Send + Clone + Serialize + DeserializeOwned,
+{
+    pub fn new<I>(protocols: I, cfg: Config) -> Self
+        where
+            I: IntoIterator<Item=(<Codec<Req, Resp> as crate::Codec>::Protocol, ProtocolSupport)>,
+    {
+        Behaviour {
+            inner: crate::Behaviour::new(
+                Codec { phantom: PhantomData }, protocols, cfg,
+            ),
+        }
+    }
 }
