@@ -43,6 +43,7 @@ use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
+
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
 /// Protocol handler that manages substreams for the Kademlia protocol
