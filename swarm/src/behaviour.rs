@@ -441,9 +441,9 @@ pub enum FromSwarm<'a, Handler> {
     ListenerClosed(ListenerClosed<'a>),
     /// Informs the behaviour that we have discovered a new candidate for an external address for us.
     NewExternalAddrCandidate(NewExternalAddrCandidate<'a>),
-    /// Informs the behaviour that an external address was removed.
+    /// Informs the behaviour that an external address of the local node was removed.
     ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
-    /// Informs the behaviour that an external address was removed.
+    /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired(ExternalAddrExpired<'a>),
 }
 
