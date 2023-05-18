@@ -374,7 +374,7 @@ pub enum KademliaHandlerIn {
         /// Identifier of the node.
         key: Vec<u8>,
         /// Custom user data. Passed back in the out event when the results arrive.
-        user_data: QueryId,
+        query_id: QueryId,
     },
 
     /// Response to a `FindNodeReq`.
@@ -393,7 +393,7 @@ pub enum KademliaHandlerIn {
         /// Identifier being searched.
         key: record_priv::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
-        user_data: QueryId,
+        query_id: QueryId,
     },
 
     /// Response to a `GetProvidersReq`.
@@ -424,7 +424,7 @@ pub enum KademliaHandlerIn {
         /// The key of the record.
         key: record_priv::Key,
         /// Custom data. Passed back in the out event when the results arrive.
-        user_data: QueryId,
+        query_id: QueryId,
     },
 
     /// Response to a `GetRecord` request.
@@ -441,7 +441,7 @@ pub enum KademliaHandlerIn {
     PutRecord {
         record: Record,
         /// Custom data. Passed back in the out event when the results arrive.
-        user_data: QueryId,
+        query_id: QueryId,
     },
 
     /// Response to a `PutRecord`.
@@ -497,11 +497,9 @@ impl KademliaHandler {
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        if let Some((msg, user_data)) = self.pending_messages.pop_front() {
+        if let Some((msg, query_id)) = self.pending_messages.pop_front() {
             self.outbound_substreams
-                .push(OutboundSubstreamState::PendingSend(
-                    protocol, msg, user_data,
-                ));
+                .push(OutboundSubstreamState::PendingSend(protocol, msg, query_id));
         } else {
             debug_assert!(false, "Requested outbound stream without message")
         }
@@ -584,9 +582,9 @@ impl KademliaHandler {
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
 
-        if let Some((_, Some(user_data))) = self.pending_messages.pop_front() {
+        if let Some((_, Some(query_id))) = self.pending_messages.pop_front() {
             self.outbound_substreams
-                .push(OutboundSubstreamState::ReportError(error.into(), user_data));
+                .push(OutboundSubstreamState::ReportError(error.into(), query_id));
         }
 
         self.num_requested_outbound_streams -= 1;
@@ -627,17 +625,17 @@ impl ConnectionHandler for KademliaHandler {
                     state.close();
                 }
             }
-            KademliaHandlerIn::FindNodeReq { key, user_data } => {
+            KademliaHandlerIn::FindNodeReq { key, query_id } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.pending_messages.push_back((msg, Some(user_data)));
+                self.pending_messages.push_back((msg, Some(query_id)));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
-            KademliaHandlerIn::GetProvidersReq { key, user_data } => {
+            KademliaHandlerIn::GetProvidersReq { key, query_id } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.pending_messages.push_back((msg, Some(user_data)));
+                self.pending_messages.push_back((msg, Some(query_id)));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
@@ -654,13 +652,13 @@ impl ConnectionHandler for KademliaHandler {
                 let msg = KadRequestMsg::AddProvider { key, provider };
                 self.pending_messages.push_back((msg, None));
             }
-            KademliaHandlerIn::GetRecord { key, user_data } => {
+            KademliaHandlerIn::GetRecord { key, query_id } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.pending_messages.push_back((msg, Some(user_data)));
+                self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::PutRecord { record, user_data } => {
+            KademliaHandlerIn::PutRecord { record, query_id } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.pending_messages.push_back((msg, Some(user_data)));
+                self.pending_messages.push_back((msg, Some(query_id)));
             }
             KademliaHandlerIn::GetRecordRes {
                 record,

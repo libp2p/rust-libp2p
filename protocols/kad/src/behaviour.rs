@@ -3023,20 +3023,20 @@ impl QueryInfo {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
                 key: peer.to_bytes(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::GetProviders { key, .. } => KademliaHandlerIn::GetProvidersReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::AddProvider { key, phase, .. } => match phase {
                 AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
                 AddProviderPhase::AddProvider {
                     provider_id,
@@ -3053,16 +3053,16 @@ impl QueryInfo {
             },
             QueryInfo::GetRecord { key, .. } => KademliaHandlerIn::GetRecord {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::PutRecord { record, phase, .. } => match phase {
                 PutRecordPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: record.key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
                 PutRecordPhase::PutRecord { .. } => KademliaHandlerIn::PutRecord {
                     record: record.clone(),
-                    user_data: query_id,
+                    query_id,
                 },
             },
         }
