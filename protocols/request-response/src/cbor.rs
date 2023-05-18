@@ -18,19 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    io,
-    marker::PhantomData,
-};
-use futures::{AsyncRead, AsyncWrite};
-use async_trait::async_trait;
-use libp2p_swarm::{NetworkBehaviour, StreamProtocol};
 use crate::{Config, ProtocolSupport};
-use serde::{de::DeserializeOwned, Serialize};
+use async_trait::async_trait;
 use futures::prelude::*;
-use libp2p_core::upgrade::{
-    read_length_prefixed, write_length_prefixed,
-};
+use futures::{AsyncRead, AsyncWrite};
+use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
+use libp2p_swarm::{NetworkBehaviour, StreamProtocol};
+use serde::{de::DeserializeOwned, Serialize};
+use std::{io, marker::PhantomData};
 
 #[derive(Debug, Clone)]
 pub struct Codec<Req, Resp> {
@@ -48,26 +43,26 @@ pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
     prelude = "libp2p_swarm::derive_prelude"
 )]
 pub struct Behaviour<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned + 'static,
-        Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned + 'static,
+    Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
     inner: crate::Behaviour<Codec<Req, Resp>>,
 }
 
 #[async_trait]
 impl<Req, Resp> crate::Codec for Codec<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     type Protocol = StreamProtocol;
     type Request = Req;
     type Response = Resp;
 
     async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
-        where
-            T: AsyncRead + Unpin + Send,
+    where
+        T: AsyncRead + Unpin + Send,
     {
         let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
 
@@ -83,8 +78,8 @@ impl<Req, Resp> crate::Codec for Codec<Req, Resp>
         _: &Self::Protocol,
         io: &mut T,
     ) -> io::Result<Self::Response>
-        where
-            T: AsyncRead + Unpin + Send,
+    where
+        T: AsyncRead + Unpin + Send,
     {
         let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
 
@@ -101,8 +96,8 @@ impl<Req, Resp> crate::Codec for Codec<Req, Resp>
         io: &mut T,
         req: Self::Request,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send,
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         let data = serde_json::to_vec(&req)?;
         write_length_prefixed(io, data).await?;
@@ -117,8 +112,8 @@ impl<Req, Resp> crate::Codec for Codec<Req, Resp>
         io: &mut T,
         resp: Self::Response,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send,
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         let data = serde_json::to_vec(&resp)?;
         write_length_prefixed(io, data).await?;
@@ -129,17 +124,26 @@ impl<Req, Resp> crate::Codec for Codec<Req, Resp>
 }
 
 impl<Req, Resp> Behaviour<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     pub fn new<I>(protocols: I, cfg: Config) -> Self
-        where
-            I: IntoIterator<Item=(<Codec<Req, Resp> as crate::Codec>::Protocol, ProtocolSupport)>,
+    where
+        I: IntoIterator<
+            Item = (
+                <Codec<Req, Resp> as crate::Codec>::Protocol,
+                ProtocolSupport,
+            ),
+        >,
     {
         Behaviour {
             inner: crate::Behaviour::new(
-                Codec { phantom: PhantomData }, protocols, cfg,
+                Codec {
+                    phantom: PhantomData,
+                },
+                protocols,
+                cfg,
             ),
         }
     }

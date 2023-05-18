@@ -20,11 +20,11 @@
 
 //! Integration tests for the `cbor::Behaviour`.
 
-use std::iter;
-use libp2p_swarm::{StreamProtocol, Swarm};
-use libp2p_request_response::ProtocolSupport;
 use libp2p_request_response::cbor::Behaviour;
+use libp2p_request_response::ProtocolSupport;
+use libp2p_swarm::{StreamProtocol, Swarm};
 use libp2p_swarm_test::SwarmExt;
+use std::iter;
 
 #[async_std::test]
 async fn cbor() {
@@ -59,12 +59,12 @@ async fn cbor() {
         loop {
             match swarm1.next_swarm_event().await.try_into_behaviour_event() {
                 Ok(request_response::Event::Message {
-                       peer,
-                       message:
-                       request_response::Message::Request {
-                           request, channel, ..
-                       },
-                   }) => {
+                    peer,
+                    message:
+                        request_response::Message::Request {
+                            request, channel, ..
+                        },
+                }) => {
                     assert_eq!(&request, &expected_req);
                     assert_eq!(&peer, &peer2_id);
                     swarm1
@@ -103,10 +103,10 @@ async fn cbor() {
                 request_response::Event::Message {
                     peer,
                     message:
-                    request_response::Message::Response {
-                        request_id,
-                        response,
-                    },
+                        request_response::Message::Response {
+                            request_id,
+                            response,
+                        },
                 } => {
                     count += 1;
                     assert_eq!(&response, &expected_resp);
