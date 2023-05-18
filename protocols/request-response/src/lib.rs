@@ -61,8 +61,6 @@
 pub mod cbor;
 mod codec;
 mod handler;
-pub mod json;
-mod serde_codec;
 
 pub use codec::Codec;
 pub use handler::ProtocolSupport;
