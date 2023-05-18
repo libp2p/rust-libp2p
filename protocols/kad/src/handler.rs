@@ -1090,12 +1090,12 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
             // We never send out pings.
             KademliaHandlerEvent::QueryError {
                 error: KademliaHandlerQueryErr::UnexpectedMessage,
-                query_id: query_id,
+                query_id,
             }
         }
         KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
             closer_peers,
-            query_id: query_id,
+            query_id,
         },
         KadResponseMsg::GetProviders {
             closer_peers,
@@ -1103,7 +1103,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
         } => KademliaHandlerEvent::GetProvidersRes {
             closer_peers,
             provider_peers,
-            query_id: query_id,
+            query_id,
         },
         KadResponseMsg::GetValue {
             record,
@@ -1111,12 +1111,12 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
         } => KademliaHandlerEvent::GetRecordRes {
             record,
             closer_peers,
-            query_id: query_id,
+            query_id,
         },
         KadResponseMsg::PutValue { key, value, .. } => KademliaHandlerEvent::PutRecordRes {
             key,
             value,
-            query_id: query_id,
+            query_id,
         },
     }
 }
