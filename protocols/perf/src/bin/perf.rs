@@ -36,14 +36,6 @@ use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
-mod schema {
-    use serde::{Deserialize, Serialize};
-    schemafy::schemafy!(
-        root: BenchmarkResults
-            "src/benchmark-data-schema.json"
-    );
-}
-
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf client")]
 struct Opts {
@@ -227,35 +219,19 @@ async fn client(
             .with(Protocol::QuicV1),
     };
 
-    let results = tokio::spawn(async move {
-        let mut results = vec![];
-
+    tokio::spawn(async move {
         for benchmark in benchmarks {
             info!(
                 "{}",
                 format!("Start benchmark: {}", benchmark.name()).underline(),
             );
 
-            let result = benchmark.run(address.clone()).await?;
-            if let Some(result) = result {
-                results.push(result);
-            }
+            benchmark.run(address.clone()).await?;
         }
 
-        anyhow::Ok(results)
+        anyhow::Ok(())
     })
     .await??;
-
-    if !results.is_empty() {
-        println!(
-            "{}",
-            serde_json::to_string(&schema::Benchmarks {
-                benchmarks: results,
-                schema: None,
-            })
-            .unwrap()
-        );
-    }
 
     Ok(())
 }
@@ -264,7 +240,7 @@ async fn client(
 trait Benchmark: Send + Sync + 'static {
     fn name(&self) -> &'static str;
 
-    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>>;
+    async fn run(&self, server_address: Multiaddr) -> Result<()>;
 }
 
 struct Custom {
@@ -278,7 +254,7 @@ impl Benchmark for Custom {
         "custom"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut latencies = Vec::new();
 
         let mut swarm = swarm().await;
@@ -325,7 +301,7 @@ impl Benchmark for Custom {
             serde_json::to_string(&CustomResult { latencies }).unwrap()
         );
 
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -342,7 +318,7 @@ impl Benchmark for Latency {
         "round-trip-time latency"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -395,7 +371,7 @@ impl Benchmark for Latency {
         );
         info!("- {:.4} s median", percentile(&latencies, 0.50),);
         info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -483,7 +459,7 @@ impl Benchmark for RequestsPerSecond {
         "single connection parallel requests per second"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut swarm = swarm().await;
 
         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -537,7 +513,7 @@ impl Benchmark for RequestsPerSecond {
         );
         info!("- {requests_per_second:.2} req/s\n");
 
-        Ok(None)
+        Ok(())
     }
 }
 
@@ -549,7 +525,7 @@ impl Benchmark for ConnectionsPerSecond {
         "sequential connections with single request per second"
     }
 
-    async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
+    async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut rounds = 0;
         let to_send = 1;
         let to_receive = 1;
@@ -606,17 +582,7 @@ impl Benchmark for ConnectionsPerSecond {
         info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
         info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
-        Ok(Some(schema::Benchmark {
-            name: "Single Connection 1 byte round trip latency 95th percentile".to_string(),
-            unit: "s".to_string(),
-            comparisons: vec![],
-            results: vec![schema::Result {
-                implementation: "rust-libp2p".to_string(),
-                transport_stack: "TODO".to_string(),
-                version: "TODO".to_string(),
-                result: connection_establishment_plus_request_95th,
-            }],
-        }))
+        Ok(())
     }
 }
 
