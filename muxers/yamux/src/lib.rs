@@ -36,9 +36,6 @@ use std::{
 use thiserror::Error;
 use yamux::ConnectionError;
 
-#[deprecated(note = "Import the `yamux` module instead and refer to this type as `yamux::Muxer`.")]
-pub type Yamux<S> = Muxer<S>;
-
 /// A Yamux connection.
 #[derive(Debug)]
 pub struct Muxer<S> {
@@ -55,6 +52,8 @@ pub struct Muxer<S> {
     inbound_stream_buffer: VecDeque<Stream>,
     /// Waker to be called when new inbound streams are available.
     inbound_stream_waker: Option<Waker>,
+
+    _phantom: std::marker::PhantomData<C>,
 }
 
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
@@ -69,16 +68,14 @@ where
             connection: yamux::Connection::new(io, cfg, mode),
             inbound_stream_buffer: VecDeque::default(),
             inbound_stream_waker: None,
+            _phantom: Default::default(),
         }
     }
 }
 
-#[deprecated(note = "Use `Result<T, yamux::Error>` instead.")]
-pub type YamuxResult<T> = Result<T, Error>;
-
-impl<S> StreamMuxer for Muxer<S>
+impl<C> StreamMuxer for Muxer<C>
 where
-    S: AsyncRead + AsyncWrite + Unpin + 'static,
+    C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     type Substream = Stream;
     type Error = Error;
@@ -106,7 +103,8 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(self.connection.poll_close(cx).map_err(Error)?);
+        ready!(self.connection.poll_close(cx).map_ok(Stream)
+            .map_err(Error)?);
 
         Poll::Ready(Ok(()))
     }
@@ -136,21 +134,68 @@ where
     }
 }
 
-impl<S> Muxer<S>
+/// A stream produced by the yamux multiplexer.
+#[derive(Debug)]
+pub struct Stream(yamux::Stream);
+
+impl AsyncRead for Stream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_read(cx, buf)
+    }
+
+    fn poll_read_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_read_vectored(cx, bufs)
+    }
+}
+
+impl AsyncWrite for Stream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.0).poll_close(cx)
+    }
+}
+
+impl<C> Muxer<C>
 where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, Error>> {
         let stream = ready!(self.connection.poll_next_inbound(cx).map_err(Error))
-            .transpose()?
+            .transpose()
+                .map_err(Error)?
+                .map(Stream)
             .ok_or(Error(ConnectionError::Closed))?;
 
         Poll::Ready(Ok(Stream(stream)))
     }
 }
-
-#[deprecated(note = "Import the `yamux` module and refer to this type as `yamux::Config` instead.")]
-pub type YamuxConfig = Config;
 
 /// The yamux configuration.
 #[derive(Debug, Clone)]
@@ -244,54 +289,6 @@ impl Config {
     }
 }
 
-/// A stream produced by the yamux multiplexer.
-#[derive(Debug)]
-pub struct Stream(yamux::Stream);
-
-impl AsyncRead for Stream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
-    }
-
-    fn poll_read_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &mut [IoSliceMut<'_>],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_read_vectored(cx, bufs)
-    }
-}
-
-impl AsyncWrite for Stream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
-    }
-}
-
 impl Default for Config {
     fn default() -> Self {
         let mut inner = yamux::Config::default();
@@ -339,10 +336,16 @@ where
     }
 }
 
-#[deprecated(note = "Import the `yamux` module and refer to this type as `yamux::Error` instead.")]
-pub type YamuxError = Error;
-
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error(transparent)]
-pub struct Error(ConnectionError);
+pub struct Error(yamux::ConnectionError);
+
+impl From<Error> for io::Error {
+    fn from(err: Error) -> Self {
+        match err.0 {
+            yamux::ConnectionError::Io(e) => e,
+            e => io::Error::new(io::ErrorKind::Other, e),
+        }
+    }
+}

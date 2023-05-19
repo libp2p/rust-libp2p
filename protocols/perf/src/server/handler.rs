@@ -30,8 +30,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, StreamProtocol,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
 use log::error;
 use void::Void;
@@ -64,8 +63,8 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Void;
-    type OutEvent = Event;
+    type FromBehaviour = Void;
+    type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
@@ -76,7 +75,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         void::unreachable(v)
     }
 
@@ -104,16 +103,11 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
                 void::unreachable(info)
             }
-            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout => {}
-                    ConnectionHandlerUpgrErr::Timer => {}
-                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
-                        libp2p_core::UpgradeError::Select(_) => {}
-                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
-                    },
-                }
+                void::unreachable(error)
             }
         }
     }
@@ -129,13 +123,15 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
         while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
             match result {
-                Ok(stats) => return Poll::Ready(ConnectionHandlerEvent::Custom(Event { stats })),
+                Ok(stats) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
+                }
                 Err(e) => {
                     error!("{e:?}")
                 }

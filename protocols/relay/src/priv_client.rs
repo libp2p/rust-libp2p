@@ -39,9 +39,9 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
-    DialFailure, NegotiatedSubstream, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
+    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -64,7 +64,7 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
+        error: StreamUpgradeError<outbound_hop::ReservationFailedReason>,
     },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
@@ -72,16 +72,12 @@ pub enum Event {
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
         limit: Option<protocol::Limit>,
-    },
-    InboundCircuitReqFailed {
-        relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
     },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
@@ -122,11 +118,6 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
 }
 
 impl Behaviour {
-    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::new instead.")]
-    pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
-        new(local_peer_id)
-    }
-
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
@@ -160,7 +151,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -282,10 +273,6 @@ impl NetworkBehaviour for Behaviour {
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
                 Event::InboundCircuitEstablished { src_peer_id, limit }
             }
-            handler::Event::InboundCircuitReqFailed { error } => Event::InboundCircuitReqFailed {
-                relay_peer_id: event_source,
-                error,
-            },
             handler::Event::InboundCircuitReqDenied { src_peer_id } => {
                 Event::InboundCircuitReqDenied { src_peer_id }
             }
@@ -301,7 +288,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);
         }
@@ -399,7 +386,7 @@ enum ConnectionState {
     },
     Operational {
         read_buffer: Bytes,
-        substream: NegotiatedSubstream,
+        substream: Stream,
         /// "Drop notifier" pattern to signal to the transport that the connection has been dropped.
         ///
         /// This is flagged as "dead-code" by the compiler because we never read from it here.
@@ -433,7 +420,7 @@ impl ConnectionState {
     }
 
     pub(crate) fn new_outbound(
-        substream: NegotiatedSubstream,
+        substream: Stream,
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {

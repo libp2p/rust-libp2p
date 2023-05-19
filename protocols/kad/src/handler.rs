@@ -33,8 +33,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use log::trace;
 use std::collections::VecDeque;
@@ -116,20 +116,16 @@ pub struct KademliaHandlerConfig {
 /// State of an active outbound substream.
 enum OutboundSubstreamState<TUserData> {
     /// Waiting to send a message to the remote.
-    PendingSend(
-        KadOutStreamSink<NegotiatedSubstream>,
-        KadRequestMsg,
-        Option<TUserData>,
-    ),
+    PendingSend(KadOutStreamSink<Stream>, KadRequestMsg, Option<TUserData>),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(KadOutStreamSink<NegotiatedSubstream>, Option<TUserData>),
+    PendingFlush(KadOutStreamSink<Stream>, Option<TUserData>),
     /// Waiting for an answer back from the remote.
     // TODO: add timeout
-    WaitingAnswer(KadOutStreamSink<NegotiatedSubstream>, TUserData),
+    WaitingAnswer(KadOutStreamSink<Stream>, TUserData),
     /// An error happened on the substream and we should report the error to the user.
     ReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is being closed.
-    Closing(KadOutStreamSink<NegotiatedSubstream>),
+    Closing(KadOutStreamSink<Stream>),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -142,24 +138,16 @@ enum InboundSubstreamState<TUserData> {
         /// Whether it is the first message to be awaited on this stream.
         first: bool,
         connection_id: UniqueConnecId,
-        substream: KadInStreamSink<NegotiatedSubstream>,
+        substream: KadInStreamSink<Stream>,
     },
     /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
-    WaitingBehaviour(
-        UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
-        Option<Waker>,
-    ),
+    WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
     /// Waiting to send an answer back to the remote.
-    PendingSend(
-        UniqueConnecId,
-        KadInStreamSink<NegotiatedSubstream>,
-        KadResponseMsg,
-    ),
+    PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
     /// Waiting to flush an answer back to the remote.
-    PendingFlush(UniqueConnecId, KadInStreamSink<NegotiatedSubstream>),
+    PendingFlush(UniqueConnecId, KadInStreamSink<Stream>),
     /// The substream is being closed.
-    Closing(KadInStreamSink<NegotiatedSubstream>),
+    Closing(KadInStreamSink<Stream>),
     /// The substream was cancelled in favor of a new one.
     Cancelled,
 
@@ -325,7 +313,7 @@ pub enum KademliaHandlerEvent<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(ConnectionHandlerUpgrErr<io::Error>),
+    Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -361,8 +349,8 @@ impl error::Error for KademliaHandlerQueryErr {
     }
 }
 
-impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
+impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
+    fn from(err: StreamUpgradeError<io::Error>) -> Self {
         KademliaHandlerQueryErr::Upgrade(err)
     }
 }
@@ -611,8 +599,8 @@ impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
 where
     TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
 {
-    type InEvent = KademliaHandlerIn<TUserData>;
-    type OutEvent = KademliaHandlerEvent<TUserData>;
+    type FromBehaviour = KademliaHandlerIn<TUserData>;
+    type ToBehaviour = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -713,13 +701,13 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
         if let ProtocolStatus::Confirmed = self.protocol_status {
             self.protocol_status = ProtocolStatus::Reported;
-            return Poll::Ready(ConnectionHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 KademliaHandlerEvent::ProtocolConfirmed {
                     endpoint: self.endpoint.clone(),
                 },
@@ -777,7 +765,10 @@ where
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
@@ -810,7 +801,7 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-impl<TUserData> Stream for OutboundSubstreamState<TUserData>
+impl<TUserData> futures::Stream for OutboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
@@ -835,7 +826,7 @@ where
                             Err(error) => {
                                 *this = OutboundSubstreamState::Done;
                                 let event = user_data.map(|user_data| {
-                                    ConnectionHandlerEvent::Custom(
+                                    ConnectionHandlerEvent::NotifyBehaviour(
                                         KademliaHandlerEvent::QueryError {
                                             error: KademliaHandlerQueryErr::Io(error),
                                             user_data,
@@ -853,10 +844,12 @@ where
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = user_data.map(|user_data| {
-                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
-                                    user_data,
-                                })
+                                ConnectionHandlerEvent::NotifyBehaviour(
+                                    KademliaHandlerEvent::QueryError {
+                                        error: KademliaHandlerQueryErr::Io(error),
+                                        user_data,
+                                    },
+                                )
                             });
 
                             return Poll::Ready(event);
@@ -879,10 +872,12 @@ where
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = user_data.map(|user_data| {
-                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
-                                    user_data,
-                                })
+                                ConnectionHandlerEvent::NotifyBehaviour(
+                                    KademliaHandlerEvent::QueryError {
+                                        error: KademliaHandlerQueryErr::Io(error),
+                                        user_data,
+                                    },
+                                )
                             });
 
                             return Poll::Ready(event);
@@ -895,7 +890,9 @@ where
                             *this = OutboundSubstreamState::Closing(substream);
                             let event = process_kad_response(msg, user_data);
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                                event,
+                            )));
                         }
                         Poll::Pending => {
                             *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
@@ -908,7 +905,9 @@ where
                                 user_data,
                             };
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                                event,
+                            )));
                         }
                         Poll::Ready(None) => {
                             *this = OutboundSubstreamState::Done;
@@ -919,7 +918,9 @@ where
                                 user_data,
                             };
 
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                            return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
+                                event,
+                            )));
                         }
                     }
                 }
@@ -927,7 +928,7 @@ where
                     *this = OutboundSubstreamState::Done;
                     let event = KademliaHandlerEvent::QueryError { error, user_data };
 
-                    return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                    return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
                 }
                 OutboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
                     Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
@@ -946,7 +947,7 @@ where
     }
 }
 
-impl<TUserData> Stream for InboundSubstreamState<TUserData>
+impl<TUserData> futures::Stream for InboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
 {
@@ -980,7 +981,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::FindNode { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             KademliaHandlerEvent::FindNodeReq {
                                 key,
                                 request_id: KademliaRequestId {
@@ -992,7 +993,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::GetProviders { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             KademliaHandlerEvent::GetProvidersReq {
                                 key,
                                 request_id: KademliaRequestId {
@@ -1007,14 +1008,14 @@ where
                             connection_id,
                             substream,
                         };
-                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             KademliaHandlerEvent::AddProvider { key, provider },
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             KademliaHandlerEvent::GetRecord {
                                 key,
                                 request_id: KademliaRequestId {
@@ -1026,7 +1027,7 @@ where
                     Poll::Ready(Some(Ok(KadRequestMsg::PutValue { record }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
-                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                        return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             KademliaHandlerEvent::PutRecord {
                                 record,
                                 request_id: KademliaRequestId {

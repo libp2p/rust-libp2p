@@ -30,7 +30,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailu
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
+    ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -65,7 +65,7 @@ pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
-    Handler(ConnectionHandlerUpgrErr<Void>),
+    Handler(StreamUpgradeError<Void>),
 }
 
 pub struct Behaviour {
@@ -237,7 +237,7 @@ impl NetworkBehaviour for Behaviour {
         handler::relayed::Handler,
         Either<handler::direct::Handler, dummy::ConnectionHandler>,
     >;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -415,7 +415,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

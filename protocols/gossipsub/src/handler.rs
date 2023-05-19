@@ -27,13 +27,13 @@ use futures::future::Either;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
     SubstreamProtocol,
 };
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::Stream;
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
@@ -143,9 +143,9 @@ pub enum DisabledHandler {
 /// State of the inbound substream, opened either by us or by the remote.
 enum InboundSubstreamState {
     /// Waiting for a message from the remote. The idle state for an inbound substream.
-    WaitingInput(Framed<NegotiatedSubstream, GossipsubCodec>),
+    WaitingInput(Framed<Stream, GossipsubCodec>),
     /// The substream is being closed.
-    Closing(Framed<NegotiatedSubstream, GossipsubCodec>),
+    Closing(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -153,11 +153,11 @@ enum InboundSubstreamState {
 /// State of the outbound substream, opened either by us or by the remote.
 enum OutboundSubstreamState {
     /// Waiting for the user to send a message. The idle state for an outbound substream.
-    WaitingOutput(Framed<NegotiatedSubstream, GossipsubCodec>),
+    WaitingOutput(Framed<Stream, GossipsubCodec>),
     /// Waiting to send a message to the remote.
-    PendingSend(Framed<NegotiatedSubstream, GossipsubCodec>, proto::RPC),
+    PendingSend(Framed<Stream, GossipsubCodec>, proto::RPC),
     /// Waiting to flush the substream so that the data arrives to the remote.
-    PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
+    PendingFlush(Framed<Stream, GossipsubCodec>),
     /// An error occurred during processing.
     Poisoned,
 }
@@ -185,7 +185,7 @@ impl Handler {
 impl EnabledHandler {
     fn on_fully_negotiated_inbound(
         &mut self,
-        (substream, peer_kind): (Framed<NegotiatedSubstream, GossipsubCodec>, PeerKind),
+        (substream, peer_kind): (Framed<Stream, GossipsubCodec>, PeerKind),
     ) {
         // update the known kind of peer
         if self.peer_kind.is_none() {
@@ -225,16 +225,16 @@ impl EnabledHandler {
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
-            <Handler as ConnectionHandler>::OutEvent,
+            <Handler as ConnectionHandler>::ToBehaviour,
             <Handler as ConnectionHandler>::Error,
         >,
     > {
         if !self.peer_kind_sent {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
-                return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
-                    peer_kind.clone(),
-                )));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    HandlerEvent::PeerKind(peer_kind.clone()),
+                ));
             }
         }
 
@@ -261,7 +261,7 @@ impl EnabledHandler {
                             self.last_io_activity = Instant::now();
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(message));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
                             log::debug!("Failed to read from inbound stream: {error}");
@@ -393,8 +393,8 @@ impl EnabledHandler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = HandlerIn;
-    type OutEvent = HandlerEvent;
+    type FromBehaviour = HandlerIn;
+    type ToBehaviour = HandlerEvent;
     type Error = Void;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
@@ -457,7 +457,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -466,9 +466,9 @@ impl ConnectionHandler for Handler {
             Handler::Disabled(DisabledHandler::ProtocolUnsupported { peer_kind_sent }) => {
                 if !*peer_kind_sent {
                     *peer_kind_sent = true;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
-                        PeerKind::NotSupported,
-                    )));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        HandlerEvent::PeerKind(PeerKind::NotSupported),
+                    ));
                 }
 
                 Poll::Pending
@@ -526,20 +526,17 @@ impl ConnectionHandler for Handler {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer,
+                        error: StreamUpgradeError::Timeout,
                         ..
                     }) => {
                         log::debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: StreamUpgradeError::Apply(e),
                         ..
                     }) => void::unreachable(e),
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::Failed,
-                            )),
+                        error: StreamUpgradeError::NegotiationFailed,
                         ..
                     }) => {
                         // The protocol is not supported
@@ -551,15 +548,15 @@ impl ConnectionHandler for Handler {
                         });
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                        error:
-                            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                NegotiationError::ProtocolError(e),
-                            )),
+                        error: StreamUpgradeError::Io(e),
                         ..
                     }) => {
                         log::debug!("Protocol negotiation failed: {e}")
                     }
-                    ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+                    ConnectionEvent::AddressChange(_)
+                    | ConnectionEvent::ListenUpgradeError(_)
+                    | ConnectionEvent::LocalProtocolsChange(_)
+                    | ConnectionEvent::RemoteProtocolsChange(_) => {}
                 }
             }
             Handler::Disabled(_) => {}

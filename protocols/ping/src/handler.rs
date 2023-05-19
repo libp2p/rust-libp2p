@@ -23,13 +23,12 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, StreamProtocol, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -53,9 +52,6 @@ pub struct Config {
     /// connection is deemed unhealthy, indicating to the `Swarm` that it
     /// should be closed.
     max_failures: NonZeroU32,
-    /// Whether the connection should generally be kept alive unless
-    /// `max_failures` occur.
-    keep_alive: bool,
 }
 
 impl Config {
@@ -64,7 +60,6 @@ impl Config {
     ///   * [`Config::with_interval`] 15s
     ///   * [`Config::with_timeout`] 20s
     ///   * [`Config::with_max_failures`] 1
-    ///   * [`Config::with_keep_alive`] false
     ///
     /// These settings have the following effect:
     ///
@@ -81,7 +76,6 @@ impl Config {
             timeout: Duration::from_secs(20),
             interval: Duration::from_secs(15),
             max_failures: NonZeroU32::new(1).expect("1 != 0"),
-            keep_alive: false,
         }
     }
 
@@ -101,25 +95,6 @@ impl Config {
     /// peer is considered unreachable and the connection closed.
     pub fn with_max_failures(mut self, n: NonZeroU32) -> Self {
         self.max_failures = n;
-        self
-    }
-
-    /// Sets whether the ping protocol itself should keep the connection alive,
-    /// apart from the maximum allowed failures.
-    ///
-    /// By default, the ping protocol itself allows the connection to be closed
-    /// at any time, i.e. in the absence of ping failures the connection lifetime
-    /// is determined by other protocol handlers.
-    ///
-    /// If the maximum number of allowed ping failures is reached, the
-    /// connection is always terminated as a result of [`ConnectionHandler::poll`]
-    /// returning an error, regardless of the keep-alive setting.
-    #[deprecated(
-        since = "0.40.0",
-        note = "Use `libp2p::swarm::behaviour::KeepAlive` if you need to keep connections alive unconditionally."
-    )]
-    pub fn with_keep_alive(mut self, b: bool) -> Self {
-        self.keep_alive = b;
         self
     }
 }
@@ -238,14 +213,14 @@ impl Handler {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            StreamUpgradeError::NegotiationFailed => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
+            StreamUpgradeError::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
@@ -254,8 +229,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Void;
-    type OutEvent = crate::Result;
+    type FromBehaviour = Void;
+    type ToBehaviour = crate::Result;
     type Error = Failure;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -269,11 +244,7 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, _: Void) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.config.keep_alive {
-            KeepAlive::Yes
-        } else {
-            KeepAlive::No
-        }
+        KeepAlive::No
     }
 
     fn poll(
@@ -287,7 +258,9 @@ impl ConnectionHandler for Handler {
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
+                    Failure::Unsupported,
+                )));
             }
             State::Active => {}
         }
@@ -303,7 +276,7 @@ impl ConnectionHandler for Handler {
                 Poll::Ready(Ok(stream)) => {
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(Success::Pong)));
                 }
             }
         }
@@ -328,7 +301,7 @@ impl ConnectionHandler for Handler {
                         return Poll::Ready(ConnectionHandlerEvent::Close(error));
                     }
 
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
 
@@ -347,9 +320,9 @@ impl ConnectionHandler for Handler {
                         self.failures = 0;
                         self.timer.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
-                            rtt,
-                        })));
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(
+                            Success::Ping { rtt },
+                        )));
                     }
                     Poll::Ready(Err(e)) => {
                         self.pending_errors
@@ -411,20 +384,23 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
 
-type PingFuture = BoxFuture<'static, Result<(NegotiatedSubstream, Duration), io::Error>>;
-type PongFuture = BoxFuture<'static, Result<NegotiatedSubstream, io::Error>>;
+type PingFuture = BoxFuture<'static, Result<(Stream, Duration), io::Error>>;
+type PongFuture = BoxFuture<'static, Result<Stream, io::Error>>;
 
 /// The current state w.r.t. outbound pings.
 enum OutboundState {
     /// A new substream is being negotiated for the ping protocol.
     OpenStream,
     /// The substream is idle, waiting to send the next ping.
-    Idle(NegotiatedSubstream),
+    Idle(Stream),
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
 }

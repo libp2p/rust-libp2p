@@ -4,12 +4,12 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
-use libp2p_core::{Multiaddr, UpgradeError};
+use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
@@ -19,7 +19,7 @@ pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -54,7 +54,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 
@@ -81,8 +81,8 @@ impl NetworkBehaviour for Behaviour {
 pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
+    type FromBehaviour = Void;
+    type ToBehaviour = Void;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -93,7 +93,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         void::unreachable(event)
     }
 
@@ -108,7 +108,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -132,14 +132,16 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
                 protocol, ..
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
-                ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-                ConnectionHandlerUpgrErr::Timer => unreachable!(),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
+                StreamUpgradeError::Timeout => unreachable!(),
+                StreamUpgradeError::Apply(e) => void::unreachable(e),
+                StreamUpgradeError::NegotiationFailed | StreamUpgradeError::Io(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

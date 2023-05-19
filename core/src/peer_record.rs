@@ -36,8 +36,7 @@ impl PeerRecord {
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let mut reader = BytesReader::from_bytes(payload);
-        let record =
-            proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError::from)?;
+        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 

@@ -19,7 +19,6 @@ libp2p-identity = { workspace = true }
 log = "0.4.8"
 quick-protobuf = "0.8"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1.0.2"
 
 [dev-dependencies]
 env_logger = "0.10.0"

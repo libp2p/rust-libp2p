@@ -23,8 +23,7 @@
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
 use std::task::{Context, Poll};
 use void::Void;
@@ -40,9 +39,9 @@ pub struct Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = void::Void;
-    type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<std::io::Error>;
+    type FromBehaviour = void::Void;
+    type ToBehaviour = Event;
+    type Error = StreamUpgradeError<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -52,7 +51,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _: Self::FromBehaviour) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No
@@ -65,13 +64,13 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
         if !self.reported {
             self.reported = true;
-            return Poll::Ready(ConnectionHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::DirectConnectionEstablished,
             ));
         }
@@ -92,7 +91,9 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::AddressChange(_) => {}
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
