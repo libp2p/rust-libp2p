@@ -241,7 +241,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let data = read_length_prefixed(&mut b, 1024)
+        let data = read_length_prefixed(&mut b, 124)
             .await
             .expect("Should read");
         let actual: TestRequest =
@@ -266,7 +266,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let data = read_length_prefixed(&mut b, 1024)
+        let data = read_length_prefixed(&mut b, 124)
             .await
             .expect("Should read");
         let actual: TestResponse =

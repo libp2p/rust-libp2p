@@ -203,7 +203,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let protocol = StreamProtocol::new("/test_json/1");
+        let protocol = StreamProtocol::new("/test_cbor/1");
         let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
             phantom: PhantomData,
         };
@@ -227,7 +227,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let protocol = StreamProtocol::new("/test_json/1");
+        let protocol = StreamProtocol::new("/test_cbor/1");
         let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
             phantom: PhantomData,
         };
@@ -245,7 +245,7 @@ mod tests {
         let expected = TestRequest {
             payload: "test_payload".to_string(),
         };
-        let protocol = StreamProtocol::new("/test_json/1");
+        let protocol = StreamProtocol::new("/test_cbor/1");
         let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
             phantom: PhantomData,
         };
@@ -255,7 +255,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let data = read_length_prefixed(&mut b, 1024)
+        let data = read_length_prefixed(&mut b, 124)
             .await
             .expect("Should read");
         let actual: TestRequest =
@@ -270,7 +270,7 @@ mod tests {
         let expected = TestResponse {
             payload: "test_payload".to_string(),
         };
-        let protocol = StreamProtocol::new("/test_json/1");
+        let protocol = StreamProtocol::new("/test_cbor/1");
         let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
             phantom: PhantomData,
         };
@@ -280,7 +280,7 @@ mod tests {
             .await
             .expect("Should write");
 
-        let data = read_length_prefixed(&mut b, 1024)
+        let data = read_length_prefixed(&mut b, 124)
             .await
             .expect("Should read");
         let actual: TestResponse =
