@@ -14,7 +14,6 @@ categories = ["network-programming", "asynchronous"]
 anyhow = "1"
 async-trait = "0.1"
 clap = { version = "4.2.7", features = ["derive"] }
-colored = "2"
 env_logger = "0.10.0"
 futures = "0.3.28"
 instant = "0.1.11"

@@ -52,13 +52,48 @@ pub struct RunDuration {
     pub download: Duration,
 }
 
-struct Run {
-    params: RunParams,
-    duration: RunDuration,
+pub struct Run {
+    pub params: RunParams,
+    pub duration: RunDuration,
 }
 
 impl Display for Run {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const KILO: f64 = 1024.0;
+        const MEGA: f64 = KILO * 1024.0;
+        const GIGA: f64 = MEGA * 1024.0;
+
+        fn format_bytes(bytes: usize) -> String {
+            let bytes = bytes as f64;
+            if bytes >= GIGA {
+                format!("{:.2} GiB", bytes / GIGA)
+            } else if bytes >= MEGA {
+                format!("{:.2} MiB", bytes / MEGA)
+            } else if bytes >= KILO {
+                format!("{:.2} KiB", bytes / KILO)
+            } else {
+                format!("{} B", bytes)
+            }
+        }
+
+        fn format_bandwidth(duration: Duration, bytes: usize) -> String {
+            const KILO: f64 = 1024.0;
+            const MEGA: f64 = KILO * 1024.0;
+            const GIGA: f64 = MEGA * 1024.0;
+
+            let bandwidth = (bytes as f64 * 8.0) / duration.as_secs_f64();
+
+            if bandwidth >= GIGA {
+                format!("{:.2} Gbit/s", bandwidth / GIGA)
+            } else if bandwidth >= MEGA {
+                format!("{:.2} Mbit/s", bandwidth / MEGA)
+            } else if bandwidth >= KILO {
+                format!("{:.2} Kbit/s", bandwidth / KILO)
+            } else {
+                format!("{:.2} bit/s", bandwidth)
+            }
+        }
+
         let Run {
             params: RunParams {
                 to_send,
@@ -66,18 +101,16 @@ impl Display for Run {
             },
             duration: RunDuration { upload, download },
         } = self;
-        let upload_seconds = upload.as_secs_f64();
-        let download_seconds = download.as_secs_f64();
-
-        let sent_mebibytes = *to_send as f64 / 1024.0 / 1024.0;
-        let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / upload_seconds;
-
-        let received_mebibytes = *to_receive as f64 / 1024.0 / 1024.0;
-        let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / download_seconds;
 
         write!(
             f,
-            "uploaded {to_send} in {upload_seconds:.4} ({sent_bandwidth_mebibit_second} MiBit/s), downloaded {to_receive} in {download_seconds} ({receive_bandwidth_mebibit_second} MiBit/s)",
+            "uploaded {} in {:.4} s ({}), downloaded {} in {:.4} s ({})",
+            format_bytes(*to_send),
+            upload.as_secs_f64(),
+            format_bandwidth(*upload, *to_send),
+            format_bytes(*to_receive),
+            download.as_secs_f64(),
+            format_bandwidth(*download, *to_receive),
         )?;
 
         Ok(())
