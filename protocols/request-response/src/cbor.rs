@@ -30,13 +30,15 @@ use libp2p_swarm_derive::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{io, marker::PhantomData};
 
+/// Max request size in bytes
+const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
+/// Max response size in bytes
+const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+
 #[derive(Debug, Clone)]
 pub struct Codec<Req, Resp> {
     phantom: PhantomData<(Req, Resp)>,
 }
-
-const REQUEST_SIZE_MAXIMUM: usize = 1_000_000;
-const RESPONSE_SIZE_MAXIMUM: usize = 500_000_000;
 
 pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
 

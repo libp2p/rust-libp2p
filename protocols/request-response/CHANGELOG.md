@@ -1,5 +1,9 @@
 ## 0.25.0 - unreleased
 
+- Implemented `request_response::json::Behaviour` and `request_response::cbor::Behaviour` which
+  use `json` and `cbor` representing of request/response, added according features.
+  See [PR 3952].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 - Remove deprecated `RequestResponse` prefixed items. See [PR 3702].
@@ -8,7 +12,7 @@
   These variants are no longer constructed.
   See [PR 3605].
 
-- Don't close connections if individual streams fail. 
+- Don't close connections if individual streams fail.
   Log the error instead.
   See [PR 3913].
 
