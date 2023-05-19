@@ -29,6 +29,8 @@ use libp2p_swarm::{
     ToSwarm,
 };
 
+use crate::protocol::{Codec, Response};
+
 pub struct Behaviour {
     request_response: request_response::Behaviour<crate::protocol::Codec>,
 }
@@ -41,7 +43,7 @@ impl Default for Behaviour {
 
         Self {
             request_response: request_response::Behaviour::new(
-                crate::protocol::Codec {},
+                Codec::default(),
                 std::iter::once((
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Inbound,
@@ -155,7 +157,7 @@ impl NetworkBehaviour for Behaviour {
                 } => {
                     let _ = self
                         .request_response
-                        .send_response(channel, request.to_send);
+                        .send_response(channel, Response::Sender(request.to_send));
                 }
                 request_response::Event::OutboundFailure { .. } => unreachable!(),
                 request_response::Event::InboundFailure { .. } => {}

@@ -31,7 +31,7 @@ use libp2p_core::{
     Transport as _,
 };
 use libp2p_identity::PeerId;
-use libp2p_perf::RunParams;
+use libp2p_perf::{RunDuration, RunParams};
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -255,50 +255,29 @@ impl Benchmark for Custom {
     }
 
     async fn run(&self, server_address: Multiaddr) -> Result<()> {
-        let mut latencies = Vec::new();
-
         let mut swarm = swarm().await;
 
-        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+        let (server_peer_id, connection_established) =
+            connect(&mut swarm, server_address.clone()).await?;
 
-        let start = Instant::now();
-
-        swarm.behaviour_mut().perf(
+        let RunDuration { upload, download } = perf(
+            &mut swarm,
             server_peer_id,
             RunParams {
                 to_send: self.upload_bytes,
                 to_receive: self.download_bytes,
             },
-        )?;
-
-        loop {
-            match swarm.next().await.unwrap() {
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                }
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-                }
-                SwarmEvent::Behaviour(libp2p_perf::client::Event {
-                    id: _,
-                    result: Ok(()),
-                }) => break,
-                e => panic!("{e:?}"),
-            };
-        }
-
-        latencies.push(start.elapsed().as_secs_f64());
-
-        info!(
-            "Finished: Sent perf request on single connection uploading {} and download {} bytes each",
-            self.upload_bytes, self.download_bytes
-        );
+        )
+        .await?;
 
         println!(
             "{}",
-            serde_json::to_string(&CustomResult { latencies }).unwrap()
+            serde_json::to_string(&CustomResult {
+                connection_established_seconds: connection_established.as_secs_f64(),
+                upload_seconds: upload.as_secs_f64(),
+                download_seconds: download.as_secs_f64(),
+            })
+            .unwrap()
         );
 
         Ok(())
@@ -307,7 +286,9 @@ impl Benchmark for Custom {
 
 #[derive(Serialize, Deserialize)]
 struct CustomResult {
-    latencies: Vec<f64>,
+    connection_established_seconds: f64,
+    upload_seconds: f64,
+    download_seconds: f64,
 }
 
 struct Latency {}
@@ -321,7 +302,7 @@ impl Benchmark for Latency {
     async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut swarm = swarm().await;
 
-        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+        let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
         let mut rounds = 0;
         let start = Instant::now();
@@ -334,31 +315,16 @@ impl Benchmark for Latency {
 
             let start = Instant::now();
 
-            swarm.behaviour_mut().perf(
+            perf(
+                &mut swarm,
                 server_peer_id,
                 RunParams {
                     to_send: 1,
                     to_receive: 1,
                 },
-            )?;
+            )
+            .await?;
 
-            loop {
-                match swarm.next().await.unwrap() {
-                    SwarmEvent::ConnectionEstablished {
-                        peer_id, endpoint, ..
-                    } => {
-                        info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-                    }
-                    SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-                        info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-                    }
-                    SwarmEvent::Behaviour(libp2p_perf::client::Event {
-                        id: _,
-                        result: Ok(()),
-                    }) => break,
-                    e => panic!("{e:?}"),
-                };
-            }
             latencies.push(start.elapsed().as_secs_f64());
             rounds += 1;
         }
@@ -380,76 +346,29 @@ fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
     values[n]
 }
 
-// // TODO: Bring back?
-// struct Throughput {}
-//
-// #[async_trait]
-// impl Benchmark for Throughput {
-//     fn name(&self) -> &'static str {
-//         "single connection single channel throughput"
-//     }
-//
-//     async fn run(&self, server_address: Multiaddr) -> Result<Option<schema::Benchmark>> {
-//         let mut swarm = swarm().await;
-//
-//         let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
-//
-//         let params =
-//             RunParams {
-//                 to_send: 10 * 1024 * 1024,
-//                 to_receive: 10 * 1024 * 1024,
-//             };
-//
-//         swarm.behaviour_mut().perf(
-//             server_peer_id,
-//             params,
-//         )?;
-//
-//         let stats = loop {
-//             match swarm.next().await.unwrap() {
-//                 SwarmEvent::ConnectionEstablished {
-//                     peer_id, endpoint, ..
-//                 } => {
-//                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
-//                 }
-//                 SwarmEvent::OutgoingConnectionError { peer_id, error } => {
-//                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-//                 }
-//                 SwarmEvent::Behaviour(libp2p_perf::client::Event { id: _, result }) => {
-//                     break result?
-//                 }
-//                 e => panic!("{e:?}"),
-//             }
-//         };
-//
-//         let sent_mebibytes = params.to_send as f64 / 1024.0 / 1024.0;
-//         let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();
-//         let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / sent_time;
-//
-//         let received_mebibytes = params.to_receive as f64 / 1024.0 / 1024.0;
-//         let receive_time = (stats.timers.read_done - stats.timers.write_done).as_secs_f64();
-//         let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / receive_time;
-//
-//         info!(
-//             "Finished: sent {sent_mebibytes:.2} MiB \
-//              and received {received_mebibytes:.2} MiB in {time:.2} s",
-//         );
-//         info!("- {sent_bandwidth_mebibit_second:.2} MiBit/s up");
-//         info!("- {receive_bandwidth_mebibit_second:.2} MiBit/s down\n");
-//
-//         Ok(Some(schema::Benchmark {
-//             name: "Single Connection throughput – Upload".to_string(),
-//             unit: "bits/s".to_string(),
-//             comparisons: vec![],
-//             results: vec![schema::Result {
-//                 implementation: "rust-libp2p".to_string(),
-//                 transport_stack: "TODO".to_string(),
-//                 version: "TODO".to_string(),
-//                 result: stats.params.to_send as f64 / sent_time,
-//             }],
-//         }))
-//     }
-// }
+struct Throughput {}
+
+#[async_trait]
+impl Benchmark for Throughput {
+    fn name(&self) -> &'static str {
+        "single connection single channel throughput"
+    }
+
+    async fn run(&self, server_address: Multiaddr) -> Result<()> {
+        let mut swarm = swarm().await;
+
+        let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+
+        let params = RunParams {
+            to_send: 10 * 1024 * 1024,
+            to_receive: 10 * 1024 * 1024,
+        };
+
+        perf(&mut swarm, server_peer_id, params).await?;
+
+        Ok(())
+    }
+}
 
 struct RequestsPerSecond {}
 
@@ -462,7 +381,7 @@ impl Benchmark for RequestsPerSecond {
     async fn run(&self, server_address: Multiaddr) -> Result<()> {
         let mut swarm = swarm().await;
 
-        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+        let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
         let num = 1_000;
         let to_send = 1;
@@ -543,7 +462,7 @@ impl Benchmark for ConnectionsPerSecond {
 
             let start = Instant::now();
 
-            let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+            let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
             latency_connection_establishment.push(start.elapsed().as_secs_f64());
 
@@ -627,7 +546,8 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
 async fn connect(
     swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
     server_address: Multiaddr,
-) -> Result<PeerId> {
+) -> Result<(PeerId, Duration)> {
+    let start = Instant::now();
     swarm.dial(server_address.clone()).unwrap();
 
     let server_peer_id = loop {
@@ -640,7 +560,30 @@ async fn connect(
         }
     };
 
-    Ok(server_peer_id)
+    let duration = start.elapsed();
+    let duration_seconds = duration.as_secs_f64();
+
+    info!("established connection in {duration_seconds:4} s");
+
+    Ok((server_peer_id, duration))
+}
+
+async fn perf(
+    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    server_peer_id: PeerId,
+    params: RunParams,
+) -> Result<RunDuration> {
+    swarm.behaviour_mut().perf(server_peer_id, params)?;
+
+    let duration = match swarm.next().await.unwrap() {
+        SwarmEvent::Behaviour(libp2p_perf::client::Event {
+            id: _,
+            result: Ok(duration),
+        }) => duration,
+        e => panic!("{e:?}"),
+    };
+
+    return Ok(duration);
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {

@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use instant::{Duration, Instant};
+use instant::Duration;
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     task::{Context, Poll},
 };
 
@@ -33,15 +33,7 @@ use libp2p_swarm::{
     NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
-use crate::RunParams;
-
-/// Timers for a single run, i.e. one stream, sending and receiving data.
-#[derive(Debug, Clone, Copy)]
-pub struct RunTimers {
-    pub write_start: Instant,
-    pub write_done: Instant,
-    pub read_done: Instant,
-}
+use crate::{protocol::Response, RunDuration, RunParams};
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -56,12 +48,11 @@ impl From<request_response::RequestId> for RunId {
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<(), request_response::OutboundFailure>,
+    pub result: Result<RunDuration, request_response::OutboundFailure>,
 }
 
 pub struct Behaviour {
     connected: HashSet<PeerId>,
-    in_progress_runs: HashMap<RunId, RunParams>,
     request_response: request_response::Behaviour<crate::protocol::Codec>,
 }
 
@@ -72,9 +63,8 @@ impl Default for Behaviour {
         req_resp_config.set_request_timeout(Duration::from_secs(60 * 5));
         Self {
             connected: Default::default(),
-            in_progress_runs: Default::default(),
             request_response: request_response::Behaviour::new(
-                crate::protocol::Codec {},
+                crate::protocol::Codec::default(),
                 std::iter::once((
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Outbound,
@@ -96,8 +86,6 @@ impl Behaviour {
         }
 
         let id = self.request_response.send_request(&server, params).into();
-
-        self.in_progress_runs.insert(id, params);
 
         Ok(id)
     }
@@ -221,16 +209,20 @@ impl NetworkBehaviour for Behaviour {
                     message:
                         request_response::Message::Response {
                             request_id,
-                            response,
+                            response: Response::Receiver(run_duration),
                         },
-                } => {
-                    let params = self.in_progress_runs.remove(&request_id.into()).unwrap();
-                    assert_eq!(params.to_receive, response);
-                    Event {
-                        id: request_id.into(),
-                        result: Ok(()),
-                    }
-                }
+                } => Event {
+                    id: request_id.into(),
+                    result: Ok(run_duration),
+                },
+                request_response::Event::Message {
+                    peer: _,
+                    message:
+                        request_response::Message::Response {
+                            response: Response::Sender(_),
+                            ..
+                        },
+                } => unreachable!(),
                 request_response::Event::Message {
                     peer: _,
                     message: request_response::Message::Request { .. },

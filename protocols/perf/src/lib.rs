@@ -24,6 +24,9 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::fmt::Display;
+
+use instant::Duration;
 use libp2p_swarm::StreamProtocol;
 
 pub mod client;
@@ -40,4 +43,43 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
 pub struct RunParams {
     pub to_send: usize,
     pub to_receive: usize,
+}
+
+/// Duration for a single run, i.e. one stream, sending and receiving data.
+#[derive(Debug, Clone, Copy)]
+pub struct RunDuration {
+    pub upload: Duration,
+    pub download: Duration,
+}
+
+struct Run {
+    params: RunParams,
+    duration: RunDuration,
+}
+
+impl Display for Run {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Run {
+            params: RunParams {
+                to_send,
+                to_receive,
+            },
+            duration: RunDuration { upload, download },
+        } = self;
+        let upload_seconds = upload.as_secs_f64();
+        let download_seconds = download.as_secs_f64();
+
+        let sent_mebibytes = *to_send as f64 / 1024.0 / 1024.0;
+        let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) / upload_seconds;
+
+        let received_mebibytes = *to_receive as f64 / 1024.0 / 1024.0;
+        let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) / download_seconds;
+
+        write!(
+            f,
+            "uploaded {to_send} in {upload_seconds:.4} ({sent_bandwidth_mebibit_second} MiBit/s), downloaded {to_receive} in {download_seconds} ({receive_bandwidth_mebibit_second} MiBit/s)",
+        )?;
+
+        Ok(())
+    }
 }
