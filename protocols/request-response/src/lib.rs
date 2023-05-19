@@ -58,11 +58,9 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(feature = "serde_cbor")]
 pub mod cbor;
 mod codec;
 mod handler;
-#[cfg(feature = "serde_json")]
 pub mod json;
 
 pub use codec::Codec;

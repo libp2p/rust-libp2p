@@ -30,8 +30,6 @@ use libp2p_swarm_derive::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{io, marker::PhantomData};
 
-#[cfg(feature = "serde_cbor")]
-
 #[derive(Debug, Clone)]
 pub struct Codec<Req, Resp> {
     phantom: PhantomData<(Req, Resp)>,
