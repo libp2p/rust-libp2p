@@ -52,8 +52,6 @@ pub struct Muxer<S> {
     inbound_stream_buffer: VecDeque<Stream>,
     /// Waker to be called when new inbound streams are available.
     inbound_stream_waker: Option<Waker>,
-
-    _phantom: std::marker::PhantomData<C>,
 }
 
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
@@ -68,7 +66,6 @@ where
             connection: yamux::Connection::new(io, cfg, mode),
             inbound_stream_buffer: VecDeque::default(),
             inbound_stream_waker: None,
-            _phantom: Default::default(),
         }
     }
 }
@@ -103,8 +100,7 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        ready!(self.connection.poll_close(cx).map_ok(Stream)
-            .map_err(Error)?);
+        ready!(self.connection.poll_close(cx).map_err(Error)?);
 
         Poll::Ready(Ok(()))
     }
@@ -184,16 +180,16 @@ impl AsyncWrite for Stream {
 
 impl<C> Muxer<C>
 where
-    S: AsyncRead + AsyncWrite + Unpin + 'static,
+    C: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<Stream, Error>> {
-        let stream = ready!(self.connection.poll_next_inbound(cx).map_err(Error))
+        let stream = ready!(self.connection.poll_next_inbound(cx))
             .transpose()
-                .map_err(Error)?
-                .map(Stream)
+            .map_err(Error)?
+            .map(Stream)
             .ok_or(Error(ConnectionError::Closed))?;
 
-        Poll::Ready(Ok(Stream(stream)))
+        Poll::Ready(Ok(stream))
     }
 }
 
