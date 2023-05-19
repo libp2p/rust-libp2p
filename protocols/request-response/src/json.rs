@@ -30,8 +30,6 @@ use libp2p_swarm_derive::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{io, marker::PhantomData};
 
-#[cfg(feature = "serde_cbor")]
-
 #[derive(Debug, Clone)]
 pub struct Codec<Req, Resp> {
     phantom: PhantomData<(Req, Resp)>,
@@ -55,16 +53,6 @@ where
     inner: crate::Behaviour<Codec<Req, Resp>>,
 }
 
-fn convert_error(err: serde_cbor::Error) -> io::Error {
-    if err.is_syntax() || err.is_data() {
-        io::Error::new(io::ErrorKind::InvalidData, err)
-    } else if err.is_eof() {
-        io::Error::new(io::ErrorKind::UnexpectedEof, err)
-    } else {
-        io::Error::new(io::ErrorKind::Other, err)
-    }
-}
-
 #[async_trait]
 impl<Req, Resp> crate::Codec for Codec<Req, Resp>
 where
@@ -81,7 +69,7 @@ where
     {
         let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
 
-        serde_cbor::from_slice(vec.as_slice()).map_err(|e| convert_error(e))
+        Ok(serde_json::from_slice(vec.as_slice())?)
     }
 
     async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
@@ -90,7 +78,7 @@ where
     {
         let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
 
-        serde_cbor::from_slice(vec.as_slice()).map_err(|e| convert_error(e))
+        Ok(serde_json::from_slice(vec.as_slice())?)
     }
 
     async fn write_request<T>(
@@ -102,9 +90,7 @@ where
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data: Vec<u8> = serde_cbor::to_vec(&req)
-            .map_err(|e| convert_error(e))
-            .unwrap();
+        let data = serde_json::to_vec(&req)?;
         write_length_prefixed(io, data.as_slice()).await?;
         io.close().await?;
 
@@ -120,9 +106,7 @@ where
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data: Vec<u8> = serde_cbor::to_vec(&resp)
-            .map_err(|e| convert_error(e))
-            .unwrap();
+        let data = serde_json::to_vec(&resp)?;
         write_length_prefixed(io, data.as_slice()).await?;
         io.close().await?;
 
@@ -199,7 +183,7 @@ mod tests {
         let expected = TestRequest {
             payload: "test_payload".to_string(),
         };
-        let data = serde_cbor::to_vec(&expected).expect("Should serialize");
+        let data = serde_json::to_vec(&expected).expect("Should serialize");
 
         write_length_prefixed(&mut a, data.as_slice())
             .await
@@ -223,7 +207,7 @@ mod tests {
         let expected = TestResponse {
             payload: "test_payload".to_string(),
         };
-        let data = serde_cbor::to_vec(&expected).expect("Should serialize");
+        let data = serde_json::to_vec(&expected).expect("Should serialize");
 
         write_length_prefixed(&mut a, data.as_slice())
             .await
@@ -261,7 +245,7 @@ mod tests {
             .await
             .expect("Should read");
         let actual: TestRequest =
-            serde_cbor::from_slice(data.as_slice()).expect("Should deserialize");
+            serde_json::from_slice(data.as_slice()).expect("Should deserialize");
 
         assert_eq!(actual, expected);
     }
@@ -286,7 +270,7 @@ mod tests {
             .await
             .expect("Should read");
         let actual: TestResponse =
-            serde_cbor::from_slice(data.as_slice()).expect("Should deserialize");
+            serde_json::from_slice(data.as_slice()).expect("Should deserialize");
 
         assert_eq!(actual, expected);
     }

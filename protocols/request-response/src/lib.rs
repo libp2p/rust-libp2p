@@ -1,4 +1,4 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
+// Copyright 2023 Protocol Labs
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -58,9 +58,12 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+#[cfg(feature = "serde_cbor")]
 pub mod cbor;
 mod codec;
 mod handler;
+#[cfg(feature = "serde_json")]
+pub mod json;
 
 pub use codec::Codec;
 pub use handler::ProtocolSupport;

@@ -16,11 +16,12 @@ futures = "0.3.28"
 instant = "0.1.11"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
+libp2p-swarm-derive = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.96"
-serde_cbor = "0.11.2"
+serde_json = { version = "1.0.96", optional = true }
+serde_cbor = { version = "0.11.2", optional = true }
 smallvec = "1.6.1"
 void = "1.0.2"
 log = "0.4.17"
@@ -33,6 +34,7 @@ libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
 libp2p-swarm-test = { workspace = true }
+futures_ringbuf = "0.3.1"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
