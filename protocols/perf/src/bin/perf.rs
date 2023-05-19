@@ -244,6 +244,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     let RunDuration { upload, download } = perf(&mut swarm, server_peer_id, params).await?;
 
     #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct CustomResult {
         connection_established_seconds: f64,
         upload_seconds: f64,
