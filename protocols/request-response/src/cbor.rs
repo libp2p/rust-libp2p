@@ -105,8 +105,7 @@ where
         T: AsyncWrite + Unpin + Send,
     {
         let data: Vec<u8> = serde_cbor::to_vec(&req)
-            .map_err(|e| convert_error(e))
-            .unwrap();
+            .map_err(|e| convert_error(e))?;
         write_length_prefixed(io, data.as_slice()).await?;
         io.close().await?;
 
