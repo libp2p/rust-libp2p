@@ -174,107 +174,46 @@ where
 mod tests {
     use crate::Codec;
     use futures_ringbuf::Endpoint;
-    use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
     use std::marker::PhantomData;
 
     #[async_std::test]
-    async fn test_read_request() {
-        let (mut a, mut b) = Endpoint::pair(124, 124);
-        let expected = TestRequest {
+    async fn test_codec() {
+        let expected_request = TestRequest {
             payload: "test_payload".to_string(),
         };
-        let data = serde_json::to_vec(&expected).expect("Should serialize");
-
-        write_length_prefixed(&mut a, data.as_slice())
-            .await
-            .expect("Should write");
-
-        let protocol = StreamProtocol::new("/test_json/1");
+        let expected_response = TestResponse {
+            payload: "test_payload".to_string(),
+        };
+        let protocol = StreamProtocol::new("/test_cbor/1");
         let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
             phantom: PhantomData,
         };
-        let actual = codec
+
+        let (mut a, mut b) = Endpoint::pair(124, 124);
+        codec
+            .write_request(&protocol, &mut a, expected_request.clone())
+            .await
+            .expect("Should write request");
+        let actual_request = codec
             .read_request(&protocol, &mut b)
             .await
-            .expect("Should read");
+            .expect("Should read request");
 
-        assert_eq!(actual, expected);
-    }
+        assert_eq!(actual_request, expected_request);
 
-    #[async_std::test]
-    async fn test_read_response() {
         let (mut a, mut b) = Endpoint::pair(124, 124);
-        let expected = TestResponse {
-            payload: "test_payload".to_string(),
-        };
-        let data = serde_json::to_vec(&expected).expect("Should serialize");
-
-        write_length_prefixed(&mut a, data.as_slice())
+        codec
+            .write_response(&protocol, &mut a, expected_response.clone())
             .await
-            .expect("Should write");
-
-        let protocol = StreamProtocol::new("/test_json/1");
-        let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
-            phantom: PhantomData,
-        };
-        let actual = codec
+            .expect("Should write response");
+        let actual_response = codec
             .read_response(&protocol, &mut b)
             .await
-            .expect("Should read");
+            .expect("Should read response");
 
-        assert_eq!(actual, expected);
-    }
-
-    #[async_std::test]
-    async fn test_write_request() {
-        let (mut a, mut b) = Endpoint::pair(124, 124);
-        let expected = TestRequest {
-            payload: "test_payload".to_string(),
-        };
-        let protocol = StreamProtocol::new("/test_json/1");
-        let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
-            phantom: PhantomData,
-        };
-
-        codec
-            .write_request(&protocol, &mut a, expected.clone())
-            .await
-            .expect("Should write");
-
-        let data = read_length_prefixed(&mut b, 124)
-            .await
-            .expect("Should read");
-        let actual: TestRequest =
-            serde_json::from_slice(data.as_slice()).expect("Should deserialize");
-
-        assert_eq!(actual, expected);
-    }
-
-    #[async_std::test]
-    async fn test_write_response() {
-        let (mut a, mut b) = Endpoint::pair(124, 124);
-        let expected = TestResponse {
-            payload: "test_payload".to_string(),
-        };
-        let protocol = StreamProtocol::new("/test_json/1");
-        let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
-            phantom: PhantomData,
-        };
-
-        codec
-            .write_response(&protocol, &mut a, expected.clone())
-            .await
-            .expect("Should write");
-
-        let data = read_length_prefixed(&mut b, 124)
-            .await
-            .expect("Should read");
-        let actual: TestResponse =
-            serde_json::from_slice(data.as_slice()).expect("Should deserialize");
-
-        assert_eq!(actual, expected);
+        assert_eq!(actual_response, expected_response);
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
