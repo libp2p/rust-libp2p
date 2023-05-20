@@ -92,7 +92,7 @@ where
     {
         let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
 
-        serde_cbor::from_slice(vec.as_slice()).map_err(|e| convert_error(e))
+        serde_cbor::from_slice(vec.as_slice()).map_err(convert_error)
     }
 
     async fn write_request<T>(
