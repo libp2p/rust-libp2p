@@ -1,7 +1,6 @@
 ## 0.25.0 - unreleased
 
-- Implemented `request_response::json::Behaviour` and `request_response::cbor::Behaviour` which
-  use `json` and `cbor` representing of request/response, added according features.
+- Add `request_response::json::Behaviour` and `request_response::cbor::Behaviour` building on top of the `serde` traits.
   See [PR 3952].
 
 - Raise MSRV to 1.65.
