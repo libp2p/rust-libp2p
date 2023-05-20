@@ -57,12 +57,14 @@ where
 
 fn convert_error(err: serde_cbor::Error) -> io::Error {
     if err.is_syntax() || err.is_data() {
-        io::Error::new(io::ErrorKind::InvalidData, err)
-    } else if err.is_eof() {
-        io::Error::new(io::ErrorKind::UnexpectedEof, err)
-    } else {
-        io::Error::new(io::ErrorKind::Other, err)
+        return io::Error::new(io::ErrorKind::InvalidData, err)
     }
+    
+    if err.is_eof() {
+        return io::Error::new(io::ErrorKind::UnexpectedEof, err)
+    }
+    
+    io::Error::new(io::ErrorKind::Other, err)
 }
 
 #[async_trait]
