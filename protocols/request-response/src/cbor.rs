@@ -55,7 +55,7 @@ where
     inner: crate::Behaviour<Codec<Req, Resp>>,
 }
 
-fn convert_error(err: serde_cbor::Error) -> io::Error {
+fn into_io_error(err: serde_cbor::Error) -> io::Error {
     if err.is_syntax() || err.is_data() {
         return io::Error::new(io::ErrorKind::InvalidData, err)
     }
