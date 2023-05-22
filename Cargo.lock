@@ -2594,6 +2594,7 @@ dependencies = [
  "env_logger 0.10.0",
  "fnv",
  "futures",
+ "getrandom 0.2.9",
  "hex",
  "hex_fmt",
  "instant",

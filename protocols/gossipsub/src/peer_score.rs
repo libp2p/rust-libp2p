@@ -24,12 +24,12 @@
 use crate::metrics::{Metrics, Penalty};
 use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
+use instant::Instant;
 use libp2p_identity::PeerId;
 use log::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::Duration;
-use wasm_timer::Instant;
 
 mod params;
 use crate::ValidationError;
