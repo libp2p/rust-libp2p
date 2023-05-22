@@ -84,6 +84,9 @@ pub struct Behaviour {
     /// Indexed by the [`ConnectionId`] of the relayed connection and
     /// the [`PeerId`] we are trying to establish a direct connection to.
     outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
+
+    /// The addresses we observed of our peers.
+    peers_addresses: HashMap<ConnectionId, Multiaddr>,
 }
 
 impl Behaviour {
@@ -95,6 +98,7 @@ impl Behaviour {
             local_peer_id,
             direct_to_relayed_connections: Default::default(),
             outgoing_direct_connection_attempts: Default::default(),
+            peers_addresses: Default::default(),
         }
     }
 
@@ -211,6 +215,8 @@ impl Behaviour {
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
+        self.peers_addresses.remove(&connection_id);
+
         if !connected_point.is_relayed() {
             let connections = self
                 .direct_connections
@@ -241,6 +247,9 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.peers_addresses
+            .insert(connection_id, remote_addr.clone());
+
         match self
             .outgoing_direct_connection_attempts
             .remove(&(connection_id, peer))
@@ -277,6 +286,8 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.peers_addresses.insert(connection_id, addr.clone());
+
         match self
             .outgoing_direct_connection_attempts
             .remove(&(connection_id, peer))
@@ -324,10 +335,7 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            Either::Left(handler::relayed::Event::InboundConnectRequest {
-                inbound_connect,
-                remote_addr,
-            }) => {
+            Either::Left(handler::relayed::Event::InboundConnectRequest { inbound_connect }) => {
                 self.queued_events.extend([
                     ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(relayed_connection_id),
@@ -339,7 +347,11 @@ impl NetworkBehaviour for Behaviour {
                     },
                     ToSwarm::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
                         remote_peer_id: event_source,
-                        remote_relayed_addr: remote_addr,
+                        remote_relayed_addr: self
+                            .peers_addresses
+                            .get(&relayed_connection_id)
+                            .cloned()
+                            .expect("to have stored remote addr of relay connection"),
                     }),
                 ]);
             }

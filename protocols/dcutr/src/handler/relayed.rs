@@ -69,7 +69,6 @@ impl fmt::Debug for Command {
 pub enum Event {
     InboundConnectRequest {
         inbound_connect: Box<protocol::inbound::PendingConnect>,
-        remote_addr: Multiaddr,
     },
     InboundNegotiationFailed {
         error: StreamUpgradeError<void::Void>,
@@ -86,13 +85,9 @@ pub enum Event {
 impl fmt::Debug for Event {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Event::InboundConnectRequest {
-                inbound_connect: _,
-                remote_addr,
-            } => f
+            Event::InboundConnectRequest { inbound_connect: _ } => f
                 .debug_struct("Event::InboundConnectRequest")
-                .field("remote_addrs", remote_addr)
-                .finish(),
+                .finish_non_exhaustive(),
             Event::InboundNegotiationFailed { error } => f
                 .debug_struct("Event::InboundNegotiationFailed")
                 .field("error", error)
@@ -156,15 +151,10 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(inbound_connect) => {
-                let remote_addr = match &self.endpoint {
-                    ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
-                    ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
-                };
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::InboundConnectRequest {
                             inbound_connect: Box::new(inbound_connect),
-                            remote_addr,
                         },
                     ));
             }
