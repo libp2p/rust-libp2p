@@ -292,6 +292,8 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
 
     /// Reports a new candidate for an external address to the [`Swarm`](crate::Swarm).
     ///
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrCandidate`].
+    ///
     /// This address could come from a variety of sources:
     /// - A protocol such as identify obtained it from a remote.
     /// - The user provided it based on configuration.
@@ -300,9 +302,15 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     NewExternalAddrCandidate(Multiaddr),
 
     /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
+    ///
+    /// This is intended to be issued in response to a [`FromSwarm::NewExternalAddrCandidate`] if we are indeed externally reachable on this address.
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
     ExternalAddrConfirmed(Multiaddr),
 
     /// Indicates to the [`Swarm`](crate::Swarm) that we are no longer externally reachable under the provided address.
+    ///
+    /// This expires an address that was earlier confirmed via [`ToSwarm::ExternalAddrConfirmed`].
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
     ExternalAddrExpired(Multiaddr),
 
     /// Instructs the `Swarm` to initiate a graceful close of one or all connections
