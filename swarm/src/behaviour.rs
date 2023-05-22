@@ -290,7 +290,7 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
         event: TInEvent,
     },
 
-    /// Reports a new candidate for an external address to the [`Swarm`].
+    /// Reports a new candidate for an external address to the [`Swarm`](crate::Swarm).
     ///
     /// This address could come from a variety of sources:
     /// - A protocol such as identify obtained it from a remote.
@@ -299,10 +299,10 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// - We established a new relay connection.
     NewExternalAddrCandidate(Multiaddr),
 
-    /// Indicates to the [`Swarm`] that the provided address is confirmed to be externally reachable.
+    /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
     ExternalAddrConfirmed(Multiaddr),
 
-    /// Indicates to the [`Swarm`] that we are no longer externally reachable under the provided address.
+    /// Indicates to the [`Swarm`](crate::Swarm) that we are no longer externally reachable under the provided address.
     ExternalAddrExpired(Multiaddr),
 
     /// Instructs the `Swarm` to initiate a graceful close of one or all connections
