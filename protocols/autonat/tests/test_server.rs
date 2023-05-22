@@ -96,6 +96,7 @@ async fn test_dial_back() {
                 num_established,
                 concurrent_dial_errors,
                 established_in: _,
+                connection_id: _,
             } => {
                 assert_eq!(peer_id, client_id);
                 assert_eq!(num_established, NonZeroU32::new(2).unwrap());
@@ -103,7 +104,10 @@ async fn test_dial_back() {
                 assert_eq!(address, expect_addr);
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }
@@ -143,12 +147,15 @@ async fn test_dial_error() {
 
     loop {
         match server.next_swarm_event().await {
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 assert_eq!(peer_id.unwrap(), client_id);
                 assert!(matches!(error, DialError::Transport(_)));
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }
@@ -307,7 +314,10 @@ async fn test_dial_multiple_addr() {
                 assert_eq!(address, dial_addresses[1]);
                 break;
             }
-            SwarmEvent::Dialing(peer) => assert_eq!(peer, client_id),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer),
+                ..
+            } => assert_eq!(peer, client_id),
             SwarmEvent::NewListenAddr { .. } | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
         }
