@@ -174,13 +174,13 @@ impl Handler {
             future::Either::Left(remote_info) => {
                 self.update_supported_protocols_for_remote(&remote_info);
                 self.events
-                    .push(ConnectionHandlerEvent::Custom(Event::Identified(
+                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                         remote_info,
                     )));
             }
-            future::Either::Right(()) => self
-                .events
-                .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
+            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::IdentificationPushed,
+            )),
         }
     }
 
@@ -192,10 +192,9 @@ impl Handler {
         >,
     ) {
         let err = err.map_upgrade_err(|e| e.into_inner());
-        self.events
-            .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
-                err,
-            )));
+        self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+            Event::IdentificationError(err),
+        ));
         self.trigger_next_identify.reset(self.interval);
     }
 
@@ -242,8 +241,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = InEvent;
-    type OutEvent = Event;
+    type FromBehaviour = InEvent;
+    type ToBehaviour = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
     type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
@@ -254,7 +253,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             InEvent::AddressesChanged(addresses) => {
                 self.external_addresses = addresses;
@@ -309,7 +308,9 @@ impl ConnectionHandler for Handler {
 
             if let Ok(info) = res {
                 self.update_supported_protocols_for_remote(&info);
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    info,
+                )));
             }
         }
 
@@ -319,7 +320,7 @@ impl ConnectionHandler for Handler {
                 .map(|()| Event::Identification)
                 .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
 
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
 
         Poll::Pending

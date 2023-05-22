@@ -26,7 +26,7 @@ use crate::handler::PROTOCOL_IDENT;
 use crate::substream_handler::{Next, PassthroughProtocol, SubstreamHandler};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
-use libp2p_swarm::{NegotiatedSubstream, SubstreamProtocol};
+use libp2p_swarm::SubstreamProtocol;
 use std::fmt;
 use std::task::{Context, Poll};
 
@@ -35,13 +35,13 @@ use std::task::{Context, Poll};
 #[allow(clippy::enum_variant_names)]
 pub enum Stream {
     /// We are in the process of reading a message from the substream.
-    PendingRead(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingRead(Framed<libp2p_swarm::Stream, RendezvousCodec>),
     /// We read a message, dispatched it to the behaviour and are waiting for the response.
-    PendingBehaviour(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingBehaviour(Framed<libp2p_swarm::Stream, RendezvousCodec>),
     /// We are in the process of sending a response.
-    PendingSend(Framed<NegotiatedSubstream, RendezvousCodec>, Message),
+    PendingSend(Framed<libp2p_swarm::Stream, RendezvousCodec>, Message),
     /// We've sent the message and are now closing down the substream.
-    PendingClose(Framed<NegotiatedSubstream, RendezvousCodec>),
+    PendingClose(Framed<libp2p_swarm::Stream, RendezvousCodec>),
 }
 
 impl fmt::Debug for Stream {
@@ -93,7 +93,7 @@ impl SubstreamHandler for Stream {
         SubstreamProtocol::new(PassthroughProtocol::new(PROTOCOL_IDENT), open_info)
     }
 
-    fn new(substream: NegotiatedSubstream, _: Self::OpenInfo) -> Self {
+    fn new(substream: libp2p_swarm::Stream, _: Self::OpenInfo) -> Self {
         Stream::PendingRead(Framed::new(substream, RendezvousCodec::default()))
     }
 

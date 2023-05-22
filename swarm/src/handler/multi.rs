@@ -27,7 +27,7 @@ use crate::handler::{
     SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
-use crate::NegotiatedSubstream;
+use crate::Stream;
 use futures::{future::BoxFuture, prelude::*};
 use rand::Rng;
 use std::{
@@ -110,8 +110,8 @@ where
     H::InboundProtocol: InboundUpgradeSend,
     H::OutboundProtocol: OutboundUpgradeSend,
 {
-    type InEvent = (K, <H as ConnectionHandler>::InEvent);
-    type OutEvent = (K, <H as ConnectionHandler>::OutEvent);
+    type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
+    type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
     type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
@@ -222,7 +222,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, (key, event): Self::InEvent) {
+    fn on_behaviour_event(&mut self, (key, event): Self::FromBehaviour) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.on_behaviour_event(event)
         } else {
@@ -245,7 +245,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -373,7 +373,7 @@ where
     type Error = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(mut self, resource: Stream, info: Self::Info) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade
@@ -395,7 +395,7 @@ where
     type Error = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, resource: Stream, info: Self::Info) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade

@@ -16,7 +16,7 @@ use libp2p::{
     multiaddr::Protocol,
     noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{NetworkBehaviour, StreamUpgradeError, Swarm, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 
@@ -216,7 +216,7 @@ impl EventLoop {
 
     async fn handle_event(
         &mut self,
-        event: SwarmEvent<ComposedEvent, Either<StreamUpgradeError<io::Error>, io::Error>>,
+        event: SwarmEvent<ComposedEvent, Either<void::Void, io::Error>>,
     ) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
@@ -329,7 +329,10 @@ impl EventLoop {
                 }
             }
             SwarmEvent::IncomingConnectionError { .. } => {}
-            SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {peer_id}"),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } => eprintln!("Dialing {peer_id}"),
             e => panic!("{e:?}"),
         }
     }
@@ -408,7 +411,7 @@ impl EventLoop {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ComposedEvent")]
+#[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
     request_response: request_response::Behaviour<FileExchangeCodec>,
     kademlia: Kademlia<MemoryStore>,

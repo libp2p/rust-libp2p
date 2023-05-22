@@ -10,9 +10,9 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 ## Kademlia client mode
 
-| Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
-| Optimization | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
+| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
+|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
+| Optimization | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
@@ -24,6 +24,14 @@ Kademlia operations.
 | Connectivity | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
+
+## Attempt to switch from webrtc-rs to str0m
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
+
+Reduce maintenance burden and reduce dependency footprint.
 
 ## Optimize Hole punching
 
@@ -72,6 +80,17 @@ A WebTransport implementation in rust-libp2p will enable browsers to connect to 
 where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
+
+## Automate port-forwarding e.g. via UPnP
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3903 |              |            |
+
+Leverage protocols like UPnP to configure port-forwarding on ones router when behind NAT and/or
+firewall. Another technique in addition to hole punching increasing the probability for a node to
+become publicly reachable when behind a firewall and/or NAT.
+
 
 ## Done
 

@@ -1,0 +1,12 @@
+error: use of deprecated constant `out_event_renamed_to_to_swarm::_w`: The `out_event` attribute has been renamed to `to_swarm`.
+ --> tests/ui/fail/out_event_deprecation.rs:6:13
+  |
+6 | #[behaviour(out_event = "FooEvent", prelude = "libp2p_swarm::derive_prelude")]
+  |             ^^^^^^^^^
+  |
+note: the lint level is defined here
+ --> tests/ui/fail/out_event_deprecation.rs:1:9
+  |
+1 | #![deny(warnings)] // Ensure the warnings we produce surface as errors.
+  |         ^^^^^^^^
+  = note: `#[deny(deprecated)]` implied by `#[deny(warnings)]`

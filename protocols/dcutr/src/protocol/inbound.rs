@@ -22,7 +22,7 @@ use crate::proto;
 use asynchronous_codec::Framed;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
-use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::convert::TryFrom;
 use std::iter;
 use thiserror::Error;
@@ -38,12 +38,12 @@ impl upgrade::UpgradeInfo for Upgrade {
     }
 }
 
-impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
+impl upgrade::InboundUpgrade<Stream> for Upgrade {
     type Output = PendingConnect;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
@@ -92,7 +92,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 }
 
 pub struct PendingConnect {
-    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HolePunch>>,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HolePunch>>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 

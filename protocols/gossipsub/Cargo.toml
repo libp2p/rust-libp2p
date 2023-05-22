@@ -35,14 +35,14 @@ wasm-timer = "0.2.5"
 instant = "0.1.11"
 void = "1.0.2"
 # Metrics dependencies
-prometheus-client = "0.20.0"
+prometheus-client = "0.21.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }
 env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-core = { workspace = true }
-libp2p-mplex = { workspace = true }
+libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-swarm-test = { workspace = true }
 quickcheck = { workspace = true }

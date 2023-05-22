@@ -40,6 +40,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -99,7 +100,7 @@ impl<P: Provider> GenTransport<P> {
         match P::runtime() {
             #[cfg(feature = "tokio")]
             Runtime::Tokio => {
-                let runtime = quinn::TokioRuntime;
+                let runtime = Arc::new(quinn::TokioRuntime);
                 let socket = std::net::UdpSocket::bind(socket_addr)?;
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
@@ -107,7 +108,7 @@ impl<P: Provider> GenTransport<P> {
             }
             #[cfg(feature = "async-std")]
             Runtime::AsyncStd => {
-                let runtime = quinn::AsyncStdRuntime;
+                let runtime = Arc::new(quinn::AsyncStdRuntime);
                 let socket = std::net::UdpSocket::bind(socket_addr)?;
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
@@ -130,13 +131,16 @@ impl<P: Provider> Transport for GenTransport<P> {
     type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        listener_id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket_addr)?;
-        let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
             socket_addr,
@@ -155,7 +159,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         // New outbound connections will use the bidirectional (listener) endpoint.
         self.dialer.remove(&socket_addr.ip().into());
 
-        Ok(listener_id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -702,8 +706,9 @@ mod test {
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let id = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            let id = ListenerId::next();
+            transport
+                .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
 
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
@@ -756,8 +761,11 @@ mod test {
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
 
         // Start listening so that the dialer and driver are dropped.
-        let _ = transport
-            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        transport
+            .listen_on(
+                ListenerId::next(),
+                "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+            )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
     }

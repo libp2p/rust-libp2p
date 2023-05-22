@@ -104,7 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .boxed();
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Event", event_process = false)]
+    #[behaviour(to_swarm = "Event", event_process = false)]
     struct Behaviour {
         relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,
@@ -267,7 +267,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } => {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
                 _ => {}

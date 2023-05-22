@@ -32,7 +32,7 @@
 //! # fn main() -> std::io::Result<()> {
 //! #
 //! use libp2p_quic as quic;
-//! use libp2p_core::{Multiaddr, Transport};
+//! use libp2p_core::{Multiaddr, Transport, transport::ListenerId};
 //!
 //! let keypair = libp2p_identity::Keypair::generate_ed25519();
 //! let quic_config = quic::Config::new(&keypair);
@@ -40,7 +40,7 @@
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1".parse().expect("address should be valid");
-//! quic_transport.listen_on(addr).expect("listen error.");
+//! quic_transport.listen_on(ListenerId::next(), addr).expect("listen error.");
 //! #
 //! # Ok(())
 //! # }

@@ -27,7 +27,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -229,8 +229,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Void;
-    type OutEvent = crate::Result;
+    type FromBehaviour = Void;
+    type ToBehaviour = crate::Result;
     type Error = Failure;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -258,7 +258,9 @@ impl ConnectionHandler for Handler {
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(
+                    Failure::Unsupported,
+                )));
             }
             State::Active => {}
         }
@@ -274,7 +276,7 @@ impl ConnectionHandler for Handler {
                 Poll::Ready(Ok(stream)) => {
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(Success::Pong)));
                 }
             }
         }
@@ -299,7 +301,7 @@ impl ConnectionHandler for Handler {
                         return Poll::Ready(ConnectionHandlerEvent::Close(error));
                     }
 
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
 
@@ -318,9 +320,9 @@ impl ConnectionHandler for Handler {
                         self.failures = 0;
                         self.timer.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
-                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
-                            rtt,
-                        })));
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(
+                            Success::Ping { rtt },
+                        )));
                     }
                     Poll::Ready(Err(e)) => {
                         self.pending_errors
@@ -390,15 +392,15 @@ impl ConnectionHandler for Handler {
     }
 }
 
-type PingFuture = BoxFuture<'static, Result<(NegotiatedSubstream, Duration), io::Error>>;
-type PongFuture = BoxFuture<'static, Result<NegotiatedSubstream, io::Error>>;
+type PingFuture = BoxFuture<'static, Result<(Stream, Duration), io::Error>>;
+type PongFuture = BoxFuture<'static, Result<Stream, io::Error>>;
 
 /// The current state w.r.t. outbound pings.
 enum OutboundState {
     /// A new substream is being negotiated for the ping protocol.
     OpenStream,
     /// The substream is idle, waiting to send the next ping.
-    Idle(NegotiatedSubstream),
+    Idle(Stream),
     /// A ping is being sent and the response awaited.
     Ping(PingFuture),
 }
