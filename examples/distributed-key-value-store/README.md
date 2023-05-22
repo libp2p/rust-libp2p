@@ -28,4 +28,7 @@ You can also use provider records instead of key-value records in the distribute
 4.  To exit, press `Ctrl-c` in each terminal window to gracefully close the instances.
 
 
-Feel free to explore and experiment with the distributed key-value store example, and observe how the data is distributed and retrieved across the network using libp2p, mDNS, and the Kademlia protocol.
+Feel free to explore and experiment with the distributed key-value store example, and observe how the data is distributed and retrieved across the network using **libp2p**, mDNS, and the Kademlia protocol.
+
+## Conclusion
+This example demonstrates the implementation of a basic distributed key-value store using **libp2p**, mDNS, and the Kademlia protocol. By leveraging these technologies, peers can connect, store, and retrieve key-value pairs in a decentralized manner. The example provides a starting point for building more advanced distributed systems and exploring the capabilities of **libp2p** and its associated protocols.
