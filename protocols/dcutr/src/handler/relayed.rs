@@ -20,6 +20,7 @@
 
 //! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
 
+use crate::behaviour_impl::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
 use crate::protocol;
 use either::Either;
 use futures::future;
@@ -80,6 +81,8 @@ pub struct Handler {
 
     /// The addresses we will send to the other party for hole-punching attempts.
     holepunch_candidates: Vec<Multiaddr>,
+
+    attempts: u8,
 }
 
 impl Handler {
@@ -90,6 +93,7 @@ impl Handler {
             queued_events: Default::default(),
             inbound_connect: Default::default(),
             holepunch_candidates,
+            attempts: 0,
         }
     }
 
@@ -122,6 +126,7 @@ impl Handler {
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::InboundConnectRequest,
                     ));
+                self.attempts += 1;
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
             future::Either::Right(output) => void::unreachable(output),
@@ -236,6 +241,7 @@ impl ConnectionHandler for Handler {
                             (),
                         ),
                     });
+                self.attempts += 1;
             }
         }
     }
@@ -246,6 +252,10 @@ impl ConnectionHandler for Handler {
         }
 
         if self.inbound_connect.is_some() {
+            return KeepAlive::Yes;
+        }
+
+        if self.attempts < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
             return KeepAlive::Yes;
         }
 

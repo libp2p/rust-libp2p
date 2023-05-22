@@ -28,7 +28,9 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
-use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent, ConnectionHandler};
+use libp2p_swarm::{
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionId, THandler, THandlerOutEvent,
+};
 use libp2p_swarm::{
     ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
@@ -38,7 +40,7 @@ use std::task::{Context, Poll};
 use thiserror::Error;
 use void::Void;
 
-const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
+pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
 /// The events produced by the [`Behaviour`].
 #[derive(Debug)]
@@ -223,18 +225,16 @@ impl NetworkBehaviour for Behaviour {
                         local_addr: local_addr.clone(),
                         send_back_addr: remote_addr.clone(),
                     };
-                    let mut handler = handler::relayed::Handler::new(
-                        connected_point,
-                        self.observed_addresses(),
-                    );
+                    let mut handler =
+                        handler::relayed::Handler::new(connected_point, self.observed_addresses());
                     handler.on_behaviour_event(handler::relayed::Command::Connect);
 
-                    self.queued_events.extend([
-                        ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
+                    self.queued_events.extend([ToSwarm::GenerateEvent(
+                        Event::InitiatedDirectConnectionUpgrade {
                             remote_peer_id: peer,
                             local_relayed_addr: local_addr.clone(),
-                        }),
-                    ]);
+                        },
+                    )]);
 
                     Either::Left(handler) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
                 } else {
