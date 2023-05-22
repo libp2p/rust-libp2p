@@ -107,7 +107,7 @@ async fn test_auto_probe() {
             }
             SwarmEvent::IncomingConnection { .. }
             | SwarmEvent::ConnectionEstablished { .. }
-            | SwarmEvent::Dialing(..)
+            | SwarmEvent::Dialing { .. }
             | SwarmEvent::NewListenAddr { .. }
             | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
