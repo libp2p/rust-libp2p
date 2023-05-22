@@ -217,12 +217,12 @@ mod tests {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct TestRequest {
+    struct TestRequest {
         payload: String,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct TestResponse {
+    struct TestResponse {
         payload: String,
     }
 }

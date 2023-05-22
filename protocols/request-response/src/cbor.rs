@@ -19,26 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{Config, ProtocolSupport, RequestId, ResponseChannel};
-use async_trait::async_trait;
-use futures::prelude::*;
-use futures::{AsyncRead, AsyncWrite};
-use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::StreamProtocol;
 use libp2p_swarm_derive::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
-use std::{io, marker::PhantomData};
-
-/// Max request size in bytes
-const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
-/// Max response size in bytes
-const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
-
-#[derive(Debug, Clone)]
-pub struct Codec<Req, Resp> {
-    phantom: PhantomData<(Req, Resp)>,
-}
 
 pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
 
@@ -52,80 +36,7 @@ where
     Req: Send + Clone + Serialize + DeserializeOwned + 'static,
     Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
 {
-    inner: crate::Behaviour<Codec<Req, Resp>>,
-}
-
-fn into_io_error(err: serde_cbor::Error) -> io::Error {
-    if err.is_syntax() || err.is_data() {
-        return io::Error::new(io::ErrorKind::InvalidData, err);
-    }
-
-    if err.is_eof() {
-        return io::Error::new(io::ErrorKind::UnexpectedEof, err);
-    }
-
-    io::Error::new(io::ErrorKind::Other, err)
-}
-
-#[async_trait]
-impl<Req, Resp> crate::Codec for Codec<Req, Resp>
-where
-    Req: Send + Clone + Serialize + DeserializeOwned,
-    Resp: Send + Clone + Serialize + DeserializeOwned,
-{
-    type Protocol = StreamProtocol;
-    type Request = Req;
-    type Response = Resp;
-
-    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
-
-        serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
-    }
-
-    async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
-
-        serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        req: Self::Request,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
-        write_length_prefixed(io, data.as_slice()).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &Self::Protocol,
-        io: &mut T,
-        resp: Self::Response,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
-        write_length_prefixed(io, data.as_slice()).await?;
-        io.close().await?;
-
-        Ok(())
-    }
+    inner: crate::Behaviour<codec::Codec<Req, Resp>>,
 }
 
 impl<Req, Resp> Behaviour<Req, Resp>
@@ -137,19 +48,13 @@ where
     where
         I: IntoIterator<
             Item = (
-                <Codec<Req, Resp> as crate::Codec>::Protocol,
+                <codec::Codec<Req, Resp> as crate::Codec>::Protocol,
                 ProtocolSupport,
             ),
         >,
     {
         Behaviour {
-            inner: crate::Behaviour::new(
-                Codec {
-                    phantom: PhantomData,
-                },
-                protocols,
-                cfg,
-            ),
+            inner: crate::Behaviour::new(codec::Codec::default(), protocols, cfg),
         }
     }
 
@@ -182,13 +87,114 @@ where
     }
 }
 
+mod codec {
+    use async_trait::async_trait;
+    use futures::prelude::*;
+    use futures::{AsyncRead, AsyncWrite};
+    use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
+    use libp2p_swarm::StreamProtocol;
+    use serde::{de::DeserializeOwned, Serialize};
+    use std::{io, marker::PhantomData};
+
+    /// Max request size in bytes
+    const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
+    /// Max response size in bytes
+    const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+
+    #[derive(Debug, Clone)]
+    pub struct Codec<Req, Resp> {
+        phantom: PhantomData<(Req, Resp)>,
+    }
+
+    impl<Req, Resp> Default for Codec<Req, Resp> {
+        fn default() -> Self {
+            Codec {
+                phantom: PhantomData,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl<Req, Resp> crate::Codec for Codec<Req, Resp>
+    where
+        Req: Send + Clone + Serialize + DeserializeOwned,
+        Resp: Send + Clone + Serialize + DeserializeOwned,
+    {
+        type Protocol = StreamProtocol;
+        type Request = Req;
+        type Response = Resp;
+
+        async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Req>
+        where
+            T: AsyncRead + Unpin + Send,
+        {
+            let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
+
+            serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
+        }
+
+        async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
+        where
+            T: AsyncRead + Unpin + Send,
+        {
+            let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
+
+            serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
+        }
+
+        async fn write_request<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+            req: Self::Request,
+        ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+        {
+            let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
+            write_length_prefixed(io, data.as_slice()).await?;
+            io.close().await?;
+
+            Ok(())
+        }
+
+        async fn write_response<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+            resp: Self::Response,
+        ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+        {
+            let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
+            write_length_prefixed(io, data.as_slice()).await?;
+            io.close().await?;
+
+            Ok(())
+        }
+    }
+
+    fn into_io_error(err: serde_cbor::Error) -> io::Error {
+        if err.is_syntax() || err.is_data() {
+            return io::Error::new(io::ErrorKind::InvalidData, err);
+        }
+
+        if err.is_eof() {
+            return io::Error::new(io::ErrorKind::UnexpectedEof, err);
+        }
+
+        io::Error::new(io::ErrorKind::Other, err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::Codec;
+    use crate::cbor::codec::Codec;
+    use crate::Codec as _;
     use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
-    use std::marker::PhantomData;
 
     #[async_std::test]
     async fn test_codec() {
@@ -199,9 +205,7 @@ mod tests {
             payload: "test_payload".to_string(),
         };
         let protocol = StreamProtocol::new("/test_cbor/1");
-        let mut codec: super::Codec<TestRequest, TestResponse> = super::Codec {
-            phantom: PhantomData,
-        };
+        let mut codec = Codec::default();
 
         let (mut a, mut b) = Endpoint::pair(124, 124);
         codec
@@ -229,12 +233,12 @@ mod tests {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct TestRequest {
+    struct TestRequest {
         payload: String,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct TestResponse {
+    struct TestResponse {
         payload: String,
     }
 }
