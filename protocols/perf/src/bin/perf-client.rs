@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
     let server_peer_id = loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
             }
             e => panic!("{e:?}"),
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
             } => {
                 info!("Established connection to {:?} via {:?}", peer_id, endpoint);
             }
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
             }
             SwarmEvent::Behaviour(libp2p_perf::client::Event { id: _, result }) => break result?,
