@@ -36,7 +36,7 @@ const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
 const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Codec<Req, Resp> {
+pub struct Codec<Req, Resp> {
     phantom: PhantomData<(Req, Resp)>,
 }
 
