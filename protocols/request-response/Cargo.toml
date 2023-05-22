@@ -16,7 +16,7 @@ futures = "0.3.28"
 instant = "0.1.11"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-libp2p-swarm-derive = { workspace = true }
+libp2p-swarm-derive = { workspace = true, optional = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", optional = true}
@@ -27,8 +27,8 @@ void = "1.0.2"
 log = "0.4.17"
 
 [features]
-json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
-cbor = ["dep:serde", "dep:serde_cbor", "libp2p-swarm/macros"]
+json = ["dep:serde", "dep:serde_json", "dep:libp2p-swarm-derive"]
+cbor = ["dep:serde", "dep:serde_cbor", "dep:libp2p-swarm-derive"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
