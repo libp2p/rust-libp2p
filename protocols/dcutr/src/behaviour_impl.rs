@@ -135,9 +135,7 @@ impl Behaviour {
                     ToSwarm::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(handler::relayed::Command::Connect {
-                            obs_addrs: self.observed_addresses(),
-                        }),
+                        event: Either::Left(handler::relayed::Command::Connect),
                     },
                     ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
                         remote_peer_id: peer_id,
@@ -192,9 +190,7 @@ impl Behaviour {
             self.queued_events.push_back(ToSwarm::NotifyHandler {
                 handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
-                event: Either::Left(handler::relayed::Command::Connect {
-                    obs_addrs: self.observed_addresses(),
-                }),
+                event: Either::Left(handler::relayed::Command::Connect),
             })
         } else {
             self.queued_events.extend([ToSwarm::GenerateEvent(
@@ -256,10 +252,14 @@ impl NetworkBehaviour for Behaviour {
         {
             None => {
                 let handler = if is_relayed(local_addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
+                    let connected_point = ConnectedPoint::Listener {
                         local_addr: local_addr.clone(),
                         send_back_addr: remote_addr.clone(),
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+                    };
+                    Either::Left(handler::relayed::Handler::new(
+                        connected_point,
+                        self.observed_addresses(),
+                    )) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
                 } else {
                     Either::Right(Either::Right(dummy::ConnectionHandler))
                 };
@@ -294,10 +294,14 @@ impl NetworkBehaviour for Behaviour {
         {
             None => {
                 let handler = if is_relayed(addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
+                    let connected_point = ConnectedPoint::Dialer {
                         address: addr.clone(),
                         role_override,
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+                    };
+                    Either::Left(handler::relayed::Handler::new(
+                        connected_point,
+                        self.observed_addresses(),
+                    )) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
                 } else {
                     Either::Right(Either::Right(dummy::ConnectionHandler))
                 };
@@ -335,25 +339,17 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            Either::Left(handler::relayed::Event::InboundConnectRequest { inbound_connect }) => {
-                self.queued_events.extend([
-                    ToSwarm::NotifyHandler {
-                        handler: NotifyHandler::One(relayed_connection_id),
-                        peer_id: event_source,
-                        event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
-                            inbound_connect,
-                            obs_addrs: self.observed_addresses(),
-                        }),
-                    },
-                    ToSwarm::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
+            Either::Left(handler::relayed::Event::InboundConnectRequest) => {
+                self.queued_events.extend([ToSwarm::GenerateEvent(
+                    Event::RemoteInitiatedDirectConnectionUpgrade {
                         remote_peer_id: event_source,
                         remote_relayed_addr: self
                             .peers_addresses
                             .get(&relayed_connection_id)
                             .cloned()
                             .expect("to have stored remote addr of relay connection"),
-                    }),
-                ]);
+                    },
+                )]);
             }
             Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(

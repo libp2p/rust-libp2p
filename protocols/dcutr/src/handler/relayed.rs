@@ -35,41 +35,16 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
-use std::fmt;
 use std::task::{Context, Poll};
 
+#[derive(Debug)]
 pub enum Command {
-    Connect {
-        obs_addrs: Vec<Multiaddr>,
-    },
-    AcceptInboundConnect {
-        obs_addrs: Vec<Multiaddr>,
-        inbound_connect: Box<protocol::inbound::PendingConnect>,
-    },
+    Connect,
 }
 
-impl fmt::Debug for Command {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Command::Connect { obs_addrs } => f
-                .debug_struct("Command::Connect")
-                .field("obs_addrs", obs_addrs)
-                .finish(),
-            Command::AcceptInboundConnect {
-                obs_addrs,
-                inbound_connect: _,
-            } => f
-                .debug_struct("Command::AcceptInboundConnect")
-                .field("obs_addrs", obs_addrs)
-                .finish(),
-        }
-    }
-}
-
+#[derive(Debug)]
 pub enum Event {
-    InboundConnectRequest {
-        inbound_connect: Box<protocol::inbound::PendingConnect>,
-    },
+    InboundConnectRequest,
     InboundNegotiationFailed {
         error: StreamUpgradeError<void::Void>,
     },
@@ -80,32 +55,6 @@ pub enum Event {
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
     },
-}
-
-impl fmt::Debug for Event {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Event::InboundConnectRequest { inbound_connect: _ } => f
-                .debug_struct("Event::InboundConnectRequest")
-                .finish_non_exhaustive(),
-            Event::InboundNegotiationFailed { error } => f
-                .debug_struct("Event::InboundNegotiationFailed")
-                .field("error", error)
-                .finish(),
-            Event::InboundConnectNegotiated(addrs) => f
-                .debug_tuple("Event::InboundConnectNegotiated")
-                .field(addrs)
-                .finish(),
-            Event::OutboundNegotiationFailed { error } => f
-                .debug_struct("Event::OutboundNegotiationFailed")
-                .field("error", error)
-                .finish(),
-            Event::OutboundConnectNegotiated { remote_addrs } => f
-                .debug_struct("Event::OutboundConnectNegotiated")
-                .field("remote_addrs", remote_addrs)
-                .finish(),
-        }
-    }
 }
 
 pub struct Handler {
@@ -128,15 +77,19 @@ pub struct Handler {
     /// Inbound connect, accepted by the behaviour, pending completion.
     inbound_connect:
         Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>>,
+
+    /// The addresses we will send to the other party for hole-punching attempts.
+    holepunch_candidates: Vec<Multiaddr>,
 }
 
 impl Handler {
-    pub fn new(endpoint: ConnectedPoint) -> Self {
+    pub fn new(endpoint: ConnectedPoint, holepunch_candidates: Vec<Multiaddr>) -> Self {
         Self {
             endpoint,
             pending_error: Default::default(),
             queued_events: Default::default(),
             inbound_connect: Default::default(),
+            holepunch_candidates,
         }
     }
 
@@ -151,11 +104,23 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(inbound_connect) => {
+                if self
+                    .inbound_connect
+                    .replace(
+                        inbound_connect
+                            .accept(self.holepunch_candidates.clone())
+                            .boxed(),
+                    )
+                    .is_some()
+                {
+                    log::warn!(
+                        "New inbound connect stream while still upgrading previous one. \
+                         Replacing previous with new.",
+                    );
+                }
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundConnectRequest {
-                            inbound_connect: Box::new(inbound_connect),
-                        },
+                        Event::InboundConnectRequest,
                     ));
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
@@ -263,29 +228,14 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
-            Command::Connect { obs_addrs } => {
+            Command::Connect => {
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
-                            protocol::outbound::Upgrade::new(obs_addrs),
+                            protocol::outbound::Upgrade::new(self.holepunch_candidates.clone()),
                             (),
                         ),
                     });
-            }
-            Command::AcceptInboundConnect {
-                inbound_connect,
-                obs_addrs,
-            } => {
-                if self
-                    .inbound_connect
-                    .replace(inbound_connect.accept(obs_addrs).boxed())
-                    .is_some()
-                {
-                    log::warn!(
-                        "New inbound connect stream while still upgrading previous one. \
-                         Replacing previous with new.",
-                    );
-                }
             }
         }
     }
