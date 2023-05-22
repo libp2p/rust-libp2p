@@ -47,3 +47,8 @@ To set up a simple file sharing scenario with a provider and a retriever, follow
 Note: It is not necessary for the retriever node to be directly connected to the provider. As long as both nodes are connected to any node in the same DHT network, the file can be successfully retrieved.
 
 This File Sharing example demonstrates the fundamental concepts of building a file sharing application using **libp2p**. By understanding the flow and architectural properties of this example, you can leverage the power of **libp2p** to integrate peer-to-peer networking capabilities into your own applications.
+
+## Conclusion
+The File Sharing example provides a practical implementation of a basic file sharing application using **libp2p**. By leveraging the capabilities of **libp2p**, such as the DHT and network connectivity protocols, it demonstrates how peers can share files in a decentralized manner.
+
+By exploring and understanding the file sharing process and architectural properties presented in this example, developers can gain insights into building their own file sharing applications using **libp2p**.
