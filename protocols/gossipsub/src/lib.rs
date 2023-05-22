@@ -99,12 +99,12 @@
 //! let local_key = identity::Keypair::generate_ed25519();
 //! let local_peer_id = local_key.public().to_peer_id();
 //!
-//! // Set up an encrypted TCP Transport over the Mplex
+//! // Set up an encrypted TCP Transport over yamux
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
 //!            .authenticate(libp2p_noise::Config::new(&local_key).unwrap())
-//!            .multiplex(libp2p_mplex::MplexConfig::new())
+//!            .multiplex(libp2p_yamux::Config::default())
 //!            .boxed();
 //!
 //! // Create a Gossipsub topic
