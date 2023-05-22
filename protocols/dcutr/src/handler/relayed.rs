@@ -46,10 +46,6 @@ pub enum Command {
         obs_addrs: Vec<Multiaddr>,
         inbound_connect: Box<protocol::inbound::PendingConnect>,
     },
-    /// Upgrading the relayed connection to a direct connection either failed for good or succeeded.
-    /// There is no need to keep the relayed connection alive for the sake of upgrading to a direct
-    /// connection.
-    UpgradeFinishedDontKeepAlive,
 }
 
 impl fmt::Debug for Command {
@@ -65,9 +61,6 @@ impl fmt::Debug for Command {
             } => f
                 .debug_struct("Command::AcceptInboundConnect")
                 .field("obs_addrs", obs_addrs)
-                .finish(),
-            Command::UpgradeFinishedDontKeepAlive => f
-                .debug_struct("Command::UpgradeFinishedDontKeepAlive")
                 .finish(),
         }
     }

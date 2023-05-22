@@ -193,17 +193,12 @@ impl Behaviour {
                 }),
             })
         } else {
-            self.queued_events.extend([
-                ToSwarm::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(relayed_connection_id),
-                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
-                },
-                ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+            self.queued_events.extend([ToSwarm::GenerateEvent(
+                Event::DirectConnectionUpgradeFailed {
                     remote_peer_id: peer_id,
                     error: Error::Dial,
-                }),
-            ]);
+                },
+            )]);
         }
     }
 
@@ -394,18 +389,11 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
             Either::Right(Either::Left(handler::direct::Event::DirectConnectionEstablished)) => {
-                self.queued_events.extend([
-                    ToSwarm::NotifyHandler {
-                        peer_id: event_source,
-                        handler: NotifyHandler::One(relayed_connection_id),
-                        event: Either::Left(
-                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-                        ),
-                    },
-                    ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
+                self.queued_events.extend([ToSwarm::GenerateEvent(
+                    Event::DirectConnectionUpgradeSucceeded {
                         remote_peer_id: event_source,
-                    }),
-                ]);
+                    },
+                )]);
             }
             Either::Right(Either::Right(never)) => void::unreachable(never),
         };
