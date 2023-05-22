@@ -98,7 +98,7 @@ impl Behaviour {
         }
     }
 
-    fn observed_addreses(&self) -> Vec<Multiaddr> {
+    fn observed_addresses(&self) -> Vec<Multiaddr> {
         self.external_addresses
             .iter()
             .cloned()
@@ -132,7 +132,7 @@ impl Behaviour {
                         peer_id,
                         handler: NotifyHandler::One(connection_id),
                         event: Either::Left(handler::relayed::Command::Connect {
-                            obs_addrs: self.observed_addreses(),
+                            obs_addrs: self.observed_addresses(),
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
@@ -189,7 +189,7 @@ impl Behaviour {
                 handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {
-                    obs_addrs: self.observed_addreses(),
+                    obs_addrs: self.observed_addresses(),
                 }),
             })
         } else {
@@ -339,7 +339,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
                             inbound_connect,
-                            obs_addrs: self.observed_addreses(),
+                            obs_addrs: self.observed_addresses(),
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {

@@ -17,4 +17,4 @@ libp2p-mplex = { path = "../muxers/mplex" }
 log = "0.4"
 rand = "0.8.5"
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = { version = "1.28.1", features = ["full"] }
