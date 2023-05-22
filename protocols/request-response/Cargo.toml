@@ -27,7 +27,6 @@ void = "1.0.2"
 log = "0.4.17"
 
 [features]
-default = ["json", "cbor"]
 json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
 cbor = ["dep:serde", "dep:serde_cbor", "libp2p-swarm/macros"]
 
