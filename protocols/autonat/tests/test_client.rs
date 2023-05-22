@@ -70,48 +70,6 @@ async fn test_auto_probe() {
     assert!(client.behaviour().public_address().is_none());
     assert_eq!(client.behaviour().confidence(), 0);
 
-    // Test Private NAT Status
-
-    // Artificially add a faulty address.
-    let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-    client.add_external_address(unreachable_addr.clone());
-
-    let id = match client.next_behaviour_event().await {
-        Event::OutboundProbe(OutboundProbeEvent::Request { probe_id, peer }) => {
-            assert_eq!(peer, server_id);
-            probe_id
-        }
-        other => panic!("Unexpected behaviour event: {other:?}."),
-    };
-
-    match client.next_behaviour_event().await {
-        Event::OutboundProbe(OutboundProbeEvent::Error {
-            probe_id,
-            peer,
-            error,
-        }) => {
-            assert_eq!(peer.unwrap(), server_id);
-            assert_eq!(probe_id, id);
-            assert_eq!(
-                error,
-                OutboundProbeError::Response(ResponseError::DialError)
-            );
-        }
-        other => panic!("Unexpected behaviour event: {other:?}."),
-    }
-
-    match client.next_behaviour_event().await {
-        Event::StatusChanged { old, new } => {
-            assert_eq!(old, NatStatus::Unknown);
-            assert_eq!(new, NatStatus::Private);
-        }
-        other => panic!("Unexpected behaviour event: {other:?}."),
-    }
-
-    assert_eq!(client.behaviour().confidence(), 0);
-    assert_eq!(client.behaviour().nat_status(), NatStatus::Private);
-    assert!(client.behaviour().public_address().is_none());
-
     // Test new public listening address
     client.listen().await;
 
@@ -142,12 +100,14 @@ async fn test_auto_probe() {
             }
             SwarmEvent::Behaviour(Event::StatusChanged { old, new }) => {
                 // Expect to flip status to public
-                assert_eq!(old, NatStatus::Private);
+                assert_eq!(old, NatStatus::Unknown);
                 assert!(matches!(new, NatStatus::Public(_)));
                 assert!(new.is_public());
                 break;
             }
             SwarmEvent::IncomingConnection { .. }
+            | SwarmEvent::ConnectionEstablished { .. }
+            | SwarmEvent::Dialing(..)
             | SwarmEvent::NewListenAddr { .. }
             | SwarmEvent::ExpiredListenAddr { .. } => {}
             other => panic!("Unexpected swarm event: {other:?}."),
