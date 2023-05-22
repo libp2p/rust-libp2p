@@ -1718,6 +1718,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-rustls"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35bd3cf68c183738046838e300353e4716c674dc5e56890de4826801a6622a28"
+dependencies = [
+ "futures-io",
+ "rustls 0.21.1",
+]
+
+[[package]]
 name = "futures-sink"
 version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2900,7 +2910,7 @@ dependencies = [
  "quickcheck",
  "quinn-proto",
  "rand 0.8.5",
- "rustls 0.20.8",
+ "rustls 0.21.1",
  "thiserror",
  "tokio",
 ]
@@ -3068,7 +3078,7 @@ name = "libp2p-tls"
 version = "0.2.0"
 dependencies = [
  "futures",
- "futures-rustls",
+ "futures-rustls 0.24.0",
  "hex",
  "hex-literal",
  "libp2p-core",
@@ -3077,7 +3087,7 @@ dependencies = [
  "libp2p-yamux",
  "rcgen 0.10.0",
  "ring",
- "rustls 0.20.8",
+ "rustls 0.21.1",
  "thiserror",
  "tokio",
  "webpki 0.22.0",
@@ -3154,7 +3164,7 @@ dependencies = [
  "async-std",
  "either",
  "futures",
- "futures-rustls",
+ "futures-rustls 0.22.2",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
@@ -4080,20 +4090,19 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.9.3"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67c10f662eee9c94ddd7135043e544f3c82fa839a1e7b865911331961b53186c"
+checksum = "85af4ed6ee5a89f26a26086e9089a6643650544c025158449a3626ebf72884b3"
 dependencies = [
  "bytes",
  "rand 0.8.5",
  "ring",
  "rustc-hash",
- "rustls 0.20.8",
+ "rustls 0.21.1",
  "slab",
  "thiserror",
  "tinyvec",
  "tracing",
- "webpki 0.22.0",
 ]
 
 [[package]]
@@ -4481,6 +4490,18 @@ dependencies = [
  "ring",
  "sct 0.7.0",
  "webpki 0.22.0",
+]
+
+[[package]]
+name = "rustls"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c911ba11bc8433e811ce56fde130ccf32f5127cab0e0194e9c68c5a5b671791e"
+dependencies = [
+ "log",
+ "ring",
+ "rustls-webpki",
+ "sct 0.7.0",
 ]
 
 [[package]]
