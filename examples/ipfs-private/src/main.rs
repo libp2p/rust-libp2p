@@ -18,19 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A minimal node that can interact with ipfs
-//!
-//! This node implements the gossipsub, ping and identify protocols. It supports
-//! the ipfs private swarms feature by reading the pre shared key file `swarm.key`
-//! from the IPFS_PATH environment variable or from the default location.
-//!
-//! You can pass any number of nodes to be dialed.
-//!
-//! On startup, this example will show a list of addresses that you can dial
-//! from a go-ipfs or js-ipfs node.
-//!
-//! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
-//! to work, the ipfs node needs to be configured to use gossipsub.
+#![doc = include_str!("../README.md")]
+
 use async_std::io;
 use either::Either;
 use futures::{prelude::*, select};
