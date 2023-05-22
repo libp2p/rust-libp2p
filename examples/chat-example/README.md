@@ -2,7 +2,7 @@
 
 A basic chat application with logs demonstrating libp2p and the gossipsub protocol combined with mDNS for the discovery of peers to gossip with. It showcases how peers can connect, discover each other using mDNS, and engage in real-time chat sessions.
 
-## Tutorial
+## Usage
 
 1. Using two terminal windows, start two instances, typing the following in each:
 	```sh

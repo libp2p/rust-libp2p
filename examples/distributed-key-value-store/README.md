@@ -2,7 +2,7 @@
 
 This example showcases a basic distributed key-value store implemented using **libp2p**, along with the mDNS and Kademlia protocols.
 
-## Tutorial
+## Usage
 
 ### Key-Value Store
 
