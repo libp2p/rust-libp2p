@@ -26,9 +26,9 @@ use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionClosed, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
-use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent};
+use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent, ConnectionHandler};
 use libp2p_swarm::{
     ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
@@ -109,49 +109,6 @@ impl Behaviour {
             .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
             .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
             .collect()
-    }
-
-    fn on_connection_established(
-        &mut self,
-        ConnectionEstablished {
-            peer_id,
-            connection_id,
-            endpoint: connected_point,
-            ..
-        }: ConnectionEstablished,
-    ) {
-        if connected_point.is_relayed() {
-            if connected_point.is_listener() && !self.direct_connections.contains_key(&peer_id) {
-                // TODO: Try dialing the remote peer directly. Specification:
-                //
-                // > The protocol starts with the completion of a relay connection from A to B. Upon
-                // observing the new connection, the inbound peer (here B) checks the addresses
-                // advertised by A via identify. If that set includes public addresses, then A may
-                // be reachable by a direct connection, in which case B attempts a unilateral
-                // connection upgrade by initiating a direct connection to A.
-                //
-                // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_events.extend([
-                    ToSwarm::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(connection_id),
-                        event: Either::Left(handler::relayed::Command::Connect),
-                    },
-                    ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
-                        remote_peer_id: peer_id,
-                        local_relayed_addr: match connected_point {
-                            ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
-                            ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
-                        },
-                    }),
-                ]);
-            }
-        } else {
-            self.direct_connections
-                .entry(peer_id)
-                .or_default()
-                .insert(connection_id);
-        }
     }
 
     fn on_dial_failure(
@@ -252,15 +209,40 @@ impl NetworkBehaviour for Behaviour {
         {
             None => {
                 let handler = if is_relayed(local_addr) {
+                    // TODO: Try dialing the remote peer directly. Specification:
+                    //
+                    // > The protocol starts with the completion of a relay connection from A to B. Upon
+                    // observing the new connection, the inbound peer (here B) checks the addresses
+                    // advertised by A via identify. If that set includes public addresses, then A may
+                    // be reachable by a direct connection, in which case B attempts a unilateral
+                    // connection upgrade by initiating a direct connection to A.
+                    //
+                    // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+
                     let connected_point = ConnectedPoint::Listener {
                         local_addr: local_addr.clone(),
                         send_back_addr: remote_addr.clone(),
                     };
-                    Either::Left(handler::relayed::Handler::new(
+                    let mut handler = handler::relayed::Handler::new(
                         connected_point,
                         self.observed_addresses(),
-                    )) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+                    );
+                    handler.on_behaviour_event(handler::relayed::Command::Connect);
+
+                    self.queued_events.extend([
+                        ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
+                            remote_peer_id: peer,
+                            local_relayed_addr: local_addr.clone(),
+                        }),
+                    ]);
+
+                    Either::Left(handler) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
                 } else {
+                    self.direct_connections
+                        .entry(peer)
+                        .or_default()
+                        .insert(connection_id);
+
                     Either::Right(Either::Right(dummy::ConnectionHandler))
                 };
 
@@ -303,6 +285,11 @@ impl NetworkBehaviour for Behaviour {
                         self.observed_addresses(),
                     )) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
                 } else {
+                    self.direct_connections
+                        .entry(peer)
+                        .or_default()
+                        .insert(connection_id);
+
                     Either::Right(Either::Right(dummy::ConnectionHandler))
                 };
 
@@ -423,14 +410,12 @@ impl NetworkBehaviour for Behaviour {
         self.external_addresses.on_swarm_event(&event);
 
         match event {
-            FromSwarm::ConnectionEstablished(connection_established) => {
-                self.on_connection_established(connection_established)
-            }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(_)
+            | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::NewListenAddr(_)
