@@ -19,9 +19,9 @@ libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4"
 parking_lot = "0.12.0"
-quinn-proto = { version = "0.9.3", default-features = false, features = ["tls-rustls"] }
+quinn-proto = { version = "0.10.1", default-features = false, features = ["tls-rustls"] }
 rand = "0.8.5"
-rustls = { version = "0.20.2", default-features = false }
+rustls = { version = "0.21.1", default-features = false }
 thiserror = "1.0.40"
 tokio = { version = "1.28.1", default-features = false, features = ["net", "rt"], optional = true }
 
