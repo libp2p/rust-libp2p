@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::ops::Deref;
 use crate::{Config, ProtocolSupport};
 use libp2p_swarm::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
+use std::ops::Deref;
 
 pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
 
@@ -59,9 +59,9 @@ where
 }
 
 impl<Req, Resp> Deref for Behaviour<Req, Resp>
-    where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+where
+    Req: Send + Clone + Serialize + DeserializeOwned,
+    Resp: Send + Clone + Serialize + DeserializeOwned,
 {
     type Target = crate::Behaviour<codec::Codec<Req, Resp>>;
 
