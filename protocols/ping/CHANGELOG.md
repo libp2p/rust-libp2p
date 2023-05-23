@@ -6,6 +6,7 @@
 - Remove deprecated items. See [PR 3702].
 
 - Don't close connections on ping failures.
+  To restore the previous behaviour, users should call `Swarm::close_connection` upon receiving a `ping::Event` with a `ping::Failure`.
   This also removes the `max_failures` config option.
   See [PR 3947].
 
