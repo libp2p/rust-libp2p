@@ -158,7 +158,9 @@ async fn test_confidence() {
         client.listen().await;
     } else {
         let unreachable_addr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-        client.add_external_address(unreachable_addr);
+        client
+            .behaviour_mut()
+            .add_external_address_candidate(unreachable_addr);
     }
 
     for i in 0..MAX_CONFIDENCE + 1 {

@@ -131,7 +131,9 @@ async fn test_dial_back() {
 async fn test_dial_error() {
     let (mut server, server_id, server_addr) = new_server_swarm(None).await;
     let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
-    client.add_external_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
+    client
+        .behaviour_mut()
+        .add_external_address_candidate("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
     async_std::task::spawn(client.loop_on_next());
 
     let request_probe_id = match server.next_behaviour_event().await {
@@ -271,7 +273,9 @@ async fn test_dial_multiple_addr() {
 
     let (mut client, client_id) = new_client_swarm(server_id, server_addr.clone()).await;
     client.listen().await;
-    client.add_external_address("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
+    client
+        .behaviour_mut()
+        .add_external_address_candidate("/ip4/127.0.0.1/tcp/12345".parse().unwrap());
     async_std::task::spawn(client.loop_on_next());
 
     let dial_addresses = match server.next_behaviour_event().await {

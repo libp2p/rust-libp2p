@@ -279,6 +279,14 @@ impl Behaviour {
         self.servers.retain(|p| p != peer);
     }
 
+    /// Add a new candidate for an external address.
+    ///
+    /// This will trigger a new probe for the given address.
+    pub fn add_external_address_candidate(&mut self, candidate: Multiaddr) {
+        self.other_candidates.insert(candidate);
+        self.as_client().on_new_address();
+    }
+
     fn as_client(&mut self) -> AsClient {
         AsClient {
             inner: &mut self.inner,
@@ -570,8 +578,7 @@ impl NetworkBehaviour for Behaviour {
                     .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                         NewExternalAddrCandidate { addr },
                     ));
-                self.other_candidates.insert(addr.to_owned());
-                self.as_client().on_new_address();
+                self.add_external_address_candidate(addr.to_owned());
             }
             listen_failure @ FromSwarm::ListenFailure(_) => {
                 self.inner.on_swarm_event(listen_failure)
