@@ -27,6 +27,7 @@ pull_request_rules:
     conditions:
       # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
       - label=send-it
+      - base=master
     actions:
       queue:
 
