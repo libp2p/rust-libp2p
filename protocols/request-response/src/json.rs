@@ -23,52 +23,29 @@ use libp2p_swarm::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 use std::ops::Deref;
 
-pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
-
-#[derive(NetworkBehaviour)]
-#[behaviour(
-    to_swarm = "OutEvent<Req, Resp>",
-    prelude = "libp2p_swarm::derive_prelude"
-)]
-pub struct Behaviour<Req, Resp>
-where
-    Req: Send + Clone + Serialize + DeserializeOwned + 'static,
-    Resp: Send + Clone + Serialize + DeserializeOwned + 'static,
-{
-    inner: crate::Behaviour<codec::Codec<Req, Resp>>,
-}
-
-impl<Req, Resp> Behaviour<Req, Resp>
-where
-    Req: Send + Clone + Serialize + DeserializeOwned,
-    Resp: Send + Clone + Serialize + DeserializeOwned,
-{
-    pub fn new<I>(protocols: I, cfg: Config) -> Self
-    where
-        I: IntoIterator<
-            Item = (
-                <codec::Codec<Req, Resp> as crate::Codec>::Protocol,
-                ProtocolSupport,
-            ),
-        >,
-    {
-        Behaviour {
-            inner: crate::Behaviour::new(codec::Codec::default(), protocols, cfg),
-        }
-    }
-}
-
-impl<Req, Resp> Deref for Behaviour<Req, Resp>
-where
-    Req: Send + Clone + Serialize + DeserializeOwned,
-    Resp: Send + Clone + Serialize + DeserializeOwned,
-{
-    type Target = crate::Behaviour<codec::Codec<Req, Resp>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
+/// A request-response behaviour using [`serde_json`] for serializing and deserializing the messages.
+///
+/// # Example
+///
+/// ```
+/// # use libp2p_request_response::{json, ProtocolSupport, self as request_response};
+/// # use libp2p_swarm::{StreamProtocol};
+/// #[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// struct GreetRequest {
+///     name: String,
+/// }
+///
+/// #[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// struct GreetResponse {
+///     message: String,
+/// }
+///
+/// let behaviour = json::Behaviour::<GreetRequest, GreetResponse>::new(
+///     [(StreamProtocol::new("/my-json-protocol"), ProtocolSupport::Full)],
+///     request_response::Config::default()
+/// );
+/// ```
+pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
     use async_trait::async_trait;
@@ -84,7 +61,6 @@ mod codec {
     /// Max response size in bytes
     const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
 
-    #[derive(Debug, Clone)]
     pub struct Codec<Req, Resp> {
         phantom: PhantomData<(Req, Resp)>,
     }
@@ -97,11 +73,17 @@ mod codec {
         }
     }
 
+    impl<Req, Resp> Clone for Codec<Req, Resp> {
+        fn clone(&self) -> Self {
+            Self::default()
+        }
+    }
+
     #[async_trait]
     impl<Req, Resp> crate::Codec for Codec<Req, Resp>
     where
-        Req: Send + Clone + Serialize + DeserializeOwned,
-        Resp: Send + Clone + Serialize + DeserializeOwned,
+        Req: Send + Serialize + DeserializeOwned,
+        Resp: Send + Serialize + DeserializeOwned,
     {
         type Protocol = StreamProtocol;
         type Request = Req;

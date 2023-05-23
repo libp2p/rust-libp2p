@@ -28,7 +28,7 @@
 //! over the actual messages being sent, which are defined in terms of a
 //! [`Codec`]. Creating a request/response protocol thus amounts
 //! to providing an implementation of this trait which can then be
-//! given to [`Behaviour::new`]. Further configuration options are
+//! given to [`Behaviour::with_codec`]. Further configuration options are
 //! available via the [`Config`].
 //!
 //! Requests are sent using [`Behaviour::send_request`] and the
@@ -38,6 +38,14 @@
 //! Responses are sent using [`Behaviour::send_response`] upon
 //! receiving a [`Message::Request`] via
 //! [`Event::Message`].
+//!
+//! ## Predefined codecs
+//!
+//! In case your message types implement [`serde::Serialize`] and [`serde::Deserialize`],
+//! you can use two predefined behaviours:
+//!
+//! - [`cbor::Behaviour`] for CBOR-encoded messages
+//! - [`json::Behaviour`] for JSON-encoded messages
 //!
 //! ## Protocol Families
 //!
@@ -334,11 +342,24 @@ where
 
 impl<TCodec> Behaviour<TCodec>
 where
+    TCodec: Codec + Default + Clone + Send + 'static,
+{
+    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
+    pub fn new<I>(protocols: I, cfg: Config) -> Self
+    where
+        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
+    {
+        Self::with_codec(TCodec::default(), protocols, cfg)
+    }
+}
+
+impl<TCodec> Behaviour<TCodec>
+where
     TCodec: Codec + Clone + Send + 'static,
 {
     /// Creates a new `Behaviour` for the given
     /// protocols, codec and configuration.
-    pub fn new<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
+    pub fn with_codec<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
     {

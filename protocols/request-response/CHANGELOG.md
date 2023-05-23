@@ -1,6 +1,7 @@
 ## 0.25.0 - unreleased
 
 - Add `request_response::json::Behaviour` and `request_response::cbor::Behaviour` building on top of the `serde` traits.
+  To conveniently construct these, we remove the `Codec` parameter from `Behaviour::new` and add `Behaviour::with_codec`.
   See [PR 3952].
 
 - Raise MSRV to 1.65.

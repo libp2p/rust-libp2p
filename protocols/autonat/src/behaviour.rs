@@ -222,7 +222,7 @@ impl Behaviour {
         let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
         let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
-        let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::with_codec(AutoNatCodec, protocols, cfg);
         Self {
             local_peer_id,
             inner,
