@@ -404,7 +404,7 @@ impl<P: Provider> Driver<P> {
         rx: mpsc::Receiver<ToEndpoint>,
     ) -> Self {
         Driver {
-            endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config),
+            endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config, false),
             client_config,
             channel,
             rx,
@@ -603,7 +603,7 @@ impl<P: Provider> Future for Driver<P> {
                     // Start sending a packet on the socket.
                     if let Some(transmit) = self.next_packet_out.take() {
                         self.provider_socket
-                            .start_send(transmit.contents, transmit.destination);
+                            .start_send(transmit.contents.into(), transmit.destination);
                         continue;
                     }
 
