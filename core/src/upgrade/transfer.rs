@@ -148,7 +148,7 @@ pub async fn read_to_end(
         }
 
         let num_bytes = socket.take(step_size).read_to_end(&mut res).await?;
-        if num_bytes == 0 || num_bytes == 1024 {
+        if num_bytes == 0 {
             break;
         }
     }
