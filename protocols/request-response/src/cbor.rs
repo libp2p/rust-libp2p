@@ -91,7 +91,7 @@ mod codec {
     use async_trait::async_trait;
     use futures::prelude::*;
     use futures::{AsyncRead, AsyncWrite};
-    use libp2p_core::upgrade::{read_length_prefixed, write_length_prefixed};
+    use libp2p_core::upgrade::read_to_end;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
     use std::{io, marker::PhantomData};
@@ -128,7 +128,7 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_length_prefixed(io, REQUEST_SIZE_MAXIMUM).await?;
+            let vec = read_to_end(io, REQUEST_SIZE_MAXIMUM).await?;
 
             serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
         }
@@ -137,7 +137,7 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_length_prefixed(io, RESPONSE_SIZE_MAXIMUM).await?;
+            let vec = read_to_end(io, RESPONSE_SIZE_MAXIMUM).await?;
 
             serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
         }
@@ -152,7 +152,8 @@ mod codec {
             T: AsyncWrite + Unpin + Send,
         {
             let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
-            write_length_prefixed(io, data.as_slice()).await?;
+            io.write_all(data.as_ref()).await?;
+            io.flush().await?;
             io.close().await?;
 
             Ok(())
@@ -168,7 +169,8 @@ mod codec {
             T: AsyncWrite + Unpin + Send,
         {
             let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
-            write_length_prefixed(io, data.as_slice()).await?;
+            io.write_all(data.as_ref()).await?;
+            io.flush().await?;
             io.close().await?;
 
             Ok(())
