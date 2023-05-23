@@ -49,7 +49,7 @@ use libp2p_swarm::{
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -105,6 +105,8 @@ pub struct Kademlia<TStore> {
     listen_addresses: ListenAddresses,
 
     external_addresses: ExternalAddresses,
+
+    inbound_connections: HashMap<ConnectionId, PeerId>,
 
     /// See [`KademliaConfig::caching`].
     caching: KademliaCaching,
@@ -450,6 +452,7 @@ where
             connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
+            inbound_connections: Default::default(),
         }
     }
 
@@ -1934,9 +1937,12 @@ where
         ConnectionClosed {
             peer_id,
             remaining_established,
+            connection_id,
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
+        self.inbound_connections.remove(&connection_id);
+
         if remaining_established == 0 {
             for query in self.queries.iter_mut() {
                 query.on_failure(&peer_id);
@@ -1961,11 +1967,13 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.inbound_connections.insert(connection_id, peer);
+
         Ok(KademliaHandler::new_inbound(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
@@ -2415,7 +2423,17 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
+        let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
+
+        if external_addresses_changed {
+            self.queued_events.extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                peer_id: *peer_id,
+                handler: NotifyHandler::One(*conn_id),
+                event: KademliaHandlerIn::ReconfigureMode {
+                    external_addresses: self.external_addresses.iter().cloned().collect(),
+                }
+            }));
+        }
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {

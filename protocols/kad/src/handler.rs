@@ -57,8 +57,8 @@ pub struct KademliaHandler {
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
 
-    /// If false, we deny incoming requests.
-    allow_listening: bool,
+    /// In client mode, we don't accept inbound substreams.
+    mode: Mode,
 
     /// Time after which we close an idle connection.
     idle_timeout: Duration,
@@ -109,6 +109,12 @@ enum ProtocolStatus {
     /// The configured protocol has been confirmed by the remote
     /// and the confirmation reported to the `Kademlia` behaviour.
     Reported,
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+enum Mode {
+    Client,
+    Server,
 }
 
 /// State of an active outbound substream.
@@ -363,6 +369,12 @@ pub enum KademliaHandlerIn {
     /// for the query on the remote.
     Reset(KademliaRequestId),
 
+    /// Re-evaluate whether the current connection should operate in client or server mode.
+    ///
+    /// When the external addresses of a node change, we may be able to switch into server mode or
+    /// might have switch from server to client mode on existing connections.
+    ReconfigureMode { external_addresses: Vec<Multiaddr> },
+
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
@@ -472,17 +484,17 @@ impl KademliaHandler {
         remote_peer_id: PeerId,
         external_addresses: Vec<&Multiaddr>,
     ) -> Self {
-        let server_mode = match external_addresses.as_slice() {
+        let mode = match external_addresses.as_slice() {
             [] => {
                 log::debug!("Operating in client-mode on new inbound connection from peer {remote_peer_id} because we don't have any confirmed external addresses");
 
-                false
+                Mode::Client
             }
             [confirmed_external_addr] => {
                 // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
                 log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that {confirmed_external_addr} routes to {local_addr}");
 
-                true
+                Mode::Server
             }
             confirmed_external_addresses => {
                 let confirmed_external_addresses = confirmed_external_addresses
@@ -493,13 +505,13 @@ impl KademliaHandler {
 
                 log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that one of [{confirmed_external_addresses}] routes to {local_addr}");
 
-                true
+                Mode::Server
             }
         };
 
         Self::new(
             protocol_config,
-            server_mode,
+            mode,
             idle_timeout,
             ConnectedPoint::Listener {
                 local_addr,
@@ -522,7 +534,7 @@ impl KademliaHandler {
 
         Self::new(
             protocol_config,
-            false,
+            Mode::Client,
             idle_timeout,
             ConnectedPoint::Dialer {
                 address: addr,
@@ -534,7 +546,7 @@ impl KademliaHandler {
 
     fn new(
         protocol_config: KademliaProtocolConfig,
-        allow_listening: bool,
+        mode: Mode,
         idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
@@ -543,7 +555,7 @@ impl KademliaHandler {
 
         KademliaHandler {
             protocol_config,
-            allow_listening,
+            mode,
             idle_timeout,
             endpoint,
             remote_peer_id,
@@ -627,7 +639,7 @@ impl KademliaHandler {
             }
         }
 
-        debug_assert!(self.allow_listening);
+        debug_assert!(self.mode == Mode::Server);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
@@ -669,10 +681,9 @@ impl ConnectionHandler for KademliaHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.allow_listening {
-            SubstreamProtocol::new(self.protocol_config.clone(), ()).map_upgrade(Either::Left)
-        } else {
-            SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ())
+        match self.mode {
+            Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
+            Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
         }
     }
 
@@ -746,6 +757,45 @@ impl ConnectionHandler for KademliaHandler {
                 value,
             } => {
                 self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
+            }
+            KademliaHandlerIn::ReconfigureMode { external_addresses } => {
+                // Outbound connections are always in client mode.
+                let local_addr = match &self.endpoint {
+                    ConnectedPoint::Dialer { .. } => return,
+                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
+                };
+                let remote_peer_id = self.remote_peer_id;
+
+                match (external_addresses.as_slice(), self.mode) {
+                    ([], Mode::Server) => {
+                        log::debug!("Switching from server to client-mode because we no longer have a confirmed external addresses");
+
+                        self.mode = Mode::Client;
+                    }
+                    ([], Mode::Client) => {
+                        self.mode = Mode::Client;
+                    }
+                    ([confirmed_external_addr], Mode::Client) => {
+                        // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
+                        log::debug!("Switching from client to server-mode with {remote_peer_id} under the assumption that {confirmed_external_addr} routes to {local_addr}");
+
+                        self.mode = Mode::Server
+                    }
+                    // Now server-mode with multiple addresses, previously client-mode.
+                    (confirmed_external_addresses, Mode::Client) => {
+                        let confirmed_external_addresses = confirmed_external_addresses
+                            .iter()
+                            .map(|addr| addr.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
+                        log::debug!("Switching from client to server-mode with {remote_peer_id} under the assumption one of [{confirmed_external_addresses}] routes to {local_addr}");
+
+                        self.mode = Mode::Server
+                    }
+                    // Now server-mode with one or more addresses, previously server-mode.
+                    (_, Mode::Server) => self.mode = Mode::Server,
+                }
             }
         }
     }
