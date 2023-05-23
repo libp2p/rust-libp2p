@@ -2048,11 +2048,7 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let address = match endpoint {
-                    ConnectedPoint::Dialer { address, .. } => {
-                        log::debug!("Adding address {address} of {source} to routing table");
-
-                        Some(address)
-                    }
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
 
