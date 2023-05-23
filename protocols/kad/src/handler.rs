@@ -97,6 +97,7 @@ pub struct KademliaHandler {
 
 /// The states of protocol confirmation that a connection
 /// handler transitions through.
+#[derive(Copy, Clone)]
 enum ProtocolStatus {
     /// It is as yet unknown whether the remote supports the
     /// configured protocol name.
@@ -887,10 +888,19 @@ impl ConnectionHandler for KademliaHandler {
                         .iter()
                         .any(|p| self.protocol_config.protocol_names().contains(p));
 
-                    if remote_supports_our_kademlia_protocols {
-                        self.protocol_status = ProtocolStatus::Confirmed;
-                    } else {
-                        self.protocol_status = ProtocolStatus::NotSupported;
+                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
+                        (true, ProtocolStatus::Confirmed) => {},
+                        (true, _) => {
+                            log::info!("Remote {} now supports our kademlia protocol", self.remote_peer_id);
+
+                            self.protocol_status = ProtocolStatus::Confirmed;
+                        },
+                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
+                            log::info!("Remote {} no longer supports our kademlia protocol", self.remote_peer_id);
+
+                            self.protocol_status = ProtocolStatus::NotSupported;
+                        },
+                        (false, _) => {},
                     }
                 }
             }

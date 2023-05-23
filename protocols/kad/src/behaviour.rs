@@ -2048,9 +2048,14 @@ where
                 // since the remote address on an inbound connection may be specific
                 // to that connection (e.g. typically the TCP port numbers).
                 let address = match endpoint {
-                    ConnectedPoint::Dialer { address, .. } => Some(address),
+                    ConnectedPoint::Dialer { address, .. } => {
+                        log::debug!("Adding address {address} of {source} to routing table");
+
+                        Some(address)
+                    },
                     ConnectedPoint::Listener { .. } => None,
                 };
+
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
@@ -2426,6 +2431,8 @@ where
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
         if external_addresses_changed {
+            log::debug!("External addresses changed, re-configuring established connections");
+
             self.queued_events.extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
                 peer_id: *peer_id,
                 handler: NotifyHandler::One(*conn_id),
