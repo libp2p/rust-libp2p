@@ -14,6 +14,7 @@ categories = ["network-programming", "asynchronous"]
 wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
 
 [dependencies]
+futures-ticker = "0.0.2"
 asynchronous-codec = "0.6"
 base64 = "0.21.0"
 byteorder = "1.3.4"
@@ -23,7 +24,7 @@ fnv = "1.0.7"
 futures = "0.3.28"
 getrandom = "0.2.9"
 hex_fmt = "0.3.0"
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-swarm = { workspace = true }
@@ -37,7 +38,6 @@ sha2 = "0.10.0"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
 void = "1.0.2"
-wasm-timer = "0.2.5"
 
 # Metrics dependencies
 prometheus-client = "0.21.0"
