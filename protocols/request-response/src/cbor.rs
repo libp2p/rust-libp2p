@@ -21,7 +21,7 @@
 use crate::{Config, ProtocolSupport, RequestId, ResponseChannel};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm_derive::NetworkBehaviour;
+use libp2p_swarm::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub type OutEvent<Req, Resp> = crate::Event<Req, Resp>;
