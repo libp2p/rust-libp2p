@@ -28,11 +28,23 @@
 //!
 //! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
 //! it will respond to inbound ping requests and as necessary periodically send outbound
-//! ping requests on every established connection. If a configurable number of consecutive
-//! pings fail, the connection will be closed.
+//! ping requests on every established connection.
 //!
 //! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
 //! by an application, e.g. to collect statistics.
+//!
+//! # Health checks / connection management
+//!
+//! It is up to the user to implement a health-check / connection management policy based on the ping protocol.
+//!
+//! For example:
+//!
+//! - Disconnect from peers with an RTT > 200ms
+//! - Disconnect from peers which don't support the ping protocol
+//! - Disconnect from peers upon the first ping failure
+//!
+//! Users should inspect emitted [`Event`] and call APIs on [`Swarm`] such as [`Swarm::close_connection`]
+//! or [`Swarm::disconnect_peer_id`] as they see fit.
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
@@ -45,10 +57,7 @@ mod protocol;
 use handler::Handler;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
-};
+use libp2p_swarm::{behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters, Swarm, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm};
 use std::time::Duration;
 use std::{
     collections::VecDeque,
