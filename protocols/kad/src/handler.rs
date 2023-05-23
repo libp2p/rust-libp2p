@@ -487,7 +487,6 @@ impl KademliaHandler {
     /// Create a [`KademliaHandler`] for a new outbound connection.
     pub fn new_outbound(
         protocol_config: KademliaProtocolConfig,
-        allow_listening: bool,
         idle_timeout: Duration,
         local_addr: Multiaddr,
         role_override: Endpoint,
@@ -495,7 +494,7 @@ impl KademliaHandler {
     ) -> Self {
         Self::new(
             protocol_config,
-            allow_listening,
+            false,
             idle_timeout,
             ConnectedPoint::Dialer {
                 address: local_addr,

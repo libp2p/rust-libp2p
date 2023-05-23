@@ -1985,7 +1985,6 @@ where
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new_outbound(
             self.protocol_config.clone(),
-            false, // We dialed the remote, which might happen on ephemeral port. Disable listening because we cannot guarantee that the remote will be able to connect back to us on the observed address.
             self.connection_idle_timeout,
             addr.clone(),
             role_override,
