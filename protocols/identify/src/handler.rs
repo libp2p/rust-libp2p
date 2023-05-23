@@ -362,17 +362,17 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::LocalProtocolsChange(change) => {
-                let before =
-                    log::log_enabled!(Level::Debug).then(|| self.local_protocols_to_string());
+                let before = log::log_enabled!(Level::Debug)
+                    .then(|| self.local_protocols_to_string())
+                    .unwrap_or_default();
                 let protocols_changed = self.local_supported_protocols.on_protocols_change(change);
-                let after =
-                    log::log_enabled!(Level::Debug).then(|| self.local_protocols_to_string());
+                let after = log::log_enabled!(Level::Debug)
+                    .then(|| self.local_protocols_to_string())
+                    .unwrap_or_default();
 
                 if protocols_changed && self.exchanged_one_periodic_identify {
                     log::debug!(
-                        "Supported listen protocols changed from [{}] to [{}], pushing to {}",
-                        before.unwrap(),
-                        after.unwrap(),
+                        "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
                         self.remote_peer_id
                     );
 
