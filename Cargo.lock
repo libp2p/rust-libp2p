@@ -1264,18 +1264,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "log",
-]
-
-[[package]]
-name = "dcutr-quic"
-version = "0.1.0"
-dependencies = [
- "clap 4.2.7",
- "env_logger 0.10.0",
- "futures",
- "futures-timer",
- "libp2p",
  "libp2p-quic",
  "log",
 ]
@@ -4292,18 +4280,6 @@ checksum = "a5996294f19bd3aae0453a862ad728f60e6600695733dd5df01da90c54363a3c"
 
 [[package]]
 name = "relay-server-example"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "async-trait",
- "clap 4.2.7",
- "env_logger 0.10.0",
- "futures",
- "libp2p",
-]
-
-[[package]]
-name = "relay-server-example-quic"
 version = "0.1.0"
 dependencies = [
  "async-std",

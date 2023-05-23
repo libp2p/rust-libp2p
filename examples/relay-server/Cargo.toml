@@ -12,3 +12,4 @@ async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["async-std", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay"] }
+libp2p-quic = { path = "../../transports/quic", features = ["async-std"] }

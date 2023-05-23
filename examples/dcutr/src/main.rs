@@ -21,12 +21,13 @@
 use clap::Parser;
 use futures::{
     executor::{block_on, ThreadPool},
-    future::FutureExt,
+    future::{Either, FutureExt},
     stream::StreamExt,
 };
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
+        muxing::StreamMuxerBox,
         transport::{OrTransport, Transport},
         upgrade,
     },
@@ -36,6 +37,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
 };
+use libp2p_quic as quic;
 use log::info;
 use std::error::Error;
 use std::net::Ipv4Addr;
@@ -89,19 +91,40 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let (relay_transport, client) = relay::client::new(local_peer_id);
 
-    let transport = OrTransport::new(
-        relay_transport,
-        block_on(DnsConfig::system(tcp::async_io::Transport::new(
-            tcp::Config::default().port_reuse(true),
-        )))
-        .unwrap(),
-    )
-    .upgrade(upgrade::Version::V1Lazy)
-    .authenticate(
-        noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
-    )
-    .multiplex(yamux::Config::default())
-    .boxed();
+    let is_quic_relay = opts.relay_address.iter().any(|p| p == Protocol::QuicV1);
+    let transport = if is_quic_relay {
+        let relay_transport = relay_transport
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::Config::new(&local_key).unwrap())
+            .multiplex(yamux::Config::default());
+
+        OrTransport::new(
+            relay_transport,
+            block_on(DnsConfig::system(quic::async_std::Transport::new(
+                quic::Config::new(&local_key),
+            )))
+            .unwrap(),
+        )
+        .map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed()
+    } else {
+        OrTransport::new(
+            relay_transport,
+            block_on(DnsConfig::system(tcp::async_io::Transport::new(
+                tcp::Config::default().port_reuse(true),
+            )))
+            .unwrap(),
+        )
+        .upgrade(upgrade::Version::V1Lazy)
+        .authenticate(
+            noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
+        )
+        .multiplex(yamux::Config::default())
+        .boxed()
+    };
 
     #[derive(NetworkBehaviour)]
     #[behaviour(to_swarm = "Event", event_process = false)]
@@ -161,13 +184,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     .build();
 
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into())
-                .with(Protocol::Tcp(0)),
-        )
-        .unwrap();
+    let listen_addr = Multiaddr::empty().with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into());
+    let listen_addr = if is_quic_relay {
+        listen_addr.with(Protocol::Udp(0)).with(Protocol::QuicV1)
+    } else {
+        listen_addr.with(Protocol::Tcp(0))
+    };
+    swarm.listen_on(listen_addr).unwrap();
 
     // Wait to listen on all interfaces.
     block_on(async {
