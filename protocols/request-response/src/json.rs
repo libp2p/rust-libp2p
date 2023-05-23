@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Config, ProtocolSupport, RequestId, ResponseChannel};
-use libp2p_core::Multiaddr;
-use libp2p_identity::PeerId;
+use std::ops::Deref;
+use crate::{Config, ProtocolSupport};
 use libp2p_swarm::NetworkBehaviour;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -57,33 +56,17 @@ where
             inner: crate::Behaviour::new(codec::Codec::default(), protocols, cfg),
         }
     }
+}
 
-    pub fn send_request(&mut self, peer: &PeerId, request: Req) -> RequestId {
-        self.inner.send_request(peer, request)
-    }
+impl<Req, Resp> Deref for Behaviour<Req, Resp>
+    where
+        Req: Send + Clone + Serialize + DeserializeOwned,
+        Resp: Send + Clone + Serialize + DeserializeOwned,
+{
+    type Target = crate::Behaviour<codec::Codec<Req, Resp>>;
 
-    pub fn send_response(&mut self, ch: ResponseChannel<Resp>, rs: Resp) -> Result<(), Resp> {
-        self.inner.send_response(ch, rs)
-    }
-
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.inner.add_address(peer, address)
-    }
-
-    pub fn remove_address(&mut self, peer: &PeerId, address: &Multiaddr) {
-        self.inner.remove_address(peer, address)
-    }
-
-    pub fn is_connected(&self, peer: &PeerId) -> bool {
-        self.inner.is_connected(peer)
-    }
-
-    pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
-        self.inner.is_pending_outbound(peer, request_id)
-    }
-
-    pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
-        self.inner.is_pending_inbound(peer, request_id)
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
