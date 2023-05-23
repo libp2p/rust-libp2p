@@ -466,15 +466,40 @@ impl KademliaHandler {
     /// Create a [`KademliaHandler`] for a new inbound connection.
     pub fn new_inbound(
         protocol_config: KademliaProtocolConfig,
-        allow_listening: bool,
         idle_timeout: Duration,
         local_addr: Multiaddr,
         remote_addr: Multiaddr,
         remote_peer_id: PeerId,
+        external_addresses: Vec<&Multiaddr>,
     ) -> Self {
+        let server_mode = match external_addresses.as_slice() {
+            [] => {
+                log::debug!("Operating in client-mode on new inbound connection from peer {remote_peer_id} because we don't have any confirmed external addresses");
+
+                false
+            }
+            [confirmed_external_addr] => {
+                // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
+                log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that {confirmed_external_addr} routes to {local_addr}");
+
+                true
+            }
+            confirmed_external_addresses => {
+                let confirmed_external_addresses = confirmed_external_addresses
+                    .iter()
+                    .map(|addr| addr.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that one of [{confirmed_external_addresses}] routes to {local_addr}");
+
+                true
+            }
+        };
+
         Self::new(
             protocol_config,
-            allow_listening,
+            server_mode,
             idle_timeout,
             ConnectedPoint::Listener {
                 local_addr,

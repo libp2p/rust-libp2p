@@ -6,7 +6,9 @@ use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]
-async fn connection_from_client_to_server_does_not_update_routing_table() {
+async fn server_gets_added_to_routing_table_by_client() {
+    let _ = env_logger::try_init();
+
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 

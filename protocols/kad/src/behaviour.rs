@@ -1968,11 +1968,11 @@ where
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new_inbound(
             self.protocol_config.clone(),
-            true, // If somebody dialed us, they can definitely include us in their routing table.
             self.connection_idle_timeout,
             local_addr.clone(),
             remote_addr.clone(),
             peer,
+            self.external_addresses.iter().collect(),
         ))
     }
 
