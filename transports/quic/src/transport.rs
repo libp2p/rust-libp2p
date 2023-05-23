@@ -308,17 +308,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                             .0,
                     };
 
-                    if let Some(mut hole_punch) = self.hole_punching.remove(&hole_punch_key) {
-                        if let Some(sender) = hole_punch.sender.take() {
-                            sender.send(upgrade).unwrap();
-                        } else {
-                            return Poll::Ready(TransportEvent::Incoming {
-                                listener_id,
-                                upgrade,
-                                local_addr,
-                                send_back_addr,
-                            });
-                        }
+                    if let Some(sender) = self
+                        .hole_punching
+                        .remove(&hole_punch_key)
+                        .and_then(|mut h| h.sender.take())
+                    {
+                        sender.send(upgrade).unwrap();
                     } else {
                         return Poll::Ready(TransportEvent::Incoming {
                             listener_id,
