@@ -488,16 +488,19 @@ impl KademliaHandler {
     pub fn new_outbound(
         protocol_config: KademliaProtocolConfig,
         idle_timeout: Duration,
-        local_addr: Multiaddr,
+        addr: Multiaddr,
         role_override: Endpoint,
         peer: PeerId,
     ) -> Self {
+        // Outbound connections are always in client-mode because we may be using an ephemeral port for dialing and thus the observed address may not be reachable.
+        log::debug!("Operating in client-mode on new outbound connection to peer {peer} at {addr}");
+
         Self::new(
             protocol_config,
             false,
             idle_timeout,
             ConnectedPoint::Dialer {
-                address: local_addr,
+                address: addr,
                 role_override,
             },
             peer,
