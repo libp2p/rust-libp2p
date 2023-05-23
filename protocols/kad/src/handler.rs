@@ -28,7 +28,7 @@ use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
-use libp2p_core::{upgrade, ConnectedPoint};
+use libp2p_core::{upgrade, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -470,8 +470,41 @@ pub struct KademliaRequestId {
 struct UniqueConnecId(u64);
 
 impl KademliaHandler {
-    /// Create a [`KademliaHandler`] using the given configuration.
-    pub fn new(
+    /// Create a [`KademliaHandler`] for a new inbound connection.
+    pub fn new_inbound(
+        config: KademliaHandlerConfig,
+        local_addr: Multiaddr,
+        remote_addr: Multiaddr,
+        remote_peer_id: PeerId,
+    ) -> Self {
+        Self::new(
+            config,
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr: remote_addr,
+            },
+            remote_peer_id,
+        )
+    }
+
+    /// Create a [`KademliaHandler`] for a new outbound connection.
+    pub fn new_outbound(
+        config: KademliaHandlerConfig,
+        local_addr: Multiaddr,
+        role_override: Endpoint,
+        peer: PeerId,
+    ) -> Self {
+        Self::new(
+            config,
+            ConnectedPoint::Dialer {
+                address: local_addr,
+                role_override,
+            },
+            peer,
+        )
+    }
+
+    fn new(
         config: KademliaHandlerConfig,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,

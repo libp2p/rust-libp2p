@@ -1969,16 +1969,14 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(KademliaHandler::new(
+        Ok(KademliaHandler::new_inbound(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
                 allow_listening: true, // If somebody dialed us, they can definitely include us in their routing table.
                 idle_timeout: self.connection_idle_timeout,
             },
-            ConnectedPoint::Listener {
-                local_addr: local_addr.clone(),
-                send_back_addr: remote_addr.clone(),
-            },
+            local_addr.clone(),
+            remote_addr.clone(),
             peer,
         ))
     }
@@ -1990,16 +1988,14 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(KademliaHandler::new(
+        Ok(KademliaHandler::new_outbound(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
                 allow_listening: false, // We dialed the remote, which might happen on ephemeral port. Disable listening because we cannot guarantee that the remote will be able to connect back to us on the observed address.
                 idle_timeout: self.connection_idle_timeout,
             },
-            ConnectedPoint::Dialer {
-                address: addr.clone(),
-                role_override,
-            },
+            addr.clone(),
+            role_override,
             peer,
         ))
     }
