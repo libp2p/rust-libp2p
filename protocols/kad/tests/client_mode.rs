@@ -66,6 +66,48 @@ async fn two_servers_add_each_other_to_routing_table() {
     }
 }
 
+#[async_std::test]
+async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
+    let _ = env_logger::try_init();
+
+    let mut client = Swarm::new_ephemeral(MyBehaviour::new);
+    let mut server = Swarm::new_ephemeral(MyBehaviour::new);
+    let server_peer_id = *server.local_peer_id();
+
+    let (memory_addr, _) = server.listen().await;
+
+    // Remove memory address to simulate a server that doesn't know its external address.
+    server.remove_external_address(&memory_addr);
+    client.dial(memory_addr.clone()).unwrap();
+
+    use MyBehaviourEvent::*;
+
+    // Do the usual identify send/receive dance.
+    match libp2p_swarm_test::drive(&mut client, &mut server).await {
+        (
+            [Identify(_), Identify(_)],
+            [Identify(_), Identify(_)],
+        ) => {}
+        other => panic!("Unexpected events: {other:?}"),
+    }
+
+    use KademliaEvent::*;
+
+    // Server learns its external address (this could be through AutoNAT or some other mechanism).
+    server.add_external_address(memory_addr);
+
+    // The server reconfigured its connection to the client to be in server mode, pushes that information to client which as a result updates its routing table.
+    match libp2p_swarm_test::drive(&mut client, &mut server).await {
+        (
+            [Identify(identify::Event::Received { .. }), Kad(RoutingUpdated { peer: peer1, .. })],
+            [Identify(identify::Event::Pushed { .. })],
+        ) => {
+            assert_eq!(peer1, server_peer_id);
+        }
+        other => panic!("Unexpected events: {other:?}"),
+    }
+}
+
 #[derive(libp2p_swarm::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct MyBehaviour {
