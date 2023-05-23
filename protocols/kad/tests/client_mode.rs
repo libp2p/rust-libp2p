@@ -86,10 +86,7 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
     // Do the usual identify send/receive dance.
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
-        (
-            [Identify(_), Identify(_)],
-            [Identify(_), Identify(_)],
-        ) => {}
+        ([Identify(_), Identify(_)], [Identify(_), Identify(_)]) => {}
         other => panic!("Unexpected events: {other:?}"),
     }
 

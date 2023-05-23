@@ -2052,7 +2052,7 @@ where
                         log::debug!("Adding address {address} of {source} to routing table");
 
                         Some(address)
-                    },
+                    }
                     ConnectedPoint::Listener { .. } => None,
                 };
 
@@ -2433,13 +2433,16 @@ where
         if external_addresses_changed {
             log::debug!("External addresses changed, re-configuring established connections");
 
-            self.queued_events.extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
-                peer_id: *peer_id,
-                handler: NotifyHandler::One(*conn_id),
-                event: KademliaHandlerIn::ReconfigureMode {
-                    external_addresses: self.external_addresses.iter().cloned().collect(),
-                }
-            }));
+            self.queued_events
+                .extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| {
+                    ToSwarm::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*conn_id),
+                        event: KademliaHandlerIn::ReconfigureMode {
+                            external_addresses: self.external_addresses.iter().cloned().collect(),
+                        },
+                    }
+                }));
         }
 
         match event {
