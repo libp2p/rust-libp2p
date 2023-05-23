@@ -2426,8 +2426,14 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        if external_addresses_changed {
-            log::debug!("External addresses changed, re-configuring established connections");
+        if external_addresses_changed && !self.inbound_connections.is_empty() {
+            let num_connections = self.inbound_connections.len();
+
+            log::debug!(
+                "External addresses changed, re-configuring {} inbound connection{}",
+                num_connections,
+                if num_connections > 1 { "s" } else { "" }
+            );
 
             self.queued_events
                 .extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| {
