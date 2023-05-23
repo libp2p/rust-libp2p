@@ -77,7 +77,9 @@ pub use self::{
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,
-    transfer::{read_to_end, read_length_prefixed, read_varint, write_length_prefixed, write_varint},
+    transfer::{
+        read_length_prefixed, read_to_end, read_varint, write_length_prefixed, write_varint,
+    },
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
