@@ -41,58 +41,21 @@ use std::{
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub enum ProbeState {
-    #[default]
-    Start,
     Probing(Duration),
     Finished(Duration),
 }
 
+impl Default for ProbeState {
+    fn default() -> Self {
+        ProbeState::Probing(INITIAL_TIMEOUT_INTERVAL)
+    }
+}
+
 impl ProbeState {
-    /// Returns `true` if the probe state is [`Probing`].
-    ///
-    /// [`Probing`]: ProbeState::Probing
-    #[must_use]
-    pub fn is_probing(&self) -> bool {
-        matches!(self, Self::Probing(..))
-    }
-
-    /// Update the internal state
-    fn update(&mut self, continue_probing: bool, maximum_interval: &Duration) {
-        *self = match *self {
-            ProbeState::Start => ProbeState::Probing(INITIAL_TIMEOUT_INTERVAL),
-            ProbeState::Probing(initial_interval) => {
-                self.on_probing(initial_interval, continue_probing, maximum_interval)
-            }
-            ProbeState::Finished(query_interval) => ProbeState::Finished(query_interval),
-        };
-    }
-
-    fn on_probing(
-        &mut self,
-        initial_interval: Duration,
-        continue_probing: bool,
-        maximum_interval: &Duration,
-    ) -> Self {
-        // Check if a peer has been discovered
-        if continue_probing {
-            // Increase the intial interval if we are still probing for a peer
-            // Stop to probe when the initial interval reach the query interval
-            let initial_interval = initial_interval * 2;
-            if initial_interval >= *maximum_interval {
-                ProbeState::Finished(*maximum_interval)
-            } else {
-                ProbeState::Probing(initial_interval)
-            }
-        } else {
-            ProbeState::Finished(*maximum_interval)
-        }
-    }
-
     fn interval(&self) -> &Duration {
         match self {
-            ProbeState::Start => &INITIAL_TIMEOUT_INTERVAL,
             ProbeState::Probing(query_interval) => query_interval,
             ProbeState::Finished(query_interval) => query_interval,
         }
@@ -204,6 +167,7 @@ where
     }
 
     pub(crate) fn reset_timer(&mut self) {
+        log::trace!("reset timer on {:#?} {:#?}", self.addr, self.probe_state);
         let interval = *self.probe_state.interval();
         self.timeout = T::interval(interval);
     }
@@ -222,16 +186,25 @@ where
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
                 log::trace!("sending query on iface {}", self.addr);
                 self.send_buffer.push_back(build_query());
+                log::trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
 
-                let is_probing = self.probe_state.is_probing();
-                self.probe_state
-                    .update(self.discovered.is_empty(), &self.query_interval);
+                let continue_probing = self.discovered.is_empty();
 
-                // Reset if the previous state was Probing or if the state has been switched to Finished
-                // We do not need to reset the timer after a tick in Finished state, the reset should occur reset when the interface receive a response from a peer.
-                if is_probing {
-                    self.reset_timer();
+                if continue_probing {
+                    // Stop to probe when the initial interval reach the query interval
+                    if let ProbeState::Probing(interval) = self.probe_state {
+                        let interval = interval * 2;
+                        self.probe_state = if interval >= self.query_interval {
+                            ProbeState::Finished(self.query_interval)
+                        } else {
+                            ProbeState::Probing(interval)
+                        };
+                    }
+                } else {
+                    self.probe_state = ProbeState::Finished(self.query_interval);
                 }
+
+                self.reset_timer();
             }
 
             // 2nd priority: Keep local buffers small: Send packets to remote.
@@ -292,7 +265,7 @@ where
 
                     // Stop probing when we have a valid response
                     if !self.discovered.is_empty() {
-                        self.probe_state.update(true, &self.query_interval);
+                        self.probe_state = ProbeState::Finished(self.query_interval);
                         self.reset_timer();
                     }
                     continue;
