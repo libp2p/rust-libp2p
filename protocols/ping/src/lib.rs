@@ -74,6 +74,8 @@ pub struct Behaviour {
 pub struct Event {
     /// The peer ID of the remote.
     pub peer: PeerId,
+    /// The connection the ping was executed on.
+    pub connection: ConnectionId,
     /// The result of an inbound or outbound ping.
     pub result: Result<Duration, Failure>,
 }
@@ -121,10 +123,14 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
-        _: ConnectionId,
+        connection: ConnectionId,
         result: THandlerOutEvent<Self>,
     ) {
-        self.events.push_front(Event { peer, result })
+        self.events.push_front(Event {
+            peer,
+            connection,
+            result,
+        })
     }
 
     fn poll(
