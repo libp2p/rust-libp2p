@@ -889,7 +889,7 @@ impl ConnectionHandler for KademliaHandler {
                         .any(|p| self.protocol_config.protocol_names().contains(p));
 
                     match (remote_supports_our_kademlia_protocols, self.protocol_status) {
-                        (true, ProtocolStatus::Confirmed) => {},
+                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {},
                         (true, _) => {
                             log::info!("Remote {} now supports our kademlia protocol", self.remote_peer_id);
 
