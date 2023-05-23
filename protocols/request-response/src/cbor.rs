@@ -18,11 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{Config, ProtocolSupport};
-use libp2p_swarm::NetworkBehaviour;
-use serde::{de::DeserializeOwned, Serialize};
-use std::ops::Deref;
-
 /// A request-response behaviour using [`serde_cbor`] for serializing and deserializing the messages.
 ///
 /// # Example
@@ -48,10 +43,10 @@ use std::ops::Deref;
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
+    use crate::codec::read_to_end;
     use async_trait::async_trait;
     use futures::prelude::*;
     use futures::{AsyncRead, AsyncWrite};
-    use libp2p_core::upgrade::read_to_end;
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
     use std::{io, marker::PhantomData};
