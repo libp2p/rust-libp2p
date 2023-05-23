@@ -237,18 +237,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         // which listener to use to send packets? go-libp2p uses routing table with random port
         let endpoint_channel = match listeners.len() {
             0 => {
-                // No listener. Get or create an explicit dialer.
-                let socket_family = socket_addr.ip().into();
-                let dialer = match self.dialer.entry(socket_family) {
-                    Entry::Occupied(occupied) => occupied.into_mut(),
-                    Entry::Vacant(vacant) => {
-                        if let Some(waker) = self.waker.take() {
-                            waker.wake();
-                        }
-                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
-                    }
-                };
-                dialer.endpoint_channel.clone()
+                return Err(TransportError::Other(
+                    Error::NoActiveListenerForDialAsListener,
+                ));
             }
             1 => listeners[0].endpoint_channel.clone(),
             _ => {

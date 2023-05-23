@@ -94,6 +94,10 @@ pub enum Error {
     /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out.")]
     HandshakeTimedOut,
+
+    /// Error when `Transport::dial_as_listener` is called without an active listener.
+    #[error("Tried to dial as listener without an active listener.")]
+    NoActiveListenerForDialAsListener,
 }
 
 /// Dialing a remote peer failed.
