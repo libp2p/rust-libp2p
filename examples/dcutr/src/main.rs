@@ -267,7 +267,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } => {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
-                SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                     info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
                 }
                 _ => {}

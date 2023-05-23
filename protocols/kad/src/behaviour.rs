@@ -103,7 +103,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn<QueryId>>>,
+    queued_events: VecDeque<ToSwarm<KademliaEvent, KademliaHandlerIn>>,
 
     listen_addresses: ListenAddresses,
 
@@ -1959,7 +1959,7 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandler<QueryId>;
+    type ConnectionHandler = KademliaHandler;
     type ToSwarm = KademliaEvent;
 
     fn handle_established_inbound_connection(
@@ -2089,9 +2089,9 @@ where
 
             KademliaHandlerEvent::FindNodeRes {
                 closer_peers,
-                user_data,
+                query_id,
             } => {
-                self.discovered(&user_data, &source, closer_peers.iter());
+                self.discovered(&query_id, &source, closer_peers.iter());
             }
 
             KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
@@ -2121,11 +2121,11 @@ where
             KademliaHandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
-                user_data,
+                query_id,
             } => {
                 let peers = closer_peers.iter().chain(provider_peers.iter());
-                self.discovered(&user_data, &source, peers);
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                self.discovered(&query_id, &source, peers);
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     let stats = query.stats().clone();
                     if let QueryInfo::GetProviders {
                         ref key,
@@ -2139,7 +2139,7 @@ where
 
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             KademliaEvent::OutboundQueryProgressed {
-                                id: user_data,
+                                id: query_id,
                                 result: QueryResult::GetProviders(Ok(
                                     GetProvidersOk::FoundProviders {
                                         key: key.clone(),
@@ -2155,16 +2155,16 @@ where
                 }
             }
 
-            KademliaHandlerEvent::QueryError { user_data, error } => {
+            KademliaHandlerEvent::QueryError { query_id, error } => {
                 log::debug!(
                     "Request to {:?} in query {:?} failed with {:?}",
                     source,
-                    user_data,
+                    query_id,
                     error
                 );
                 // If the query to which the error relates is still active,
                 // signal the failure w.r.t. `source`.
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_failure(&source)
                 }
             }
@@ -2217,9 +2217,9 @@ where
             KademliaHandlerEvent::GetRecordRes {
                 record,
                 closer_peers,
-                user_data,
+                query_id,
             } => {
-                if let Some(query) = self.queries.get_mut(&user_data) {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     let stats = query.stats().clone();
                     if let QueryInfo::GetRecord {
                         key,
@@ -2237,7 +2237,7 @@ where
 
                             self.queued_events.push_back(ToSwarm::GenerateEvent(
                                 KademliaEvent::OutboundQueryProgressed {
-                                    id: user_data,
+                                    id: query_id,
                                     result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(
                                         record,
                                     ))),
@@ -2266,15 +2266,15 @@ where
                     }
                 }
 
-                self.discovered(&user_data, &source, closer_peers.iter());
+                self.discovered(&query_id, &source, closer_peers.iter());
             }
 
             KademliaHandlerEvent::PutRecord { record, request_id } => {
                 self.record_received(source, connection, request_id, record);
             }
 
-            KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
-                if let Some(query) = self.queries.get_mut(&user_data) {
+            KademliaHandlerEvent::PutRecordRes { query_id, .. } => {
+                if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
                         phase: PutRecordPhase::PutRecord { success, .. },
@@ -2292,7 +2292,7 @@ where
                                 debug!(
                                     "PutRecord query ({:?}) reached quorum ({}/{}) with response \
                                      from peer {} but could not yet finish.",
-                                    user_data,
+                                    query_id,
                                     peers.len(),
                                     quorum,
                                     source,
@@ -2439,13 +2439,14 @@ where
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
             FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::NewExternalAddrCandidate(_)
             | FromSwarm::NewListenAddr(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerClosed(_)
             | FromSwarm::ListenerError(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }
@@ -2915,7 +2916,7 @@ struct QueryInner {
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn<QueryId>); K_VALUE.get()]>,
+    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn); K_VALUE.get()]>,
 }
 
 impl QueryInner {
@@ -3027,24 +3028,24 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn<QueryId> {
+    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn {
         match &self {
             QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
                 key: peer.to_bytes(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::GetProviders { key, .. } => KademliaHandlerIn::GetProvidersReq {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::AddProvider { key, phase, .. } => match phase {
                 AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
                 AddProviderPhase::AddProvider {
                     provider_id,
@@ -3061,16 +3062,16 @@ impl QueryInfo {
             },
             QueryInfo::GetRecord { key, .. } => KademliaHandlerIn::GetRecord {
                 key: key.clone(),
-                user_data: query_id,
+                query_id,
             },
             QueryInfo::PutRecord { record, phase, .. } => match phase {
                 PutRecordPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
                     key: record.key.to_vec(),
-                    user_data: query_id,
+                    query_id,
                 },
                 PutRecordPhase::PutRecord { .. } => KademliaHandlerIn::PutRecord {
                     record: record.clone(),
-                    user_data: query_id,
+                    query_id,
                 },
             },
         }

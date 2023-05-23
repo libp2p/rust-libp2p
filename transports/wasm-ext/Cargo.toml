@@ -15,7 +15,7 @@ futures = "0.3.28"
 js-sys = "0.3.62"
 libp2p-core = { workspace = true }
 parity-send-wrapper = "0.1.0"
-wasm-bindgen = "0.2.42"
+wasm-bindgen = "0.2.86"
 wasm-bindgen-futures = "0.4.35"
 
 [features]

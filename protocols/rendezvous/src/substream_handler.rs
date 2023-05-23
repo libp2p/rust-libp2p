@@ -468,32 +468,28 @@ where
 
         match poll_substreams(&mut self.inbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundEvent {
-                    id,
-                    message,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::InboundEvent { id, message },
+                ))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundError {
-                    id,
-                    error,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::InboundError { id, error },
+                ))
             }
             Poll::Pending => {}
         }
 
         match poll_substreams(&mut self.outbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundEvent {
-                    id,
-                    message,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::OutboundEvent { id, message },
+                ))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundError {
-                    id,
-                    error,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::OutboundError { id, error },
+                ))
             }
             Poll::Pending => {}
         }
