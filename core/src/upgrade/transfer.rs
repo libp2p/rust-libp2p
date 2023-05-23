@@ -20,8 +20,8 @@
 
 //! Contains some helper futures for creating upgrades.
 
-use std::cmp::min;
 use futures::prelude::*;
+use std::cmp::min;
 use std::io;
 
 // TODO: these methods could be on an Ext trait to AsyncWrite
