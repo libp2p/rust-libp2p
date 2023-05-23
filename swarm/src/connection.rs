@@ -425,12 +425,17 @@ where
             }
 
             let new_protocols = gather_supported_protocols(handler);
+            let changes = ProtocolsChange::from_full_sets(supported_protocols, &new_protocols);
 
-            for change in ProtocolsChange::from_full_sets(supported_protocols, &new_protocols) {
-                handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+            if !changes.is_empty() {
+                for change in changes {
+                    handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(change));
+                }
+
+                *supported_protocols = new_protocols;
+
+                continue; // Go back to the top, handler can potentially make progress again.
             }
-
-            *supported_protocols = new_protocols;
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
