@@ -23,10 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{
-    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
-    KademliaRequestId,
-};
+use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
@@ -1970,11 +1967,9 @@ where
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new_inbound(
-            KademliaHandlerConfig {
-                protocol_config: self.protocol_config.clone(),
-                allow_listening: true, // If somebody dialed us, they can definitely include us in their routing table.
-                idle_timeout: self.connection_idle_timeout,
-            },
+            self.protocol_config.clone(),
+            true, // If somebody dialed us, they can definitely include us in their routing table.
+            self.connection_idle_timeout,
             local_addr.clone(),
             remote_addr.clone(),
             peer,
@@ -1989,11 +1984,9 @@ where
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new_outbound(
-            KademliaHandlerConfig {
-                protocol_config: self.protocol_config.clone(),
-                allow_listening: false, // We dialed the remote, which might happen on ephemeral port. Disable listening because we cannot guarantee that the remote will be able to connect back to us on the observed address.
-                idle_timeout: self.connection_idle_timeout,
-            },
+            self.protocol_config.clone(),
+            false, // We dialed the remote, which might happen on ephemeral port. Disable listening because we cannot guarantee that the remote will be able to connect back to us on the observed address.
+            self.connection_idle_timeout,
             addr.clone(),
             role_override,
             peer,

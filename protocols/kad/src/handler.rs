@@ -54,8 +54,14 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 ///
 /// It also handles requests made by the remote.
 pub struct KademliaHandler {
-    /// Configuration for the Kademlia protocol.
-    config: KademliaHandlerConfig,
+    /// Configuration of the wire protocol.
+    protocol_config: KademliaProtocolConfig,
+
+    /// If false, we deny incoming requests.
+    allow_listening: bool,
+
+    /// Time after which we close an idle connection.
+    idle_timeout: Duration,
 
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
@@ -103,19 +109,6 @@ enum ProtocolStatus {
     /// The configured protocol has been confirmed by the remote
     /// and the confirmation reported to the `Kademlia` behaviour.
     Reported,
-}
-
-/// Configuration of a [`KademliaHandler`].
-#[derive(Debug, Clone)]
-pub struct KademliaHandlerConfig {
-    /// Configuration of the wire protocol.
-    pub protocol_config: KademliaProtocolConfig,
-
-    /// If false, we deny incoming requests.
-    pub allow_listening: bool,
-
-    /// Time after which we close an idle connection.
-    pub idle_timeout: Duration,
 }
 
 /// State of an active outbound substream.
@@ -472,13 +465,17 @@ struct UniqueConnecId(u64);
 impl KademliaHandler {
     /// Create a [`KademliaHandler`] for a new inbound connection.
     pub fn new_inbound(
-        config: KademliaHandlerConfig,
+        protocol_config: KademliaProtocolConfig,
+        allow_listening: bool,
+        idle_timeout: Duration,
         local_addr: Multiaddr,
         remote_addr: Multiaddr,
         remote_peer_id: PeerId,
     ) -> Self {
         Self::new(
-            config,
+            protocol_config,
+            allow_listening,
+            idle_timeout,
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr: remote_addr,
@@ -489,13 +486,17 @@ impl KademliaHandler {
 
     /// Create a [`KademliaHandler`] for a new outbound connection.
     pub fn new_outbound(
-        config: KademliaHandlerConfig,
+        protocol_config: KademliaProtocolConfig,
+        allow_listening: bool,
+        idle_timeout: Duration,
         local_addr: Multiaddr,
         role_override: Endpoint,
         peer: PeerId,
     ) -> Self {
         Self::new(
-            config,
+            protocol_config,
+            allow_listening,
+            idle_timeout,
             ConnectedPoint::Dialer {
                 address: local_addr,
                 role_override,
@@ -505,14 +506,18 @@ impl KademliaHandler {
     }
 
     fn new(
-        config: KademliaHandlerConfig,
+        protocol_config: KademliaProtocolConfig,
+        allow_listening: bool,
+        idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
     ) -> Self {
-        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
+        let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
 
         KademliaHandler {
-            config,
+            protocol_config,
+            allow_listening,
+            idle_timeout,
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
@@ -595,7 +600,7 @@ impl KademliaHandler {
             }
         }
 
-        debug_assert!(self.config.allow_listening);
+        debug_assert!(self.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
@@ -637,9 +642,8 @@ impl ConnectionHandler for KademliaHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                .map_upgrade(Either::Left)
+        if self.allow_listening {
+            SubstreamProtocol::new(self.protocol_config.clone(), ()).map_upgrade(Either::Left)
         } else {
             SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ())
         }
@@ -758,7 +762,7 @@ impl ConnectionHandler for KademliaHandler {
         {
             self.num_requested_outbound_streams += 1;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(self.config.protocol_config.clone(), ()),
+                protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
             });
         }
 
@@ -767,7 +771,7 @@ impl ConnectionHandler for KademliaHandler {
             // No open streams. Preserve the existing idle timeout.
             (true, k @ KeepAlive::Until(_)) => k,
             // No open streams. Set idle timeout.
-            (true, _) => KeepAlive::Until(Instant::now() + self.config.idle_timeout),
+            (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
             // Keep alive for open streams.
             (false, _) => KeepAlive::Yes,
         };
@@ -804,7 +808,7 @@ impl ConnectionHandler for KademliaHandler {
                     let remote_supports_our_kademlia_protocols = self
                         .remote_supported_protocols
                         .iter()
-                        .any(|p| self.config.protocol_config.protocol_names().contains(p));
+                        .any(|p| self.protocol_config.protocol_names().contains(p));
 
                     if remote_supports_our_kademlia_protocols {
                         self.protocol_status = ProtocolStatus::Confirmed;
@@ -829,16 +833,6 @@ impl KademliaHandler {
         }
 
         debug_assert!(false, "Cannot find inbound substream for {request_id:?}")
-    }
-}
-
-impl Default for KademliaHandlerConfig {
-    fn default() -> Self {
-        KademliaHandlerConfig {
-            protocol_config: Default::default(),
-            allow_listening: true,
-            idle_timeout: Duration::from_secs(10),
-        }
     }
 }
 
