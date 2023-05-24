@@ -66,15 +66,6 @@ static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
-    /// A "dummy" [`ConnectionId`].
-    ///
-    /// Really, you should not use this, not even for testing but it is here if you need it.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Don't use this, it will be removed at a later stage again."
-    )]
-    pub const DUMMY: ConnectionId = ConnectionId(0);
-
     /// Creates an _unchecked_ [`ConnectionId`].
     ///
     /// [`Swarm`](crate::Swarm) enforces that [`ConnectionId`]s are unique and not reused.

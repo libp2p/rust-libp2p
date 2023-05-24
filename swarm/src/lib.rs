@@ -132,7 +132,7 @@ use connection::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 use dial_opts::{DialOpts, PeerCondition};
-use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
+use futures::{prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
@@ -164,7 +164,6 @@ type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::ToSwarm;
 
 /// [`ConnectionHandler`] of the [`NetworkBehaviour`] for all the protocols the [`NetworkBehaviour`]
 /// supports.
-#[allow(deprecated)]
 pub type THandler<TBehaviour> = <TBehaviour as NetworkBehaviour>::ConnectionHandler;
 
 /// Custom event that can be received by the [`ConnectionHandler`] of the
@@ -352,121 +351,10 @@ where
 
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
 
-#[allow(deprecated)]
 impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Builds a new `Swarm` with a provided executor.
-    #[deprecated(note = "Use `SwarmBuilder::with_executor` instead.")]
-    pub fn with_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-        executor: impl Executor + Send + 'static,
-    ) -> Self {
-        SwarmBuilder::with_executor(transport, behaviour, local_peer_id, executor).build()
-    }
-
-    /// Builds a new `Swarm` with a tokio executor.
-    #[cfg(all(
-        feature = "tokio",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    #[deprecated(note = "Use `SwarmBuilder::with_tokio_executor` instead.")]
-    pub fn with_tokio_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_executor(
-            transport,
-            behaviour,
-            local_peer_id,
-            crate::executor::TokioExecutor,
-        )
-    }
-
-    /// Builds a new `Swarm` with an async-std executor.
-    #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
-    ))]
-    #[deprecated(note = "Use `SwarmBuilder::with_async_std_executor` instead.")]
-    pub fn with_async_std_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_executor(
-            transport,
-            behaviour,
-            local_peer_id,
-            crate::executor::AsyncStdExecutor,
-        )
-    }
-
-    /// Builds a new `Swarm` with a threadpool executor.
-    #[deprecated(
-        note = "The `futures::executor::ThreadPool` executor is deprecated. See https://github.com/libp2p/rust-libp2p/issues/3107."
-    )]
-    pub fn with_threadpool_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        let builder = match ThreadPoolBuilder::new()
-            .name_prefix("libp2p-swarm-task-")
-            .create()
-        {
-            Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
-            Err(err) => {
-                log::warn!("Failed to create executor thread pool: {:?}", err);
-                SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
-            }
-        };
-        builder.build()
-    }
-
-    /// Builds a new `Swarm` with a wasm executor.
-    /// Background tasks will be executed by the browser on the next micro-tick.
-    ///
-    /// Spawning a task is similar too:
-    /// ```typescript
-    /// function spawn(task: () => Promise<void>) {
-    ///     task()
-    /// }
-    /// ```
-    #[cfg(feature = "wasm-bindgen")]
-    #[deprecated(note = "Use `SwarmBuilder::with_wasm_executor` instead.")]
-    pub fn with_wasm_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_executor(
-            transport,
-            behaviour,
-            local_peer_id,
-            crate::executor::WasmBindgenExecutor,
-        )
-    }
-
-    /// Builds a new `Swarm` without an executor, instead using the current task.
-    ///
-    /// ## ⚠️  Performance warning
-    /// All connections will be polled on the current task, thus quite bad performance
-    /// characteristics should be expected. Whenever possible use an executor and
-    /// [`Swarm::with_executor`].
-    #[deprecated(note = "Use `SwarmBuilder::without_executor` instead.")]
-    pub fn without_executor(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build()
-    }
-
     /// Returns information about the connections underlying the [`Swarm`].
     pub fn network_info(&self) -> NetworkInfo {
         let num_peers = self.pool.num_peers();
@@ -1250,9 +1138,7 @@ where
                 None => {
                     let behaviour_poll = {
                         let mut parameters = SwarmPollParameters {
-                            local_peer_id: &this.local_peer_id,
                             supported_protocols: &this.supported_protocols,
-                            listened_addrs: this.listened_addrs.values().flatten().collect(),
                         };
                         this.behaviour.poll(cx, &mut parameters)
                     };
@@ -1417,25 +1303,14 @@ where
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
 pub struct SwarmPollParameters<'a> {
-    local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
-    listened_addrs: Vec<&'a Multiaddr>,
 }
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
     type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
-    type ListenedAddressesIter = std::iter::Cloned<std::vec::IntoIter<&'a Multiaddr>>;
 
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
         self.supported_protocols.iter().cloned()
-    }
-
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        self.listened_addrs.clone().into_iter().cloned()
-    }
-
-    fn local_peer_id(&self) -> &PeerId {
-        self.local_peer_id
     }
 }
 
