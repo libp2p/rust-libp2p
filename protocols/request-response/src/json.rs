@@ -43,7 +43,6 @@
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
-    use crate::codec::read_to_end;
     use async_trait::async_trait;
     use futures::prelude::*;
     use futures::{AsyncRead, AsyncWrite};
@@ -52,9 +51,9 @@ mod codec {
     use std::{io, marker::PhantomData};
 
     /// Max request size in bytes
-    const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
+    const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
     /// Max response size in bytes
-    const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+    const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
     pub struct Codec<Req, Resp> {
         phantom: PhantomData<(Req, Resp)>,
@@ -88,7 +87,9 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_to_end(io, REQUEST_SIZE_MAXIMUM).await?;
+            let mut vec = Vec::new();
+
+            io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }
@@ -97,7 +98,9 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_to_end(io, RESPONSE_SIZE_MAXIMUM).await?;
+            let mut vec = Vec::new();
+
+            io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
             Ok(serde_json::from_slice(vec.as_slice())?)
         }
@@ -114,7 +117,6 @@ mod codec {
             let data = serde_json::to_vec(&req)?;
 
             io.write_all(data.as_ref()).await?;
-            io.flush().await?;
             io.close().await?;
 
             Ok(())
@@ -131,7 +133,6 @@ mod codec {
         {
             let data = serde_json::to_vec(&resp)?;
             io.write_all(data.as_ref()).await?;
-            io.flush().await?;
             io.close().await?;
 
             Ok(())
@@ -154,7 +155,7 @@ mod tests {
         let expected_response = TestResponse {
             payload: "test_payload".to_string(),
         };
-        let protocol = StreamProtocol::new("/test_cbor/1");
+        let protocol = StreamProtocol::new("/test_json/1");
         let mut codec: super::codec::Codec<TestRequest, TestResponse> =
             super::codec::Codec::default();
 

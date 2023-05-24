@@ -43,7 +43,6 @@
 pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
-    use crate::codec::read_to_end;
     use async_trait::async_trait;
     use futures::prelude::*;
     use futures::{AsyncRead, AsyncWrite};
@@ -52,9 +51,9 @@ mod codec {
     use std::{io, marker::PhantomData};
 
     /// Max request size in bytes
-    const REQUEST_SIZE_MAXIMUM: usize = 1024 * 1024;
+    const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
     /// Max response size in bytes
-    const RESPONSE_SIZE_MAXIMUM: usize = 10 * 1024 * 1024;
+    const RESPONSE_SIZE_MAXIMUM: u64 = 10 * 1024 * 1024;
 
     pub struct Codec<Req, Resp> {
         phantom: PhantomData<(Req, Resp)>,
@@ -88,7 +87,9 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_to_end(io, REQUEST_SIZE_MAXIMUM).await?;
+            let mut vec = Vec::new();
+
+            io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
             serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
         }
@@ -97,7 +98,9 @@ mod codec {
         where
             T: AsyncRead + Unpin + Send,
         {
-            let vec = read_to_end(io, RESPONSE_SIZE_MAXIMUM).await?;
+            let mut vec = Vec::new();
+
+            io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
             serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
         }
@@ -113,7 +116,6 @@ mod codec {
         {
             let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
             io.write_all(data.as_ref()).await?;
-            io.flush().await?;
             io.close().await?;
 
             Ok(())
@@ -130,7 +132,6 @@ mod codec {
         {
             let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
             io.write_all(data.as_ref()).await?;
-            io.flush().await?;
             io.close().await?;
 
             Ok(())

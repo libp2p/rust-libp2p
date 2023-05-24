@@ -20,7 +20,6 @@
 
 use async_trait::async_trait;
 use futures::prelude::*;
-use std::cmp::min;
 use std::io;
 
 /// A `Codec` defines the request and response types
@@ -76,36 +75,4 @@ pub trait Codec {
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send;
-}
-
-const DEFAULT_READ_STEP_SIZE: u64 = 1024;
-
-/// Reads a message from the given socket.
-///
-/// The `max_size` parameter is the maximum size in bytes of the message that we accept. This is
-/// necessary in order to avoid DoS attacks where the remote sends us a message of several
-/// gigabytes.
-pub(crate) async fn read_to_end(
-    socket: &mut (impl AsyncRead + Unpin),
-    max_size: usize,
-) -> io::Result<Vec<u8>> {
-    let step_size = min(DEFAULT_READ_STEP_SIZE, u64::try_from(max_size).unwrap());
-    let mut res = Vec::with_capacity(usize::try_from(step_size).unwrap());
-
-    loop {
-        let len = res.len();
-        if len > max_size {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Received data size ({len} bytes) exceeds maximum ({max_size} bytes)"),
-            ));
-        }
-
-        let num_bytes = socket.take(step_size).read_to_end(&mut res).await?;
-        if num_bytes == 0 {
-            break;
-        }
-    }
-
-    Ok(res)
 }
