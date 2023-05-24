@@ -59,6 +59,7 @@
 
 mod config;
 mod connection;
+mod hole_punching;
 mod provider;
 mod transport;
 

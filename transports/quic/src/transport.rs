@@ -19,9 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{Config, QuinnConfig};
+use crate::hole_punching::*;
 use crate::provider::Provider;
 use crate::{ConnectError, Connecting, Connection, Error};
 
+use futures::channel::oneshot;
 use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::StreamExt;
@@ -40,7 +42,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::sync::Arc;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -69,6 +70,8 @@ pub struct GenTransport<P: Provider> {
     support_draft_29: bool,
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
+    /// Hole punching attempts
+    hole_punch_map: HolePunchMap,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, quinn::Endpoint>,
     /// Waker to poll the transport again when a new dialer or listener is added.
@@ -83,6 +86,7 @@ impl<P: Provider> GenTransport<P> {
         let quinn_config = config.into();
         Self {
             listeners: SelectAll::new(),
+            hole_punch_map: Default::default(),
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
@@ -100,16 +104,24 @@ impl<P: Provider> GenTransport<P> {
         match P::runtime() {
             #[cfg(feature = "tokio")]
             Runtime::Tokio => {
-                let runtime = Arc::new(quinn::TokioRuntime);
-                let socket = std::net::UdpSocket::bind(socket_addr)?;
+                let runtime = std::sync::Arc::new(quinn::TokioRuntime);
+                let domain = socket2::Domain::for_address(socket_addr);
+                let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
+                socket.set_reuse_port(true)?;
+                socket.bind(&socket_addr.into())?;
+                let socket = socket.into();
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
                 Ok(endpoint)
             }
             #[cfg(feature = "async-std")]
             Runtime::AsyncStd => {
-                let runtime = Arc::new(quinn::AsyncStdRuntime);
-                let socket = std::net::UdpSocket::bind(socket_addr)?;
+                let runtime = std::sync::Arc::new(quinn::AsyncStdRuntime);
+                let domain = socket2::Domain::for_address(socket_addr);
+                let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
+                socket.set_reuse_port(true)?;
+                socket.bind(&socket_addr.into())?;
+                let socket = socket.into();
                 let endpoint =
                     quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
                 Ok(endpoint)
@@ -128,7 +140,7 @@ impl<P: Provider> GenTransport<P> {
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Connection);
     type Error = Error;
-    type ListenerUpgrade = Connecting;
+    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -136,8 +148,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket_addr)?;
@@ -145,6 +158,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             listener_id,
             socket_addr,
             endpoint,
+            self.hole_punch_map.clone(),
             self.handshake_timeout,
             version,
         )?;
@@ -183,8 +197,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        let (socket_addr, version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
@@ -255,11 +270,60 @@ impl<P: Provider> Transport for GenTransport<P> {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
-        // `addr`. See DCUtR specification below.
-        //
-        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-        Err(TransportError::MultiaddrNotSupported(addr))
+        let (socket_addr, _version, peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+        let Some(peer_id) = peer_id else {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        };
+
+        let listeners = self
+            .listeners
+            .iter_mut()
+            .filter(|l| {
+                if l.is_closed {
+                    return false;
+                }
+                let listen_addr = l.socket_addr();
+                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect::<Vec<_>>();
+
+        let endpoint_addr = match listeners.len() {
+            0 => {
+                return Err(TransportError::MultiaddrNotSupported(addr)); // FIXME return correct error
+            }
+            _ => {
+                // Pick any listener to use for dialing.
+                // We hash the socket address to achieve determinism.
+                let mut hasher = DefaultHasher::new();
+                socket_addr.hash(&mut hasher);
+                let index = hasher.finish() as usize % listeners.len();
+                listeners[index].endpoint.local_addr().unwrap()
+            }
+        };
+
+        let hole_puncher = HolePuncher::new(endpoint_addr, socket_addr, self.handshake_timeout)
+            .map_err(|e| TransportError::Other(Error::Io(e)))?;
+
+        let (sender, receiver) = oneshot::channel();
+        let mut hole_punch_map = self.hole_punch_map.lock().unwrap();
+        hole_punch_map.insert((socket_addr, peer_id), sender);
+
+        Ok(Box::pin(async {
+            futures::select! {
+                hole_punched = receiver.fuse() => {
+                    Ok(hole_punched.unwrap())
+                },
+                err = hole_puncher.fuse() => {
+                    Err(err)
+                }
+            }
+        }))
     }
 
     fn poll(
@@ -302,6 +366,9 @@ struct Listener<P: Provider> {
     /// None if we are only listening on a single interface.
     if_watcher: Option<P::IfWatcher>,
 
+    /// Hole punching attempts
+    hole_punch_map: HolePunchMap,
+
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
 
@@ -317,6 +384,7 @@ impl<P: Provider> Listener<P> {
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         endpoint: quinn::Endpoint,
+        hole_punch_map: HolePunchMap,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
@@ -339,6 +407,7 @@ impl<P: Provider> Listener<P> {
 
         Ok(Listener {
             endpoint,
+            hole_punch_map,
             accept,
             listener_id,
             version,
@@ -416,7 +485,7 @@ impl<P: Provider> Listener<P> {
 }
 
 impl<P: Provider> Stream for Listener<P> {
-    type Item = TransportEvent<Connecting, Error>;
+    type Item = TransportEvent<<GenTransport<P> as Transport>::ListenerUpgrade, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -435,10 +504,18 @@ impl<P: Provider> Stream for Listener<P> {
                     self.accept = async move { endpoint.accept().await }.boxed();
 
                     let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
-                    let send_back_addr =
-                        socketaddr_to_multiaddr(&connecting.remote_address(), self.version);
+                    let remote_addr = connecting.remote_address();
+                    let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
+
+                    let upgrade = MaybeHolePunchedConnection::new(
+                        self.hole_punch_map.clone(),
+                        remote_addr,
+                        Connecting::new(connecting, self.handshake_timeout),
+                    )
+                    .boxed();
+
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::new(connecting, self.handshake_timeout),
+                        upgrade,
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -526,15 +603,19 @@ fn ip_to_listenaddr(
 fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
     support_draft_29: bool,
-) -> Option<(SocketAddr, ProtocolVersion)> {
+) -> Option<(SocketAddr, ProtocolVersion, Option<PeerId>)> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
+    let mut peer_id = None;
     for proto in iter {
         match proto {
-            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(id) => {
+                let new_peer_id = PeerId::from_multihash(id).ok()?;
+                peer_id.replace(new_peer_id);
+            }
             _ => return None,
         }
     }
@@ -546,10 +627,10 @@ fn multiaddr_to_socketaddr(
 
     match (proto1, proto2) {
         (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         _ => None,
     }
@@ -622,7 +703,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -634,7 +716,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -646,7 +729,7 @@ mod test {
             Some((SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 55148,
-            ), ProtocolVersion::V1))
+            ), ProtocolVersion::V1, Some("12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ".parse().unwrap())))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -655,7 +738,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -672,7 +756,8 @@ mod test {
                     )),
                     8080,
                 ),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
 
@@ -688,7 +773,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
-                ProtocolVersion::Draft29
+                ProtocolVersion::Draft29,
+                None
             ))
         );
     }
