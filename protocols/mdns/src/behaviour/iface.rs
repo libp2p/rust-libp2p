@@ -42,7 +42,7 @@ use std::{
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone)]
-pub enum ProbeState {
+enum ProbeState {
     Probing(Duration),
     Finished(Duration),
 }
