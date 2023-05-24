@@ -74,7 +74,7 @@ impl Behaviour {
     /// Register our external addresses in the given namespace with the given rendezvous peer.
     ///
     /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
-    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ReportObservedAddr`].
+    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
     pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
@@ -307,8 +307,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

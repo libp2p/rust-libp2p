@@ -36,10 +36,10 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     behaviour::{
-        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
-        ExpiredListenAddr, FromSwarm,
+        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+        ExternalAddrExpired, FromSwarm,
     },
-    ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, NewExternalAddrCandidate,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
@@ -214,7 +214,7 @@ pub struct Behaviour {
     probe_id: ProbeId,
 
     listen_addresses: ListenAddresses,
-    external_addresses: ExternalAddresses,
+    other_candidates: HashSet<Multiaddr>,
 }
 
 impl Behaviour {
@@ -240,7 +240,7 @@ impl Behaviour {
             pending_actions: VecDeque::new(),
             probe_id: ProbeId(0),
             listen_addresses: Default::default(),
-            external_addresses: Default::default(),
+            other_candidates: Default::default(),
         }
     }
 
@@ -279,6 +279,12 @@ impl Behaviour {
         self.servers.retain(|p| p != peer);
     }
 
+    /// Explicitly probe the provided address for external reachability.
+    pub fn probe_address(&mut self, candidate: Multiaddr) {
+        self.other_candidates.insert(candidate);
+        self.as_client().on_new_address();
+    }
+
     fn as_client(&mut self) -> AsClient {
         AsClient {
             inner: &mut self.inner,
@@ -294,7 +300,7 @@ impl Behaviour {
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
             listen_addresses: &self.listen_addresses,
-            external_addresses: &self.external_addresses,
+            other_candidates: &self.other_candidates,
         }
     }
 
@@ -532,7 +538,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
@@ -561,14 +566,17 @@ impl NetworkBehaviour for Behaviour {
                     }));
                 self.as_client().on_expired_address(addr);
             }
-            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.inner
-                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
+                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
                 self.as_client().on_expired_address(addr);
             }
-            external_addr @ FromSwarm::NewExternalAddr(_) => {
-                self.inner.on_swarm_event(external_addr);
-                self.as_client().on_new_address();
+            FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr },
+                    ));
+                self.probe_address(addr.to_owned());
             }
             listen_failure @ FromSwarm::ListenFailure(_) => {
                 self.inner.on_swarm_event(listen_failure)
@@ -580,6 +588,7 @@ impl NetworkBehaviour for Behaviour {
             listener_closed @ FromSwarm::ListenerClosed(_) => {
                 self.inner.on_swarm_event(listener_closed)
             }
+            confirmed @ FromSwarm::ExternalAddrConfirmed(_) => self.inner.on_swarm_event(confirmed),
         }
     }
 
