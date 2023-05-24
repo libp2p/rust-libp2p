@@ -26,14 +26,8 @@
 //!
 //! # Usage
 //!
-//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
-//! it will respond to inbound ping requests and as necessary periodically send outbound
-//! ping requests on every established connection.
-//!
-//! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
-//! by an application, e.g. to collect statistics.
-//!
-//! # Health checks / connection management
+//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait.
+//! It will respond to inbound ping requests and periodically send outbound ping requests on every established connection.
 //!
 //! It is up to the user to implement a health-check / connection management policy based on the ping protocol.
 //!
@@ -43,8 +37,10 @@
 //! - Disconnect from peers which don't support the ping protocol
 //! - Disconnect from peers upon the first ping failure
 //!
-//! Users should inspect emitted [`Event`] and call APIs on [`Swarm`] such as [`Swarm::close_connection`]
-//! or [`Swarm::disconnect_peer_id`] as they see fit.
+//! Users should inspect emitted [`Event`] and call APIs on [`Swarm`]:
+//!
+//! - [`Swarm::close_connection`](libp2p_swarm::Swarm::close_connection) to close a specific connection
+//! - [`Swarm::disconnect_peer_id`](libp2p_swarm::Swarm::disconnect_peer_id) to close all connections to a peer
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
