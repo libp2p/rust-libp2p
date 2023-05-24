@@ -100,7 +100,7 @@ impl Future for HolePuncher {
             Poll::Pending => {}
         }
 
-        let _ = futures::ready!(self.interval_timeout.poll_unpin(cx));
+        futures::ready!(self.interval_timeout.poll_unpin(cx));
 
         let contents: Vec<u8> = rand::thread_rng()
             .sample_iter(distributions::Standard)
