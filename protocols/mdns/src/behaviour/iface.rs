@@ -188,20 +188,14 @@ where
                 self.send_buffer.push_back(build_query());
                 log::trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
 
-                let continue_probing = self.discovered.is_empty();
-
-                if continue_probing {
-                    // Stop to probe when the initial interval reach the query interval
-                    if let ProbeState::Probing(interval) = self.probe_state {
-                        let interval = interval * 2;
-                        self.probe_state = if interval >= self.query_interval {
-                            ProbeState::Finished(self.query_interval)
-                        } else {
-                            ProbeState::Probing(interval)
-                        };
-                    }
-                } else {
-                    self.probe_state = ProbeState::Finished(self.query_interval);
+                // Stop to probe when the initial interval reach the query interval
+                if let ProbeState::Probing(interval) = self.probe_state {
+                    let interval = interval * 2;
+                    self.probe_state = if interval >= self.query_interval {
+                        ProbeState::Finished(self.query_interval)
+                    } else {
+                        ProbeState::Probing(interval)
+                    };
                 }
 
                 self.reset_timer();
