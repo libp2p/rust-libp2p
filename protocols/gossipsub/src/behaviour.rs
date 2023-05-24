@@ -3684,8 +3684,7 @@ impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Behaviour<C, F
             .field("fanout", &self.fanout)
             .field("fanout_last_pub", &self.fanout_last_pub)
             .field("mcache", &self.mcache)
-            // This doesn't derive `Debug` trait yet
-            // .field("heartbeat", &self.heartbeat)
+            .field("heartbeat", &self.heartbeat)
             .finish()
     }
 }
