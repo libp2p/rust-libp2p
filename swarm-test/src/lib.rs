@@ -29,8 +29,7 @@ use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
-    THandlerErr,
+    dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
 };
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
@@ -228,11 +227,7 @@ where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::ToSwarm: Debug,
     {
-        let external_addresses = other
-            .external_addresses()
-            .cloned()
-            .map(|r| r.addr)
-            .collect();
+        let external_addresses = other.external_addresses().cloned().collect();
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
@@ -315,7 +310,7 @@ where
             .await;
 
         // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(memory_multiaddr.clone(), AddressScore::Infinite);
+        self.add_external_address(memory_multiaddr.clone());
 
         let tcp_addr_listener_id = self
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())

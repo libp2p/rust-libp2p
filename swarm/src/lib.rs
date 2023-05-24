@@ -57,7 +57,6 @@
 
 mod connection;
 mod executor;
-mod registry;
 mod stream;
 mod stream_protocol;
 #[cfg(test)]
@@ -77,13 +76,14 @@ pub mod derive_prelude {
     pub use crate::behaviour::ConnectionClosed;
     pub use crate::behaviour::ConnectionEstablished;
     pub use crate::behaviour::DialFailure;
-    pub use crate::behaviour::ExpiredExternalAddr;
     pub use crate::behaviour::ExpiredListenAddr;
+    pub use crate::behaviour::ExternalAddrConfirmed;
+    pub use crate::behaviour::ExternalAddrExpired;
     pub use crate::behaviour::FromSwarm;
     pub use crate::behaviour::ListenFailure;
     pub use crate::behaviour::ListenerClosed;
     pub use crate::behaviour::ListenerError;
-    pub use crate::behaviour::NewExternalAddr;
+    pub use crate::behaviour::NewExternalAddrCandidate;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
@@ -107,10 +107,10 @@ pub mod derive_prelude {
 }
 
 pub use behaviour::{
-    AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredExternalAddr,
-    ExpiredListenAddr, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddr, NewListenAddr, NotifyHandler,
-    PollParameters, ToSwarm,
+    AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
+    ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
+    NotifyHandler, PollParameters, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -121,10 +121,10 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
-pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
+use crate::behaviour::ExternalAddrConfirmed;
 use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
@@ -142,7 +142,6 @@ use libp2p_core::{
     Endpoint, Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
-use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
@@ -340,12 +339,10 @@ where
     /// List of protocols that the behaviour says it supports.
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
+    confirmed_external_addr: HashSet<Multiaddr>,
+
     /// Multiaddresses that our listeners are listening on,
     listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
-
-    /// List of multiaddresses we're listening on, after account for external IP addresses and
-    /// similar mechanisms.
-    external_addrs: Addresses,
 
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
@@ -654,60 +651,30 @@ where
         &self.local_peer_id
     }
 
-    /// Returns an iterator for [`AddressRecord`]s of external addresses
-    /// of the local node, in decreasing order of their current
-    /// [score](AddressScore).
-    pub fn external_addresses(&self) -> impl Iterator<Item = &AddressRecord> {
-        self.external_addrs.iter()
+    /// TODO
+    pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.confirmed_external_addr.iter()
     }
 
-    /// Adds an external address record for the local node.
+    /// Add a **confirmed** external address for the local node.
     ///
-    /// An external address is an address of the local node known to
-    /// be (likely) reachable for other nodes, possibly taking into
-    /// account NAT. The external addresses of the local node may be
-    /// shared with other nodes by the `NetworkBehaviour`.
-    ///
-    /// The associated score determines both the position of the address
-    /// in the list of external addresses (which can determine the
-    /// order in which addresses are used to connect to) as well as
-    /// how long the address is retained in the list, depending on
-    /// how frequently it is reported by the `NetworkBehaviour` via
-    /// [`ToSwarm::ReportObservedAddr`] or explicitly
-    /// through this method.
-    pub fn add_external_address(&mut self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
-        let result = self.external_addrs.add(a.clone(), s);
-        let expired = match &result {
-            AddAddressResult::Inserted { expired } => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddr(NewExternalAddr { addr: &a }));
-                expired
-            }
-            AddAddressResult::Updated { expired } => expired,
-        };
-        for a in expired {
-            self.behaviour
-                .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr {
-                    addr: &a.addr,
-                }));
-        }
-        result
+    /// This function should only be called with addresses that are guaranteed to be reachable.
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
+    pub fn add_external_address(&mut self, a: Multiaddr) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
+                addr: &a,
+            }));
+        self.confirmed_external_addr.insert(a);
     }
 
-    /// Removes an external address of the local node, regardless of
-    /// its current score. See [`Swarm::add_external_address`]
-    /// for details.
+    /// Remove an external address for the local node.
     ///
-    /// Returns `true` if the address existed and was removed, `false`
-    /// otherwise.
-    pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
-        if self.external_addrs.remove(addr) {
-            self.behaviour
-                .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
-            true
-        } else {
-            false
-        }
+    /// The address is broadcast to all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
+    pub fn remove_external_address(&mut self, addr: &Multiaddr) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
+        self.confirmed_external_addr.remove(addr);
     }
 
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
@@ -1162,25 +1129,21 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            ToSwarm::ReportObservedAddr { address, score } => {
-                // Maps the given `observed_addr`, representing an address of the local
-                // node observed by a remote peer, onto the locally known listen addresses
-                // to yield one or more addresses of the local node that may be publicly
-                // reachable.
-                //
-                // I.e. self method incorporates the view of other peers into the listen
-                // addresses seen by the local node to account for possible IP and port
-                // mappings performed by intermediate network devices in an effort to
-                // obtain addresses for the local peer that are also reachable for peers
-                // other than the peer who reported the `observed_addr`.
-                //
-                // The translation is transport-specific. See [`Transport::address_translation`].
+            ToSwarm::NewExternalAddrCandidate(addr) => {
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr: &addr },
+                    ));
+
+                // Generate more candidates based on address translation.
+                // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
+
                 let translated_addresses = {
                     let mut addrs: Vec<_> = self
                         .listened_addrs
                         .values()
                         .flatten()
-                        .filter_map(|server| self.transport.address_translation(server, &address))
+                        .filter_map(|server| self.transport.address_translation(server, &addr))
                         .collect();
 
                     // remove duplicates
@@ -1189,8 +1152,17 @@ where
                     addrs
                 };
                 for addr in translated_addresses {
-                    self.add_external_address(addr, score);
+                    self.behaviour
+                        .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                            NewExternalAddrCandidate { addr: &addr },
+                        ));
                 }
+            }
+            ToSwarm::ExternalAddrConfirmed(addr) => {
+                self.add_external_address(addr);
+            }
+            ToSwarm::ExternalAddrExpired(addr) => {
+                self.remove_external_address(&addr);
             }
             ToSwarm::CloseConnection {
                 peer_id,
@@ -1263,7 +1235,6 @@ where
                             local_peer_id: &this.local_peer_id,
                             supported_protocols: &this.supported_protocols,
                             listened_addrs: this.listened_addrs.values().flatten().collect(),
-                            external_addrs: &this.external_addrs,
                         };
                         this.behaviour.poll(cx, &mut parameters)
                     };
@@ -1431,13 +1402,11 @@ pub struct SwarmPollParameters<'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
     listened_addrs: Vec<&'a Multiaddr>,
-    external_addrs: &'a Addresses,
 }
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
     type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
     type ListenedAddressesIter = std::iter::Cloned<std::vec::IntoIter<&'a Multiaddr>>;
-    type ExternalAddressesIter = AddressIntoIter;
 
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
         self.supported_protocols.iter().cloned()
@@ -1445,10 +1414,6 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 
     fn listened_addresses(&self) -> Self::ListenedAddressesIter {
         self.listened_addrs.clone().into_iter().cloned()
-    }
-
-    fn external_addresses(&self) -> Self::ExternalAddressesIter {
-        self.external_addrs.clone().into_iter()
     }
 
     fn local_peer_id(&self) -> &PeerId {
@@ -1639,8 +1604,8 @@ where
             pool: Pool::new(self.local_peer_id, self.pool_config),
             behaviour: self.behaviour,
             supported_protocols: Default::default(),
+            confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            external_addrs: Addresses::default(),
             pending_event: None,
         }
     }
