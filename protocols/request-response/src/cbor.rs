@@ -115,8 +115,8 @@ mod codec {
             T: AsyncWrite + Unpin + Send,
         {
             let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
+
             io.write_all(data.as_ref()).await?;
-            io.close().await?;
 
             Ok(())
         }
@@ -131,8 +131,8 @@ mod codec {
             T: AsyncWrite + Unpin + Send,
         {
             let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
+
             io.write_all(data.as_ref()).await?;
-            io.close().await?;
 
             Ok(())
         }
@@ -155,6 +155,7 @@ mod codec {
 mod tests {
     use crate::cbor::codec::Codec;
     use crate::Codec as _;
+    use futures::AsyncWriteExt;
     use futures_ringbuf::Endpoint;
     use libp2p_swarm::StreamProtocol;
     use serde::{Deserialize, Serialize};
@@ -175,10 +176,13 @@ mod tests {
             .write_request(&protocol, &mut a, expected_request.clone())
             .await
             .expect("Should write request");
+        a.close().await.unwrap();
+
         let actual_request = codec
             .read_request(&protocol, &mut b)
             .await
             .expect("Should read request");
+        b.close().await.unwrap();
 
         assert_eq!(actual_request, expected_request);
 
@@ -187,10 +191,13 @@ mod tests {
             .write_response(&protocol, &mut a, expected_response.clone())
             .await
             .expect("Should write response");
+        a.close().await.unwrap();
+
         let actual_response = codec
             .read_response(&protocol, &mut b)
             .await
             .expect("Should read response");
+        b.close().await.unwrap();
 
         assert_eq!(actual_response, expected_response);
     }
