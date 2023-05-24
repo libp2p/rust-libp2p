@@ -180,7 +180,7 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmBuilder};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
@@ -237,7 +237,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmBuilder};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
@@ -287,7 +287,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent, SwarmBuilder};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
