@@ -232,20 +232,6 @@ pub trait PollParameters {
         note = "Use `libp2p_swarm::SupportedProtocols` in your `ConnectionHandler` instead."
     )]
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
-
-    /// Returns the list of the addresses we're listening on.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Use `libp2p_swarm::ListenAddresses` instead."
-    )]
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter;
-
-    /// Returns the peer id of the local node.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Pass the node's `PeerId` into the behaviour instead."
-    )]
-    fn local_peer_id(&self) -> &PeerId;
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
@@ -413,7 +399,6 @@ pub enum CloseConnection {
 
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
-#[allow(deprecated)]
 pub enum FromSwarm<'a, Handler> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),
@@ -470,7 +455,6 @@ pub struct ConnectionEstablished<'a> {
 /// This event is always paired with an earlier
 /// [`FromSwarm::ConnectionEstablished`] with the same peer ID, connection ID
 /// and endpoint.
-#[allow(deprecated)]
 pub struct ConnectionClosed<'a, Handler> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,

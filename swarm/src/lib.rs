@@ -1300,14 +1300,6 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
         self.supported_protocols.iter().cloned()
     }
-
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        self.listened_addrs.clone().into_iter().cloned()
-    }
-
-    fn local_peer_id(&self) -> &PeerId {
-        self.local_peer_id
-    }
 }
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
