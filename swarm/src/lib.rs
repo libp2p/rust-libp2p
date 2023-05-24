@@ -1120,9 +1120,7 @@ where
                 None => {
                     let behaviour_poll = {
                         let mut parameters = SwarmPollParameters {
-                            local_peer_id: &this.local_peer_id,
                             supported_protocols: &this.supported_protocols,
-                            listened_addrs: this.listened_addrs.values().flatten().collect(),
                         };
                         this.behaviour.poll(cx, &mut parameters)
                     };
@@ -1286,11 +1284,8 @@ where
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 // TODO: #[derive(Debug)]
-#[allow(dead_code)]
 pub struct SwarmPollParameters<'a> {
-    local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
-    listened_addrs: Vec<&'a Multiaddr>,
 }
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
