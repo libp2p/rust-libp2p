@@ -250,6 +250,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             ping::Event {
                                 peer,
                                 result: Result::Ok(rtt),
+                                ..
                             } => {
                                 println!(
                                     "ping: rtt to {} is {} ms",
@@ -260,18 +261,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             ping::Event {
                                 peer,
                                 result: Result::Err(ping::Failure::Timeout),
+                                ..
                             } => {
                                 println!("ping: timeout to {}", peer.to_base58());
                             }
                             ping::Event {
                                 peer,
                                 result: Result::Err(ping::Failure::Unsupported),
+                                ..
                             } => {
                                 println!("ping: {} does not support ping protocol", peer.to_base58());
                             }
                             ping::Event {
                                 peer,
                                 result: Result::Err(ping::Failure::Other { error }),
+                                ..
                             } => {
                                 println!("ping: ping::Failure with {}: {error}", peer.to_base58());
                             }

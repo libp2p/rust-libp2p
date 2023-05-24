@@ -57,7 +57,10 @@ mod protocol;
 use handler::Handler;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters, Swarm, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm};
+use libp2p_swarm::{
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+};
 use std::time::Duration;
 use std::{
     collections::VecDeque,

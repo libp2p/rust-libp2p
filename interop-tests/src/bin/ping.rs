@@ -137,8 +137,8 @@ async fn main() -> Result<()> {
 
         let rtt = loop {
             if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                peer: _,
                 result: Ok(rtt),
+                ..
             }))) = swarm.next().await
             {
                 log::info!("Ping successful: {rtt:?}");
