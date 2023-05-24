@@ -699,6 +699,24 @@ where
         }
     }
 
+    /// Attempt to gracefully close a connection.
+    ///
+    /// Closing a connection is asynchronous but this function will return immediately.
+    /// A [`SwarmEvent::ConnectionClosed`] event will be emitted once the connection is actually closed.
+    ///
+    /// # Returns
+    ///
+    /// - `true` if the connection was established and is now being closed.
+    /// - `false` if the connection was not found or is no longer established.
+    pub fn close_connection(&mut self, connection_id: ConnectionId) -> bool {
+        if let Some(established) = self.pool.get_established(connection_id) {
+            established.start_close();
+            return true;
+        }
+
+        false
+    }
+
     /// Checks whether there is an established connection to a peer.
     pub fn is_connected(&self, peer_id: &PeerId) -> bool {
         self.pool.is_connected(*peer_id)

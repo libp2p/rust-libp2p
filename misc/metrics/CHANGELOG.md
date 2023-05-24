@@ -26,9 +26,13 @@
   Note that you can use the `_count` metric of the `Histogram` as a replacement for the `Counter`.
   See [PR 3927].
 
+- Remove the `pong_received` counter because it is no longer exposed by `libp2p-ping`.
+  See [PR 3947].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
 [PR 3325]: https://github.com/libp2p/rust-libp2p/pull/3325
+[PR 3947]: https://github.com/libp2p/rust-libp2p/pull/3947
 
 ## 0.12.0
 
