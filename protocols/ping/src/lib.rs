@@ -37,7 +37,7 @@
 //! - Disconnect from peers which don't support the ping protocol
 //! - Disconnect from peers upon the first ping failure
 //!
-//! Users should inspect emitted [`Event`] and call APIs on [`Swarm`]:
+//! Users should inspect emitted [`Event`]s and call APIs on [`Swarm`]:
 //!
 //! - [`Swarm::close_connection`](libp2p_swarm::Swarm::close_connection) to close a specific connection
 //! - [`Swarm::disconnect_peer_id`](libp2p_swarm::Swarm::disconnect_peer_id) to close all connections to a peer
