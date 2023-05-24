@@ -82,8 +82,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let new_listener = quote! { #prelude_path::NewListener };
     let new_listen_addr = quote! { #prelude_path::NewListenAddr };
     let expired_listen_addr = quote! { #prelude_path::ExpiredListenAddr };
-    let new_external_addr = quote! { #prelude_path::NewExternalAddr };
-    let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
+    let new_external_addr_candidate = quote! { #prelude_path::NewExternalAddrCandidate };
+    let external_addr_expired = quote! { #prelude_path::ExternalAddrExpired };
+    let external_addr_confirmed = quote! { #prelude_path::ExternalAddrConfirmed };
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler = quote! { #prelude_path::THandler };
@@ -443,19 +444,19 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewExternalAddr` variant.
-    let on_new_external_addr_stmts = {
+    let on_new_external_addr_candidate_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                self.#i.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
                         addr,
                     }));
                 },
                 None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
                         addr,
                     }));
                 },
@@ -463,20 +464,41 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExpiredExternalAddr` variant.
-    let on_expired_external_addr_stmts = {
+    // for the `FromSwarm::ExternalAddrExpired` variant.
+    let on_external_addr_expired_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                self.#i.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
                         addr,
                     }));
                 },
                 None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
+                        addr,
+                    }));
+                },
+            })
+    };
+
+    // Build the list of statements to put in the body of `on_swarm_event()`
+    // for the `FromSwarm::ExternalAddrConfirmed` variant.
+    let on_external_addr_confirmed_stmts = {
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(field_n, field)| match field.ident {
+                Some(ref i) => quote! {
+                self.#i.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
+                        addr,
+                    }));
+                },
+                None => quote! {
+                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
                         addr,
                     }));
                 },
@@ -717,8 +739,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                         event: #wrapped_event,
                     });
                 }
-                std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
+                std::task::Poll::Ready(#network_behaviour_action::NewExternalAddrCandidate(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::NewExternalAddrCandidate(addr));
+                }
+                std::task::Poll::Ready(#network_behaviour_action::ExternalAddrConfirmed(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ExternalAddrConfirmed(addr));
+                }
+                std::task::Poll::Ready(#network_behaviour_action::ExternalAddrExpired(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ExternalAddrExpired(addr));
                 }
                 std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
@@ -834,12 +862,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                     #from_swarm::ExpiredListenAddr(
                         #expired_listen_addr { listener_id, addr })
                     => { #(#on_expired_listen_addr_stmts)* }
-                    #from_swarm::NewExternalAddr(
-                        #new_external_addr { addr })
-                    => { #(#on_new_external_addr_stmts)* }
-                    #from_swarm::ExpiredExternalAddr(
-                        #expired_external_addr { addr })
-                    => { #(#on_expired_external_addr_stmts)* }
+                    #from_swarm::NewExternalAddrCandidate(
+                        #new_external_addr_candidate { addr })
+                    => { #(#on_new_external_addr_candidate_stmts)* }
+                    #from_swarm::ExternalAddrExpired(
+                        #external_addr_expired { addr })
+                    => { #(#on_external_addr_expired_stmts)* }
+                    #from_swarm::ExternalAddrConfirmed(
+                        #external_addr_confirmed { addr })
+                    => { #(#on_external_addr_confirmed_stmts)* }
                     #from_swarm::ListenerError(
                         #listener_error { listener_id, err })
                     => { #(#on_listener_error_stmts)* }
