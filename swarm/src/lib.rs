@@ -1295,7 +1295,6 @@ pub struct SwarmPollParameters<'a> {
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
     type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
-    type ListenedAddressesIter = std::iter::Cloned<std::vec::IntoIter<&'a Multiaddr>>;
 
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
         self.supported_protocols.iter().cloned()

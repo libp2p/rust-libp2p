@@ -219,8 +219,6 @@ pub trait NetworkBehaviour: 'static {
 pub trait PollParameters {
     /// Iterator returned by [`supported_protocols`](PollParameters::supported_protocols).
     type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
-    /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
-    type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
