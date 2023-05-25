@@ -275,7 +275,7 @@ impl NetworkBehaviour for Behaviour {
     fn handle_established_outbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        peer: PeerId,
+        _peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -288,14 +288,13 @@ impl NetworkBehaviour for Behaviour {
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
 
-        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        if self
+            .direct_to_relayed_connections
+            .get(&connection_id)
+            .is_some()
         {
-            assert!(
-                self.outgoing_direct_connection_attempts
-                    .remove(&(relayed_connection_id, peer))
-                    .is_some(),
-                "DCUtR state tracking is buggy!"
-            );
+            // outgoing_direct_connection_attempts is populated only by the listener
+            // so we don't need to delete any entries here.
 
             return Ok(Either::Right(Either::Left(
                 handler::direct::Handler::default(),
