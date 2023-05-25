@@ -23,7 +23,7 @@ To run the client example, follow these steps:
 
 ### Server
 
-The server-side example demonstrates a basic AutoNAT server that supports the `/libp2p/autonat/1.0.0` and `/ipfs/0.1.0` protocols.
+The server-side example demonstrates a basic AutoNAT server that supports the autonat and identify protocols.
 
 To start the server, follow these steps:
 
