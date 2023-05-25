@@ -136,11 +136,7 @@ fn build_client() -> Swarm<Client> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    to_swarm = "ClientEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(to_swarm = "ClientEvent", prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
