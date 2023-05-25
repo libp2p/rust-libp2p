@@ -5,7 +5,8 @@ This example consists of a client and a server, which demonstrate the usage of t
 ## Usage
 ### Client
 
-The client-side part of the example showcases the combination of the AutoNAT and identify protocols. The identify protocol allows the local peer to determine its external addresses, which are then included in AutoNAT dial-back requests sent to the server.
+The client-side part of the example showcases the combination of the AutoNAT and identify protocols.
+The identify protocol allows the local peer to determine its external addresses, which are then included in AutoNAT dial-back requests sent to the server.
 
 To run the client example, follow these steps:
 
@@ -32,4 +33,5 @@ To start the server, follow these steps:
 
 ## Conclusion
 
-By combining the AutoNAT and identify protocols, the example showcases the establishment of direct connections between peers and the exchange of external address information. Users can explore the provided client and server code to gain insights into the implementation details and functionality of **libp2p**.
+By combining the AutoNAT and identify protocols, the example showcases the establishment of direct connections between peers and the exchange of external address information.
+Users can explore the provided client and server code to gain insights into the implementation details and functionality of **libp2p**.
