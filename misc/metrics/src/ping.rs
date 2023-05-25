@@ -55,7 +55,6 @@ enum Failure {
 pub(crate) struct Metrics {
     rtt: Histogram,
     failure: Family<FailureLabels, Counter>,
-    pong_received: Counter,
 }
 
 impl Metrics {
@@ -77,28 +76,14 @@ impl Metrics {
             failure.clone(),
         );
 
-        let pong_received = Counter::default();
-        sub_registry.register(
-            "pong_received",
-            "Number of 'pong's received",
-            pong_received.clone(),
-        );
-
-        Self {
-            rtt,
-            failure,
-            pong_received,
-        }
+        Self { rtt, failure }
     }
 }
 
 impl super::Recorder<libp2p_ping::Event> for Metrics {
     fn record(&self, event: &libp2p_ping::Event) {
         match &event.result {
-            Ok(libp2p_ping::Success::Pong) => {
-                self.pong_received.inc();
-            }
-            Ok(libp2p_ping::Success::Ping { rtt }) => {
+            Ok(rtt) => {
                 self.rtt.observe(rtt.as_secs_f64());
             }
             Err(failure) => {

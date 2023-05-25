@@ -2980,6 +2980,7 @@ dependencies = [
  "async-trait",
  "env_logger 0.10.0",
  "futures",
+ "futures_ringbuf",
  "instant",
  "libp2p-core",
  "libp2p-identity",
@@ -2990,6 +2991,9 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "rand 0.8.5",
+ "serde",
+ "serde_cbor",
+ "serde_json",
  "smallvec",
  "void",
 ]
@@ -4650,6 +4654,16 @@ version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd31f59f6fe2b0c055371bb2f16d7f0aa7d8881676c04a55b1596d1a17cd10a4"
 dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "serde_cbor"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bef2ebfde456fb76bbcf9f59315333decc4fda0b2b44b420243c11e0f5ec1f5"
+dependencies = [
+ "half",
  "serde",
 ]
 
