@@ -1034,6 +1034,11 @@ where
                         },
                     ));
                 }
+
+                self.behaviour
+                    .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
+                        listener_id: id,
+                    }));
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
