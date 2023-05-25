@@ -26,4 +26,5 @@ To run the example, follow these steps:
 
 ## Conclusion
 
-The ping example demonstrates the basic usage of **libp2p** to create a simple p2p network and implement a ping protocol. By running multiple nodes and observing the ping behavior, users can gain insights into how **libp2p** facilitates communication and interaction between peers.
+The ping example demonstrates the basic usage of **libp2p** to create a simple p2p network and implement a ping protocol.
+By running multiple nodes and observing the ping behavior, users can gain insights into how **libp2p** facilitates communication and interaction between peers.

@@ -4,6 +4,7 @@ The "Direct Connection Upgrade through Relay" (DCUTR) protocol allows peers in a
 This example provides a basic usage of this protocol in **libp2p**.
 
 ## Usage
+
 To run the example, follow these steps:
 
 1. Run the example using Cargo:
@@ -13,6 +14,7 @@ To run the example, follow these steps:
    Replace `<OPTIONS>` with specific options.
 
 ### Available Options
+
 The following options can be used with the example:
 
 - `--mode <MODE>`: Specify the mode of operation for the example. Possible values are `dial` (client-dial) or `listen` (client-listen).
@@ -21,6 +23,7 @@ The following options can be used with the example:
 - `--remote-peer-id <ID>`: Specify the Peer ID of the remote peer to establish a connection with (only in `dial` mode).
 
 ### Example usage
+
 - Example usage in client-dial mode:
 	```sh
 	cargo run -- --mode dial --secret-key-seed 42 --relay-address /ip4/127.0.0.1/tcp/12345 --remote-peer-id <REMOTE_PEER_ID>
@@ -32,6 +35,7 @@ The following options can be used with the example:
 	```
 
 ## Conclusion
+
 The DCUTR protocol offers a solution for achieving direct connectivity between peers in a peer-to-peer network.
 By utilizing hole punching and eliminating the need for signaling servers, the protocol allows peers behind NATs to establish direct connections.
 This example provides instructions on running an example implementation of the protocol, allowing users to explore its functionality and benefits.

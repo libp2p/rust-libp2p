@@ -1,7 +1,8 @@
 ## Description
 
-
-The example demonstrates how to create a connection between two nodes using TCP transport, authenticate with the noise protocol, and multiplex data streams with yamux. The library provides a behavior for identity network interactions, allowing nodes to exchange identification information securely. By running the example, the nodes will establish a connection, negotiate the identity protocol, and exchange identification information, which will be displayed in the console.
+The example demonstrates how to create a connection between two nodes using TCP transport, authenticate with the noise protocol, and multiplex data streams with yamux.
+The library provides a behavior for identity network interactions, allowing nodes to exchange identification information securely.
+By running the example, the nodes will establish a connection, negotiate the identity protocol, and exchange identification information, which will be displayed in the console.
 
 ## Usage
 

@@ -24,6 +24,7 @@ When a new peer is discovered through mDNS, it can join the conversation, and al
 If a participant exits the application using `Ctrl-c` or any other method, the remaining peers will receive an mDNS expired event and remove the expired peer from their list of known peers.
 
 ## Conclusion
+
 This chat application demonstrates the usage of **libp2p** and the gossipsub protocol for building a decentralized chat system.
 By leveraging mDNS for peer discovery, users can easily connect with other peers and engage in real-time conversations.
 The example provides a starting point for developing more sophisticated chat applications using **libp2p** and exploring the capabilities of decentralized communication.
