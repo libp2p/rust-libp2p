@@ -120,8 +120,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener = Listener::new(
             listener_id,
             socket_addr,
@@ -164,8 +165,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        let (socket_addr, version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
@@ -215,8 +217,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, _version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        let (socket_addr, _version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
@@ -768,15 +771,18 @@ fn ip_to_listenaddr(
 fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
     support_draft_29: bool,
-) -> Option<(SocketAddr, ProtocolVersion)> {
+) -> Option<(SocketAddr, ProtocolVersion, Option<PeerId>)> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
+    let mut peer_id = None;
     for proto in iter {
         match proto {
-            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(id) => {
+                peer_id = Some(PeerId::from_multihash(id).ok()?);
+            }
             _ => return None,
         }
     }
@@ -788,10 +794,10 @@ fn multiaddr_to_socketaddr(
 
     match (proto1, proto2) {
         (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         _ => None,
     }
@@ -865,7 +871,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -877,7 +884,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -889,7 +897,7 @@ mod test {
             Some((SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 55148,
-            ), ProtocolVersion::V1))
+            ), ProtocolVersion::V1, Some("12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ".parse().unwrap())))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -898,7 +906,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -915,7 +924,8 @@ mod test {
                     )),
                     8080,
                 ),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
 
@@ -931,7 +941,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
-                ProtocolVersion::Draft29
+                ProtocolVersion::Draft29,
+                None
             ))
         );
     }
