@@ -19,7 +19,7 @@ relay = ["libp2p-relay"]
 dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }

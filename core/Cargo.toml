@@ -15,7 +15,7 @@ either = "1.5"
 fnv = "1.0"
 futures = { version = "0.3.28", features = ["executor", "thread-pool"] }
 futures-timer = "3"
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 log = "0.4"
 multiaddr = { version = "0.17.1" }
