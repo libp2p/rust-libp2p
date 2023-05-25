@@ -247,14 +247,15 @@ impl NetworkBehaviour for Behaviour {
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if is_relayed(local_addr) {
-            Ok(Either::Left(handler::relayed::Handler::new(
+            return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Listener {
                     local_addr: local_addr.clone(),
                     send_back_addr: remote_addr.clone(),
                 },
-            ))) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-        } else if let Some(&relayed_connection_id) =
-            self.direct_to_relayed_connections.get(&connection_id)
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+        }
+
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
             self.outgoing_direct_connection_attempts
                 .remove(&(relayed_connection_id, peer));
@@ -274,14 +275,15 @@ impl NetworkBehaviour for Behaviour {
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if is_relayed(addr) {
-            Ok(Either::Left(handler::relayed::Handler::new(
+            return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Dialer {
                     address: addr.clone(),
                     role_override,
                 },
-            ))) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-        } else if let Some(&relayed_connection_id) =
-            self.direct_to_relayed_connections.get(&connection_id)
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+        }
+
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
             self.outgoing_direct_connection_attempts
                 .remove(&(relayed_connection_id, peer));
