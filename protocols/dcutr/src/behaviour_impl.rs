@@ -257,14 +257,19 @@ impl NetworkBehaviour for Behaviour {
 
         if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
-            self.outgoing_direct_connection_attempts
-                .remove(&(relayed_connection_id, peer));
-            Ok(Either::Right(Either::Left(
+            assert!(
+                self.outgoing_direct_connection_attempts
+                    .remove(&(relayed_connection_id, peer))
+                    .is_some(),
+                "DCUtR state tracking is buggy!"
+            );
+
+            return Ok(Either::Right(Either::Left(
                 handler::direct::Handler::default(),
-            )))
-        } else {
-            Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
+            )));
         }
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn handle_established_outbound_connection(
@@ -285,14 +290,19 @@ impl NetworkBehaviour for Behaviour {
 
         if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
-            self.outgoing_direct_connection_attempts
-                .remove(&(relayed_connection_id, peer));
-            Ok(Either::Right(Either::Left(
+            assert!(
+                self.outgoing_direct_connection_attempts
+                    .remove(&(relayed_connection_id, peer))
+                    .is_some(),
+                "DCUtR state tracking is buggy!"
+            );
+
+            return Ok(Either::Right(Either::Left(
                 handler::direct::Handler::default(),
-            )))
-        } else {
-            Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
+            )));
         }
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn on_connection_handler_event(
