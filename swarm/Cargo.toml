@@ -15,7 +15,7 @@ either = "1.6.0"
 fnv = "1.0"
 futures = "0.3.28"
 futures-timer = "3.0.2"
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-swarm-derive = { workspace = true, optional = true }

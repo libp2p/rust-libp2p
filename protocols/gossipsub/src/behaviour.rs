@@ -30,10 +30,12 @@ use std::{
 };
 
 use futures::StreamExt;
+use futures_ticker::Ticker;
 use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
+use instant::Instant;
 use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
@@ -43,7 +45,6 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
@@ -67,7 +68,6 @@ use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
-use wasm_timer::Interval;
 
 #[cfg(test)]
 mod tests;
@@ -289,7 +289,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     mcache: MessageCache,
 
     /// Heartbeat interval stream.
-    heartbeat: Interval,
+    heartbeat: Ticker,
 
     /// Number of heartbeats since the beginning of time; this allows us to amortize some resource
     /// clean up -- eg backoff clean up.
@@ -307,7 +307,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Stores optional peer score data together with thresholds, decay interval and gossip
     /// promises.
-    peer_score: Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+    peer_score: Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
 
     /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
     count_received_ihave: HashMap<PeerId, usize>,
@@ -460,9 +460,9 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Interval::new_at(
-                Instant::now() + config.heartbeat_initial_delay(),
+            heartbeat: Ticker::new_with_next(
                 config.heartbeat_interval(),
+                config.heartbeat_initial_delay(),
             ),
             heartbeat_ticks: 0,
             px_peers: HashSet::new(),
@@ -908,7 +908,7 @@ where
             return Err("Peer score set twice".into());
         }
 
-        let interval = Interval::new(params.decay_interval);
+        let interval = Ticker::new(params.decay_interval);
         let peer_score = PeerScore::new_with_message_delivery_time_callback(params, callback);
         self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
@@ -1175,7 +1175,7 @@ where
     }
 
     fn score_below_threshold_from_scores(
-        peer_score: &Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+        peer_score: &Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
         peer_id: &PeerId,
         threshold: impl Fn(&PeerScoreThresholds) -> f64,
     ) -> (bool, f64) {
@@ -3472,12 +3472,12 @@ where
 
         // update scores
         if let Some((peer_score, _, interval, _)) = &mut self.peer_score {
-            while let Poll::Ready(Some(())) = interval.poll_next_unpin(cx) {
+            while let Poll::Ready(Some(_)) = interval.poll_next_unpin(cx) {
                 peer_score.refresh_scores();
             }
         }
 
-        while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
+        while let Poll::Ready(Some(_)) = self.heartbeat.poll_next_unpin(cx) {
             self.heartbeat();
         }
 
