@@ -8,7 +8,7 @@ The example code demonstrates how to perform Kademlia queries on the IPFS networ
 Run the example code:
 
 ```sh
-cargo [PEER_ID]
+cargo run [PEER_ID]
 ```
 
 Replace `[PEER_ID]` with the base58-encoded peer ID you want to search for. If no peer ID is provided, a random peer ID will be generated.
