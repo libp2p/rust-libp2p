@@ -6,16 +6,15 @@ This example showcases a basic distributed key-value store implemented using **l
 
 ### Key-Value Store
 
-1.  Open two terminal windows and start two instances of the key-value store.
-If your local network supports mDNS, the instances will automatically connect.
+1.  Open two terminal windows.
 
 2.  In terminal one, type `PUT my-key my-value` and press Enter.
 This command will store the value `my-value` with the key `my-key` in the distributed key-value store.
 
-3.  In terminal two, type `GET my-key` and press Enter.
+1.  In terminal two, type `GET my-key` and press Enter.
 This command will retrieve the value associated with the key `my-key` from the key-value store.
 
-4.  To exit, press `Ctrl-c` in each terminal window to gracefully close the instances.
+1.  To exit, press `Ctrl-c` in each terminal window to gracefully close the instances.
 
 
 ### Provider Records
