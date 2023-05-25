@@ -372,7 +372,16 @@ where
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let id = ListenerId::next();
-        self.transport.listen_on(id, addr)?;
+
+        if let Err(e) = self.transport.listen_on(id, addr) {
+            self.behaviour
+                .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
+                    listener_id: id,
+                    err: &e,
+                }));
+            return Err(e);
+        }
+
         self.behaviour
             .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
                 listener_id: id,
