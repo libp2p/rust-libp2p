@@ -31,4 +31,3 @@ To run the example, follow these steps:
 The DCUTR protocol offers a solution for achieving direct connectivity between peers in a peer-to-peer network.
 By utilizing hole punching and eliminating the need for signaling servers, the protocol allows peers behind NATs to establish direct connections.
 This example provides instructions on running an example implementation of the protocol, allowing users to explore its functionality and benefits.
-By adopting this protocol, peer-to-peer networks can enhance their efficiency and reduce reliance on costly relay infrastructure.
