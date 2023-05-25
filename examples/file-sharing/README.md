@@ -1,8 +1,11 @@
 ## Description
 
-The File Sharing example demonstrates a basic file sharing application built using **libp2p**. This example showcases how to integrate **rust-libp2p** into a larger application while providing a simple file sharing functionality.
+The File Sharing example demonstrates a basic file sharing application built using **libp2p**.
+This example showcases how to integrate **rust-libp2p** into a larger application while providing a simple file sharing functionality.
 
-In this application, peers in the network can either act as file providers or file retrievers. Providers advertise the files they have available on a Distributed Hash Table (DHT) using `libp2p-kad`. Retrievers can locate and retrieve files by their names from any node in the network.
+In this application, peers in the network can either act as file providers or file retrievers.
+Providers advertise the files they have available on a Distributed Hash Table (DHT) using `libp2p-kad`.
+Retrievers can locate and retrieve files by their names from any node in the network.
 
 ## How it Works
 
