@@ -16,15 +16,17 @@ To run the example, follow these steps:
 
 ### Example usage
 
+- Example usage in client-listen mode:
+	```sh
+	cargo run -- --mode listen --secret-key-seed 42 --relay-address /ip4/127.0.0.1/tcp/12345
+	```
+
 - Example usage in client-dial mode:
 	```sh
 	cargo run -- --mode dial --secret-key-seed 42 --relay-address /ip4/127.0.0.1/tcp/12345 --remote-peer-id <REMOTE_PEER_ID>
 	```
 
-- Example usage in client-listen mode:
-	```sh
-	cargo run -- --mode listen --secret-key-seed 42 --relay-address /ip4/127.0.0.1/tcp/12345
-	```
+For this example to work, it is also necessary to turn on a relay server (you will find the related instructions in the example in the `examples/relay-server` folder).
 
 ## Conclusion
 
