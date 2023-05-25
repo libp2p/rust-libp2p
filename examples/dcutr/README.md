@@ -12,16 +12,7 @@ To run the example, follow these steps:
    ```sh
    cargo run -- <OPTIONS>
    ```
-   Replace `<OPTIONS>` with specific options.
-
-### Available Options
-
-The following options can be used with the example:
-
-- `--mode <MODE>`: Specify the mode of operation for the example. Possible values are `dial` (client-dial) or `listen` (client-listen).
-- `--secret-key-seed <SEED>`: Specify a fixed value to generate a deterministic peer ID.
-- `--relay-address <ADDRESS>`: Specify the listening address for the relay server.
-- `--remote-peer-id <ID>`: Specify the Peer ID of the remote peer to establish a connection with (only in `dial` mode).
+   Replace `<OPTIONS>` with specific options (you can use the `--help` command to see the available options).
 
 ### Example usage
 
