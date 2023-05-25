@@ -1,6 +1,7 @@
 ## Description
 
 The "Direct Connection Upgrade through Relay" (DCUTR) protocol allows peers in a peer-to-peer network to establish direct connections with each other.
+In other words, DCUTR is libp2p's version of hole-punching.
 This example provides a basic usage of this protocol in **libp2p**.
 
 ## Usage
