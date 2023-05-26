@@ -38,8 +38,8 @@ use yamux::ConnectionError;
 
 /// A Yamux connection.
 #[derive(Debug)]
-pub struct Muxer<S> {
-    connection: yamux::Connection<S>,
+pub struct Muxer<C> {
+    connection: yamux::Connection<C>,
     /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
     ///
     /// The only way how yamux can make progress is by calling [`yamux::Connection::poll_next_inbound`]. However, the
