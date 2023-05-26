@@ -329,7 +329,7 @@ impl Floodsub {
 
 impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
-    type OutEvent = FloodsubEvent;
+    type ToSwarm = FloodsubEvent;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -470,7 +470,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -494,8 +494,9 @@ impl NetworkBehaviour for Floodsub {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

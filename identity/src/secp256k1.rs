@@ -20,7 +20,7 @@
 
 //! Secp256k1 keys.
 
-use super::error::{DecodingError, SigningError};
+use super::error::DecodingError;
 use asn1_der::typed::{DerDecodable, Sequence};
 use core::cmp;
 use core::fmt;
@@ -97,20 +97,6 @@ impl SecretKey {
     /// error is returned.
     ///
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
-    )]
-    #[allow(unused_mut)]
-    pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        Self::try_from_bytes(sk)
-    }
-
-    /// Create a secret key from a byte slice, zeroing the slice on success.
-    /// If the bytes do not constitute a valid Secp256k1 secret key, an
-    /// error is returned.
-    ///
-    /// Note that the expected binary format is the same as `libsecp256k1`'s.
     pub fn try_from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
         let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
@@ -142,25 +128,25 @@ impl SecretKey {
     /// ECDSA signature, as defined in [RFC3278].
     ///
     /// [RFC3278]: https://tools.ietf.org/html/rfc3278#section-8.2
-    pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
-        self.sign_hash(Sha256::digest(msg).as_ref())
+    pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
+        let generic_array = Sha256::digest(msg);
+
+        // FIXME: Once `generic-array` hits 1.0, we should be able to just use `Into` here.
+        let mut array = [0u8; 32];
+        array.copy_from_slice(generic_array.as_slice());
+
+        let message = Message::parse(&array);
+
+        libsecp256k1::sign(&message, &self.0)
+            .0
+            .serialize_der()
+            .as_ref()
+            .into()
     }
 
     /// Returns the raw bytes of the secret key.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.serialize()
-    }
-
-    /// Sign a raw message of length 256 bits with this secret key, produces a DER-encoded
-    /// ECDSA signature.
-    pub fn sign_hash(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
-        let m = Message::parse_slice(msg)
-            .map_err(|_| SigningError::new("failed to parse secp256k1 digest"))?;
-        Ok(libsecp256k1::sign(&m, &self.0)
-            .0
-            .serialize_der()
-            .as_ref()
-            .into())
     }
 }
 
@@ -215,41 +201,15 @@ impl PublicKey {
             .unwrap_or(false)
     }
 
-    /// Encode the public key in compressed form, i.e. with one coordinate
-    /// represented by a single bit.
-    #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::to_bytes`.")]
-    pub fn encode(&self) -> [u8; 33] {
-        self.to_bytes()
-    }
-
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
     /// represented by a single bit.
     pub fn to_bytes(&self) -> [u8; 33] {
         self.0.serialize_compressed()
     }
 
-    /// Encode the public key in uncompressed form.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Renamed to `PublicKey::to_bytes_uncompressed`."
-    )]
-    pub fn encode_uncompressed(&self) -> [u8; 65] {
-        self.to_bytes_uncompressed()
-    }
-
     /// Convert the public key to a byte buffer in uncompressed form.
     pub fn to_bytes_uncompressed(&self) -> [u8; 65] {
         self.0.serialize()
-    }
-
-    /// Decode a public key from a byte slice in the the format produced
-    /// by `encode`.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
-    )]
-    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_from_bytes(k)
     }
 
     /// Decode a public key from a byte slice in the the format produced

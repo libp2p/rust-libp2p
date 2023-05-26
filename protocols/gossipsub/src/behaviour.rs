@@ -30,10 +30,12 @@ use std::{
 };
 
 use futures::StreamExt;
+use futures_ticker::Ticker;
 use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng, Rng};
 
+use instant::Instant;
 use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr};
 use libp2p_identity::Keypair;
 use libp2p_identity::PeerId;
@@ -43,18 +45,17 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
     THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, FloodPublish, ValidationMode};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
-use crate::metrics_priv::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
+use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol_priv::{ProtocolConfig, SIGNING_PREFIX};
-use crate::subscription_filter_priv::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
-use crate::time_cache_priv::{DuplicateCache, TimeCache};
+use crate::protocol::SIGNING_PREFIX;
+use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
+use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
@@ -67,7 +68,6 @@ use crate::{PublishError, SubscriptionError, ValidationError};
 use instant::SystemTime;
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
-use wasm_timer::Interval;
 
 #[cfg(test)]
 mod tests;
@@ -289,7 +289,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     mcache: MessageCache,
 
     /// Heartbeat interval stream.
-    heartbeat: Interval,
+    heartbeat: Ticker,
 
     /// Number of heartbeats since the beginning of time; this allows us to amortize some resource
     /// clean up -- eg backoff clean up.
@@ -307,7 +307,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
 
     /// Stores optional peer score data together with thresholds, decay interval and gossip
     /// promises.
-    peer_score: Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+    peer_score: Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
 
     /// Counts the number of `IHAVE` received from each peer since the last heartbeat.
     count_received_ihave: HashMap<PeerId, usize>,
@@ -463,9 +463,9 @@ where
                 config.backoff_slack(),
             ),
             mcache: MessageCache::new(config.history_gossip(), config.history_length()),
-            heartbeat: Interval::new_at(
-                Instant::now() + config.heartbeat_initial_delay(),
+            heartbeat: Ticker::new_with_next(
                 config.heartbeat_interval(),
+                config.heartbeat_initial_delay(),
             ),
             heartbeat_ticks: 0,
             px_peers: HashSet::new(),
@@ -1020,7 +1020,7 @@ where
             return Err("Peer score set twice".into());
         }
 
-        let interval = Interval::new(params.decay_interval);
+        let interval = Ticker::new(params.decay_interval);
         let peer_score = PeerScore::new_with_message_delivery_time_callback(params, callback);
         self.peer_score = Some((peer_score, threshold, interval, GossipPromises::default()));
         Ok(())
@@ -1287,7 +1287,7 @@ where
     }
 
     fn score_below_threshold_from_scores(
-        peer_score: &Option<(PeerScore, PeerScoreThresholds, Interval, GossipPromises)>,
+        peer_score: &Option<(PeerScore, PeerScoreThresholds, Ticker, GossipPromises)>,
         peer_id: &PeerId,
         threshold: impl Fn(&PeerScoreThresholds) -> f64,
     ) -> (bool, f64) {
@@ -3444,7 +3444,7 @@ where
     F: Send + 'static + TopicSubscriptionFilter,
 {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -3454,7 +3454,7 @@ where
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
@@ -3467,7 +3467,7 @@ where
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
-            ProtocolConfig::new(&self.config),
+            self.config.protocol_config(),
             self.config.idle_timeout(),
         ))
     }
@@ -3602,19 +3602,19 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
 
         // update scores
         if let Some((peer_score, _, interval, _)) = &mut self.peer_score {
-            while let Poll::Ready(Some(())) = interval.poll_next_unpin(cx) {
+            while let Poll::Ready(Some(_)) = interval.poll_next_unpin(cx) {
                 peer_score.refresh_scores();
             }
         }
 
-        while let Poll::Ready(Some(())) = self.heartbeat.poll_next_unpin(cx) {
+        while let Poll::Ready(Some(_)) = self.heartbeat.poll_next_unpin(cx) {
             self.heartbeat();
         }
 
@@ -3637,8 +3637,9 @@ where
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }
@@ -3846,7 +3847,7 @@ mod local_test {
     use super::*;
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     fn empty_rpc() -> Rpc {
         Rpc {
@@ -3961,7 +3962,7 @@ mod local_test {
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);
             let mut codec =
-                crate::protocol_priv::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
+                crate::protocol::GossipsubCodec::new(length_codec, ValidationMode::Permissive);
 
             let rpc_proto = rpc.into_protobuf();
             let fragmented_messages = gs

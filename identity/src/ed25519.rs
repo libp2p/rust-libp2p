@@ -38,31 +38,11 @@ impl Keypair {
         Keypair::from(SecretKey::generate())
     }
 
-    /// Encode the keypair into a byte array by concatenating the bytes
-    /// of the secret scalar and the compressed public point,
-    /// an informal standard for encoding Ed25519 keypairs.
-    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::to_bytes`")]
-    pub fn encode(&self) -> [u8; 64] {
-        self.to_bytes()
-    }
-
     /// Convert the keypair into a byte array by concatenating the bytes
     /// of the secret scalar and the compressed public point,
     /// an informal standard for encoding Ed25519 keypairs.
     pub fn to_bytes(&self) -> [u8; 64] {
         self.0.to_bytes()
-    }
-
-    /// Decode a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
-    /// produced by [`Keypair::to_bytes`], zeroing the input on success.
-    ///
-    /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_from_bytes` instead."
-    )]
-    pub fn decode(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
-        Self::try_from_bytes(kp)
     }
 
     /// Try to parse a keypair from the [binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)
@@ -182,29 +162,10 @@ impl PublicKey {
             .is_ok()
     }
 
-    /// Encode the public key into a byte array in compressed form, i.e.
-    /// where one coordinate is represented by a single bit.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Renamed to `PublicKey::to_bytes` to reflect actual behaviour."
-    )]
-    pub fn encode(&self) -> [u8; 32] {
-        self.to_bytes()
-    }
-
     /// Convert the public key to a byte array in compressed form, i.e.
     /// where one coordinate is represented by a single bit.
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes()
-    }
-
-    /// Decode a public key from a byte array as produced by `to_bytes`.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
-    )]
-    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_from_bytes(k)
     }
 
     /// Try to parse a public key from a byte array containing the actual key as produced by `to_bytes`.
@@ -249,18 +210,6 @@ impl SecretKey {
                 "this returns `Err` only if the length is wrong; the length is correct; qed",
             ),
         )
-    }
-
-    /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.
-    /// If the bytes do not constitute a valid Ed25519 secret key, an error is
-    /// returned.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
-    )]
-    #[allow(unused_mut)]
-    pub fn from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        Self::try_from_bytes(sk_bytes)
     }
 
     /// Try to parse an Ed25519 secret key from a byte slice

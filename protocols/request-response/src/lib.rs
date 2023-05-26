@@ -28,7 +28,7 @@
 //! over the actual messages being sent, which are defined in terms of a
 //! [`Codec`]. Creating a request/response protocol thus amounts
 //! to providing an implementation of this trait which can then be
-//! given to [`Behaviour::new`]. Further configuration options are
+//! given to [`Behaviour::with_codec`]. Further configuration options are
 //! available via the [`Config`].
 //!
 //! Requests are sent using [`Behaviour::send_request`] and the
@@ -38,6 +38,14 @@
 //! Responses are sent using [`Behaviour::send_response`] upon
 //! receiving a [`Message::Request`] via
 //! [`Event::Message`].
+//!
+//! ## Predefined codecs
+//!
+//! In case your message types implement [`serde::Serialize`] and [`serde::Deserialize`],
+//! you can use two predefined behaviours:
+//!
+//! - [`cbor::Behaviour`] for CBOR-encoded messages
+//! - [`json::Behaviour`] for JSON-encoded messages
 //!
 //! ## Protocol Families
 //!
@@ -58,31 +66,19 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod codec_priv;
-#[deprecated(
-    note = "The `codec` module will be made private in the future and should not be depended on."
-)]
-pub mod codec {
-    pub use super::codec_priv::*;
-}
+#[cfg(feature = "cbor")]
+pub mod cbor;
+mod codec;
+mod handler;
+#[cfg(feature = "json")]
+pub mod json;
 
-mod handler_priv;
-#[deprecated(
-    note = "The `handler` module will be made private in the future and should not be depended on."
-)]
-pub mod handler {
-    pub use super::handler_priv::*;
-}
+pub use codec::Codec;
+pub use handler::ProtocolSupport;
 
-pub use codec_priv::{Codec, ProtocolName};
-
-#[allow(deprecated)]
-pub use codec_priv::RequestResponseCodec;
-
-pub use handler_priv::ProtocolSupport;
-
+use crate::handler::protocol::RequestProtocol;
 use futures::channel::oneshot;
-use handler_priv::{Handler, RequestProtocol};
+use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -99,37 +95,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use libp2p::request_response::Behaviour instead."
-)]
-pub type RequestResponse<TCodec> = Behaviour<TCodec>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Config`"
-)]
-pub type RequestResponseConfig = Config;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
-)]
-pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
-)]
-pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
-    Message<TRequest, TResponse, TChannelResponse>;
-
-#[deprecated(
-    since = "0.24.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
-)]
-pub type HandlerEvent<TCodec> = handler_priv::Event<TCodec>;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -377,11 +342,24 @@ where
 
 impl<TCodec> Behaviour<TCodec>
 where
+    TCodec: Codec + Default + Clone + Send + 'static,
+{
+    /// Creates a new `Behaviour` for the given protocols and configuration, using [`Default`] to construct the codec.
+    pub fn new<I>(protocols: I, cfg: Config) -> Self
+    where
+        I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
+    {
+        Self::with_codec(TCodec::default(), protocols, cfg)
+    }
+}
+
+impl<TCodec> Behaviour<TCodec>
+where
     TCodec: Codec + Clone + Send + 'static,
 {
     /// Creates a new `Behaviour` for the given
     /// protocols, codec and configuration.
-    pub fn new<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
+    pub fn with_codec<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
     {
@@ -464,7 +442,7 @@ where
 
     /// Adds a known address for a peer that can be used for
     /// dialing attempts by the `Swarm`, i.e. is returned
-    /// by [`NetworkBehaviour::addresses_of_peer`].
+    /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
@@ -730,7 +708,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type ConnectionHandler = Handler<TCodec>;
-    type OutEvent = Event<TCodec::Request, TCodec::Response>;
+    type ToSwarm = Event<TCodec::Request, TCodec::Response>;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -803,8 +781,9 @@ where
             FromSwarm::ExpiredListenAddr(_) => {}
             FromSwarm::ListenerError(_) => {}
             FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::NewExternalAddrCandidate(_) => {}
+            FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -815,7 +794,7 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            handler_priv::Event::Response {
+            handler::Event::Response {
                 request_id,
                 response,
             } => {
@@ -832,7 +811,7 @@ where
                 self.pending_events
                     .push_back(ToSwarm::GenerateEvent(Event::Message { peer, message }));
             }
-            handler_priv::Event::Request {
+            handler::Event::Request {
                 request_id,
                 request,
                 sender,
@@ -863,7 +842,7 @@ where
                     }
                 }
             }
-            handler_priv::Event::ResponseSent(request_id) => {
+            handler::Event::ResponseSent(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -876,7 +855,7 @@ where
                         request_id,
                     }));
             }
-            handler_priv::Event::ResponseOmission(request_id) => {
+            handler::Event::ResponseOmission(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -890,7 +869,7 @@ where
                         error: InboundFailure::ResponseOmission,
                     }));
             }
-            handler_priv::Event::OutboundTimeout(request_id) => {
+            handler::Event::OutboundTimeout(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -904,21 +883,7 @@ where
                         error: OutboundFailure::Timeout,
                     }));
             }
-            handler_priv::Event::InboundTimeout(request_id) => {
-                // Note: `Event::InboundTimeout` is emitted both for timing
-                // out to receive the request and for timing out sending the response. In the former
-                // case the request is never added to `pending_outbound_responses` and thus one can
-                // not assert the request_id to be present before removing it.
-                self.remove_pending_outbound_response(&peer, connection, request_id);
-
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::Timeout,
-                    }));
-            }
-            handler_priv::Event::OutboundUnsupportedProtocols(request_id) => {
+            handler::Event::OutboundUnsupportedProtocols(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -932,17 +897,6 @@ where
                         error: OutboundFailure::UnsupportedProtocols,
                     }));
             }
-            handler_priv::Event::InboundUnsupportedProtocols(request_id) => {
-                // Note: No need to call `self.remove_pending_outbound_response`,
-                // `Event::Request` was never emitted for this request and
-                // thus request was never added to `pending_outbound_responses`.
-                self.pending_events
-                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error: InboundFailure::UnsupportedProtocols,
-                    }));
-            }
         }
     }
 
@@ -950,7 +904,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {

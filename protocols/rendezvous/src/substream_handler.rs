@@ -31,7 +31,7 @@ use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -50,7 +50,7 @@ pub trait SubstreamHandler: Sized {
 
     fn upgrade(open_info: Self::OpenInfo)
         -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo>;
-    fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self;
+    fn new(substream: Stream, info: Self::OpenInfo) -> Self;
     fn on_event(self, event: Self::InEvent) -> Self;
     fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error>;
 }
@@ -127,21 +127,21 @@ impl fmt::Display for OutboundSubstreamId {
 }
 
 pub struct PassthroughProtocol {
-    ident: Option<&'static [u8]>,
+    ident: Option<StreamProtocol>,
 }
 
 impl PassthroughProtocol {
-    pub fn new(ident: &'static [u8]) -> Self {
+    pub fn new(ident: StreamProtocol) -> Self {
         Self { ident: Some(ident) }
     }
 }
 
 impl UpgradeInfo for PassthroughProtocol {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = std::option::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        self.ident.into_iter()
+        self.ident.clone().into_iter()
     }
 }
 
@@ -354,8 +354,8 @@ where
     TInboundSubstreamHandler: Send + 'static,
     TOutboundSubstreamHandler: Send + 'static,
 {
-    type InEvent = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
-    type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
+    type FromBehaviour = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
+    type ToBehaviour = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
     type Error = Void;
     type InboundProtocol = PassthroughProtocol;
     type OutboundProtocol = PassthroughProtocol;
@@ -396,11 +396,13 @@ where
             // TODO: Handle upgrade errors properly
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::DialUpgradeError(_) => {}
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             InEvent::NewSubstream { open_info } => self.new_substreams.push_back(open_info),
             InEvent::NotifyInboundSubstream { id, message } => {
@@ -454,7 +456,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -466,32 +468,28 @@ where
 
         match poll_substreams(&mut self.inbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundEvent {
-                    id,
-                    message,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::InboundEvent { id, message },
+                ))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundError {
-                    id,
-                    error,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::InboundError { id, error },
+                ))
             }
             Poll::Pending => {}
         }
 
         match poll_substreams(&mut self.outbound_substreams, cx) {
             Poll::Ready(Ok((id, message))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundEvent {
-                    id,
-                    message,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::OutboundEvent { id, message },
+                ))
             }
             Poll::Ready(Err((id, error))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundError {
-                    id,
-                    error,
-                }))
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    OutEvent::OutboundError { id, error },
+                ))
             }
             Poll::Pending => {}
         }
@@ -538,7 +536,7 @@ impl SubstreamHandler for void::Void {
     type Error = void::Void;
     type OpenInfo = ();
 
-    fn new(_: NegotiatedSubstream, _: Self::OpenInfo) -> Self {
+    fn new(_: Stream, _: Self::OpenInfo) -> Self {
         unreachable!("we should never yield a substream")
     }
 

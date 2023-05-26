@@ -24,7 +24,7 @@ use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::convert::TryFrom;
 use std::iter;
 use thiserror::Error;
@@ -34,7 +34,7 @@ pub struct Upgrade {
 }
 
 impl upgrade::UpgradeInfo for Upgrade {
-    type Info = &'static [u8];
+    type Info = StreamProtocol;
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -48,12 +48,12 @@ impl Upgrade {
     }
 }
 
-impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
+impl upgrade::OutboundUpgrade<Stream> for Upgrade {
     type Output = Connect;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
@@ -136,9 +136,6 @@ pub enum UpgradeError {
     NoAddresses,
     #[error("Invalid expiration timestamp in reservation.")]
     InvalidReservationExpiration,
-    #[deprecated(since = "0.8.1", note = "Error is no longer constructed.")]
-    #[error("Invalid addresses in reservation.")]
-    InvalidAddrs,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Unexpected message type 'connect'")]
