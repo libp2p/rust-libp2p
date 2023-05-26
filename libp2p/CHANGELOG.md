@@ -18,13 +18,13 @@
   See [PR 3920].
 
 - Remove `libp2p-perf` protocol. To use `libp2p-perf` one needs to import it directly.
-  See [PR XXX].
+  See [PR 3990].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 [PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
-[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+[PR 3990]: https://github.com/libp2p/rust-libp2p/pull/3990
 
 ## 0.51.3
 
