@@ -34,7 +34,7 @@ use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -47,7 +47,7 @@ fn reservation() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
@@ -90,7 +90,7 @@ fn new_reservation_to_same_relay_replaces_old() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut client = build_client();
@@ -183,7 +183,7 @@ fn connect() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut dst = build_client();
@@ -281,7 +281,7 @@ fn reuse_connection() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr

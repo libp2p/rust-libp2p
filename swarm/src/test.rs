@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr, ExternalAddrExpired,
+    FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate, NewListenAddr, NewListener,
 };
 use crate::{
     ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, PollParameters, THandler,
@@ -130,8 +130,9 @@ where
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -500,15 +501,17 @@ where
                         addr,
                     }));
             }
-            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+            FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
                 self.on_new_external_addr.push(addr.clone());
                 self.inner
-                    .on_swarm_event(FromSwarm::NewExternalAddr(NewExternalAddr { addr }));
+                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                        NewExternalAddrCandidate { addr },
+                    ));
             }
-            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }) => {
                 self.on_expired_external_addr.push(addr.clone());
                 self.inner
-                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
+                    .on_swarm_event(FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr }));
             }
             FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
                 self.on_listener_error.push(listener_id);

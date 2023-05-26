@@ -80,7 +80,7 @@ tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
 tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-webrtc?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 webrtc = ["dep:libp2p-webrtc", "libp2p-webrtc?/pem"]
@@ -92,7 +92,7 @@ bytes = "1"
 futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
-instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
+instant = "0.1.12" # Explicit dependency to be used in `wasm-bindgen` feature
 
 libp2p-allow-block-list = { workspace = true }
 libp2p-autonat = { workspace = true, optional = true }
@@ -100,6 +100,7 @@ libp2p-connection-limits = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-dcutr = { workspace = true, optional = true }
 libp2p-floodsub = { workspace = true, optional = true }
+libp2p-gossipsub = { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
 libp2p-identity = { workspace = true }
 libp2p-kad = { workspace = true, optional = true }
@@ -129,9 +130,6 @@ libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
 libp2p-webrtc = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
-
-[target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub = { workspace = true, optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
