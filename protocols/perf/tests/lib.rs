@@ -50,7 +50,7 @@ async fn perf() {
         .wait(|e| match e {
             SwarmEvent::IncomingConnection { .. } => panic!(),
             SwarmEvent::ConnectionEstablished { .. } => None,
-            SwarmEvent::Dialing(_) => None,
+            SwarmEvent::Dialing { .. } => None,
             SwarmEvent::Behaviour(client::Event { result, .. }) => Some(result),
             e => panic!("{e:?}"),
         })

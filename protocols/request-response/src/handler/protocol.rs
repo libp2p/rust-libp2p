@@ -28,7 +28,7 @@ use crate::RequestId;
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::Stream;
 use smallvec::SmallVec;
 use std::{fmt, io};
 
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<TCodec> InboundUpgrade<NegotiatedSubstream> for ResponseProtocol<TCodec>
+impl<TCodec> InboundUpgrade<Stream> for ResponseProtocol<TCodec>
 where
     TCodec: Codec + Send + 'static,
 {
@@ -96,11 +96,7 @@ where
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(
-        mut self,
-        mut io: NegotiatedSubstream,
-        protocol: Self::Info,
-    ) -> Self::Future {
+    fn upgrade_inbound(mut self, mut io: Stream, protocol: Self::Info) -> Self::Future {
         async move {
             let read = self.codec.read_request(&protocol, &mut io);
             let request = read.await?;
@@ -163,7 +159,7 @@ where
     }
 }
 
-impl<TCodec> OutboundUpgrade<NegotiatedSubstream> for RequestProtocol<TCodec>
+impl<TCodec> OutboundUpgrade<Stream> for RequestProtocol<TCodec>
 where
     TCodec: Codec + Send + 'static,
 {
@@ -171,11 +167,7 @@ where
     type Error = io::Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(
-        mut self,
-        mut io: NegotiatedSubstream,
-        protocol: Self::Info,
-    ) -> Self::Future {
+    fn upgrade_outbound(mut self, mut io: Stream, protocol: Self::Info) -> Self::Future {
         async move {
             let write = self.codec.write_request(&protocol, &mut io, self.request);
             write.await?;

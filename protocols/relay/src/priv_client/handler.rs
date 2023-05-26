@@ -123,7 +123,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -194,9 +194,10 @@ impl Handler {
                     relay_addr: self.remote_addr.clone(),
                 });
 
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundCircuitEstablished { src_peer_id, limit },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::InboundCircuitEstablished { src_peer_id, limit },
+                    ));
             }
             Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
@@ -254,7 +255,7 @@ impl Handler {
                 );
 
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::Custom(event));
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(event));
             }
 
             // Outbound circuit
@@ -272,9 +273,10 @@ impl Handler {
                 })) {
                     Ok(()) => {
                         self.alive_lend_out_substreams.push(rx);
-                        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                            Event::OutboundCircuitEstablished { limit },
-                        ));
+                        self.queued_events
+                            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::OutboundCircuitEstablished { limit },
+                            ));
                     }
                     Err(_) => debug!(
                         "Oneshot to `client::transport::Dial` future dropped. \
@@ -350,12 +352,13 @@ impl Handler {
                 }
 
                 let renewal = self.reservation.failed();
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::ReservationReqFailed {
-                        renewal,
-                        error: non_fatal_error,
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqFailed {
+                            renewal,
+                            error: non_fatal_error,
+                        },
+                    ));
             }
             OutboundOpenInfo::Connect { send_back } => {
                 let non_fatal_error = match error {
@@ -382,19 +385,20 @@ impl Handler {
 
                 let _ = send_back.send(Err(()));
 
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::OutboundCircuitReqFailed {
-                        error: non_fatal_error,
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitReqFailed {
+                            error: non_fatal_error,
+                        },
+                    ));
             }
         }
     }
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = In;
-    type OutEvent = Event;
+    type FromBehaviour = In;
+    type ToBehaviour = Event;
     type Error = StreamUpgradeError<
         Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
@@ -407,7 +411,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::Reserve { to_listener } => {
                 self.queued_events
@@ -444,7 +448,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -485,7 +489,7 @@ impl ConnectionHandler for Handler {
                 });
         if let Some((src_peer_id, event)) = maybe_event {
             self.circuit_deny_futs.remove(&src_peer_id);
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
 
         // Send errors to transport.

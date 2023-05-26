@@ -74,7 +74,7 @@ impl Behaviour {
     /// Register our external addresses in the given namespace with the given rendezvous peer.
     ///
     /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
-    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ReportObservedAddr`].
+    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
     pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
@@ -163,7 +163,7 @@ pub enum Event {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -244,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -307,8 +307,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

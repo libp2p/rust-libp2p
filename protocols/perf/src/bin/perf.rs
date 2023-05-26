@@ -482,7 +482,7 @@ async fn connect(
     let server_peer_id = loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-            SwarmEvent::OutgoingConnectionError { peer_id, error } => {
+            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
                 bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
             }
             e => panic!("{e:?}"),

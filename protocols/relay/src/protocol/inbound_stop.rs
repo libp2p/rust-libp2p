@@ -25,7 +25,7 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade;
 use libp2p_identity::PeerId;
-use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::iter;
 use thiserror::Error;
 
@@ -40,12 +40,12 @@ impl upgrade::UpgradeInfo for Upgrade {
     }
 }
 
-impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
+impl upgrade::InboundUpgrade<Stream> for Upgrade {
     type Output = Circuit;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let mut substream = Framed::new(
             substream,
             quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
@@ -111,7 +111,7 @@ pub enum FatalUpgradeError {
 }
 
 pub struct Circuit {
-    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::StopMessage>>,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::StopMessage>>,
     src_peer_id: PeerId,
     limit: Option<protocol::Limit>,
 }
@@ -125,7 +125,7 @@ impl Circuit {
         self.limit
     }
 
-    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
+    pub async fn accept(mut self) -> Result<(Stream, Bytes), UpgradeError> {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::STATUS,
             peer: None,

@@ -136,11 +136,7 @@ fn build_client() -> Swarm<Client> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "ClientEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(to_swarm = "ClientEvent", prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
@@ -193,7 +189,10 @@ async fn wait_for_reservation(
                     break;
                 }
             }
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             e => panic!("{e:?}"),
         }

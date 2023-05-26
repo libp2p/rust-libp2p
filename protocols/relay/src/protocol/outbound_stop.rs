@@ -25,7 +25,7 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade;
 use libp2p_identity::PeerId;
-use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::convert::TryInto;
 use std::iter;
 use std::time::Duration;
@@ -46,12 +46,12 @@ impl upgrade::UpgradeInfo for Upgrade {
     }
 }
 
-impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
-    type Output = (NegotiatedSubstream, Bytes);
+impl upgrade::OutboundUpgrade<Stream> for Upgrade {
+    type Output = (Stream, Bytes);
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::CONNECT,
             peer: Some(proto::Peer {

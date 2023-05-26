@@ -64,7 +64,6 @@ impl Default for Behaviour {
         Self {
             connected: Default::default(),
             request_response: request_response::Behaviour::new(
-                crate::protocol::Codec::default(),
                 std::iter::once((
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Outbound,
@@ -100,7 +99,7 @@ pub enum PerfError {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         <request_response::Behaviour<crate::protocol::Codec> as NetworkBehaviour>::ConnectionHandler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_pending_outbound_connection(
         &mut self,
@@ -180,8 +179,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrConfirmed(_)
+            | FromSwarm::ExternalAddrExpired(_) => {}
         };
 
         self.request_response.on_swarm_event(event);
@@ -201,7 +201,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.request_response.poll(cx, params).map(|to_swarm| {
             to_swarm.map_out(|m| match m {
                 request_response::Event::Message {

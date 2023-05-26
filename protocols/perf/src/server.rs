@@ -29,7 +29,7 @@ use libp2p_swarm::{
     ToSwarm,
 };
 
-use crate::protocol::{Codec, Response};
+use crate::protocol::Response;
 
 pub struct Behaviour {
     request_response: request_response::Behaviour<crate::protocol::Codec>,
@@ -43,7 +43,6 @@ impl Default for Behaviour {
 
         Self {
             request_response: request_response::Behaviour::new(
-                Codec::default(),
                 std::iter::once((
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Inbound,
@@ -63,7 +62,7 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         <request_response::Behaviour<crate::protocol::Codec> as NetworkBehaviour>::ConnectionHandler;
-    type OutEvent = ();
+    type ToSwarm = ();
 
     fn handle_pending_outbound_connection(
         &mut self,
@@ -137,7 +136,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.request_response.poll(cx, params).map(|to_swarm| {
             to_swarm.map_out(|m| match m {
                 request_response::Event::Message {

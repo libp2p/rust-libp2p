@@ -154,14 +154,18 @@ where
         }
     }
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            Either::Left(a) => a.listen_on(addr).map_err(|e| match e {
+            Either::Left(a) => a.listen_on(id, addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Left(err)),
             }),
-            Either::Right(b) => b.listen_on(addr).map_err(|e| match e {
+            Either::Right(b) => b.listen_on(id, addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Right(err)),
             }),
