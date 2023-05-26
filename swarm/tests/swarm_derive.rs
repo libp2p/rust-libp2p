@@ -518,8 +518,9 @@ fn custom_out_event_no_type_parameters() {
                 | FromSwarm::ExpiredListenAddr(_)
                 | FromSwarm::ListenerError(_)
                 | FromSwarm::ListenerClosed(_)
-                | FromSwarm::NewExternalAddr(_)
-                | FromSwarm::ExpiredExternalAddr(_) => {}
+                | FromSwarm::NewExternalAddrCandidate(_)
+                | FromSwarm::ExternalAddrExpired(_)
+                | FromSwarm::ExternalAddrConfirmed(_) => {}
             }
         }
     }

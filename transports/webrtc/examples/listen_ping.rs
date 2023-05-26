@@ -37,11 +37,7 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
 }
 
 #[derive(NetworkBehaviour, Default)]
-#[behaviour(
-    to_swarm = "Event",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(to_swarm = "Event", prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
