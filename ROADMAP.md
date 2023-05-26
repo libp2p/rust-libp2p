@@ -95,7 +95,8 @@ argue that that demand follows this roadmap item and not the other way round.)
 Use the browser's WebRTC stack to support
 [`/webrtc`](https://github.com/libp2p/specs/blob/master/webrtc/webrtc.md) and
 [`/webrtc-direct`](https://github.com/libp2p/specs/blob/master/webrtc/webrtc-direct.md) from within
-the browser using rust-libp2p compiled to WASM.
+the browser using rust-libp2p compiled to WASM. This makes rust-libp2p a truly end-to-end solution,
+enabling users to use rust-libp2p on both the client (browser) and server side.
 
 ## WebTransport
 
