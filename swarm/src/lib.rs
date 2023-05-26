@@ -382,10 +382,7 @@ where
             return Err(e);
         }
 
-        self.behaviour
-            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                listener_id: id,
-            }));
+        self.add_listener(id);
         Ok(id)
     }
 
@@ -551,6 +548,14 @@ where
     /// TODO
     pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
         self.confirmed_external_addr.iter()
+    }
+
+    /// TBD
+    fn add_listener(&mut self, listener_id: ListenerId) {
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
+                listener_id,
+            }));
     }
 
     /// Add a **confirmed** external address for the local node.
@@ -1035,10 +1040,7 @@ where
                     ));
                 }
 
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                        listener_id: id,
-                    }));
+                self.add_listener(id);
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
