@@ -290,10 +290,14 @@ impl NetworkBehaviour for Behaviour {
 
         if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
-            // outgoing_direct_connection_attempts is populated only by the listener.
-            // so this may/may not return an entry
-            self.outgoing_direct_connection_attempts
-                .remove(&(relayed_connection_id, peer));
+            if role_override == Endpoint::Listener {
+                assert!(
+                    self.outgoing_direct_connection_attempts
+                        .remove(&(relayed_connection_id, peer))
+                        .is_some(),
+                    "DCUtR state tracking is buggy!"
+                );
+            }
 
             return Ok(Either::Right(Either::Left(
                 handler::direct::Handler::default(),
