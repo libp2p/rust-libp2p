@@ -50,8 +50,6 @@ Reduce maintenance burden and reduce dependency footprint.
 
 Be smart on address prioritization. go-libp2p made a lot of progress here. Lots to learn. See https://github.com/libp2p/go-libp2p/issues/2229 and https://github.com/libp2p/rust-libp2p/issues/1896#issuecomment-1537774383.
 
-Add hole punching support for QUIC. See also [DCUtR specification on usage with
-QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
 
 ## AutoNATv2
 
