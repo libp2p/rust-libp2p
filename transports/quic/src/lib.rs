@@ -63,8 +63,11 @@ mod hole_punching;
 mod provider;
 mod transport;
 
+use std::net::SocketAddr;
+
 pub use connection::{Connecting, Connection, Substream};
 pub use endpoint::Config;
+use libp2p_identity::PeerId;
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
@@ -99,6 +102,10 @@ pub enum Error {
     /// Error when `Transport::dial_as_listener` is called without an active listener.
     #[error("Tried to dial as listener without an active listener.")]
     NoActiveListenerForDialAsListener,
+
+    /// Error when holepunching for a remote is already in progress
+    #[error("Already punching hole for ({0:?}, {1:?}).")]
+    HolePunchInProgress(SocketAddr, PeerId),
 }
 
 /// Dialing a remote peer failed.
