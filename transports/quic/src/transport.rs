@@ -95,6 +95,35 @@ impl<P: Provider> GenTransport<P> {
             hole_punch_map: Default::default(),
         }
     }
+
+    fn remote_multiaddr_to_socketaddr(
+        &self,
+        addr: Multiaddr,
+    ) -> Result<
+        (SocketAddr, ProtocolVersion, Option<PeerId>),
+        TransportError<<Self as Transport>::Error>,
+    > {
+        let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+        Ok((socket_addr, version, peer_id))
+    }
+
+    fn eligible_listeners(&mut self, socket_addr: &SocketAddr) -> Vec<&mut Listener<P>> {
+        self.listeners
+            .iter_mut()
+            .filter(|l| {
+                if l.is_closed {
+                    return false;
+                }
+                let listen_addr = l.endpoint_channel.socket_addr();
+                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect()
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -154,25 +183,11 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr)?;
 
-        let mut listeners = self
-            .listeners
-            .iter_mut()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                let listen_addr = l.endpoint_channel.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
-            })
-            .collect::<Vec<_>>();
+        let handshake_timeout = self.handshake_timeout;
+
+        let mut listeners = self.eligible_listeners(&socket_addr);
 
         let dialer_state = match listeners.len() {
             0 => {
@@ -199,38 +214,19 @@ impl<P: Provider> Transport for GenTransport<P> {
                 &mut listeners[index].dialer_state
             }
         };
-        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
+        Ok(dialer_state.new_dial(socket_addr, handshake_timeout, version))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, _version, peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
+        let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
 
-        let Some(peer_id) = peer_id else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        let listeners = self
-            .listeners
-            .iter()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                let listen_addr = l.endpoint_channel.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
-            })
-            .collect::<Vec<_>>();
+        let listeners = self.eligible_listeners(&socket_addr);
 
-        // which listener to use to send packets? go-libp2p uses routing table with random port
         let endpoint_channel = match listeners.len() {
             0 => {
                 return Err(TransportError::Other(
