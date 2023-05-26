@@ -6072,13 +6072,15 @@ dependencies = [
 
 [[package]]
 name = "yamux"
-version = "0.11.0"
-source = "git+https://github.com/libp2p/rust-yamux?branch=fix/stream-flush#76a7e6f7e55025e4c78844635d6976eace1ead83"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0875ad26dfbf0e7126d4a200747c78496aa3f0225d094a8c867b0e98bb19f9d7"
 dependencies = [
  "futures",
  "log",
  "nohash-hasher",
  "parking_lot 0.12.1",
+ "pin-project",
  "rand 0.8.5",
  "static_assertions",
 ]
