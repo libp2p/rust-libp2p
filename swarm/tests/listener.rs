@@ -20,7 +20,7 @@ struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn listen(&mut self, addr: Multiaddr) -> ListenerId {
+    pub(crate) fn listen(&mut self, addr: Multiaddr) -> ListenerId {
         let listener_id = ListenerId::next();
         assert!(!self.listeners.contains(&listener_id));
         self.events.push_back(ToSwarm::ListenOn {
@@ -33,7 +33,7 @@ impl Behaviour {
         listener_id
     }
 
-    pub fn stop_listening(&mut self, id: ListenerId) {
+    pub(crate) fn stop_listening(&mut self, id: ListenerId) {
         self.events.push_back(ToSwarm::RemoveListener { id });
     }
 }
