@@ -108,8 +108,8 @@ impl NetworkBehaviour for Behaviour {
 }
 
 #[async_std::test]
-async fn listener() {
-    let mut swarm: Swarm<Behaviour> = Swarm::new_ephemeral(|_| Behaviour::default());
+async fn behaviour_listener() {
+    let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
     let addr: Multiaddr = Protocol::Memory(0).into();
     let id = swarm.behaviour_mut().listen(addr.clone());
 
