@@ -130,7 +130,11 @@ async fn behaviour_listener() {
 
     swarm
         .wait(|e| match e {
-            SwarmEvent::ListenerClosed { listener_id, addresses, reason } => {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                addresses,
+                reason,
+            } => {
                 assert_eq!(listener_id, id);
                 assert!(addresses.contains(&address));
                 assert!(reason.is_ok());
