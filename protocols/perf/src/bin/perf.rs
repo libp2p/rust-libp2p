@@ -107,7 +107,7 @@ async fn main() -> Result<()> {
 }
 
 async fn server(server_address: SocketAddr, secret_key_seed: u8) -> Result<()> {
-    let mut swarm = swarm::<libp2p_perf::server::Behaviour>(Some(secret_key_seed)).await;
+    let mut swarm = swarm::<libp2p_perf::server::Behaviour>(Some(secret_key_seed)).await?;
 
     swarm.listen_on(
         Multiaddr::empty()
@@ -201,7 +201,7 @@ async fn client(
 
 async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
-    let mut swarm = swarm(None).await;
+    let mut swarm = swarm(None).await?;
 
     let (server_peer_id, connection_established) =
         connect(&mut swarm, server_address.clone()).await?;
@@ -231,7 +231,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 
 async fn latency(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: round-trip-time latency");
-    let mut swarm = swarm(None).await;
+    let mut swarm = swarm(None).await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -278,7 +278,7 @@ fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
 
 async fn throughput(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection single channel throughput");
-    let mut swarm = swarm(None).await;
+    let mut swarm = swarm(None).await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -294,7 +294,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
 
 async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection parallel requests per second");
-    let mut swarm = swarm(None).await;
+    let mut swarm = swarm(None).await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -357,7 +357,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
             break;
         }
 
-        let mut swarm = swarm(None).await;
+        let mut swarm = swarm(None).await?;
 
         let start = Instant::now();
 
@@ -397,7 +397,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
     Ok(())
 }
 
-async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Swarm<B> {
+async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Result<Swarm<B>> {
     let local_key = if let Some(seed) = secret_key_seed {
         generate_ed25519(seed)
     } else {
@@ -408,10 +408,7 @@ async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Sw
     let transport = {
         let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1Lazy)
-            .authenticate(
-                libp2p_noise::Config::new(&local_key)
-                    .expect("Signing libp2p-noise static DH keypair failed."),
-            )
+            .authenticate(libp2p_tls::Config::new(&local_key)?)
             .multiplex(libp2p_yamux::Config::default());
 
         let quic = {
@@ -420,7 +417,7 @@ async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Sw
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
+        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp))?;
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -429,9 +426,11 @@ async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Sw
         .boxed()
     };
 
-    SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
-        .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-        .build()
+    Ok(
+        SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
+            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .build(),
+    )
 }
 
 async fn connect(
