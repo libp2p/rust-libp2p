@@ -2820,7 +2820,7 @@ name = "libp2p-perf"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "async-std",
+ "async-trait",
  "clap 4.3.0",
  "env_logger 0.10.0",
  "futures",
@@ -2828,15 +2828,19 @@ dependencies = [
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
- "libp2p-noise",
  "libp2p-quic",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
+ "libp2p-tls",
  "libp2p-yamux",
  "log",
  "rand 0.8.5",
+ "serde",
+ "serde_json",
  "thiserror",
+ "tokio",
  "void",
 ]
 
