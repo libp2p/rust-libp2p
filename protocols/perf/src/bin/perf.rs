@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
-use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -107,50 +107,13 @@ async fn main() -> Result<()> {
 }
 
 async fn server(server_address: SocketAddr, secret_key_seed: u8) -> Result<()> {
-    // Create a random PeerId
-    let local_key = generate_ed25519(secret_key_seed);
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id}");
+    let mut swarm = swarm::<libp2p_perf::server::Behaviour>(Some(secret_key_seed)).await;
 
-    let transport = {
-        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
-            .upgrade(upgrade::Version::V1Lazy)
-            .authenticate(
-                libp2p_noise::Config::new(&local_key)
-                    .expect("Signing libp2p-noise static DH keypair failed."),
-            )
-            .multiplex(libp2p_yamux::Config::default());
-
-        let quic = {
-            let mut config = libp2p_quic::Config::new(&local_key);
-            config.support_draft_29 = true;
-            libp2p_quic::tokio::Transport::new(config)
-        };
-
-        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp)).unwrap();
-
-        dns.map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed()
-    };
-
-    let mut swarm = SwarmBuilder::with_tokio_executor(
-        transport,
-        libp2p_perf::server::Behaviour::default(),
-        local_peer_id,
-    )
-    .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-    .build();
-
-    swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with(server_address.ip().into())
-                .with(Protocol::Tcp(server_address.port())),
-        )
-        .unwrap();
+    swarm.listen_on(
+        Multiaddr::empty()
+            .with(server_address.ip().into())
+            .with(Protocol::Tcp(server_address.port())),
+    )?;
 
     swarm
         .listen_on(
@@ -238,7 +201,7 @@ async fn client(
 
 async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
-    let mut swarm = swarm().await;
+    let mut swarm = swarm(None).await;
 
     let (server_peer_id, connection_established) =
         connect(&mut swarm, server_address.clone()).await?;
@@ -268,7 +231,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 
 async fn latency(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: round-trip-time latency");
-    let mut swarm = swarm().await;
+    let mut swarm = swarm(None).await;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -315,7 +278,7 @@ fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
 
 async fn throughput(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection single channel throughput");
-    let mut swarm = swarm().await;
+    let mut swarm = swarm(None).await;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -331,7 +294,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
 
 async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection parallel requests per second");
-    let mut swarm = swarm().await;
+    let mut swarm = swarm(None).await;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -394,7 +357,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
             break;
         }
 
-        let mut swarm = swarm().await;
+        let mut swarm = swarm(None).await;
 
         let start = Instant::now();
 
@@ -434,9 +397,12 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
     Ok(())
 }
 
-async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
-    // Create a random PeerId
-    let local_key = libp2p_identity::Keypair::generate_ed25519();
+async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Swarm<B> {
+    let local_key = if let Some(seed) = secret_key_seed {
+        generate_ed25519(seed)
+    } else {
+        libp2p_identity::Keypair::generate_ed25519()
+    };
     let local_peer_id = PeerId::from(local_key.public());
 
     let transport = {
@@ -463,13 +429,9 @@ async fn swarm() -> Swarm<libp2p_perf::client::Behaviour> {
         .boxed()
     };
 
-    SwarmBuilder::with_tokio_executor(
-        transport,
-        libp2p_perf::client::Behaviour::default(),
-        local_peer_id,
-    )
-    .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-    .build()
+    SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
+        .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+        .build()
 }
 
 async fn connect(
