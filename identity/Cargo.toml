@@ -41,7 +41,7 @@ peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiser
 
 [dev-dependencies]
 quickcheck = { workspace = true }
-base64 = "0.21.0"
+base64 = "0.21.2"
 serde_json = "1.0"
 rmp-serde = "1.0"
 criterion = "0.4"
