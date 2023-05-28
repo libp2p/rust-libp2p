@@ -2408,7 +2408,6 @@ dependencies = [
  "libp2p-mdns",
  "libp2p-metrics",
  "libp2p-noise",
- "libp2p-perf",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
