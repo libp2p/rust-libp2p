@@ -476,7 +476,7 @@ async fn perf(
 
     info!("{}", Run { params, duration });
 
-    return Ok(duration);
+    Ok(duration)
 }
 
 fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {
