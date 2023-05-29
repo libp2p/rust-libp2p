@@ -18,7 +18,7 @@ if-watch = "3.0.1"
 libc = "0.2.144"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.11"
+log = "0.4.18"
 socket2 = { version = "0.5.3", features = ["all"] }
 tokio = { version = "1.28.2", default-features = false, features = ["net"], optional = true }
 
