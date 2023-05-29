@@ -50,9 +50,6 @@ struct Opts {
     /// Run in server mode.
     #[clap(long)]
     run_server: bool,
-    /// Fixed value to generate deterministic peer id.
-    #[clap(long)]
-    secret_key_seed: Option<u8>,
 }
 
 /// Supported transports by rust-libp2p.
@@ -88,15 +85,13 @@ async fn main() -> Result<()> {
             upload_bytes: None,
             download_bytes: None,
             run_server: true,
-            secret_key_seed: Some(secret_key_seed),
-        } => server(server_address, secret_key_seed).await?,
+        } => server(server_address).await?,
         Opts {
             server_address: Some(server_address),
             transport: Some(transport),
             upload_bytes,
             download_bytes,
             run_server: false,
-            secret_key_seed: None,
         } => {
             client(server_address, transport, upload_bytes, download_bytes).await?;
         }
@@ -106,8 +101,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn server(server_address: SocketAddr, secret_key_seed: u8) -> Result<()> {
-    let mut swarm = swarm::<libp2p_perf::server::Behaviour>(Some(secret_key_seed)).await?;
+async fn server(server_address: SocketAddr) -> Result<()> {
+    let mut swarm = swarm::<libp2p_perf::server::Behaviour>().await?;
 
     swarm.listen_on(
         Multiaddr::empty()
@@ -201,7 +196,7 @@ async fn client(
 
 async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
-    let mut swarm = swarm(None).await?;
+    let mut swarm = swarm().await?;
 
     let (server_peer_id, connection_established) =
         connect(&mut swarm, server_address.clone()).await?;
@@ -231,7 +226,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 
 async fn latency(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: round-trip-time latency");
-    let mut swarm = swarm(None).await?;
+    let mut swarm = swarm().await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -278,7 +273,7 @@ fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
 
 async fn throughput(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection single channel throughput");
-    let mut swarm = swarm(None).await?;
+    let mut swarm = swarm().await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -294,7 +289,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
 
 async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection parallel requests per second");
-    let mut swarm = swarm(None).await?;
+    let mut swarm = swarm().await?;
 
     let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
 
@@ -357,7 +352,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
             break;
         }
 
-        let mut swarm = swarm(None).await?;
+        let mut swarm = swarm().await?;
 
         let start = Instant::now();
 
@@ -397,12 +392,8 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
     Ok(())
 }
 
-async fn swarm<B: NetworkBehaviour + Default>(secret_key_seed: Option<u8>) -> Result<Swarm<B>> {
-    let local_key = if let Some(seed) = secret_key_seed {
-        generate_ed25519(seed)
-    } else {
-        libp2p_identity::Keypair::generate_ed25519()
-    };
+async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
+    let local_key = libp2p_identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
     let transport = {
@@ -476,11 +467,4 @@ async fn perf(
     info!("{}", Run { params, duration });
 
     Ok(duration)
-}
-
-fn generate_ed25519(secret_key_seed: u8) -> libp2p_identity::Keypair {
-    let mut bytes = [0u8; 32];
-    bytes[0] = secret_key_seed;
-
-    libp2p_identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
 }
