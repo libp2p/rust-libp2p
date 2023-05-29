@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.28"
-log = "0.4.8"
+log = "0.4.18"
 salsa20 = "0.10"
 sha3 = "0.10"
 rand = "0.8"
