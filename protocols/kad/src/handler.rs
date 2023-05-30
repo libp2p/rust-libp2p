@@ -544,6 +544,7 @@ impl KademliaHandler {
             future::Either::Left(p) => p,
             future::Either::Right(p) => void::unreachable(p),
         };
+        debug_assert_eq!(self.mode, Mode::Server);
 
         if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
@@ -576,7 +577,6 @@ impl KademliaHandler {
             }
         }
 
-        debug_assert!(self.mode == Mode::Server);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
