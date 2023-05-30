@@ -36,8 +36,7 @@ use std::sync::{Arc, Mutex};
 static PROTOCOLS_DESCRIPTOR: Lazy<Descriptor> = Lazy::new(|| {
     Descriptor::new(
         "remote_protocols",
-        r#"Number of connected nodes supporting a specific protocol, with "unrecognized" for each
-        peer supporting one or more unrecognized protocols"#,
+        "Number of connected nodes supporting a specific protocol, with \"unrecognized\" for each peer supporting one or more unrecognized protocols",
         None,
         None,
         vec![],

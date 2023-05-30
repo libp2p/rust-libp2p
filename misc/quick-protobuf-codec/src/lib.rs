@@ -25,7 +25,7 @@ impl<In, Out> Codec<In, Out> {
         uvi.set_max_len(max_message_len_bytes);
         Self {
             uvi,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 }

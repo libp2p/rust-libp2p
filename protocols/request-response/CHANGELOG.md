@@ -1,5 +1,9 @@
 ## 0.25.0 - unreleased
 
+- Add `request_response::json::Behaviour` and `request_response::cbor::Behaviour` building on top of the `serde` traits.
+  To conveniently construct these, we remove the `Codec` parameter from `Behaviour::new` and add `Behaviour::with_codec`.
+  See [PR 3952].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 - Remove deprecated `RequestResponse` prefixed items. See [PR 3702].
@@ -8,10 +12,11 @@
   These variants are no longer constructed.
   See [PR 3605].
 
-- Don't close connections if individual streams fail. 
+- Don't close connections if individual streams fail.
   Log the error instead.
   See [PR 3913].
 
+[PR 3952]: https://github.com/libp2p/rust-libp2p/pull/3952
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3702]: https://github.com/libp2p/rust-libp2p/pull/3702

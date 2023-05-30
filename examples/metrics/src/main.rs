@@ -134,7 +134,7 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_pub_key,
             )),
-            keep_alive: keep_alive::Behaviour::default(),
+            keep_alive: keep_alive::Behaviour,
         }
     }
 }
