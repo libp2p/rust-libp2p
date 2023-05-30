@@ -8,7 +8,7 @@
 
 - Automatically configure client/server mode based on external addresses.
   If we have or learn about an external address of our node, we operate in server-mode and thus allow inbound requests.
-  By default, all connections are in client-mode and only allow outbound requests.
+  By default, a node is in client-mode and only allows outbound requests.
   See [PR 3877].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
