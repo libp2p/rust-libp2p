@@ -24,6 +24,9 @@ use crate::{
 pub(crate) type HolePunchMap =
     Arc<Mutex<HashMap<(SocketAddr, PeerId), oneshot::Sender<(PeerId, Connection)>>>>;
 
+/// An upgrading inbound QUIC connection that is either
+/// - a normal inbound connection or
+/// - an inbound connection corresponding to an in-progress outbound hole punching connection.
 pub(crate) struct MaybeHolePunchedConnection {
     hole_punch_map: HolePunchMap,
     addr: SocketAddr,
@@ -69,7 +72,8 @@ pub(crate) struct HolePuncher {
     endpoint_channel: endpoint::Channel,
     remote_addr: SocketAddr,
     timeout: Delay,
-    interval_timeout: Delay,
+    interval: Delay,
+    message: Option<ToEndpoint>,
 }
 
 impl HolePuncher {
@@ -82,7 +86,8 @@ impl HolePuncher {
             endpoint_channel,
             remote_addr,
             timeout: Delay::new(timeout),
-            interval_timeout: Delay::new(Duration::from_secs(0)),
+            interval: Delay::new(Duration::from_secs(0)),
+            message: None,
         }
     }
 }
@@ -92,35 +97,47 @@ impl Future for HolePuncher {
     type Output = Error;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.timeout.poll_unpin(cx) {
-            Poll::Ready(_) => return Poll::Ready(Error::HandshakeTimedOut),
-            Poll::Pending => {}
-        }
-
-        futures::ready!(self.interval_timeout.poll_unpin(cx));
-
-        let message = ToEndpoint::SendUdpPacket(quinn_proto::Transmit {
-            destination: self.remote_addr,
-            ecn: None,
-            contents: rand::thread_rng()
-                .sample_iter(distributions::Standard)
-                .take(64)
-                .collect(),
-            segment_size: None,
-            src_ip: None,
-        });
-
-        match self.endpoint_channel.try_send(message, cx) {
-            Ok(_) => {}
-            Err(endpoint::Disconnected {}) => {
-                return Poll::Ready(Error::EndpointDriverCrashed);
+        loop {
+            match self.timeout.poll_unpin(cx) {
+                Poll::Ready(_) => return Poll::Ready(Error::HandshakeTimedOut),
+                Poll::Pending => {}
             }
+
+            let message = match self.message.take() {
+                Some(m) => m,
+                None => {
+                    futures::ready!(self.interval.poll_unpin(cx));
+                    self.interval.reset(Duration::from_millis(
+                        rand::thread_rng().gen_range(10..=200),
+                    ));
+                    ToEndpoint::SendUdpPacket(quinn_proto::Transmit {
+                        destination: self.remote_addr,
+                        ecn: None,
+                        contents: rand::thread_rng()
+                            .sample_iter(distributions::Standard)
+                            .take(64)
+                            .collect(),
+                        segment_size: None,
+                        src_ip: None,
+                    })
+                }
+            };
+
+            match self.endpoint_channel.try_send(message, cx) {
+                Ok(Ok(())) => {
+                    // Message sent. Continue to register waker on `self.interval`.
+                    continue;
+                }
+                Ok(Err(m)) => {
+                    // Endpoint is busy. Try again later.
+                    self.message = Some(m);
+                }
+                Err(endpoint::Disconnected {}) => {
+                    return Poll::Ready(Error::EndpointDriverCrashed);
+                }
+            }
+
+            return Poll::Pending;
         }
-
-        self.interval_timeout.reset(Duration::from_millis(
-            rand::thread_rng().gen_range(10..=200),
-        ));
-
-        Poll::Pending
     }
 }
