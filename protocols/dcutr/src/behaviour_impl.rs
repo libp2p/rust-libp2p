@@ -281,6 +281,7 @@ impl NetworkBehaviour for Behaviour {
             ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
 
+        // Whether this is a connection requested by this behaviour.
         if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
         {
             if role_override == Endpoint::Listener {
