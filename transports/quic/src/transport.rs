@@ -189,8 +189,8 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let mut listeners = self.eligible_listeners(&socket_addr);
 
-        let dialer_state = match listeners.len() {
-            0 => {
+        let dialer_state = match listeners.as_mut_slice() {
+            [] => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
@@ -204,8 +204,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                 };
                 &mut dialer.state
             }
-            1 => &mut listeners[0].dialer_state,
-            _ => {
+            [listener] => &mut listener.dialer_state,
+            listeners => {
                 // Pick any listener to use for dialing.
                 // We hash the socket address to achieve determinism.
                 let mut hasher = DefaultHasher::new();
@@ -227,14 +227,14 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let listeners = self.eligible_listeners(&socket_addr);
 
-        let endpoint_channel = match listeners.len() {
-            0 => {
+        let endpoint_channel = match listeners.as_slice() {
+            [] => {
                 return Err(TransportError::Other(
                     Error::NoActiveListenerForDialAsListener,
                 ));
             }
-            1 => listeners[0].endpoint_channel.clone(),
-            _ => {
+            [listener] => listener.endpoint_channel.clone(),
+            listeners => {
                 // Pick any listener to use for dialing.
                 // We hash the socket address to achieve determinism.
                 let mut hasher = DefaultHasher::new();
