@@ -649,7 +649,7 @@ impl PeerScore {
         }
 
         let peers: Vec<_> = {
-            let mut record = self
+            let record = self
                 .deliveries
                 .entry(msg_id.clone())
                 .or_insert_with(DeliveryRecord::default);
