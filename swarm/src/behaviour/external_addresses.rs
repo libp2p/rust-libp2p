@@ -62,6 +62,7 @@ mod tests {
     use crate::dummy;
     use libp2p_core::multiaddr::Protocol;
     use once_cell::sync::Lazy;
+    use rand::Rng;
 
     #[test]
     fn new_external_addr_returns_correct_changed_value() {
@@ -94,6 +95,21 @@ mod tests {
         addresses.on_swarm_event(&new_external_addr2());
 
         assert_eq!(addresses.as_slice(), &[(*MEMORY_ADDR_2000).clone(), (*MEMORY_ADDR_1000).clone()]);
+    }
+
+    #[test]
+    fn when_pushing_more_than_max_addresses_oldest_is_evicted() {
+        let mut addresses = ExternalAddresses::default();
+
+        for _ in 0..MAX_LOCAL_EXTERNAL_ADDRS {
+            let random_address = Multiaddr::empty().with(Protocol::Memory(rand::thread_rng().gen_range(0..1000)));
+            addresses.on_swarm_event(&FromSwarm::<'_, dummy::ConnectionHandler>::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &random_address }));
+        }
+
+        addresses.on_swarm_event(&new_external_addr2());
+
+        assert_eq!(addresses.as_slice().len(), 20);
+        assert_eq!(addresses.as_slice()[0], (*MEMORY_ADDR_2000).clone());
     }
 
     fn new_external_addr1() -> FromSwarm<'static, dummy::ConnectionHandler> {
