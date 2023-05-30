@@ -6,15 +6,15 @@ This example showcases a basic distributed key-value store implemented using **l
 
 ### Key-Value Store
 
-1.  Open two terminal windows.
+1.  Open two terminal windows, type `cargo run` and press Enter.
 
 2.  In terminal one, type `PUT my-key my-value` and press Enter.
 This command will store the value `my-value` with the key `my-key` in the distributed key-value store.
 
-1.  In terminal two, type `GET my-key` and press Enter.
+3.  In terminal two, type `GET my-key` and press Enter.
 This command will retrieve the value associated with the key `my-key` from the key-value store.
 
-1.  To exit, press `Ctrl-c` in each terminal window to gracefully close the instances.
+4.  To exit, press `Ctrl-c` in each terminal window to gracefully close the instances.
 
 
 ### Provider Records
