@@ -104,7 +104,7 @@ pub enum Error {
     NoActiveListenerForDialAsListener,
 
     /// Error when holepunching for a remote is already in progress
-    #[error("Already punching hole for ({0:?}, {1:?}).")]
+    #[error("Already punching hole for ({0}, {1}).")]
     HolePunchInProgress(SocketAddr, PeerId),
 }
 
