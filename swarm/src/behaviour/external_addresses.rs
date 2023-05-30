@@ -11,14 +11,12 @@ const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
 #[derive(Debug, Clone)]
 pub struct ExternalAddresses {
     addresses: HashSet<Multiaddr>,
-    limit: usize,
 }
 
 impl Default for ExternalAddresses {
     fn default() -> Self {
         Self {
             addresses: Default::default(),
-            limit: MAX_LOCAL_EXTERNAL_ADDRS,
         }
     }
 }
@@ -35,7 +33,7 @@ impl ExternalAddresses {
     pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
         match event {
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
-                if self.addresses.len() < self.limit {
+                if self.addresses.len() < MAX_LOCAL_EXTERNAL_ADDRS {
                     return self.addresses.insert((*addr).clone());
                 }
             }
