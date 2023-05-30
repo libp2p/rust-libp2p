@@ -1,6 +1,5 @@
 use crate::behaviour::{ExternalAddrConfirmed, ExternalAddrExpired, FromSwarm};
 use libp2p_core::Multiaddr;
-use std::collections::HashSet;
 
 /// The maximum number of local external addresses. When reached any
 /// further externally reported addresses are ignored. The behaviour always
@@ -8,17 +7,9 @@ use std::collections::HashSet;
 const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
 
 /// Utility struct for tracking the external addresses of a [`Swarm`](crate::Swarm).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ExternalAddresses {
-    addresses: HashSet<Multiaddr>,
-}
-
-impl Default for ExternalAddresses {
-    fn default() -> Self {
-        Self {
-            addresses: Default::default(),
-        }
-    }
+    addresses: Vec<Multiaddr>,
 }
 
 impl ExternalAddresses {
@@ -27,18 +18,36 @@ impl ExternalAddresses {
         self.addresses.iter()
     }
 
+    pub fn as_slice(&self) -> &[Multiaddr] {
+        self.addresses.as_slice()
+    }
+
     /// Feed a [`FromSwarm`] event to this struct.
     ///
     /// Returns whether the event changed our set of external addresses.
     pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
         match event {
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
-                if self.addresses.len() < MAX_LOCAL_EXTERNAL_ADDRS {
-                    return self.addresses.insert((*addr).clone());
+                if self.addresses.contains(addr) {
+                    return false;
                 }
+
+                if self.addresses.len() >= MAX_LOCAL_EXTERNAL_ADDRS {
+                    return false;
+                }
+
+                self.addresses.insert(0, (*addr).clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
+
+                return true;
             }
-            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr, .. }) => {
-                return self.addresses.remove(addr)
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr: expired_addr, .. }) => {
+                let pos = match self.addresses.iter().position(|candidate| candidate == *expired_addr) {
+                    None => return false,
+                    Some(p) => p,
+                };
+
+                self.addresses.remove(pos);
+                return true;
             }
             _ => {}
         }
