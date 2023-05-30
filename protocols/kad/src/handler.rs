@@ -1226,10 +1226,12 @@ fn infer_mode(
             ConnectedPoint::Listener { local_addr, .. },
             None | Some(Mode::Client),
         ) => {
-            let confirmed_external_addresses =
-                to_comma_separated_list(confirmed_external_addresses);
+            if log::log_enabled!(log::Level::Debug) {
+                let confirmed_external_addresses =
+                    to_comma_separated_list(confirmed_external_addresses);
 
-            log::debug!("Operating in server-mode on inbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to {local_addr}");
+                log::debug!("Operating in server-mode on inbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to {local_addr}");
+            }
 
             Mode::Server
         }
@@ -1238,10 +1240,12 @@ fn infer_mode(
             ConnectedPoint::Dialer { .. },
             None | Some(Mode::Client),
         ) => {
-            let confirmed_external_addresses =
-                to_comma_separated_list(confirmed_external_addresses);
+            if log::log_enabled!(log::Level::Debug) {
+                let confirmed_external_addresses =
+                    to_comma_separated_list(confirmed_external_addresses);
 
-            log::debug!("Operating in server-mode on outbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to us");
+                log::debug!("Operating in server-mode on outbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to us");
+            }
 
             // This assumes that the remote node somehow figures out a dialable address for us.
             // For example, our observed address may not be reachable if we don't reuse ports on TCP.
