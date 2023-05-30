@@ -2438,39 +2438,44 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
+        self.mode = match (self.external_addresses.as_slice(), self.mode) {
+            ([], Mode::Server) => {
+                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+
+                Mode::Client
+            }
+            ([], Mode::Client) => {
+                // Previously client-mode, now also client-mode because no external addresses.
+
+                Mode::Client
+            }
+            (confirmed_external_addresses, Mode::Client) => {
+                if log::log_enabled!(log::Level::Debug) {
+                    let confirmed_external_addresses =
+                        to_comma_separated_list(confirmed_external_addresses);
+
+                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                }
+
+                Mode::Server
+            }
+            (confirmed_external_addresses, Mode::Server) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                Mode::Server
+            }
+        };
+
         if external_addresses_changed && !self.connections.is_empty() {
-            self.mode = match (self.external_addresses.as_slice(), self.mode) {
-                ([], Mode::Server) => {
-                    log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
-
-                    Mode::Client
-                }
-                (confirmed_external_addresses, Mode::Client) => {
-                    if log::log_enabled!(log::Level::Debug) {
-                        let confirmed_external_addresses =
-                            to_comma_separated_list(confirmed_external_addresses);
-
-                        log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
-                    }
-
-                    Mode::Server
-                }
-                (confirmed_external_addresses, Mode::Server) => {
-                    debug_assert!(
-                        !confirmed_external_addresses.is_empty(),
-                        "Previous match arm handled empty list"
-                    );
-
-                    // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
-                    Mode::Server
-                }
-            };
-
             let num_connections = self.connections.len();
 
             log::debug!(
-                "External addresses changed, re-configuring {} connection{}",
+                "External addresses changed, re-configuring {} established connection{}",
                 num_connections,
                 if num_connections > 1 { "s" } else { "" }
             );
