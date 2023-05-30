@@ -483,42 +483,17 @@ impl KademliaHandler {
         local_addr: Multiaddr,
         remote_addr: Multiaddr,
         remote_peer_id: PeerId,
-        external_addresses: Vec<&Multiaddr>,
+        external_addresses: Vec<Multiaddr>,
     ) -> Self {
-        let mode = match external_addresses.as_slice() {
-            [] => {
-                log::debug!("Operating in client-mode on new inbound connection from peer {remote_peer_id} because we don't have any confirmed external addresses");
-
-                Mode::Client
-            }
-            [confirmed_external_addr] => {
-                // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
-                log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that {confirmed_external_addr} routes to {local_addr}");
-
-                Mode::Server
-            }
-            confirmed_external_addresses => {
-                let confirmed_external_addresses = confirmed_external_addresses
-                    .iter()
-                    .map(|addr| addr.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                log::debug!("Operating in server-mode on new inbound connection from peer {remote_peer_id} under the assumption that one of [{confirmed_external_addresses}] routes to {local_addr}");
-
-                Mode::Server
-            }
-        };
-
         Self::new(
             protocol_config,
-            mode,
             idle_timeout,
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr: remote_addr,
             },
             remote_peer_id,
+            external_addresses,
         )
     }
 
@@ -529,34 +504,32 @@ impl KademliaHandler {
         addr: Multiaddr,
         role_override: Endpoint,
         peer: PeerId,
+        external_addresses: Vec<Multiaddr>,
     ) -> Self {
-        // Outbound connections are always in client-mode because we may be using an ephemeral port for dialing and thus the observed address may not be reachable.
-        log::debug!("Operating in client-mode on new outbound connection to peer {peer} at {addr}");
-
         Self::new(
             protocol_config,
-            Mode::Client,
             idle_timeout,
             ConnectedPoint::Dialer {
                 address: addr,
                 role_override,
             },
             peer,
+            external_addresses,
         )
     }
 
     fn new(
         protocol_config: KademliaProtocolConfig,
-        mode: Mode,
         idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
+        external_addresses: Vec<Multiaddr>,
     ) -> Self {
         let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
 
         KademliaHandler {
             protocol_config,
-            mode,
+            mode: infer_mode(external_addresses, &endpoint, remote_peer_id, None),
             idle_timeout,
             endpoint,
             remote_peer_id,
@@ -760,43 +733,12 @@ impl ConnectionHandler for KademliaHandler {
                 self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
             }
             KademliaHandlerIn::ReconfigureMode { external_addresses } => {
-                // Outbound connections are always in client mode.
-                let local_addr = match &self.endpoint {
-                    ConnectedPoint::Dialer { .. } => return,
-                    ConnectedPoint::Listener { local_addr, .. } => local_addr,
-                };
-                let remote_peer_id = self.remote_peer_id;
-
-                match (external_addresses.as_slice(), self.mode) {
-                    ([], Mode::Server) => {
-                        log::debug!("Switching from server to client-mode because we no longer have a confirmed external addresses");
-
-                        self.mode = Mode::Client;
-                    }
-                    ([], Mode::Client) => {
-                        self.mode = Mode::Client;
-                    }
-                    ([confirmed_external_addr], Mode::Client) => {
-                        // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
-                        log::debug!("Switching from client to server-mode with {remote_peer_id} under the assumption that {confirmed_external_addr} routes to {local_addr}");
-
-                        self.mode = Mode::Server
-                    }
-                    // Now server-mode with multiple addresses, previously client-mode.
-                    (confirmed_external_addresses, Mode::Client) => {
-                        let confirmed_external_addresses = confirmed_external_addresses
-                            .iter()
-                            .map(|addr| addr.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ");
-
-                        log::debug!("Switching from client to server-mode with {remote_peer_id} under the assumption one of [{confirmed_external_addresses}] routes to {local_addr}");
-
-                        self.mode = Mode::Server
-                    }
-                    // Now server-mode with one or more addresses, previously server-mode.
-                    (_, Mode::Server) => self.mode = Mode::Server,
-                }
+                self.mode = infer_mode(
+                    external_addresses,
+                    &self.endpoint,
+                    self.remote_peer_id,
+                    None,
+                );
             }
         }
     }
@@ -1255,4 +1197,79 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
             query_id,
         },
     }
+}
+
+fn infer_mode(
+    external_addresses: Vec<Multiaddr>,
+    endpoint: &ConnectedPoint,
+    remote_peer_id: PeerId,
+    current_mode: Option<Mode>,
+) -> Mode {
+    match (external_addresses.as_slice(), &endpoint, current_mode) {
+        ([], _, None | Some(Mode::Server)) => {
+            log::debug!("Operating in client-mode on connection from peer {remote_peer_id} because we don't have any confirmed external addresses");
+
+            Mode::Client
+        }
+        (
+            [confirmed_external_addr],
+            ConnectedPoint::Listener { local_addr, .. },
+            None | Some(Mode::Client),
+        ) => {
+            // This may not be true if we are listening on multiple interfaces but it is a good enough approximation for now.
+            log::debug!("Operating in server-mode on inbound connection from peer {remote_peer_id} assuming that {confirmed_external_addr} routes to {local_addr}");
+
+            Mode::Server
+        }
+        (
+            confirmed_external_addresses,
+            ConnectedPoint::Listener { local_addr, .. },
+            None | Some(Mode::Client),
+        ) => {
+            let confirmed_external_addresses =
+                to_comma_separated_list(confirmed_external_addresses);
+
+            log::debug!("Operating in server-mode on inbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to {local_addr}");
+
+            Mode::Server
+        }
+        (
+            confirmed_external_addresses,
+            ConnectedPoint::Dialer { .. },
+            None | Some(Mode::Client),
+        ) => {
+            let confirmed_external_addresses =
+                to_comma_separated_list(confirmed_external_addresses);
+
+            log::debug!("Operating in server-mode on outbound connection from peer {remote_peer_id} assuming that one of [{confirmed_external_addresses}] routes to us");
+
+            // This assumes that the remote node somehow figures out a dialable address for us.
+            // For example, our observed address may not be reachable if we don't reuse ports on TCP.
+            // We leave it up to the remote to figure this out.
+            // Maybe they categorically don't add inbound connections to their routing table.
+            // We assume to be publicly reachable on `confirmed_external_addr`, hence we allow inbound requests, i.e. server-mode.
+            Mode::Server
+        }
+        (confirmed_external_addresses, _, Some(Mode::Server)) => {
+            debug_assert!(
+                !confirmed_external_addresses.is_empty(),
+                "Previous match arm handled empty list"
+            );
+
+            // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+            Mode::Server
+        }
+    }
+}
+
+fn to_comma_separated_list<T>(confirmed_external_addresses: &[T]) -> String
+where
+    T: ToString,
+{
+    confirmed_external_addresses
+        .iter()
+        .map(|addr| addr.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }

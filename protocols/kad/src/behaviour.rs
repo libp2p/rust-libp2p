@@ -106,7 +106,7 @@ pub struct Kademlia<TStore> {
 
     external_addresses: ExternalAddresses,
 
-    inbound_connections: HashMap<ConnectionId, PeerId>,
+    connections: HashMap<ConnectionId, PeerId>,
 
     /// See [`KademliaConfig::caching`].
     caching: KademliaCaching,
@@ -452,7 +452,7 @@ where
             connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
-            inbound_connections: Default::default(),
+            connections: Default::default(),
         }
     }
 
@@ -1941,7 +1941,7 @@ where
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-        self.inbound_connections.remove(&connection_id);
+        self.connections.remove(&connection_id);
 
         if remaining_established == 0 {
             for query in self.queries.iter_mut() {
@@ -1972,7 +1972,7 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.inbound_connections.insert(connection_id, peer);
+        self.connections.insert(connection_id, peer);
 
         Ok(KademliaHandler::new_inbound(
             self.protocol_config.clone(),
@@ -1980,23 +1980,26 @@ where
             local_addr.clone(),
             remote_addr.clone(),
             peer,
-            self.external_addresses.iter().collect(),
+            self.external_addresses.iter().cloned().collect(),
         ))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.connections.insert(connection_id, peer);
+
         Ok(KademliaHandler::new_outbound(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             addr.clone(),
             role_override,
             peer,
+            self.external_addresses.iter().cloned().collect(),
         ))
     }
 
@@ -2426,25 +2429,31 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        if external_addresses_changed && !self.inbound_connections.is_empty() {
-            let num_connections = self.inbound_connections.len();
+        if external_addresses_changed && !self.connections.is_empty() {
+            let num_connections = self.connections.len();
 
             log::debug!(
-                "External addresses changed, re-configuring {} inbound connection{}",
+                "External addresses changed, re-configuring {} connection{}",
                 num_connections,
                 if num_connections > 1 { "s" } else { "" }
             );
 
             self.queued_events
-                .extend(self.inbound_connections.iter().map(|(conn_id, peer_id)| {
-                    ToSwarm::NotifyHandler {
-                        peer_id: *peer_id,
-                        handler: NotifyHandler::One(*conn_id),
-                        event: KademliaHandlerIn::ReconfigureMode {
-                            external_addresses: self.external_addresses.iter().cloned().collect(),
-                        },
-                    }
-                }));
+                .extend(
+                    self.connections
+                        .iter()
+                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                            peer_id: *peer_id,
+                            handler: NotifyHandler::One(*conn_id),
+                            event: KademliaHandlerIn::ReconfigureMode {
+                                external_addresses: self
+                                    .external_addresses
+                                    .iter()
+                                    .cloned()
+                                    .collect(),
+                            },
+                        }),
+                );
         }
 
         match event {
