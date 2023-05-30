@@ -10,10 +10,14 @@
 - Fix aborting the answering of an identify request in rare situations.
   See [PR 3876].
 
+- Actively push changes in listen protocols to remote.
+  See [PR 3980].
+
+[PR 3545]: https://github.com/libp2p/rust-libp2p/pull/3545
 [PR 3698]: https://github.com/libp2p/rust-libp2p/pull/3698
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR 3545]: https://github.com/libp2p/rust-libp2p/pull/3545
 [PR 3876]: https://github.com/libp2p/rust-libp2p/pull/3876
+[PR 3980]: https://github.com/libp2p/rust-libp2p/pull/3980
 
 ## 0.42.2
 

@@ -406,7 +406,6 @@ where
 
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
-    #[allow(deprecated)]
     pub(crate) fn add_outgoing(
         &mut self,
         dials: Vec<
@@ -486,7 +485,6 @@ where
         );
     }
 
-    #[allow(deprecated)]
     pub(crate) fn spawn_connection(
         &mut self,
         id: ConnectionId,
