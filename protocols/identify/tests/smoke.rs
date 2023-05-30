@@ -202,7 +202,7 @@ impl Behaviour {
     fn new(config: identify::Config) -> Self {
         Self {
             identify: identify::Behaviour::new(config),
-            keep_alive: keep_alive::Behaviour::default(),
+            keep_alive: keep_alive::Behaviour,
         }
     }
 }

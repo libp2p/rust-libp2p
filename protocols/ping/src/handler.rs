@@ -196,10 +196,12 @@ impl Handler {
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            StreamUpgradeError::Timeout => {
-                debug_assert!(false, "ReadyUpgrade cannot time out");
-                return;
-            }
+            StreamUpgradeError::Timeout => Failure::Other {
+                error: Box::new(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "ping protocol negotiation timed out",
+                )),
+            },
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };

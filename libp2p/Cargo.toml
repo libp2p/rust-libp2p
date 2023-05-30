@@ -27,7 +27,6 @@ full = [
     "mdns",
     "metrics",
     "noise",
-    "perf",
     "ping",
     "plaintext",
     "pnet",
@@ -65,7 +64,6 @@ macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
-perf = ["dep:libp2p-perf"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
@@ -123,7 +121,6 @@ pin-project = "1.0.0"
 libp2p-deflate = { workspace = true, optional = true }
 libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
-libp2p-perf = { workspace = true, optional = true }
 libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
