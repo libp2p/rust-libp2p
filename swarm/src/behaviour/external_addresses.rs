@@ -44,8 +44,14 @@ impl ExternalAddresses {
 
                 return true;
             }
-            FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr: expired_addr, .. }) => {
-                let pos = match self.addresses.iter().position(|candidate| candidate == *expired_addr) {
+            FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+                addr: expired_addr, ..
+            }) => {
+                let pos = match self
+                    .addresses
+                    .iter()
+                    .position(|candidate| candidate == *expired_addr)
+                {
                     None => return false,
                     Some(p) => p,
                 };
@@ -98,7 +104,10 @@ mod tests {
         addresses.on_swarm_event(&new_external_addr1());
         addresses.on_swarm_event(&new_external_addr2());
 
-        assert_eq!(addresses.as_slice(), &[(*MEMORY_ADDR_2000).clone(), (*MEMORY_ADDR_1000).clone()]);
+        assert_eq!(
+            addresses.as_slice(),
+            &[(*MEMORY_ADDR_2000).clone(), (*MEMORY_ADDR_1000).clone()]
+        );
     }
 
     #[test]
@@ -106,8 +115,15 @@ mod tests {
         let mut addresses = ExternalAddresses::default();
 
         for _ in 0..MAX_LOCAL_EXTERNAL_ADDRS {
-            let random_address = Multiaddr::empty().with(Protocol::Memory(rand::thread_rng().gen_range(0..1000)));
-            addresses.on_swarm_event(&FromSwarm::<'_, dummy::ConnectionHandler>::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &random_address }));
+            let random_address =
+                Multiaddr::empty().with(Protocol::Memory(rand::thread_rng().gen_range(0..1000)));
+            addresses.on_swarm_event(
+                &FromSwarm::<'_, dummy::ConnectionHandler>::ExternalAddrConfirmed(
+                    ExternalAddrConfirmed {
+                        addr: &random_address,
+                    },
+                ),
+            );
         }
 
         addresses.on_swarm_event(&new_external_addr2());
@@ -117,15 +133,21 @@ mod tests {
     }
 
     fn new_external_addr1() -> FromSwarm<'static, dummy::ConnectionHandler> {
-        FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &MEMORY_ADDR_1000 })
+        FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
+            addr: &MEMORY_ADDR_1000,
+        })
     }
 
     fn new_external_addr2() -> FromSwarm<'static, dummy::ConnectionHandler> {
-        FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr: &MEMORY_ADDR_2000 })
+        FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed {
+            addr: &MEMORY_ADDR_2000,
+        })
     }
 
     fn expired_external_addr1() -> FromSwarm<'static, dummy::ConnectionHandler> {
-        FromSwarm::ExternalAddrExpired(ExternalAddrExpired { addr: &MEMORY_ADDR_1000 })
+        FromSwarm::ExternalAddrExpired(ExternalAddrExpired {
+            addr: &MEMORY_ADDR_1000,
+        })
     }
 
     static MEMORY_ADDR_1000: Lazy<Multiaddr> =
