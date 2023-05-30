@@ -5099,7 +5099,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
     }
 
     let message_id_fn = |m: &Message| -> MessageId {
-        let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
+        let (mut id, counters_pointer): (MessageId, *mut Pointers) =
             get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).slow_counter += 1;
@@ -5108,7 +5108,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         id
     };
     let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
-        let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
+        let (id, counters_pointer) = get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).fast_counter += 1;
         }
