@@ -32,15 +32,10 @@ impl ExternalAddresses {
                     return false;
                 }
 
-                if self.addresses.len() >= MAX_LOCAL_EXTERNAL_ADDRS {
-                    // If we hit the limit, we can add the address in O(1):
-                    self.addresses.push((*addr).clone());
-                    self.addresses.swap_remove(0);
-
-                    return true;
-                }
-
                 self.addresses.insert(0, (*addr).clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
+                if self.addresses.len() >= MAX_LOCAL_EXTERNAL_ADDRS {
+                    self.addresses.pop();
+                }
 
                 return true;
             }
