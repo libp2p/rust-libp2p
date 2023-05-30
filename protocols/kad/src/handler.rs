@@ -544,7 +544,6 @@ impl KademliaHandler {
             future::Either::Left(p) => p,
             future::Either::Right(p) => void::unreachable(p),
         };
-        debug_assert_eq!(self.mode, Mode::Server);
 
         if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
