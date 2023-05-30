@@ -28,12 +28,21 @@ impl ExternalAddresses {
     pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
         match event {
             FromSwarm::ExternalAddrConfirmed(ExternalAddrConfirmed { addr }) => {
-                if self.addresses.contains(addr) {
-                    return false;
+                if let Some(pos) = self
+                    .addresses
+                    .iter()
+                    .position(|candidate| candidate == *addr)
+                {
+                    // Refresh the existing confirmed address.
+                    self.addresses.remove(pos);
+                    self.push_front(addr);
+
+                    return false; // No changes to our external addresses.
                 }
 
-                self.addresses.insert(0, (*addr).clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
-                if self.addresses.len() >= MAX_LOCAL_EXTERNAL_ADDRS {
+                self.push_front(addr);
+
+                if self.addresses.len() > MAX_LOCAL_EXTERNAL_ADDRS {
                     self.addresses.pop();
                 }
 
@@ -58,6 +67,10 @@ impl ExternalAddresses {
         }
 
         false
+    }
+
+    fn push_front(&mut self, addr: &Multiaddr) {
+        self.addresses.insert(0, addr.clone()); // We have at most `MAX_LOCAL_EXTERNAL_ADDRS` so this isn't very expensive.
     }
 }
 
@@ -125,6 +138,20 @@ mod tests {
 
         assert_eq!(addresses.as_slice().len(), 20);
         assert_eq!(addresses.as_slice()[0], (*MEMORY_ADDR_2000).clone());
+    }
+
+    #[test]
+    fn reporting_existing_external_address_moves_it_to_the_front() {
+        let mut addresses = ExternalAddresses::default();
+
+        addresses.on_swarm_event(&new_external_addr1());
+        addresses.on_swarm_event(&new_external_addr2());
+        addresses.on_swarm_event(&new_external_addr1());
+
+        assert_eq!(
+            addresses.as_slice(),
+            &[(*MEMORY_ADDR_1000).clone(), (*MEMORY_ADDR_2000).clone()]
+        );
     }
 
     fn new_external_addr1() -> FromSwarm<'static, dummy::ConnectionHandler> {
