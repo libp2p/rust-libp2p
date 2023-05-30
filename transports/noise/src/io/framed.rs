@@ -166,7 +166,7 @@ where
     type Item = io::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         loop {
             trace!("read state: {:?}", this.read_state);
             match this.read_state {
@@ -265,7 +265,7 @@ where
     type Error = io::Error;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         loop {
             trace!("write state {:?}", this.write_state);
             match this.write_state {
@@ -321,7 +321,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, frame: &Vec<u8>) -> Result<(), Self::Error> {
         assert!(frame.len() <= MAX_FRAME_LEN);
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         assert!(this.write_state.is_ready());
 
         this.write_buffer
