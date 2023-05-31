@@ -134,10 +134,10 @@ impl Metrics {
             Family::new_with_constructor(constructor)
         };
         sub_registry.register_with_unit(
-            "connections_establishment_duration",
-            "Time it took (locally) to establish connections",
+            "connections_duration",
+            "Time a connection was alive",
             Unit::Seconds,
-            connections_establishment_duration.clone(),
+            connections_duration.clone(),
         );
 
         Self {
