@@ -71,6 +71,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();
+    swarm.add_external_address(address.clone());
 
     (address, swarm)
 }
