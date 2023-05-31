@@ -205,60 +205,37 @@ impl NetworkBehaviour for Behaviour {
         self.peers_addresses
             .insert(connection_id, remote_addr.clone());
 
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(local_addr) {
-                    // TODO: Try dialing the remote peer directly. Specification:
-                    //
-                    // > The protocol starts with the completion of a relay connection from A to B. Upon
-                    // observing the new connection, the inbound peer (here B) checks the addresses
-                    // advertised by A via identify. If that set includes public addresses, then A may
-                    // be reachable by a direct connection, in which case B attempts a unilateral
-                    // connection upgrade by initiating a direct connection to A.
-                    //
-                    // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+        if is_relayed(local_addr) {
+            let connected_point = ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            };
+            let mut handler =
+                handler::relayed::Handler::new(connected_point, self.observed_addresses());
+            handler.on_behaviour_event(handler::relayed::Command::Connect);
 
-                    let connected_point = ConnectedPoint::Listener {
-                        local_addr: local_addr.clone(),
-                        send_back_addr: remote_addr.clone(),
-                    };
-                    let mut handler =
-                        handler::relayed::Handler::new(connected_point, self.observed_addresses());
-                    handler.on_behaviour_event(handler::relayed::Command::Connect);
+            self.queued_events.extend([ToSwarm::GenerateEvent(
+                Event::InitiatedDirectConnectionUpgrade {
+                    remote_peer_id: peer,
+                    local_relayed_addr: local_addr.clone(),
+                },
+            )]);
 
-                    self.queued_events.extend([ToSwarm::GenerateEvent(
-                        Event::InitiatedDirectConnectionUpgrade {
-                            remote_peer_id: peer,
-                            local_relayed_addr: local_addr.clone(),
-                        },
-                    )]);
-
-                    Either::Left(handler) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    self.direct_connections
-                        .entry(peer)
-                        .or_default()
-                        .insert(connection_id);
-
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(local_addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+            return Ok(Either::Left(handler)); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+        self.direct_connections
+            .entry(peer)
+            .or_default()
+            .insert(connection_id);
+
+        assert!(
+            self.direct_to_relayed_connections
+                .get(&connection_id)
+                .is_none(),
+            "state mismatch"
+        );
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn handle_established_outbound_connection(
@@ -269,43 +246,39 @@ impl NetworkBehaviour for Behaviour {
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.peers_addresses.insert(connection_id, addr.clone());
-
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(addr) {
-                    let connected_point = ConnectedPoint::Dialer {
-                        address: addr.clone(),
-                        role_override,
-                    };
-                    Either::Left(handler::relayed::Handler::new(
-                        connected_point,
-                        self.observed_addresses(),
-                    )) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    self.direct_connections
-                        .entry(peer)
-                        .or_default()
-                        .insert(connection_id);
-
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+        if is_relayed(addr) {
+            return Ok(Either::Left(handler::relayed::Handler::new(
+                ConnectedPoint::Dialer {
+                    address: addr.clone(),
+                    role_override,
+                },
+                self.observed_addresses(),
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+
+        self.direct_connections
+            .entry(peer)
+            .or_default()
+            .insert(connection_id);
+
+        // Whether this is a connection requested by this behaviour.
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        {
+            if role_override == Endpoint::Listener {
+                assert!(
+                    self.outgoing_direct_connection_attempts
+                        .remove(&(relayed_connection_id, peer))
+                        .is_some(),
+                    "state mismatch"
+                );
+            }
+
+            return Ok(Either::Right(Either::Left(
+                handler::direct::Handler::default(),
+            )));
+        }
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn on_connection_handler_event(
