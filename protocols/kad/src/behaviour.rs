@@ -23,10 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{
-    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
-    KademliaRequestId,
-};
+use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
@@ -52,7 +49,7 @@ use libp2p_swarm::{
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -109,10 +106,14 @@ pub struct Kademlia<TStore> {
 
     external_addresses: ExternalAddresses,
 
+    connections: HashMap<ConnectionId, PeerId>,
+
     /// See [`KademliaConfig::caching`].
     caching: KademliaCaching,
 
     local_peer_id: PeerId,
+
+    mode: Mode,
 
     /// The record storage.
     store: TStore,
@@ -453,6 +454,8 @@ where
             connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
+            connections: Default::default(),
+            mode: Mode::Client,
         }
     }
 
@@ -1937,9 +1940,12 @@ where
         ConnectionClosed {
             peer_id,
             remaining_established,
+            connection_id,
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
+        self.connections.remove(&connection_id);
+
         if remaining_established == 0 {
             for query in self.queries.iter_mut() {
                 query.on_failure(&peer_id);
@@ -1964,43 +1970,45 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let connected_point = ConnectedPoint::Listener {
+            local_addr: local_addr.clone(),
+            send_back_addr: remote_addr.clone(),
+        };
+        self.connections.insert(connection_id, peer);
+
         Ok(KademliaHandler::new(
-            KademliaHandlerConfig {
-                protocol_config: self.protocol_config.clone(),
-                allow_listening: true,
-                idle_timeout: self.connection_idle_timeout,
-            },
-            ConnectedPoint::Listener {
-                local_addr: local_addr.clone(),
-                send_back_addr: remote_addr.clone(),
-            },
+            self.protocol_config.clone(),
+            self.connection_idle_timeout,
+            connected_point,
             peer,
+            self.mode,
         ))
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        let connected_point = ConnectedPoint::Dialer {
+            address: addr.clone(),
+            role_override,
+        };
+        self.connections.insert(connection_id, peer);
+
         Ok(KademliaHandler::new(
-            KademliaHandlerConfig {
-                protocol_config: self.protocol_config.clone(),
-                allow_listening: true,
-                idle_timeout: self.connection_idle_timeout,
-            },
-            ConnectedPoint::Dialer {
-                address: addr.clone(),
-                role_override,
-            },
+            self.protocol_config.clone(),
+            self.connection_idle_timeout,
+            connected_point,
             peer,
+            self.mode,
         ))
     }
 
@@ -2055,7 +2063,16 @@ where
                     ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
                 };
+
                 self.connection_updated(source, address, NodeStatus::Connected);
+            }
+
+            KademliaHandlerEvent::ProtocolNotSupported { endpoint } => {
+                let address = match endpoint {
+                    ConnectedPoint::Dialer { address, .. } => Some(address),
+                    ConnectedPoint::Listener { .. } => None,
+                };
+                self.connection_updated(source, address, NodeStatus::Disconnected);
             }
 
             KademliaHandlerEvent::FindNodeReq { key, request_id } => {
@@ -2419,7 +2436,63 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarm_event(&event);
+        let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
+
+        self.mode = match (self.external_addresses.as_slice(), self.mode) {
+            ([], Mode::Server) => {
+                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+
+                Mode::Client
+            }
+            ([], Mode::Client) => {
+                // Previously client-mode, now also client-mode because no external addresses.
+
+                Mode::Client
+            }
+            (confirmed_external_addresses, Mode::Client) => {
+                if log::log_enabled!(log::Level::Debug) {
+                    let confirmed_external_addresses =
+                        to_comma_separated_list(confirmed_external_addresses);
+
+                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                }
+
+                Mode::Server
+            }
+            (confirmed_external_addresses, Mode::Server) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                Mode::Server
+            }
+        };
+
+        if external_addresses_changed && !self.connections.is_empty() {
+            let num_connections = self.connections.len();
+
+            log::debug!(
+                "External addresses changed, re-configuring {} established connection{}",
+                num_connections,
+                if num_connections > 1 { "s" } else { "" }
+            );
+
+            self.queued_events
+                .extend(
+                    self.connections
+                        .iter()
+                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                            peer_id: *peer_id,
+                            handler: NotifyHandler::One(*conn_id),
+                            event: KademliaHandlerIn::ReconfigureMode {
+                                new_mode: self.mode,
+                            },
+                        }),
+                );
+        }
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
@@ -3186,4 +3259,30 @@ pub enum RoutingUpdate {
     /// peer ID is deemed invalid (e.g. refers to the local
     /// peer ID).
     Failed,
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum Mode {
+    Client,
+    Server,
+}
+
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Mode::Client => write!(f, "client"),
+            Mode::Server => write!(f, "server"),
+        }
+    }
+}
+
+fn to_comma_separated_list<T>(confirmed_external_addresses: &[T]) -> String
+where
+    T: ToString,
+{
+    confirmed_external_addresses
+        .iter()
+        .map(|addr| addr.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }

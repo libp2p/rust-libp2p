@@ -2638,6 +2638,7 @@ name = "libp2p-kad"
 version = "0.44.0"
 dependencies = [
  "arrayvec",
+ "async-std",
  "asynchronous-codec",
  "bytes",
  "either",
@@ -2647,9 +2648,11 @@ dependencies = [
  "futures-timer",
  "instant",
  "libp2p-core",
+ "libp2p-identify",
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-swarm",
+ "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
  "quick-protobuf",

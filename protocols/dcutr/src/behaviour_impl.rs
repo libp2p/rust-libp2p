@@ -242,37 +242,27 @@ impl NetworkBehaviour for Behaviour {
     fn handle_established_inbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        peer: PeerId,
+        _peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(local_addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
-                        local_addr: local_addr.clone(),
-                        send_back_addr: remote_addr.clone(),
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(local_addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+        if is_relayed(local_addr) {
+            return Ok(Either::Left(handler::relayed::Handler::new(
+                ConnectedPoint::Listener {
+                    local_addr: local_addr.clone(),
+                    send_back_addr: remote_addr.clone(),
+                },
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+
+        assert!(
+            self.direct_to_relayed_connections
+                .get(&connection_id)
+                .is_none(),
+            "state mismatch"
+        );
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn handle_established_outbound_connection(
@@ -282,33 +272,33 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
-                        address: addr.clone(),
-                        role_override,
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+        if is_relayed(addr) {
+            return Ok(Either::Left(handler::relayed::Handler::new(
+                ConnectedPoint::Dialer {
+                    address: addr.clone(),
+                    role_override,
+                },
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+
+        // Whether this is a connection requested by this behaviour.
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        {
+            if role_override == Endpoint::Listener {
+                assert!(
+                    self.outgoing_direct_connection_attempts
+                        .remove(&(relayed_connection_id, peer))
+                        .is_some(),
+                    "state mismatch"
+                );
+            }
+
+            return Ok(Either::Right(Either::Left(
+                handler::direct::Handler::default(),
+            )));
+        }
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn on_connection_handler_event(
