@@ -4,11 +4,8 @@
   See [PR 3715].
 - Remove deprecated items. See [PR 3700].
 
-- Remove `handler::direct`. See [PR 4016].
-
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3700]: https://github.com/libp2p/rust-libp2p/pull/3700
-[PR 4016]: https://github.com/libp2p/rust-libp2p/pull/4016
 
 ## 0.9.1
 
