@@ -23,12 +23,14 @@ use asynchronous_codec::{BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
-use std::fmt;
+use std::{fmt, io};
 
 pub type Ttl = u64;
 
+const MAX_MESSAGE_LEN_BYTES: usize = 1024 * 1024;
+
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Message {
     Register(NewRegistration),
     RegisterResponse(Result<Ttl, ErrorCode>),
@@ -49,7 +51,7 @@ impl Namespace {
     ///
     /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
-        if value.len() > 255 {
+        if value.len() > crate::MAX_NAMESPACE {
             panic!("Namespace '{value}' is too long!")
         }
 
@@ -57,7 +59,7 @@ impl Namespace {
     }
 
     pub fn new(value: String) -> Result<Self, NamespaceTooLong> {
-        if value.len() > 255 {
+        if value.len() > crate::MAX_NAMESPACE {
             return Err(NamespaceTooLong);
         }
 
@@ -160,7 +162,7 @@ impl Cookie {
 #[error("The cookie was malformed")]
 pub struct InvalidCookie;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewRegistration {
     pub namespace: Namespace,
     pub record: PeerRecord,
@@ -206,7 +208,7 @@ pub struct RendezvousCodec {
 impl Default for RendezvousCodec {
     fn default() -> Self {
         Self {
-            inner: quick_protobuf_codec::Codec::new(1024 * 1024), // 1MB
+            inner: quick_protobuf_codec::Codec::new(MAX_MESSAGE_LEN_BYTES), // 1MB
         }
     }
 }
@@ -236,6 +238,165 @@ impl Decoder for RendezvousCodec {
     }
 }
 
+pub mod request_response {
+    use crate::codec::{Message, RendezvousCodec};
+    use async_trait::async_trait;
+    use asynchronous_codec::{FramedRead, FramedWrite};
+    use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
+    use libp2p_swarm::StreamProtocol;
+    use std::io;
+
+    #[derive(Clone)]
+    pub struct Codec {}
+
+    impl Default for Codec {
+        fn default() -> Self {
+            Codec {}
+        }
+    }
+
+    #[async_trait]
+    impl libp2p_request_response::Codec for Codec {
+        type Protocol = StreamProtocol;
+        type Request = Message;
+        type Response = Message;
+
+        async fn read_request<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> io::Result<Self::Request>
+            where
+                T: AsyncRead + Unpin + Send,
+        {
+            let mut frame = FramedRead::new(io, RendezvousCodec::default());
+            if let Some(result) = frame.next().await {
+                return Ok(result?);
+            }
+
+            Err(io::ErrorKind::InvalidInput.into())
+        }
+
+        async fn read_response<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+        ) -> io::Result<Self::Response>
+            where
+                T: AsyncRead + Unpin + Send,
+        {
+            let mut frame = FramedRead::new(io, RendezvousCodec::default());
+            if let Some(result) = frame.next().await {
+                return Ok(result?);
+            }
+
+            Err(io::ErrorKind::InvalidInput.into())
+        }
+
+        async fn write_request<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+            req: Self::Request,
+        ) -> io::Result<()>
+            where
+                T: AsyncWrite + Unpin + Send,
+        {
+            let mut framer = FramedWrite::new(io, RendezvousCodec::default());
+            framer.send(req).await?;
+
+            Ok(())
+        }
+
+        async fn write_response<T>(
+            &mut self,
+            _: &Self::Protocol,
+            io: &mut T,
+            res: Self::Response,
+        ) -> io::Result<()>
+            where
+                T: AsyncWrite + Unpin + Send,
+        {
+            let mut framer = FramedWrite::new(io, RendezvousCodec::default());
+            framer.send(res).await?;
+
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use crate::codec::{Message, NewRegistration};
+        use crate::Namespace;
+        use async_std;
+        use futures::AsyncWriteExt;
+        use futures_ringbuf::Endpoint;
+        use libp2p_core::PeerRecord;
+        use libp2p_identity;
+        use libp2p_request_response::Codec;
+
+        #[async_std::test]
+        async fn codec_test() {
+            let identity = libp2p_identity::Keypair::generate_ed25519();
+
+            let exp_msg = Message::Register(NewRegistration {
+                namespace: Namespace::from_static("wonderland"),
+                record: PeerRecord::new(
+                    &identity,
+                    vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()],
+                )
+                    .unwrap(),
+                ttl: None,
+            });
+
+            let mut codec = super::Codec {};
+            let protocol = &crate::PROTOCOL_IDENT;
+
+            // Write/read request
+
+            let (mut a, mut b) = Endpoint::pair(
+                crate::codec::MAX_MESSAGE_LEN_BYTES,
+                crate::codec::MAX_MESSAGE_LEN_BYTES,
+            );
+
+            codec
+                .write_request(protocol, &mut a, exp_msg.clone())
+                .await
+                .expect("Should write");
+            a.close().await.unwrap();
+
+            let act_msg = codec
+                .read_request(protocol, &mut b)
+                .await
+                .expect("Should read");
+            b.close().await.unwrap();
+
+            assert_eq!(exp_msg, act_msg);
+
+            // Write/read response
+
+            let (mut a, mut b) = Endpoint::pair(
+                crate::codec::MAX_MESSAGE_LEN_BYTES,
+                crate::codec::MAX_MESSAGE_LEN_BYTES,
+            );
+
+            codec
+                .write_response(protocol, &mut a, exp_msg.clone())
+                .await
+                .expect("Should write");
+            a.close().await.unwrap();
+
+            let act_msg = codec
+                .read_response(protocol, &mut b)
+                .await
+                .expect("Should read");
+            b.close().await.unwrap();
+
+            assert_eq!(exp_msg, act_msg);
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -246,14 +407,24 @@ pub enum Error {
     Conversion(#[from] ConversionError),
 }
 
+impl From<Error> for std::io::Error {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::Io(e) => e,
+            Error::Codec(e) => io::Error::from(e),
+            Error::Conversion(e) => io::Error::new(io::ErrorKind::InvalidInput, e),
+        }
+    }
+}
+
 impl From<Message> for proto::Message {
     fn from(message: Message) -> Self {
         match message {
             Message::Register(NewRegistration {
-                namespace,
-                record,
-                ttl,
-            }) => proto::Message {
+                                  namespace,
+                                  record,
+                                  ttl,
+                              }) => proto::Message {
                 type_pb: Some(proto::MessageType::REGISTER),
                 register: Some(proto::Register {
                     ns: Some(namespace.into()),

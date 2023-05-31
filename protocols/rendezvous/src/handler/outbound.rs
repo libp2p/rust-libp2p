@@ -20,8 +20,8 @@
 
 use crate::codec::{Cookie, Message, NewRegistration, RendezvousCodec};
 use crate::handler::Error;
-use crate::handler::PROTOCOL_IDENT;
 use crate::substream_handler::{FutureSubstream, Next, PassthroughProtocol, SubstreamHandler};
+use crate::PROTOCOL_IDENT;
 use crate::{ErrorCode, Namespace, Registration, Ttl};
 use asynchronous_codec::Framed;
 use futures::{SinkExt, TryFutureExt, TryStreamExt};

@@ -22,8 +22,8 @@ use crate::codec::{
     Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec, Ttl,
 };
 use crate::handler::Error;
-use crate::handler::PROTOCOL_IDENT;
 use crate::substream_handler::{Next, PassthroughProtocol, SubstreamHandler};
+use crate::PROTOCOL_IDENT;
 use asynchronous_codec::Framed;
 use futures::{SinkExt, StreamExt};
 use libp2p_swarm::SubstreamProtocol;

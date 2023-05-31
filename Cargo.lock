@@ -2957,12 +2957,14 @@ dependencies = [
 name = "libp2p-rendezvous"
 version = "0.13.0"
 dependencies = [
+ "async-std",
  "async-trait",
  "asynchronous-codec",
  "bimap",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
+ "futures_ringbuf",
  "instant",
  "libp2p-core",
  "libp2p-identify",
@@ -2970,6 +2972,7 @@ dependencies = [
  "libp2p-mplex",
  "libp2p-noise",
  "libp2p-ping",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
