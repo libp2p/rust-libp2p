@@ -1563,7 +1563,11 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "libp2p-request-response",
+ "libp2p-swarm",
  "multiaddr",
+ "serde",
+ "serde_cbor",
  "void",
 ]
 
