@@ -289,6 +289,17 @@ impl NetworkBehaviour for Behaviour {
                     "state mismatch"
                 );
             }
+
+            self.queued_events.extend([
+                ToSwarm::NotifyHandler {
+                    peer_id: peer,
+                    handler: NotifyHandler::One(relayed_connection_id),
+                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
+                },
+                ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
+                    remote_peer_id: peer,
+                }),
+            ]);
         }
 
         Ok(Either::Right(dummy::ConnectionHandler))
@@ -376,20 +387,7 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(_) => {
-                self.queued_events.extend([
-                    ToSwarm::NotifyHandler {
-                        peer_id: event_source,
-                        handler: NotifyHandler::One(relayed_connection_id),
-                        event: Either::Left(
-                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-                        ),
-                    },
-                    ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
-                        remote_peer_id: event_source,
-                    }),
-                ]);
-            }
+            Either::Right(never) => void::unreachable(never),
         };
     }
 
