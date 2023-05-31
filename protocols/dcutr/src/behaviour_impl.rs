@@ -376,7 +376,20 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(never) => void::unreachable(never),
+            Either::Right(_) => {
+                self.queued_events.extend([
+                    ToSwarm::NotifyHandler {
+                        peer_id: event_source,
+                        handler: NotifyHandler::One(relayed_connection_id),
+                        event: Either::Left(
+                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+                        ),
+                    },
+                    ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
+                        remote_peer_id: event_source,
+                    }),
+                ]);
+            }
         };
     }
 
