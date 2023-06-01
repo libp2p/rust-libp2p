@@ -7,11 +7,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{
-    channel::oneshot,
-    future::{Fuse, FusedFuture},
-    prelude::*,
-};
+use futures::{channel::oneshot, prelude::*};
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use rand::{distributions, Rng};
@@ -30,7 +26,7 @@ pub(crate) type HolePunchMap =
 pub(crate) struct MaybeHolePunchedConnection {
     hole_punch_map: HolePunchMap,
     addr: SocketAddr,
-    upgrade: Fuse<Connecting>,
+    upgrade: Connecting,
 }
 
 impl MaybeHolePunchedConnection {
@@ -38,7 +34,7 @@ impl MaybeHolePunchedConnection {
         Self {
             hole_punch_map,
             addr,
-            upgrade: upgrade.fuse(),
+            upgrade,
         }
     }
 }
@@ -54,17 +50,11 @@ impl Future for MaybeHolePunchedConnection {
             if let Err(connection) = sender.send((peer_id, connection)) {
                 Poll::Ready(Ok(connection))
             } else {
-                Poll::Pending
+                Poll::Ready(Err(Error::HandshakeTimedOut))
             }
         } else {
             Poll::Ready(Ok((peer_id, connection)))
         }
-    }
-}
-
-impl FusedFuture for MaybeHolePunchedConnection {
-    fn is_terminated(&self) -> bool {
-        self.upgrade.is_terminated()
     }
 }
 

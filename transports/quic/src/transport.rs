@@ -25,7 +25,7 @@ use crate::{endpoint, Connecting, Connection, Error};
 
 use futures::channel::mpsc;
 use futures::channel::oneshot;
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Either};
 use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
@@ -264,13 +264,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         };
 
         Ok(Box::pin(async {
-            futures::select! {
-                hole_punched = receiver.fuse() => {
-                    Ok(hole_punched.unwrap())
-                },
-                err = hole_puncher.fuse() => {
-                    Err(err)
-                }
+            match futures::future::select(receiver, hole_puncher).await {
+                Either::Left((connection, _)) => Ok(connection.unwrap()),
+                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
             }
         }))
     }
