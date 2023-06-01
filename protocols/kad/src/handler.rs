@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::Mode;
 use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
@@ -35,7 +36,7 @@ use libp2p_swarm::handler::{
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamUpgradeError,
-    SubstreamProtocol,
+    SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
 use std::collections::VecDeque;
@@ -54,8 +55,14 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 ///
 /// It also handles requests made by the remote.
 pub struct KademliaHandler {
-    /// Configuration for the Kademlia protocol.
-    config: KademliaHandlerConfig,
+    /// Configuration of the wire protocol.
+    protocol_config: KademliaProtocolConfig,
+
+    /// In client mode, we don't accept inbound substreams.
+    mode: Mode,
+
+    /// Time after which we close an idle connection.
+    idle_timeout: Duration,
 
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
@@ -85,33 +92,25 @@ pub struct KademliaHandler {
 
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
+
+    remote_supported_protocols: SupportedProtocols,
 }
 
 /// The states of protocol confirmation that a connection
 /// handler transitions through.
+#[derive(Copy, Clone)]
 enum ProtocolStatus {
     /// It is as yet unknown whether the remote supports the
     /// configured protocol name.
-    Unconfirmed,
+    Unknown,
     /// The configured protocol name has been confirmed by the remote
     /// but has not yet been reported to the `Kademlia` behaviour.
     Confirmed,
+    /// The configured protocol name(s) are not or no longer supported by the remote.
+    NotSupported,
     /// The configured protocol has been confirmed by the remote
     /// and the confirmation reported to the `Kademlia` behaviour.
     Reported,
-}
-
-/// Configuration of a [`KademliaHandler`].
-#[derive(Debug, Clone)]
-pub struct KademliaHandlerConfig {
-    /// Configuration of the wire protocol.
-    pub protocol_config: KademliaProtocolConfig,
-
-    /// If false, we deny incoming requests.
-    pub allow_listening: bool,
-
-    /// Time after which we close an idle connection.
-    pub idle_timeout: Duration,
 }
 
 /// State of an active outbound substream.
@@ -214,13 +213,11 @@ impl InboundSubstreamState {
 #[derive(Debug)]
 pub enum KademliaHandlerEvent {
     /// The configured protocol name has been confirmed by the peer through
-    /// a successfully negotiated substream.
-    ///
-    /// This event is only emitted once by a handler upon the first
-    /// successfully negotiated inbound or outbound substream and
-    /// indicates that the connected peer participates in the Kademlia
-    /// overlay network identified by the configured protocol name.
+    /// a successfully negotiated substream or by learning the supported protocols of the remote.
     ProtocolConfirmed { endpoint: ConnectedPoint },
+    /// The configured protocol name(s) are not or no longer supported by the peer on the provided
+    /// connection and it should be removed from the routing table.
+    ProtocolNotSupported { endpoint: ConnectedPoint },
 
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
@@ -368,6 +365,9 @@ pub enum KademliaHandlerIn {
     /// for the query on the remote.
     Reset(KademliaRequestId),
 
+    /// Change the connection to the specified mode.
+    ReconfigureMode { new_mode: Mode },
+
     /// Request for the list of nodes whose IDs are the closest to `key`. The number of nodes
     /// returned is not specified, but should be around 20.
     FindNodeReq {
@@ -468,16 +468,32 @@ pub struct KademliaRequestId {
 struct UniqueConnecId(u64);
 
 impl KademliaHandler {
-    /// Create a [`KademliaHandler`] using the given configuration.
     pub fn new(
-        config: KademliaHandlerConfig,
+        protocol_config: KademliaProtocolConfig,
+        idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
+        mode: Mode,
     ) -> Self {
-        let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
+        match &endpoint {
+            ConnectedPoint::Dialer { .. } => {
+                log::debug!(
+                    "Operating in {mode}-mode on new outbound connection to {remote_peer_id}"
+                );
+            }
+            ConnectedPoint::Listener { .. } => {
+                log::debug!(
+                    "Operating in {mode}-mode on new inbound connection to {remote_peer_id}"
+                );
+            }
+        }
+
+        let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
 
         KademliaHandler {
-            config,
+            protocol_config,
+            mode,
+            idle_timeout,
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
@@ -486,7 +502,8 @@ impl KademliaHandler {
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
             keep_alive,
-            protocol_status: ProtocolStatus::Unconfirmed,
+            protocol_status: ProtocolStatus::Unknown,
+            remote_supported_protocols: Default::default(),
         }
     }
 
@@ -506,7 +523,7 @@ impl KademliaHandler {
 
         self.num_requested_outbound_streams -= 1;
 
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -528,7 +545,7 @@ impl KademliaHandler {
             future::Either::Right(p) => void::unreachable(p),
         };
 
-        if let ProtocolStatus::Unconfirmed = self.protocol_status {
+        if let ProtocolStatus::Unknown = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
@@ -559,7 +576,6 @@ impl KademliaHandler {
             }
         }
 
-        debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
@@ -601,11 +617,9 @@ impl ConnectionHandler for KademliaHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                .map_upgrade(Either::Left)
-        } else {
-            SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ())
+        match self.mode {
+            Mode::Server => SubstreamProtocol::new(Either::Left(self.protocol_config.clone()), ()),
+            Mode::Client => SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ()),
         }
     }
 
@@ -680,6 +694,22 @@ impl ConnectionHandler for KademliaHandler {
             } => {
                 self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
             }
+            KademliaHandlerIn::ReconfigureMode { new_mode } => {
+                let peer = self.remote_peer_id;
+
+                match &self.endpoint {
+                    ConnectedPoint::Dialer { .. } => {
+                        log::debug!(
+                            "Now operating in {new_mode}-mode on outbound connection with {peer}"
+                        )
+                    }
+                    ConnectedPoint::Listener { local_addr, .. } => {
+                        log::debug!("Now operating in {new_mode}-mode on inbound connection with {peer} assuming that one of our external addresses routes to {local_addr}")
+                    }
+                }
+
+                self.mode = new_mode;
+            }
         }
     }
 
@@ -722,7 +752,7 @@ impl ConnectionHandler for KademliaHandler {
         {
             self.num_requested_outbound_streams += 1;
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(self.config.protocol_config.clone(), ()),
+                protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
             });
         }
 
@@ -731,7 +761,7 @@ impl ConnectionHandler for KademliaHandler {
             // No open streams. Preserve the existing idle timeout.
             (true, k @ KeepAlive::Until(_)) => k,
             // No open streams. Set idle timeout.
-            (true, _) => KeepAlive::Until(Instant::now() + self.config.idle_timeout),
+            (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
             // Keep alive for open streams.
             (false, _) => KeepAlive::Yes,
         };
@@ -760,8 +790,38 @@ impl ConnectionHandler for KademliaHandler {
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::LocalProtocolsChange(_)
-            | ConnectionEvent::RemoteProtocolsChange(_) => {}
+            | ConnectionEvent::LocalProtocolsChange(_) => {}
+            ConnectionEvent::RemoteProtocolsChange(change) => {
+                let dirty = self.remote_supported_protocols.on_protocols_change(change);
+
+                if dirty {
+                    let remote_supports_our_kademlia_protocols = self
+                        .remote_supported_protocols
+                        .iter()
+                        .any(|p| self.protocol_config.protocol_names().contains(p));
+
+                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
+                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
+                        (true, _) => {
+                            log::info!(
+                                "Remote {} now supports our kademlia protocol",
+                                self.remote_peer_id
+                            );
+
+                            self.protocol_status = ProtocolStatus::Confirmed;
+                        }
+                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
+                            log::info!(
+                                "Remote {} no longer supports our kademlia protocol",
+                                self.remote_peer_id
+                            );
+
+                            self.protocol_status = ProtocolStatus::NotSupported;
+                        }
+                        (false, _) => {}
+                    }
+                }
+            }
         }
     }
 }
@@ -778,16 +838,6 @@ impl KademliaHandler {
         }
 
         debug_assert!(false, "Cannot find inbound substream for {request_id:?}")
-    }
-}
-
-impl Default for KademliaHandlerConfig {
-    fn default() -> Self {
-        KademliaHandlerConfig {
-            protocol_config: Default::default(),
-            allow_listening: true,
-            idle_timeout: Duration::from_secs(10),
-        }
     }
 }
 

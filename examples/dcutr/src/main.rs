@@ -112,7 +112,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "Event", event_process = false)]
+    #[behaviour(to_swarm = "Event")]
     struct Behaviour {
         relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,

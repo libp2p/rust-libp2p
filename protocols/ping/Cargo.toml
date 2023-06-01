@@ -14,11 +14,11 @@ categories = ["network-programming", "asynchronous"]
 either = "1.8.0"
 futures = "0.3.28"
 futures-timer = "3.0.2"
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.1"
+log = "0.4.18"
 rand = "0.8"
 void = "1.0"
 

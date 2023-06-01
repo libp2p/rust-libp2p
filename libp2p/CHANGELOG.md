@@ -9,7 +9,7 @@
   This newtype enforces additional variants like a leading forward-slash.
   We encourage users to use `StreamProtocol` when implementing `UpgradeInfo`.
   See [PR 3746].
-  
+
 - Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
 
 - Remove deprecated `mplex` module.
@@ -17,10 +17,14 @@
   This also removes `mplex` from the `development_transport` and `tokio_development_transport` functions.
   See [PR 3920].
 
+- Remove `libp2p-perf` protocol. To use `libp2p-perf` one needs to import it directly.
+  See [PR 3990].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 [PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
+[PR 3990]: https://github.com/libp2p/rust-libp2p/pull/3990
 
 ## 0.51.3
 

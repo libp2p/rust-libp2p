@@ -180,7 +180,7 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
@@ -194,7 +194,7 @@
 //!
 //!     let behaviour = Behaviour::default();
 //!
-//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 //!
 //!     Ok(())
 //! }
@@ -237,7 +237,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
@@ -251,7 +251,7 @@
 //!
 //!     let behaviour = Behaviour::default();
 //!
-//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
@@ -287,7 +287,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
@@ -301,7 +301,7 @@
 //!
 //!     let behaviour = Behaviour::default();
 //!
-//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.

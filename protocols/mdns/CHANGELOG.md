@@ -6,7 +6,9 @@
 - Raise MSRV to 1.65.
   See [PR 3715].
 - Remove deprecated `Mdns` prefixed items. See [PR 3699].
+- Faster peer discovery with adaptive initial interval. See [PR 3975].
 
+[PR 3975]: https://github.com/libp2p/rust-libp2p/pull/3975
 [PR 3621]: https://github.com/libp2p/rust-libp2p/pull/3621
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3699]: https://github.com/libp2p/rust-libp2p/pull/3699
