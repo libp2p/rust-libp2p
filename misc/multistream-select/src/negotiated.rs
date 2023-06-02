@@ -305,9 +305,7 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        // Ensure all data has been flushed and expected negotiation messages
-        // have been received.
-        ready!(self.as_mut().poll(cx).map_err(Into::<io::Error>::into)?);
+        // Ensure all data has been flushed.
         ready!(self
             .as_mut()
             .poll_flush(cx)
