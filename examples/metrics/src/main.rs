@@ -18,35 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Example demonstrating `libp2p-metrics`.
-//!
-//! In one terminal run:
-//!
-//! ```
-//! cargo run
-//! ```
-//!
-//! In a second terminal run:
-//!
-//! ```
-//! cargo run -- <listen-addr-of-first-node>
-//! ```
-//!
-//! Where `<listen-addr-of-first-node>` is replaced by the listen address of the
-//! first node reported in the first terminal. Look for `NewListenAddr`.
-//!
-//! In a third terminal run:
-//!
-//! ```
-//! curl localhost:<metrics-port-of-first-or-second-node>/metrics
-//! ```
-//!
-//! Where `<metrics-port-of-first-or-second-node>` is replaced by the listen
-//! port of the metrics server of the first or the second node. Look for
-//! `tide::server Server listening on`.
-//!
-//! You should see a long list of metrics printed to the terminal. Check the
-//! `libp2p_ping` metrics, they should be `>0`.
+#![doc = include_str!("../README.md")]
 
 use env_logger::Env;
 use futures::executor::block_on;
