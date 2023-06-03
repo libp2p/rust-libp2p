@@ -86,8 +86,7 @@ pub struct Behaviour {
     /// Indexed by the [`ConnectionId`] of the relayed connection and
     /// the [`PeerId`] we are trying to establish a direct connection to.
     outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
-
-    /// The addresses we observed of our peers.
+    // /// The addresses we observed of our peers.
     peers_addresses: HashMap<ConnectionId, Multiaddr>,
 }
 
@@ -298,15 +297,11 @@ impl NetworkBehaviour for Behaviour {
         };
 
         match handler_event {
-            Either::Left(handler::relayed::Event::InboundConnectRequest) => {
+            Either::Left(handler::relayed::Event::InboundConnectRequest { remote_addr }) => {
                 self.queued_events.extend([ToSwarm::GenerateEvent(
                     Event::RemoteInitiatedDirectConnectionUpgrade {
                         remote_peer_id: event_source,
-                        remote_relayed_addr: self
-                            .peers_addresses
-                            .get(&relayed_connection_id)
-                            .cloned()
-                            .expect("to have stored remote addr of relay connection"),
+                        remote_relayed_addr: remote_addr,
                     },
                 )]);
             }

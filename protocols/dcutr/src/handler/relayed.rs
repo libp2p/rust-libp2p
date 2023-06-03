@@ -45,7 +45,9 @@ pub enum Command {
 
 #[derive(Debug)]
 pub enum Event {
-    InboundConnectRequest,
+    InboundConnectRequest {
+        remote_addr: Multiaddr,
+    },
     InboundNegotiationFailed {
         error: StreamUpgradeError<void::Void>,
     },
@@ -122,9 +124,13 @@ impl Handler {
                          Replacing previous with new.",
                     );
                 }
+                let remote_addr = match &self.endpoint {
+                    ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
+                    ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
+                };
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundConnectRequest,
+                        Event::InboundConnectRequest { remote_addr },
                     ));
                 self.attempts += 1;
             }
