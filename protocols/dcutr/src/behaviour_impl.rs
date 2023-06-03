@@ -72,7 +72,7 @@ pub enum Error {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Either<Void, Void>>>>,
+    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Void>>>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -189,10 +189,7 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Either<
-        handler::relayed::Handler,
-        Either<handler::direct::Handler, dummy::ConnectionHandler>,
-    >;
+    type ConnectionHandler = Either<handler::relayed::Handler, dummy::ConnectionHandler>;
     type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
@@ -235,7 +232,7 @@ impl NetworkBehaviour for Behaviour {
             "state mismatch"
         );
 
-        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
+        Ok(Either::Right(dummy::ConnectionHandler))
     }
 
     fn handle_established_outbound_connection(
@@ -273,12 +270,19 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
 
-            return Ok(Either::Right(Either::Left(
-                handler::direct::Handler::default(),
-            )));
+            self.queued_events.extend([
+                ToSwarm::NotifyHandler {
+                    peer_id: peer,
+                    handler: NotifyHandler::One(relayed_connection_id),
+                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
+                },
+                ToSwarm::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
+                    remote_peer_id: peer,
+                }),
+            ]);
         }
 
-        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
+        Ok(Either::Right(dummy::ConnectionHandler))
     }
 
     fn on_connection_handler_event(
