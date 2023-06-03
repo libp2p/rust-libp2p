@@ -86,8 +86,6 @@ pub struct Behaviour {
     /// Indexed by the [`ConnectionId`] of the relayed connection and
     /// the [`PeerId`] we are trying to establish a direct connection to.
     outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
-    // /// The addresses we observed of our peers.
-    peers_addresses: HashMap<ConnectionId, Multiaddr>,
 }
 
 impl Behaviour {
@@ -99,7 +97,6 @@ impl Behaviour {
             local_peer_id,
             direct_to_relayed_connections: Default::default(),
             outgoing_direct_connection_attempts: Default::default(),
-            peers_addresses: Default::default(),
         }
     }
 
@@ -169,8 +166,6 @@ impl Behaviour {
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-        self.peers_addresses.remove(&connection_id);
-
         if !connected_point.is_relayed() {
             let connections = self
                 .direct_connections
@@ -198,9 +193,6 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.peers_addresses
-            .insert(connection_id, remote_addr.clone());
-
         if is_relayed(local_addr) {
             let connected_point = ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
@@ -241,7 +233,6 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.peers_addresses.insert(connection_id, addr.clone());
         if is_relayed(addr) {
             return Ok(Either::Left(handler::relayed::Handler::new(
                 ConnectedPoint::Dialer {
