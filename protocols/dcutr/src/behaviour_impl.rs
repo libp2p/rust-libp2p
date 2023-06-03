@@ -360,14 +360,7 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(Either::Left(handler::direct::Event::DirectConnectionEstablished)) => {
-                self.queued_events.extend([ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeSucceeded {
-                        remote_peer_id: event_source,
-                    },
-                )]);
-            }
-            Either::Right(Either::Right(never)) => void::unreachable(never),
+            Either::Right(never) => void::unreachable(never),
         };
     }
 
