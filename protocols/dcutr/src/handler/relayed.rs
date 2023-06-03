@@ -38,16 +38,9 @@ use libp2p_swarm::{
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
+#[derive(Debug)]
 pub enum Command {
     Connect,
-    AcceptInboundConnect {
-        obs_addrs: Vec<Multiaddr>,
-        inbound_connect: Box<protocol::inbound::PendingConnect>,
-    },
-    /// Upgrading the relayed connection to a direct connection either failed for good or succeeded.
-    /// There is no need to keep the relayed connection alive for the sake of upgrading to a direct
-    /// connection.
-    UpgradeFinishedDontKeepAlive,
 }
 
 #[derive(Debug)]
