@@ -224,16 +224,17 @@ where
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
+        let message = self
+            .requested_outbound
+            .pop_front()
+            .expect("negotiated a stream without a pending message");
+
         match error {
             StreamUpgradeError::Timeout => {
-                unreachable!("`future::Ready` never times out")
+                self.pending_events
+                    .push_back(Event::OutboundTimeout(message.request_id));
             }
             StreamUpgradeError::NegotiationFailed => {
-                let message = self
-                    .requested_outbound
-                    .pop_front()
-                    .expect("negotiated a stream without a pending message");
-
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -244,7 +245,11 @@ where
             }
             StreamUpgradeError::Apply(e) => void::unreachable(e),
             StreamUpgradeError::Io(e) => {
-                log::debug!("outbound stream failed: {e}");
+                log::debug!(
+                    "outbound stream for request {} failed: {e}, retrying",
+                    message.request_id
+                );
+                self.requested_outbound.push_back(message);
             }
         }
     }
