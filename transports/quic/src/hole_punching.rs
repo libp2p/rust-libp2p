@@ -62,10 +62,7 @@ impl Future for MaybeHolePunchedConnection {
     }
 }
 
-async fn punch_holes(
-    mut endpoint_channel: endpoint::Channel,
-    remote_addr: SocketAddr,
-) -> Error {
+async fn punch_holes(mut endpoint_channel: endpoint::Channel, remote_addr: SocketAddr) -> Error {
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
         sleep(sleep_duration).await;
@@ -92,10 +89,7 @@ pub(crate) async fn hole_puncher(
     remote_addr: SocketAddr,
     timeout_duration: Duration,
 ) -> Error {
-    timeout(
-        timeout_duration,
-        punch_holes(endpoint_channel, remote_addr),
-    )
-    .await
-    .unwrap_or(Error::HandshakeTimedOut)
+    timeout(timeout_duration, punch_holes(endpoint_channel, remote_addr))
+        .await
+        .unwrap_or(Error::HandshakeTimedOut)
 }
