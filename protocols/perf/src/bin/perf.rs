@@ -102,7 +102,7 @@ async fn main() -> Result<()> {
 }
 
 async fn server(server_address: SocketAddr) -> Result<()> {
-    let mut swarm = swarm::<libp2p_perf::server::Behaviour>().await?;
+    let mut swarm = swarm::<libp2p_perf::Behaviour<libp2p_perf::server::Behaviour>>().await?;
 
     swarm.listen_on(
         Multiaddr::empty()
@@ -135,8 +135,11 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::Behaviour(()) => {
+                SwarmEvent::Behaviour(libp2p_perf::BehaviourEvent::Inner(())) => {
                     info!("Finished run",)
+                }
+                SwarmEvent::Behaviour(libp2p_perf::BehaviourEvent::KeepAlive(never)) => {
+                    void::unreachable(never)
                 }
                 e => panic!("{e:?}"),
             }
@@ -298,7 +301,7 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     let to_receive = 1;
 
     for _ in 0..num {
-        swarm.behaviour_mut().perf(
+        swarm.behaviour_mut().inner.perf(
             server_peer_id,
             RunParams {
                 to_send,
@@ -312,10 +315,12 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
 
     loop {
         match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(libp2p_perf::client::Event {
-                id: _,
-                result: Ok(_),
-            }) => {
+            SwarmEvent::Behaviour(libp2p_perf::BehaviourEvent::Inner(
+                libp2p_perf::client::Event {
+                    id: _,
+                    result: Ok(_),
+                },
+            )) => {
                 finished += 1;
 
                 if finished == num {
@@ -425,7 +430,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
 }
 
 async fn connect(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<libp2p_perf::Behaviour<libp2p_perf::client::Behaviour>>,
     server_address: Multiaddr,
 ) -> Result<(PeerId, Duration)> {
     let start = Instant::now();
@@ -450,17 +455,17 @@ async fn connect(
 }
 
 async fn perf(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<libp2p_perf::Behaviour<libp2p_perf::client::Behaviour>>,
     server_peer_id: PeerId,
     params: RunParams,
 ) -> Result<RunDuration> {
-    swarm.behaviour_mut().perf(server_peer_id, params)?;
+    swarm.behaviour_mut().inner.perf(server_peer_id, params)?;
 
     let duration = match swarm.next().await.unwrap() {
-        SwarmEvent::Behaviour(libp2p_perf::client::Event {
+        SwarmEvent::Behaviour(libp2p_perf::BehaviourEvent::Inner(libp2p_perf::client::Event {
             id: _,
             result: Ok(duration),
-        }) => duration,
+        })) => duration,
         e => panic!("{e:?}"),
     };
 
