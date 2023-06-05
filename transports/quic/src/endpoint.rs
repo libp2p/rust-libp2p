@@ -280,15 +280,9 @@ impl Channel {
     }
 
     pub(crate) async fn send(&mut self, to_endpoint: ToEndpoint) -> Result<(), Disconnected> {
-        futures::future::poll_fn(|cx| {
-            self.to_endpoint
-                .poll_ready_unpin(cx)
-                .map_err(|_| Disconnected {})
-        })
-        .await?;
-
         self.to_endpoint
-            .start_send(to_endpoint)
+            .send(to_endpoint)
+            .await
             .map_err(|_| Disconnected {})
     }
 
