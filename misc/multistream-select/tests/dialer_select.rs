@@ -20,6 +20,8 @@
 
 //! Integration tests for protocol negotiation.
 
+use std::time::Duration;
+
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
@@ -175,4 +177,35 @@ fn negotiation_failed() {
             }
         }
     }
+}
+
+#[async_std::test]
+async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener_addr = listener.local_addr().unwrap();
+
+    let _server = async_std::task::spawn(async move {
+        let _connec = listener.accept().await.unwrap().0;
+        // Blocks forever as only a single connection is dialed by the client. Never interacts with
+        // `_connec`.
+        listener.accept().await.unwrap();
+    });
+
+    let client = async_std::task::spawn(async move {
+        let connec = TcpStream::connect(&listener_addr).await.unwrap();
+        // Single protocol to allow for lazy (or optimistic) protocol negotiation.
+        let protos = vec!["/proto1"];
+        let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), Version::V1Lazy)
+            .await
+            .unwrap();
+        assert_eq!(proto, "/proto1");
+
+        // client can close the connection even though protocol negotiation is not yet done, i.e.
+        // server never interacted with the connection.
+        io.close().await.unwrap();
+    });
+
+    async_std::future::timeout(Duration::from_secs(10), client)
+        .await
+        .unwrap();
 }
