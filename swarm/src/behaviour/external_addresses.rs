@@ -80,7 +80,6 @@ impl ExternalAddresses {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
     use super::*;
     use crate::dummy;
     use libp2p_core::multiaddr::Protocol;
