@@ -1776,20 +1776,18 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::{executor, future};
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
+    use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
-    use libp2p_core::{Endpoint, UpgradeError};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;
-    use void::Void;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2374,15 +2372,13 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
-                    MemoryTransportError::Unreachable,
-                ))),
+                MemoryTransportError::Unreachable,
             )),
         )]);
 
         let string = format!("{error}");
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : Handshake failed: No listener on the given port.)]", string)
+        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
     }
 }
