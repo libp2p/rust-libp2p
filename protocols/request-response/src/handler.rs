@@ -26,6 +26,7 @@ use crate::codec::Codec;
 use crate::handler::protocol::Protocol;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
+use futures::channel::mpsc;
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
 use libp2p_swarm::handler::{
@@ -72,19 +73,19 @@ where
     pending_outbound: VecDeque<OutboundMessage<TCodec>>,
 
     requested_outbound: VecDeque<OutboundMessage<TCodec>>,
-    /// Inbound upgrades waiting for the incoming request.
-    inbound: FuturesUnordered<
-        BoxFuture<
-            'static,
-            Result<
-                (
-                    (RequestId, TCodec::Request),
-                    oneshot::Sender<TCodec::Response>,
-                ),
-                oneshot::Canceled,
-            >,
-        >,
-    >,
+    /// A channel for receiving inbound requests.
+    inbound_receiver: mpsc::Receiver<(
+        RequestId,
+        TCodec::Request,
+        oneshot::Sender<TCodec::Response>,
+    )>,
+    /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound request.
+    inbound_sender: mpsc::Sender<(
+        RequestId,
+        TCodec::Request,
+        oneshot::Sender<TCodec::Response>,
+    )>,
+
     inbound_request_id: Arc<AtomicU64>,
 
     worker_streams: FuturesUnordered<BoxFuture<'static, Result<Event<TCodec>, io::Error>>>,
@@ -101,6 +102,7 @@ where
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
     ) -> Self {
+        let (inbound_sender, inbound_receiver) = mpsc::channel(0);
         Self {
             inbound_protocols,
             codec,
@@ -109,7 +111,8 @@ where
             substream_timeout,
             pending_outbound: VecDeque::new(),
             requested_outbound: Default::default(),
-            inbound: FuturesUnordered::new(),
+            inbound_receiver,
+            inbound_sender,
             pending_events: VecDeque::new(),
             inbound_request_id,
             worker_streams: Default::default(),
@@ -127,33 +130,22 @@ where
         >,
     ) {
         let mut codec = self.codec.clone();
-
-        // A channel for notifying the handler when the inbound
-        // upgrade received the request.
-        let (rq_send, rq_recv) = oneshot::channel();
-
-        // A channel for notifying the inbound upgrade when the
-        // response is sent.
-        let (rs_send, rs_recv) = oneshot::channel();
-
-        // The handler waits for the request to come in. It then emits
-        // `Event::Request` together with a
-        // `ResponseChannel`.
-        self.inbound
-            .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
-
         let request_id = RequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
         let timeout = self.substream_timeout;
+        let mut sender = self.inbound_sender.clone();
 
         let recv = async move {
+            // A channel for notifying the inbound upgrade when the
+            // response is sent.
+            let (rs_send, rs_recv) = oneshot::channel();
+
             let read = codec.read_request(&protocol, &mut stream);
             let request = read.await?;
-            match rq_send.send((request_id, request)) {
-                Ok(()) => {}
-                Err(_) => {
-                    panic!("Expect request receiver to be alive i.e. protocol handler to be alive.",)
-                }
-            }
+            sender
+                .send((request_id, request, rs_send))
+                .await
+                .expect("`ConnectionHandler` owns both ends of the channel");
+            drop(sender);
 
             if let Ok(response) = rs_recv.await {
                 let write = codec.write_response(&protocol, &mut stream, response);
@@ -395,23 +387,14 @@ where
         }
 
         // Check for inbound requests.
-        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok(((id, rq), rs_sender)) => {
-                    // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
-                        request_id: id,
-                        request: rq,
-                        sender: rs_sender,
-                    }));
-                }
-                Err(oneshot::Canceled) => {
-                    // The inbound upgrade has errored or timed out reading
-                    // or waiting for the request. The handler is informed
-                    // via `on_connection_event` call with `ConnectionEvent::ListenUpgradeError`.
-                }
-            }
+        if let Poll::Ready(Some((id, rq, rs_sender))) = self.inbound_receiver.poll_next_unpin(cx) {
+            // We received an inbound request.
+            self.keep_alive = KeepAlive::Yes;
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
+                request_id: id,
+                request: rq,
+                sender: rs_sender,
+            }));
         }
 
         // Emit outbound requests.
@@ -430,7 +413,8 @@ where
             self.pending_outbound.shrink_to_fit();
         }
 
-        if self.inbound.is_empty() && self.keep_alive.is_yes() {
+        // if self.inbound_sender.is_empty() && self.keep_alive.is_yes() { TODO: Fix keep-alive tracking first?
+        if self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure
             // the keep-alive timeout is preceded by the substream timeout.
