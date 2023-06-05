@@ -249,12 +249,9 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let (sender, receiver) = oneshot::channel();
 
-        match self
-            .hole_punch_map
-            .lock()
-            .unwrap()
-            .entry((socket_addr, peer_id))
-        {
+        let hole_punch_map = self.hole_punch_map.clone();
+
+        match hole_punch_map.lock().unwrap().entry((socket_addr, peer_id)) {
             Entry::Vacant(entry) => entry.insert(sender),
             Entry::Occupied(_) => {
                 return Err(TransportError::Other(Error::HolePunchInProgress(
@@ -264,10 +261,16 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         };
 
-        Ok(Box::pin(async {
+        Ok(Box::pin(async move {
             match futures::future::select(receiver, pin!(hole_puncher)).await {
                 Either::Left((connection, _)) => Ok(connection.unwrap()),
-                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
+                Either::Right((hole_punch_err, _)) => {
+                    hole_punch_map
+                        .lock()
+                        .unwrap()
+                        .remove(&(socket_addr, peer_id));
+                    Err(hole_punch_err)
+                }
             }
         }))
     }
