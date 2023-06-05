@@ -1782,8 +1782,8 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
+    use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
-    use libp2p_core::{Endpoint};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;

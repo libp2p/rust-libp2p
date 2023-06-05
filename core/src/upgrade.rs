@@ -66,10 +66,10 @@ mod ready;
 mod select;
 mod transfer;
 
-pub(crate) use error::UpgradeError;
 pub(crate) use apply::{
     apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
 };
+pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
 pub use self::{
