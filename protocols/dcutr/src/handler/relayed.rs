@@ -135,7 +135,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -171,12 +171,13 @@ impl Handler {
                     ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
                 };
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundConnectRequest {
-                        inbound_connect: Box::new(inbound_connect),
-                        remote_addr,
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::InboundConnectRequest {
+                            inbound_connect: Box::new(inbound_connect),
+                            remote_addr,
+                        },
+                    ));
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
             future::Either::Right(output) => void::unreachable(output),
@@ -197,11 +198,12 @@ impl Handler {
             self.endpoint.is_listener(),
             "A connection dialer never initiates a connection upgrade."
         );
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::OutboundConnectNegotiated {
-                remote_addrs: obs_addrs,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiated {
+                    remote_addrs: obs_addrs,
+                },
+            ));
     }
 
     fn on_listen_upgrade_error(
@@ -228,21 +230,23 @@ impl Handler {
 
         match error {
             StreamUpgradeError::Timeout => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::OutboundNegotiationFailed {
-                        error: StreamUpgradeError::Timeout,
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundNegotiationFailed {
+                            error: StreamUpgradeError::Timeout,
+                        },
+                    ));
             }
             StreamUpgradeError::NegotiationFailed => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::OutboundNegotiationFailed {
-                        error: StreamUpgradeError::NegotiationFailed,
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundNegotiationFailed {
+                            error: StreamUpgradeError::NegotiationFailed,
+                        },
+                    ));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -254,8 +258,8 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Command;
-    type OutEvent = Event;
+    type FromBehaviour = Command;
+    type ToBehaviour = Event;
     type Error = StreamUpgradeError<
         Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
     >;
@@ -280,7 +284,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             Command::Connect { obs_addrs } => {
                 self.queued_events
@@ -323,7 +327,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -342,7 +346,7 @@ impl ConnectionHandler for Handler {
             self.inbound_connect = None;
             match result {
                 Ok(addresses) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::InboundConnectNegotiated(addresses),
                     ));
                 }

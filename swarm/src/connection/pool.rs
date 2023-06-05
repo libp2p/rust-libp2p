@@ -90,8 +90,10 @@ where
     counters: ConnectionCounters,
 
     /// The managed connections of each peer that are currently considered established.
-    established:
-        FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<THandler::InEvent>>>,
+    established: FnvHashMap<
+        PeerId,
+        FnvHashMap<ConnectionId, EstablishedConnection<THandler::FromBehaviour>>,
+    >,
 
     /// The pending connections that are currently being negotiated.
     pending: HashMap<ConnectionId, PendingConnection>,
@@ -285,7 +287,7 @@ pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandler::OutEvent,
+        event: THandler::ToBehaviour,
     },
 
     /// The connection to a node has changed its address.
@@ -338,7 +340,7 @@ where
     pub(crate) fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<&mut EstablishedConnection<THandler::InEvent>> {
+    ) -> Option<&mut EstablishedConnection<THandler::FromBehaviour>> {
         self.established
             .values_mut()
             .find_map(|connections| connections.get_mut(&id))
@@ -404,7 +406,6 @@ where
 
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
-    #[allow(deprecated)]
     pub(crate) fn add_outgoing(
         &mut self,
         dials: Vec<
@@ -484,7 +485,6 @@ where
         );
     }
 
-    #[allow(deprecated)]
     pub(crate) fn spawn_connection(
         &mut self,
         id: ConnectionId,

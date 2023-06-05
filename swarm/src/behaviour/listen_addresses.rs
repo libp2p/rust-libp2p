@@ -34,7 +34,7 @@ impl ListenAddresses {
 mod tests {
     use super::*;
     use crate::dummy;
-    use libp2p_core::multiaddr::Protocol;
+    use libp2p_core::{multiaddr::Protocol, transport::ListenerId};
     use once_cell::sync::Lazy;
 
     #[test]
@@ -62,14 +62,14 @@ mod tests {
 
     fn new_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
         FromSwarm::NewListenAddr(NewListenAddr {
-            listener_id: Default::default(),
+            listener_id: ListenerId::next(),
             addr: &MEMORY_ADDR,
         })
     }
 
     fn expired_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
         FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
-            listener_id: Default::default(),
+            listener_id: ListenerId::next(),
             addr: &MEMORY_ADDR,
         })
     }

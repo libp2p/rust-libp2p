@@ -29,7 +29,7 @@ pub(crate) use multistream_select::Version;
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
-pub fn apply<C, U>(
+pub(crate) fn apply<C, U>(
     conn: C,
     up: U,
     cp: ConnectedPoint,
@@ -48,7 +48,7 @@ where
 }
 
 /// Tries to perform an upgrade on an inbound connection or substream.
-pub fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
+pub(crate) fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>,
@@ -62,7 +62,7 @@ where
 }
 
 /// Tries to perform an upgrade on an outbound connection or substream.
-pub fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
+pub(crate) fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>>,

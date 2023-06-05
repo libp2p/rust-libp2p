@@ -25,7 +25,7 @@
 
 use futures::future::{ready, Ready};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::NegotiatedSubstream;
+use libp2p_swarm::Stream;
 use smallvec::SmallVec;
 
 /// The level of support for a particular protocol.
@@ -77,28 +77,28 @@ where
     }
 }
 
-impl<P> InboundUpgrade<NegotiatedSubstream> for Protocol<P>
+impl<P> InboundUpgrade<Stream> for Protocol<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = (NegotiatedSubstream, P);
+    type Output = (Stream, P);
     type Error = void::Void;
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
         ready(Ok((io, protocol)))
     }
 }
 
-impl<P> OutboundUpgrade<NegotiatedSubstream> for Protocol<P>
+impl<P> OutboundUpgrade<Stream> for Protocol<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = (NegotiatedSubstream, P);
+    type Output = (Stream, P);
     type Error = void::Void;
     type Future = Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, io: NegotiatedSubstream, protocol: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
         ready(Ok((io, protocol)))
     }
 }

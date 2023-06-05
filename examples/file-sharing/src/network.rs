@@ -60,7 +60,7 @@ pub(crate) async fn new(
         transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-            request_response: request_response::Behaviour::new(
+            request_response: request_response::Behaviour::with_codec(
                 FileExchangeCodec(),
                 iter::once((
                     StreamProtocol::new("/file-exchange/1"),
@@ -329,7 +329,10 @@ impl EventLoop {
                 }
             }
             SwarmEvent::IncomingConnectionError { .. } => {}
-            SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {peer_id}"),
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } => eprintln!("Dialing {peer_id}"),
             e => panic!("{e:?}"),
         }
     }
@@ -408,7 +411,7 @@ impl EventLoop {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ComposedEvent")]
+#[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
     request_response: request_response::Behaviour<FileExchangeCodec>,
     kademlia: Kademlia<MemoryStore>,

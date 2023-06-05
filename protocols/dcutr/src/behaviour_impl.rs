@@ -98,7 +98,7 @@ impl Behaviour {
         }
     }
 
-    fn observed_addreses(&self) -> Vec<Multiaddr> {
+    fn observed_addresses(&self) -> Vec<Multiaddr> {
         self.external_addresses
             .iter()
             .cloned()
@@ -132,7 +132,7 @@ impl Behaviour {
                         peer_id,
                         handler: NotifyHandler::One(connection_id),
                         event: Either::Left(handler::relayed::Command::Connect {
-                            obs_addrs: self.observed_addreses(),
+                            obs_addrs: self.observed_addresses(),
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::InitiatedDirectConnectionUpgrade {
@@ -189,7 +189,7 @@ impl Behaviour {
                 handler: NotifyHandler::One(relayed_connection_id),
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {
-                    obs_addrs: self.observed_addreses(),
+                    obs_addrs: self.observed_addresses(),
                 }),
             })
         } else {
@@ -237,42 +237,32 @@ impl NetworkBehaviour for Behaviour {
         handler::relayed::Handler,
         Either<handler::direct::Handler, dummy::ConnectionHandler>,
     >;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
         connection_id: ConnectionId,
-        peer: PeerId,
+        _peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(local_addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
-                        local_addr: local_addr.clone(),
-                        send_back_addr: remote_addr.clone(),
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(local_addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+        if is_relayed(local_addr) {
+            return Ok(Either::Left(handler::relayed::Handler::new(
+                ConnectedPoint::Listener {
+                    local_addr: local_addr.clone(),
+                    send_back_addr: remote_addr.clone(),
+                },
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+
+        assert!(
+            self.direct_to_relayed_connections
+                .get(&connection_id)
+                .is_none(),
+            "state mismatch"
+        );
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn handle_established_outbound_connection(
@@ -282,33 +272,33 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self
-            .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
-        {
-            None => {
-                let handler = if is_relayed(addr) {
-                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
-                        address: addr.clone(),
-                        role_override,
-                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                };
-
-                Ok(handler)
-            }
-            Some(_) => {
-                assert!(
-                    !is_relayed(addr),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-
-                Ok(Either::Right(Either::Left(
-                    handler::direct::Handler::default(),
-                )))
-            }
+        if is_relayed(addr) {
+            return Ok(Either::Left(handler::relayed::Handler::new(
+                ConnectedPoint::Dialer {
+                    address: addr.clone(),
+                    role_override,
+                },
+            ))); // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
         }
+
+        // Whether this is a connection requested by this behaviour.
+        if let Some(&relayed_connection_id) = self.direct_to_relayed_connections.get(&connection_id)
+        {
+            if role_override == Endpoint::Listener {
+                assert!(
+                    self.outgoing_direct_connection_attempts
+                        .remove(&(relayed_connection_id, peer))
+                        .is_some(),
+                    "state mismatch"
+                );
+            }
+
+            return Ok(Either::Right(Either::Left(
+                handler::direct::Handler::default(),
+            )));
+        }
+
+        Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
     }
 
     fn on_connection_handler_event(
@@ -339,7 +329,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id: event_source,
                         event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
                             inbound_connect,
-                            obs_addrs: self.observed_addreses(),
+                            obs_addrs: self.observed_addresses(),
                         }),
                     },
                     ToSwarm::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
@@ -415,7 +405,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
@@ -441,8 +431,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

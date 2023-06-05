@@ -25,8 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    AddressScore, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -43,8 +43,7 @@ use std::{
 /// about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
-/// are reported via [`ToSwarm::ReportObservedAddr`] with a
-/// [score](AddressScore) of `1`.
+/// are reported via [`ToSwarm::NewExternalAddrCandidate`].
 pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
@@ -234,7 +233,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     #[allow(deprecated)]
     fn handle_established_inbound_connection(
@@ -295,10 +294,8 @@ impl NetworkBehaviour for Behaviour {
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
-                self.events.push_back(ToSwarm::ReportObservedAddr {
-                    address: observed,
-                    score: AddressScore::Finite(1),
-                });
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed));
             }
             handler::Event::Identification => {
                 self.events
@@ -319,7 +316,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -405,8 +402,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }

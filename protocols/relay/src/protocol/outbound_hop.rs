@@ -27,7 +27,7 @@ use futures_timer::Delay;
 use instant::{Duration, SystemTime};
 use libp2p_core::{upgrade, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::{NegotiatedSubstream, StreamProtocol};
+use libp2p_swarm::{Stream, StreamProtocol};
 use std::convert::TryFrom;
 use std::iter;
 use thiserror::Error;
@@ -46,12 +46,12 @@ impl upgrade::UpgradeInfo for Upgrade {
     }
 }
 
-impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
+impl upgrade::OutboundUpgrade<Stream> for Upgrade {
     type Output = Output;
     type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, substream: Stream, _: Self::Info) -> Self::Future {
         let msg = match self {
             Upgrade::Reserve => proto::HopMessage {
                 type_pb: proto::HopMessageType::RESERVE,
@@ -269,7 +269,7 @@ pub enum Output {
         limit: Option<Limit>,
     },
     Circuit {
-        substream: NegotiatedSubstream,
+        substream: Stream,
         read_buffer: Bytes,
         limit: Option<Limit>,
     },

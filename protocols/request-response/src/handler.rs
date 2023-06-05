@@ -344,8 +344,8 @@ impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: Codec + Send + Clone + 'static,
 {
-    type InEvent = OutboundMessage<TCodec>;
-    type OutEvent = Event<TCodec>;
+    type FromBehaviour = OutboundMessage<TCodec>;
+    type ToBehaviour = Event<TCodec>;
     type Error = void::Void;
     type InboundProtocol = Protocol<TCodec::Protocol>;
     type OutboundProtocol = Protocol<TCodec::Protocol>;
@@ -361,7 +361,7 @@ where
         )
     }
 
-    fn on_behaviour_event(&mut self, request: Self::InEvent) {
+    fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
         self.keep_alive = KeepAlive::Yes;
         self.pending_outbound.push_back(request);
     }
@@ -373,11 +373,11 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::OutEvent, Self::Error>>
+    ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
     {
         while let Poll::Ready(Some(result)) = self.worker_streams.poll_next_unpin(cx) {
             match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::Custom(event)),
+                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
                 Err(e) => {
                     log::debug!("worker stream failed: {e}")
                 }
@@ -386,7 +386,7 @@ where
 
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_events.shrink_to_fit();
         }
@@ -397,7 +397,7 @@ where
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Request {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
                         request_id: id,
                         request: rq,
                         sender: rs_sender,
