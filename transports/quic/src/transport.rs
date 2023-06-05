@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
-use crate::hole_punching::{hole_puncher, HolePunchMap, MaybeHolePunchedConnection};
+use crate::hole_punching::{hole_puncher, maybe_hole_punched_connection, HolePunchMap};
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
@@ -43,7 +43,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
-use std::pin::pin;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -262,7 +261,8 @@ impl<P: Provider> Transport for GenTransport<P> {
         };
 
         Ok(Box::pin(async move {
-            match futures::future::select(receiver, pin!(hole_puncher)).await {
+            futures::pin_mut!(hole_puncher);
+            match futures::future::select(receiver, hole_puncher).await {
                 Either::Left((connection, _)) => Ok(connection.unwrap()),
                 Either::Right((hole_punch_err, _)) => {
                     hole_punch_map
@@ -572,7 +572,7 @@ impl<P: Provider> Stream for Listener<P> {
                     let remote_addr = connection.remote_addr();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
 
-                    let upgrade = MaybeHolePunchedConnection::new(
+                    let upgrade = maybe_hole_punched_connection(
                         self.hole_punch_map.clone(),
                         remote_addr,
                         Connecting::new(connection, self.handshake_timeout),
