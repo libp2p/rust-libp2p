@@ -84,8 +84,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use smallvec::SmallVec;
 use std::{
@@ -705,16 +705,24 @@ where
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
-        _: PeerId,
+        peer: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        ))
+        );
+
+        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+            for request in pending_requests {
+                handler.on_behaviour_event(request);
+            }
+        }
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
@@ -747,12 +755,20 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        ))
+        );
+
+        if let Some(pending_requests) = self.pending_outbound_requests.remove(&peer) {
+            for request in pending_requests {
+                handler.on_behaviour_event(request);
+            }
+        }
+
+        Ok(handler)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
