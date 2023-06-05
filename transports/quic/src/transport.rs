@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
-use crate::hole_punching::{HolePunchMap, HolePuncher, MaybeHolePunchedConnection};
+use crate::hole_punching::{hole_puncher, HolePunchMap, MaybeHolePunchedConnection};
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
@@ -43,6 +43,7 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
+use std::pin::pin;
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -244,7 +245,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         };
 
-        let hole_puncher = HolePuncher::new(endpoint_channel, socket_addr, self.handshake_timeout);
+        let hole_puncher = hole_puncher(endpoint_channel, socket_addr, self.handshake_timeout);
 
         let (sender, receiver) = oneshot::channel();
 
@@ -264,7 +265,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         };
 
         Ok(Box::pin(async {
-            match futures::future::select(receiver, hole_puncher).await {
+            match futures::future::select(receiver, pin!(hole_puncher)).await {
                 Either::Left((connection, _)) => Ok(connection.unwrap()),
                 Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
             }

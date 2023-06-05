@@ -279,6 +279,19 @@ impl Channel {
         Ok(Ok(()))
     }
 
+    pub(crate) async fn send(&mut self, to_endpoint: ToEndpoint) -> Result<(), Disconnected> {
+        futures::future::poll_fn(|cx| {
+            self.to_endpoint
+                .poll_ready_unpin(cx)
+                .map_err(|_| Disconnected {})
+        })
+        .await?;
+
+        self.to_endpoint
+            .start_send(to_endpoint)
+            .map_err(|_| Disconnected {})
+    }
+
     /// Send a message to inform the [`Driver`] about an
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
