@@ -160,11 +160,9 @@ where
                 write.await?;
 
                 stream.close().await?;
-                // Response was sent. Indicate to handler to emit a `ResponseSent` event.
                 Ok(Event::ResponseSent(request_id))
             } else {
                 stream.close().await?;
-                // No response was sent. Indicate to handler to emit a `ResponseOmission` event.
                 Ok(Event::ResponseOmission(request_id))
             }
         };
