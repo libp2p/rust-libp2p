@@ -134,6 +134,13 @@ pub struct ReservationReq {
 
 impl ReservationReq {
     pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
+        if addrs.is_empty() {
+            log::debug!(
+                "Accepting relay reservation without providing external addresses of local node. \
+                 Thus the remote node might not be able to advertise its relayed address."
+            )
+        }
+
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,

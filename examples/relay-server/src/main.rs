@@ -19,6 +19,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;

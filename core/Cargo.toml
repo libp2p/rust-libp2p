@@ -21,7 +21,7 @@ log = "0.4"
 multiaddr = { version = "0.17.1" }
 multihash = { version = "0.17.0", default-features = false, features = ["std"] }
 multistream-select = { workspace = true }
-once_cell = "1.17.1"
+once_cell = "1.18.0"
 parking_lot = "0.12.0"
 pin-project = "1.1.0"
 quick-protobuf = "0.8"

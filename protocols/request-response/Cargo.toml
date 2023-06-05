@@ -37,7 +37,7 @@ libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
 libp2p-swarm-test = { workspace = true }
-futures_ringbuf = "0.3.1"
+futures_ringbuf = "0.4.0"
 serde = { version = "1.0", features = ["derive"]}
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
