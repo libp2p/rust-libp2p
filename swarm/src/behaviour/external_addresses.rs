@@ -126,7 +126,7 @@ mod tests {
     fn when_pushing_more_than_max_addresses_oldest_is_evicted() {
         let mut addresses = ExternalAddresses::default();
 
-        for _ in 0..MAX_LOCAL_EXTERNAL_ADDRS {
+        while addresses.as_slice().len() < MAX_LOCAL_EXTERNAL_ADDRS {
             let random_address =
                 Multiaddr::empty().with(Protocol::Memory(rand::thread_rng().gen_range(0..1000)));
             addresses.on_swarm_event(
