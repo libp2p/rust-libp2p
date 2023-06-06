@@ -64,10 +64,10 @@ mod provider;
 mod transport;
 
 use std::net::SocketAddr;
+use libp2p_identity::PeerId;
 
 pub use connection::{Connecting, Connection, Substream};
 pub use endpoint::Config;
-use libp2p_identity::PeerId;
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
