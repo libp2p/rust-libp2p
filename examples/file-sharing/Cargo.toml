@@ -8,7 +8,7 @@ license = "MIT"
 [dependencies]
 libp2p-request-response = { workspace = true, features = ["cbor"]  }
 libp2p-swarm = { workspace = true }
-serde = { version = "1.0", optional = true}
+serde = { version = "1.0", optional = true, features = ["derive"] }
 serde_cbor = { version = "0.11.2", optional = true }
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
@@ -21,4 +21,5 @@ multiaddr = { version = "0.17.1" }
 void = "1.0.2"
 
 [features]
+default = ["cbor"]
 cbor = ["dep:serde", "dep:serde_cbor", "libp2p-swarm/macros"]
