@@ -18,7 +18,6 @@ use libp2p::{
 
 use libp2p::core::upgrade::Version;
 use libp2p::StreamProtocol;
-#[cfg(feature = "cbor")]
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
