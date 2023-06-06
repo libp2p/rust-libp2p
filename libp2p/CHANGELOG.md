@@ -22,14 +22,14 @@
 
 - Remove `libp2p-quic` and `libp2p-webrtc` protocols.
   These are in alpha status and should be depended on directly.
-  See [PR XXXX].
+  See [PR 4041].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
 [PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 [PR 3920]: https://github.com/libp2p/rust-libp2p/pull/3920
 [PR 3990]: https://github.com/libp2p/rust-libp2p/pull/3990
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4041]: https://github.com/libp2p/rust-libp2p/pull/4041
 
 ## 0.51.3
 
