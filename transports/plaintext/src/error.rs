@@ -33,7 +33,7 @@ pub enum PlainTextError {
     /// Failed to parse public key from bytes in protobuf message.
     InvalidPublicKey(libp2p_identity::DecodingError),
 
-    /// Failed to parse the [`PeerId`](libp2p_core::PeerId) from bytes in the protobuf message.
+    /// Failed to parse the [`PeerId`](libp2p_identity::PeerId) from bytes in the protobuf message.
     InvalidPeerId(libp2p_core::multihash::Error),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
