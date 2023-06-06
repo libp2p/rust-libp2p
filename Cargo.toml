@@ -101,3 +101,6 @@ quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = { git = "https://github.com/thomaseizinger/rust-multiaddr", branch = "typesafe-p2p" }
 multihash = "0.19.0"
+
+[patch.crates-io]
+libp2p-identity = { path = "identity" }
