@@ -385,7 +385,6 @@ where
 #[cfg(test)]
 mod tests {
     use crate::length_delimited::LengthDelimited;
-    use async_std::net::{TcpListener, TcpStream};
     use futures::{io::Cursor, prelude::*};
     use quickcheck::*;
     use std::io::ErrorKind;
@@ -488,15 +487,13 @@ mod tests {
     #[test]
     fn writing_reading() {
         fn prop(frames: Vec<Vec<u8>>) -> TestResult {
-            async_std::task::block_on(async move {
-                let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-                let listener_addr = listener.local_addr().unwrap();
+            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
+            async_std::task::block_on(async move {
                 let expected_frames = frames.clone();
                 let server = async_std::task::spawn(async move {
-                    let socket = listener.accept().await.unwrap().0;
                     let mut connec =
-                        rw_stream_sink::RwStreamSink::new(LengthDelimited::new(socket));
+                        rw_stream_sink::RwStreamSink::new(LengthDelimited::new(server_connection));
 
                     let mut buf = vec![0u8; 0];
                     for expected in expected_frames {
@@ -512,8 +509,7 @@ mod tests {
                 });
 
                 let client = async_std::task::spawn(async move {
-                    let socket = TcpStream::connect(&listener_addr).await.unwrap();
-                    let mut connec = LengthDelimited::new(socket);
+                    let mut connec = LengthDelimited::new(client_connection);
                     for frame in frames {
                         connec.send(From::from(frame)).await.unwrap();
                     }
