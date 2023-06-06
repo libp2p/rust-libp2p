@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{channel::oneshot, prelude::*};
+use futures::channel::oneshot;
 use libp2p_identity::PeerId;
 use rand::{distributions, Rng};
 
@@ -30,24 +30,21 @@ pub(crate) async fn maybe_hole_punched_connection(
     remote_addr: SocketAddr,
     upgrade: Connecting,
 ) -> Result<(PeerId, Connection), Error> {
-    upgrade
-        .map(|res| {
-            let (peer_id, connection) = res?;
-            if let Some(sender) = hole_punch_map
-                .lock()
-                .unwrap()
-                .remove(&(remote_addr, peer_id))
-            {
-                if let Err((peer_id, connection)) = sender.send((peer_id, connection)) {
-                    Ok((peer_id, connection))
-                } else {
-                    Err(Error::HandshakeTimedOut)
-                }
-            } else {
-                Ok((peer_id, connection))
-            }
-        })
-        .await
+    let (peer_id, connection) = upgrade.await?;
+
+    if let Some(sender) = hole_punch_map
+        .lock()
+        .unwrap()
+        .remove(&(remote_addr, peer_id))
+    {
+        if let Err((peer_id, connection)) = sender.send((peer_id, connection)) {
+            Ok((peer_id, connection))
+        } else {
+            Err(Error::HandshakeTimedOut)
+        }
+    } else {
+        Ok((peer_id, connection))
+    }
 }
 
 pub(crate) async fn hole_puncher(
