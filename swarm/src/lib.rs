@@ -550,8 +550,15 @@ where
         self.confirmed_external_addr.iter()
     }
 
-    /// TBD
-    fn add_listener(&mut self, listener_id: ListenerId) {
+    fn add_listener(&mut self, listener_id: ListenerId, addr: Multiaddr) {
+        if let Err(e) = self.transport.listen_on(listener_id, addr) {
+            self.behaviour
+                .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
+                    listener_id,
+                    err: &e,
+                }));
+        }
+
         self.behaviour
             .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
                 listener_id,
@@ -1031,16 +1038,7 @@ where
                 }
             }
             ToSwarm::ListenOn { id, address } => {
-                if let Err(e) = self.transport.listen_on(id, address) {
-                    self.behaviour.on_swarm_event(FromSwarm::ListenerError(
-                        behaviour::ListenerError {
-                            listener_id: id,
-                            err: &e,
-                        },
-                    ));
-                }
-
-                self.add_listener(id);
+                self.add_listener(id, address);
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
