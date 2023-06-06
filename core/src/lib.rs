@@ -49,55 +49,6 @@ mod proto {
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
-pub mod identity {
-    pub use libp2p_identity::Keypair;
-    pub use libp2p_identity::PublicKey;
-
-    pub mod ed25519 {
-        pub use libp2p_identity::ed25519::Keypair;
-        pub use libp2p_identity::ed25519::PublicKey;
-        pub use libp2p_identity::ed25519::SecretKey;
-    }
-
-    #[cfg(feature = "ecdsa")]
-    #[deprecated(
-        since = "0.39.0",
-        note = "The `ecdsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
-    )]
-    pub mod ecdsa {
-        pub use libp2p_identity::ecdsa::Keypair;
-        pub use libp2p_identity::ecdsa::PublicKey;
-        pub use libp2p_identity::ecdsa::SecretKey;
-    }
-
-    #[cfg(feature = "secp256k1")]
-    #[deprecated(
-        since = "0.39.0",
-        note = "The `secp256k1` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
-    )]
-    pub mod secp256k1 {
-        pub use libp2p_identity::secp256k1::Keypair;
-        pub use libp2p_identity::secp256k1::PublicKey;
-        pub use libp2p_identity::secp256k1::SecretKey;
-    }
-
-    #[cfg(feature = "rsa")]
-    #[deprecated(
-        since = "0.39.0",
-        note = "The `rsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
-    )]
-    pub mod rsa {
-        pub use libp2p_identity::rsa::Keypair;
-        pub use libp2p_identity::rsa::PublicKey;
-    }
-
-    pub mod error {
-        pub use libp2p_identity::DecodingError;
-        pub use libp2p_identity::SigningError;
-    }
-}
-
 mod translation;
 
 pub mod connection;
