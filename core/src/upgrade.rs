@@ -69,11 +69,11 @@ mod transfer;
 pub(crate) use apply::{
     apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply,
 };
+pub(crate) use error::UpgradeError;
 use futures::future::Future;
 
 pub use self::{
     denied::DeniedUpgrade,
-    error::UpgradeError,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,
