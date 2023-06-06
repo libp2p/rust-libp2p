@@ -20,20 +20,19 @@
 
 //! Integration tests for protocol negotiation.
 
-use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
 
 #[test]
 fn select_proto_basic() {
     async fn run(version: Version) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let listener_addr = listener.local_addr().unwrap();
+        let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
         let server = async_std::task::spawn(async move {
-            let connec = listener.accept().await.unwrap().0;
             let protos = vec!["/proto1", "/proto2"];
-            let (proto, mut io) = listener_select_proto(connec, protos).await.unwrap();
+            let (proto, mut io) = listener_select_proto(server_connection, protos)
+                .await
+                .unwrap();
             assert_eq!(proto, "/proto2");
 
             let mut out = vec![0; 32];
@@ -46,11 +45,11 @@ fn select_proto_basic() {
         });
 
         let client = async_std::task::spawn(async move {
-            let connec = TcpStream::connect(&listener_addr).await.unwrap();
             let protos = vec!["/proto3", "/proto2"];
-            let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), version)
-                .await
-                .unwrap();
+            let (proto, mut io) =
+                dialer_select_proto(client_connection, protos.into_iter(), version)
+                    .await
+                    .unwrap();
             assert_eq!(proto, "/proto2");
 
             io.write_all(b"ping").await.unwrap();
@@ -83,12 +82,10 @@ fn negotiation_failed() {
             dial_payload,
         }: Test,
     ) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let listener_addr = listener.local_addr().unwrap();
+        let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
 
         let server = async_std::task::spawn(async move {
-            let connec = listener.accept().await.unwrap().0;
-            let io = match listener_select_proto(connec, listen_protos).await {
+            let io = match listener_select_proto(server_connection, listen_protos).await {
                 Ok((_, io)) => io,
                 Err(NegotiationError::Failed) => return,
                 Err(NegotiationError::ProtocolError(e)) => {
@@ -101,22 +98,25 @@ fn negotiation_failed() {
             }
         });
 
-        let client = async_std::task::spawn(async move {
-            let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let mut io = match dialer_select_proto(connec, dial_protos.into_iter(), version).await {
-                Err(NegotiationError::Failed) => return,
-                Ok((_, io)) => io,
-                Err(_) => panic!(),
-            };
-            // The dialer may write a payload that is even sent before it
-            // got confirmation of the last proposed protocol, when `V1Lazy`
-            // is used.
-            io.write_all(&dial_payload).await.unwrap();
-            match io.complete().await {
-                Err(NegotiationError::Failed) => {}
-                _ => panic!(),
-            }
-        });
+        let client =
+            async_std::task::spawn(async move {
+                let mut io =
+                    match dialer_select_proto(client_connection, dial_protos.into_iter(), version)
+                        .await
+                    {
+                        Err(NegotiationError::Failed) => return,
+                        Ok((_, io)) => io,
+                        Err(_) => panic!(),
+                    };
+                // The dialer may write a payload that is even sent before it
+                // got confirmation of the last proposed protocol, when `V1Lazy`
+                // is used.
+                io.write_all(&dial_payload).await.unwrap();
+                match io.complete().await {
+                    Err(NegotiationError::Failed) => {}
+                    _ => panic!(),
+                }
+            });
 
         server.await;
         client.await;
