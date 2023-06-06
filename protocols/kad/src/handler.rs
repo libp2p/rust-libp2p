@@ -23,7 +23,7 @@ use crate::protocol::{
     KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
     KademliaProtocolConfig,
 };
-use crate::record_priv::{self, Record};
+use crate::record::{self, Record};
 use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
@@ -240,7 +240,7 @@ pub enum KademliaHandlerEvent {
     /// this key.
     GetProvidersReq {
         /// The key for which providers are requested.
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -266,7 +266,7 @@ pub enum KademliaHandlerEvent {
     /// The peer announced itself as a provider of a key.
     AddProvider {
         /// The key for which the peer is a provider of the associated value.
-        key: record_priv::Key,
+        key: record::Key,
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
     },
@@ -274,7 +274,7 @@ pub enum KademliaHandlerEvent {
     /// Request to get a value from the dht records
     GetRecord {
         /// Key for which we should look in the dht
-        key: record_priv::Key,
+        key: record::Key,
         /// Identifier of the request. Needs to be passed back when answering.
         request_id: KademliaRequestId,
     },
@@ -299,7 +299,7 @@ pub enum KademliaHandlerEvent {
     /// Response to a request to store a record.
     PutRecordRes {
         /// The key of the stored record.
-        key: record_priv::Key,
+        key: record::Key,
         /// The value of the stored record.
         value: Vec<u8>,
         /// The user data passed to the `PutValue`.
@@ -391,7 +391,7 @@ pub enum KademliaHandlerIn {
     /// this key.
     GetProvidersReq {
         /// Identifier being searched.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom user data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -414,7 +414,7 @@ pub enum KademliaHandlerIn {
     /// succeeded.
     AddProvider {
         /// Key for which we should add providers.
-        key: record_priv::Key,
+        key: record::Key,
         /// Known provider for this key.
         provider: KadPeer,
     },
@@ -422,7 +422,7 @@ pub enum KademliaHandlerIn {
     /// Request to retrieve a record from the DHT.
     GetRecord {
         /// The key of the record.
-        key: record_priv::Key,
+        key: record::Key,
         /// Custom data. Passed back in the out event when the results arrive.
         query_id: QueryId,
     },
@@ -447,7 +447,7 @@ pub enum KademliaHandlerIn {
     /// Response to a `PutRecord`.
     PutRecordRes {
         /// Key of the value that was put.
-        key: record_priv::Key,
+        key: record::Key,
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
