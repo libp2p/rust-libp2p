@@ -14,6 +14,7 @@ categories = ["network-programming", "asynchronous"]
 full = [
     "async-std",
     "autonat",
+    "cbor",
     "dcutr",
     "deflate",
     "dns",
@@ -49,6 +50,7 @@ full = [
 
 async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 autonat = ["dep:libp2p-autonat"]
+cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]

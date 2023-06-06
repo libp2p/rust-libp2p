@@ -1534,13 +1534,13 @@ name = "file-sharing"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "async-trait",
  "clap",
  "either",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
  "multiaddr",
+ "serde",
  "void",
 ]
 
