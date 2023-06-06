@@ -102,5 +102,12 @@ rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = { git = "https://github.com/thomaseizinger/rust-multiaddr", branch = "typesafe-p2p" }
 multihash = "0.19.0"
 
+
 [patch.crates-io]
+
+# Patch away `libp2p-idnentity` in our dependency tree with the workspace version.
+# `libp2p-identity` is a leaf dependency and used within `rust-multiaddr` which is **not** part of the workspace.
+# As a result, we cannot just reference the workspace version in our crates because the types would mismatch with what
+# we import via `rust-multiaddr`.
+# This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
