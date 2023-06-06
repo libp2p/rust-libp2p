@@ -59,7 +59,7 @@ impl Transport {
     /// # Example
     ///
     /// ```
-    /// use libp2p_core::identity;
+    /// use libp2p_identity as identity;
     /// use rand::thread_rng;
     /// use libp2p_webrtc::tokio::{Transport, Certificate};
     ///
