@@ -11,7 +11,7 @@ use libp2p::{
     },
     multiaddr::Protocol,
     noise,
-    request_response::{self, cbor::Behaviour, ProtocolSupport, RequestId, ResponseChannel},
+    request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
     swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
@@ -57,7 +57,7 @@ pub(crate) async fn new(
         transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-            request_response: Behaviour::<FileRequest, FileResponse>::new(
+            request_response: request_response::cbor::Behaviour::<FileRequest, FileResponse>::new(
                 [(
                     StreamProtocol::new("/file-exchange/1"),
                     ProtocolSupport::Full,
@@ -409,7 +409,7 @@ impl EventLoop {
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
-    request_response: Behaviour<FileRequest, FileResponse>,
+    request_response: request_response::cbor::Behaviour<FileRequest, FileResponse>,
     kademlia: Kademlia<MemoryStore>,
 }
 
