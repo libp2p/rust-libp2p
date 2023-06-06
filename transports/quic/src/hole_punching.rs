@@ -26,13 +26,13 @@ pub(crate) type HolePunchMap =
 /// - a normal inbound connection or
 /// - an inbound connection corresponding to an in-progress outbound hole punching connection.
 pub(crate) async fn maybe_hole_punched_connection(
-    hole_punch_map: HolePunchMap,
+    hole_punch_attempts: HolePunchMap,
     remote_addr: SocketAddr,
     upgrade: Connecting,
 ) -> Result<(PeerId, Connection), Error> {
     let (peer_id, connection) = upgrade.await?;
 
-    if let Some(sender) = hole_punch_map
+    if let Some(sender) = hole_punch_attempts
         .lock()
         .unwrap()
         .remove(&(remote_addr, peer_id))

@@ -76,7 +76,7 @@ pub struct GenTransport<P: Provider> {
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
     /// Holepunching attempts
-    hole_punch_map: HolePunchMap,
+    hole_punch_attempts: HolePunchMap,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -92,7 +92,7 @@ impl<P: Provider> GenTransport<P> {
             dialer: HashMap::new(),
             waker: None,
             support_draft_29,
-            hole_punch_map: Default::default(),
+            hole_punch_attempts: Default::default(),
         }
     }
 
@@ -144,7 +144,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             listener_id,
             socket_addr,
             self.quinn_config.clone(),
-            self.hole_punch_map.clone(),
+            self.hole_punch_attempts.clone(),
             self.handshake_timeout,
             version,
         )?;
@@ -248,9 +248,13 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let (sender, receiver) = oneshot::channel();
 
-        let hole_punch_map = self.hole_punch_map.clone();
+        let hole_punch_attempts = self.hole_punch_attempts.clone();
 
-        match hole_punch_map.lock().unwrap().entry((socket_addr, peer_id)) {
+        match hole_punch_attempts
+            .lock()
+            .unwrap()
+            .entry((socket_addr, peer_id))
+        {
             Entry::Vacant(entry) => entry.insert(sender),
             Entry::Occupied(_) => {
                 return Err(TransportError::Other(Error::HolePunchInProgress(
@@ -265,7 +269,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             match futures::future::select(receiver, hole_puncher).await {
                 Either::Left((connection, _)) => Ok(connection.unwrap()),
                 Either::Right((hole_punch_err, _)) => {
-                    hole_punch_map
+                    hole_punch_attempts
                         .lock()
                         .unwrap()
                         .remove(&(socket_addr, peer_id));
@@ -422,7 +426,7 @@ struct Listener<P: Provider> {
     if_watcher: Option<P::IfWatcher>,
 
     /// Hole punching attempts
-    hole_punch_map: HolePunchMap,
+    hole_punch_attempts: HolePunchMap,
 
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
@@ -439,7 +443,7 @@ impl<P: Provider> Listener<P> {
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         config: QuinnConfig,
-        hole_punch_map: HolePunchMap,
+        hole_punch_attempts: HolePunchMap,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
@@ -465,7 +469,7 @@ impl<P: Provider> Listener<P> {
             listener_id,
             version,
             new_connections_rx,
-            hole_punch_map,
+            hole_punch_attempts,
             handshake_timeout,
             if_watcher,
             is_closed: false,
@@ -573,7 +577,7 @@ impl<P: Provider> Stream for Listener<P> {
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
 
                     let upgrade = maybe_hole_punched_connection(
-                        self.hole_punch_map.clone(),
+                        self.hole_punch_attempts.clone(),
                         remote_addr,
                         Connecting::new(connection, self.handshake_timeout),
                     )
