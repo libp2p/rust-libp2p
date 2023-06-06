@@ -117,20 +117,6 @@ impl PeerId {
     pub fn to_base58(&self) -> String {
         bs58::encode(self.to_bytes()).into_string()
     }
-
-    /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
-    ///
-    /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
-    /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &crate::PublicKey) -> Option<bool> {
-        let other_peer_id = PeerId::from_public_key(public_key);
-
-        if self.multihash.code() != other_peer_id.multihash.code() {
-            return None;
-        }
-
-        Some(self == &other_peer_id)
-    }
 }
 
 impl From<crate::PublicKey> for PeerId {
@@ -259,14 +245,6 @@ impl FromStr for PeerId {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    #[cfg(feature = "ed25519")]
-    fn peer_id_is_public_key() {
-        let key = crate::Keypair::generate_ed25519().public();
-        let peer_id = key.to_peer_id();
-        assert_eq!(peer_id.is_public_key(&key), Some(true));
-    }
 
     #[test]
     #[cfg(feature = "ed25519")]
