@@ -165,10 +165,10 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
     not(target_arch = "wasm32"),
     feature = "tcp",
     feature = "dns",
-    feature = "async-std",
     feature = "websocket",
     feature = "noise",
     feature = "yamux"
+    feature = "async-std",
 ))]
 pub async fn development_transport(
     keypair: identity::Keypair,
@@ -210,10 +210,10 @@ pub async fn development_transport(
     not(target_arch = "wasm32"),
     feature = "tcp",
     feature = "dns",
-    feature = "tokio",
     feature = "websocket",
     feature = "noise",
     feature = "yamux"
+    feature = "tokio",
 ))]
 pub fn tokio_development_transport(
     keypair: identity::Keypair,
