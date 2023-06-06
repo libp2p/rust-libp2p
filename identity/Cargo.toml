@@ -17,7 +17,7 @@ bs58 = { version = "0.5.0", optional = true }
 ed25519-dalek = { version = "1.0.1", optional = true }
 libsecp256k1 = { version = "0.7.0", optional = true }
 log = "0.4"
-multihash = { version = "0.18.0", default-features = false, features = ["std"], optional = true }
+multihash = { git = "https://github.com/multiformats/rust-multihash", optional = true }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 quick-protobuf = "0.8.1"
 rand = { version = "0.8", optional = true }

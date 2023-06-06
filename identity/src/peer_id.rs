@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::{Error, MultihashGeneric};
 use rand::Rng;
 use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
@@ -29,7 +28,7 @@ use thiserror::Error;
 /// Must be big enough to accommodate for `MAX_INLINE_KEY_LENGTH`.
 /// 64 satisfies that and can hold 512 bit hashes which is what the ecosystem typically uses.
 /// Given that this appears in our type-signature, using a "common" number here makes us more compatible.
-type Multihash = MultihashGeneric<64>;
+type Multihash = multihash::Multihash<64>;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -79,9 +78,9 @@ impl PeerId {
     }
 
     /// Parses a `PeerId` from bytes.
-    pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
+    pub fn from_bytes(data: &[u8]) -> Result<PeerId, ParseError> {
         PeerId::from_multihash(Multihash::from_bytes(data)?)
-            .map_err(|mh| Error::UnsupportedCode(mh.code()))
+            .map_err(|mh| ParseError::UnsupportedCode(mh.code()))
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
@@ -234,12 +233,15 @@ impl<'de> Deserialize<'de> for PeerId {
     }
 }
 
+/// Error when parsing a [`PeerId`] from string or bytes.
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("base-58 decode error: {0}")]
     B58(#[from] bs58::decode::Error),
-    #[error("decoding multihash failed")]
-    MultiHash,
+    #[error("unsupported multihash code '{0}'")]
+    UnsupportedCode(u64),
+    #[error("invalid multihash")]
+    InvalidMultihash(#[from] multihash::Error),
 }
 
 impl FromStr for PeerId {
@@ -248,7 +250,9 @@ impl FromStr for PeerId {
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes = bs58::decode(s).into_vec()?;
-        PeerId::from_bytes(&bytes).map_err(|_| ParseError::MultiHash)
+        let peer_id = PeerId::from_bytes(&bytes)?;
+
+        Ok(peer_id)
     }
 }
 
