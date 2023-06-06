@@ -181,27 +181,19 @@ fn negotiation_failed() {
 
 #[async_std::test]
 async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let listener_addr = listener.local_addr().unwrap();
-
-    let _server = async_std::task::spawn(async move {
-        let _connec = listener.accept().await.unwrap().0;
-        // Blocks forever as only a single connection is dialed by the client. Never interacts with
-        // `_connec`.
-        listener.accept().await.unwrap();
-    });
+    let (client_connection, _server_connection) = futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
 
     let client = async_std::task::spawn(async move {
-        let connec = TcpStream::connect(&listener_addr).await.unwrap();
         // Single protocol to allow for lazy (or optimistic) protocol negotiation.
         let protos = vec!["/proto1"];
-        let (proto, mut io) = dialer_select_proto(connec, protos.into_iter(), Version::V1Lazy)
-            .await
-            .unwrap();
+        let (proto, mut io) =
+            dialer_select_proto(client_connection, protos.into_iter(), Version::V1Lazy)
+                .await
+                .unwrap();
         assert_eq!(proto, "/proto1");
 
         // client can close the connection even though protocol negotiation is not yet done, i.e.
-        // server never interacted with the connection.
+        // `_server_connection` had been untouched.
         io.close().await.unwrap();
     });
 

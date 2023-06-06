@@ -1748,7 +1748,19 @@ dependencies = [
  "futures",
  "log",
  "log-derive",
- "ringbuf",
+ "ringbuf 0.2.8",
+ "rustc_version",
+]
+
+[[package]]
+name = "futures_ringbuf"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6628abb6eb1fc74beaeb20cd0670c43d158b0150f7689b38c3eaf663f99bdec7"
+dependencies = [
+ "futures",
+ "log",
+ "ringbuf 0.3.3",
  "rustc_version",
 ]
 
@@ -2500,7 +2512,7 @@ dependencies = [
  "async-std",
  "flate2",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "libp2p-core",
  "libp2p-tcp",
  "quickcheck-ext",
@@ -2741,7 +2753,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "futures-timer",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "libp2p-core",
  "log",
 ]
@@ -2754,7 +2766,7 @@ dependencies = [
  "curve25519-dalek 3.2.0",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "libp2p-core",
  "libp2p-identity",
  "log",
@@ -2827,7 +2839,7 @@ dependencies = [
  "bytes",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "libp2p-core",
  "libp2p-identity",
  "log",
@@ -2950,7 +2962,7 @@ dependencies = [
  "async-trait",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "instant",
  "libp2p-core",
  "libp2p-identity",
@@ -3428,6 +3440,7 @@ dependencies = [
  "bytes",
  "env_logger 0.10.0",
  "futures",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-mplex",
@@ -4306,6 +4319,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f65af18d50f789e74aaf23bbb3f65dcd22a3cb6e029b5bced149f6bd57c5c2a2"
 dependencies = [
  "cache-padded",
+]
+
+[[package]]
+name = "ringbuf"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
