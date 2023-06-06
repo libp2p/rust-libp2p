@@ -13,6 +13,44 @@ use libp2p_swarm::{
 
 use libp2p_swarm_test::SwarmExt;
 
+#[async_std::test]
+async fn behaviour_listener() {
+    let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
+    let addr: Multiaddr = Protocol::Memory(0).into();
+    let id = swarm.behaviour_mut().listen(addr.clone());
+
+    let address = swarm
+        .wait(|e| match e {
+            SwarmEvent::NewListenAddr {
+                listener_id,
+                address,
+            } => {
+                assert_eq!(listener_id, id);
+                Some(address)
+            }
+            _ => None,
+        })
+        .await;
+
+    swarm.behaviour_mut().stop_listening(id);
+
+    swarm
+        .wait(|e| match e {
+            SwarmEvent::ListenerClosed {
+                listener_id,
+                addresses,
+                reason,
+            } => {
+                assert_eq!(listener_id, id);
+                assert!(addresses.contains(&address));
+                assert!(reason.is_ok());
+                Some(())
+            }
+            _ => None,
+        })
+        .await;
+}
+
 #[derive(Default)]
 struct Behaviour {
     events: VecDeque<ToSwarm<<Self as NetworkBehaviour>::ToSwarm, THandlerInEvent<Self>>>,
@@ -105,42 +143,4 @@ impl NetworkBehaviour for Behaviour {
 
         Poll::Pending
     }
-}
-
-#[async_std::test]
-async fn behaviour_listener() {
-    let mut swarm = Swarm::new_ephemeral(|_| Behaviour::default());
-    let addr: Multiaddr = Protocol::Memory(0).into();
-    let id = swarm.behaviour_mut().listen(addr.clone());
-
-    let address = swarm
-        .wait(|e| match e {
-            SwarmEvent::NewListenAddr {
-                listener_id,
-                address,
-            } => {
-                assert_eq!(listener_id, id);
-                Some(address)
-            }
-            _ => None,
-        })
-        .await;
-
-    swarm.behaviour_mut().stop_listening(id);
-
-    swarm
-        .wait(|e| match e {
-            SwarmEvent::ListenerClosed {
-                listener_id,
-                addresses,
-                reason,
-            } => {
-                assert_eq!(listener_id, id);
-                assert!(addresses.contains(&address));
-                assert!(reason.is_ok());
-                Some(())
-            }
-            _ => None,
-        })
-        .await;
 }
