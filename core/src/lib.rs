@@ -22,10 +22,6 @@
 //!
 //! The main concepts of libp2p-core are:
 //!
-//! - A [`PeerId`] is a unique global identifier for a node on the network.
-//!   Each node must have a different [`PeerId`]. Normally, a [`PeerId`] is the
-//!   hash of the public key used to negotiate encryption on the
-//!   communication channel, thereby guaranteeing that they cannot be spoofed.
 //! - The [`Transport`] trait defines how to reach a remote node or listen for
 //!   incoming remote connections. See the [`transport`] module.
 //! - The [`StreamMuxer`] trait is implemented on structs that hold a connection
