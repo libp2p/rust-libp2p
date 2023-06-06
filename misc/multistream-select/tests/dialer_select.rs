@@ -20,9 +20,9 @@
 
 //! Integration tests for protocol negotiation.
 
-use std::time::Duration;
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
+use std::time::Duration;
 
 #[test]
 fn select_proto_basic() {
