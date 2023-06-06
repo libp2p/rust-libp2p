@@ -9,10 +9,6 @@
 - Remove deprecated symbols related to upgrades.
   See [PR 3867].
 
-[PR 3567]: https://github.com/libp2p/rust-libp2p/pull/3567
-[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-[PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
-
 - Enforce protocol names to be valid UTF8 strings as required by the [spec].
   We delete the `ProtocolName` trait and replace it with a requirement for `AsRef<str>`.
   See [PR 3746]
@@ -27,11 +23,19 @@
   These are implementation details that should not be depended on.
   See [PR 3915].
 
+- Remove deprecated `identity` module.
+  Depend on `libp2p-identity` directly instead or import it via the `libp2p::identity` re-export.
+  See [PR 4040].
+
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
+[PR 3567]: https://github.com/libp2p/rust-libp2p/pull/3567
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
-[PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
 [PR 3814]: https://github.com/libp2p/rust-libp2p/pull/3814
+[PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
+[PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
 [PR 3915]: https://github.com/libp2p/rust-libp2p/pull/3915
+[PR 4040]: https://github.com/libp2p/rust-libp2p/pull/4040
 
 ## 0.39.2
 
