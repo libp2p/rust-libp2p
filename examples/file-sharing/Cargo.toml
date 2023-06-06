@@ -9,7 +9,6 @@ license = "MIT"
 libp2p-request-response = { workspace = true, features = ["cbor"]  }
 serde = { version = "1.0", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
-async-trait = "0.1"
 clap = { version = "4.3.1", features = ["derive"] }
 either = "1.8"
 env_logger = "0.10"
