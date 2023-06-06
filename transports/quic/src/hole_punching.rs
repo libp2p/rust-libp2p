@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,8 +19,27 @@ use crate::{
     Connecting, Connection, Error,
 };
 
-pub(crate) type HolePunchMap =
-    Arc<Mutex<HashMap<(SocketAddr, PeerId), oneshot::Sender<(PeerId, Connection)>>>>;
+type HolePunchKey = (SocketAddr, PeerId);
+type HolePunchValue = oneshot::Sender<(PeerId, Connection)>;
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct HolePunchMap(Arc<Mutex<HashMap<HolePunchKey, HolePunchValue>>>);
+
+impl HolePunchMap {
+    pub(crate) fn remove(&self, key: &HolePunchKey) -> Option<HolePunchValue> {
+        self.0.lock().unwrap().remove(key)
+    }
+
+    pub(crate) fn try_insert(&self, key: HolePunchKey, value: HolePunchValue) -> bool {
+        match self.0.lock().unwrap().entry(key) {
+            Entry::Vacant(entry) => {
+                entry.insert(value);
+                true
+            }
+            Entry::Occupied(_) => false,
+        }
+    }
+}
 
 /// An upgrading inbound QUIC connection that is either
 /// - a normal inbound connection or
@@ -32,11 +51,7 @@ pub(crate) async fn maybe_hole_punched_connection(
 ) -> Result<(PeerId, Connection), Error> {
     let (peer_id, connection) = upgrade.await?;
 
-    if let Some(sender) = hole_punch_attempts
-        .lock()
-        .unwrap()
-        .remove(&(remote_addr, peer_id))
-    {
+    if let Some(sender) = hole_punch_attempts.remove(&(remote_addr, peer_id)) {
         if let Err((peer_id, connection)) = sender.send((peer_id, connection)) {
             Ok((peer_id, connection))
         } else {

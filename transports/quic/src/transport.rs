@@ -222,7 +222,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
-
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         let listeners = self.eligible_listeners(&socket_addr);
@@ -250,29 +249,19 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let hole_punch_attempts = self.hole_punch_attempts.clone();
 
-        match hole_punch_attempts
-            .lock()
-            .unwrap()
-            .entry((socket_addr, peer_id))
-        {
-            Entry::Vacant(entry) => entry.insert(sender),
-            Entry::Occupied(_) => {
-                return Err(TransportError::Other(Error::HolePunchInProgress(
-                    socket_addr,
-                    peer_id,
-                )));
-            }
-        };
+        if !hole_punch_attempts.try_insert((socket_addr, peer_id), sender) {
+            return Err(TransportError::Other(Error::HolePunchInProgress(
+                socket_addr,
+                peer_id,
+            )));
+        }
 
         Ok(Box::pin(async move {
             futures::pin_mut!(hole_puncher);
             match futures::future::select(receiver, hole_puncher).await {
                 Either::Left((connection, _)) => Ok(connection.unwrap()),
                 Either::Right((hole_punch_err, _)) => {
-                    hole_punch_attempts
-                        .lock()
-                        .unwrap()
-                        .remove(&(socket_addr, peer_id));
+                    hole_punch_attempts.remove(&(socket_addr, peer_id));
                     Err(hole_punch_err)
                 }
             }
