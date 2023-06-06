@@ -18,14 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_perf::{
-    client::{self, RunParams},
-    server,
-};
+use libp2p_perf::{client, server, RunParams};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 
-#[async_std::test]
+#[tokio::test]
 async fn perf() {
     let _ = env_logger::try_init();
 
@@ -36,7 +33,7 @@ async fn perf() {
     server.listen().await;
     client.connect(&mut server).await;
 
-    async_std::task::spawn(server.loop_on_next());
+    tokio::spawn(server.loop_on_next());
 
     client
         .behaviour_mut()
@@ -53,7 +50,7 @@ async fn perf() {
         .wait(|e| match e {
             SwarmEvent::IncomingConnection { .. } => panic!(),
             SwarmEvent::ConnectionEstablished { .. } => None,
-            SwarmEvent::Dialing(_) => None,
+            SwarmEvent::Dialing { .. } => None,
             SwarmEvent::Behaviour(client::Event { result, .. }) => Some(result),
             e => panic!("{e:?}"),
         })

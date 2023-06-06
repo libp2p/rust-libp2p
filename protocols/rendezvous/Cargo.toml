@@ -15,7 +15,7 @@ asynchronous-codec = "0.6"
 bimap = "0.6.3"
 futures = { version = "0.3", default-features = false, features = ["std"] }
 futures-timer = "3.0.2"
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -30,7 +30,6 @@ void = "1"
 async-trait = "0.1"
 env_logger = "0.10.0"
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
-libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-identify = { workspace = true }

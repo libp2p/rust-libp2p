@@ -30,15 +30,15 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -77,7 +77,7 @@ pub enum In {
         dst_peer_id: PeerId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
-        dst_stream: NegotiatedSubstream,
+        dst_stream: Stream,
         dst_pending_data: Bytes,
     },
 }
@@ -163,10 +163,6 @@ pub enum Event {
         inbound_circuit_req: inbound_hop::CircuitReq,
         endpoint: ConnectedPoint,
     },
-    /// Receiving an inbound circuit request failed.
-    CircuitReqReceiveFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         circuit_id: Option<CircuitId>,
@@ -197,7 +193,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
-        dst_stream: NegotiatedSubstream,
+        dst_stream: Stream,
         dst_pending_data: Bytes,
     },
     /// Negotiating an outbound substream for an inbound circuit request failed.
@@ -207,7 +203,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         status: proto::Status,
-        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -251,10 +247,6 @@ impl fmt::Debug for Event {
             } => f
                 .debug_struct("Event::CircuitReqReceived")
                 .field("endpoint", endpoint)
-                .finish(),
-            Event::CircuitReqReceiveFailed { error } => f
-                .debug_struct("Event::CircuitReqReceiveFailed")
-                .field("error", error)
                 .finish(),
             Event::CircuitReqDenied {
                 circuit_id,
@@ -348,14 +340,14 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
 
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ConnectionHandlerUpgrErr<
+        StreamUpgradeError<
             Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
         >,
     >,
@@ -418,21 +410,23 @@ impl Handler {
     ) {
         match request {
             inbound_hop::Req::Reserve(inbound_reservation_req) => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::ReservationReqReceived {
-                        inbound_reservation_req,
-                        endpoint: self.endpoint.clone(),
-                        renewed: self.active_reservation.is_some(),
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqReceived {
+                            inbound_reservation_req,
+                            endpoint: self.endpoint.clone(),
+                            renewed: self.active_reservation.is_some(),
+                        },
+                    ));
             }
             inbound_hop::Req::Connect(inbound_circuit_req) => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::CircuitReqReceived {
-                        inbound_circuit_req,
-                        endpoint: self.endpoint.clone(),
-                    },
-                ));
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitReqReceived {
+                            inbound_circuit_req,
+                            endpoint: self.endpoint.clone(),
+                        },
+                    ));
             }
         }
     }
@@ -456,57 +450,31 @@ impl Handler {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::OutboundConnectNegotiated {
-                circuit_id,
-                src_peer_id,
-                src_connection_id,
-                inbound_circuit_req,
-                dst_handler_notifier: tx,
-                dst_stream,
-                dst_pending_data,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiated {
+                    circuit_id,
+                    src_peer_id,
+                    src_connection_id,
+                    inbound_circuit_req,
+                    dst_handler_notifier: tx,
+                    dst_stream,
+                    dst_pending_data,
+                },
+            ));
     }
 
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError {
+            error: inbound_hop::UpgradeError::Fatal(error),
+            ..
+        }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        let non_fatal_error = match error {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )),
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::ProtocolError(e),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
-                ));
-                return;
-            }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                inbound_hop::UpgradeError::Fatal(error),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(Either::Left(error)),
-                ));
-                return;
-            }
-        };
-
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::CircuitReqReceiveFailed {
-                error: non_fatal_error,
-            },
-        ));
+        self.pending_error = Some(StreamUpgradeError::Apply(Either::Left(error)));
     }
 
     fn on_dial_upgrade_error(
@@ -520,37 +488,23 @@ impl Handler {
         >,
     ) {
         let (non_fatal_error, status) = match error {
-            ConnectionHandlerUpgrErr::Timeout => (
-                ConnectionHandlerUpgrErr::Timeout,
+            StreamUpgradeError::Timeout => (
+                StreamUpgradeError::Timeout,
                 proto::Status::CONNECTION_FAILED,
             ),
-            ConnectionHandlerUpgrErr::Timer => (
-                ConnectionHandlerUpgrErr::Timer,
-                proto::Status::CONNECTION_FAILED,
-            ),
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => {
+            StreamUpgradeError::NegotiationFailed => {
                 // The remote has previously done a reservation. Doing a reservation but not
                 // supporting the stop protocol is pointless, thus disconnecting.
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed),
-                ));
+                self.pending_error = Some(StreamUpgradeError::NegotiationFailed);
                 return;
             }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::ProtocolError(e),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
-                ));
+            StreamUpgradeError::Io(e) => {
+                self.pending_error = Some(StreamUpgradeError::Io(e));
                 return;
             }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => match error {
+            StreamUpgradeError::Apply(error) => match error {
                 outbound_stop::UpgradeError::Fatal(error) => {
-                    self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                        upgrade::UpgradeError::Apply(Either::Right(error)),
-                    ));
+                    self.pending_error = Some(StreamUpgradeError::Apply(Either::Right(error)));
                     return;
                 }
                 outbound_stop::UpgradeError::CircuitFailed(error) => {
@@ -562,10 +516,7 @@ impl Handler {
                             proto::Status::PERMISSION_DENIED
                         }
                     };
-                    (
-                        ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)),
-                        status,
-                    )
+                    (StreamUpgradeError::Apply(error), status)
                 }
             },
         };
@@ -577,16 +528,17 @@ impl Handler {
             src_connection_id,
         } = open_info;
 
-        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-            Event::OutboundConnectNegotiationFailed {
-                circuit_id,
-                src_peer_id,
-                src_connection_id,
-                inbound_circuit_req,
-                status,
-                error: non_fatal_error,
-            },
-        ));
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiationFailed {
+                    circuit_id,
+                    src_peer_id,
+                    src_connection_id,
+                    inbound_circuit_req,
+                    status,
+                    error: non_fatal_error,
+                },
+            ));
     }
 }
 
@@ -598,9 +550,9 @@ enum ReservationRequestFuture {
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
 impl ConnectionHandler for Handler {
-    type InEvent = In;
-    type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
+    type FromBehaviour = In;
+    type ToBehaviour = Event;
+    type Error = StreamUpgradeError<
         Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_hop::Upgrade;
@@ -619,7 +571,7 @@ impl ConnectionHandler for Handler {
         )
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::AcceptReservationReq {
                 inbound_reservation_req,
@@ -723,7 +675,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -744,18 +696,22 @@ impl ConnectionHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitClosed {
-                        circuit_id,
-                        dst_peer_id,
-                        error: None,
-                    }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitClosed {
+                            circuit_id,
+                            dst_peer_id,
+                            error: None,
+                        },
+                    ))
                 }
                 Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitClosed {
-                        circuit_id,
-                        dst_peer_id,
-                        error: Some(e),
-                    }))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitClosed {
+                            circuit_id,
+                            dst_peer_id,
+                            error: Some(e),
+                        },
+                    ))
                 }
             }
         }
@@ -766,13 +722,15 @@ impl ConnectionHandler for Handler {
         {
             match result {
                 Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::CircuitReqDenied {
-                        circuit_id,
-                        dst_peer_id,
-                    }));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitReqDenied {
+                            circuit_id,
+                            dst_peer_id,
+                        },
+                    ));
                 }
                 Err(error) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqDenyFailed {
                             circuit_id,
                             dst_peer_id,
@@ -825,7 +783,7 @@ impl ConnectionHandler for Handler {
 
                     self.circuits.push(circuit);
 
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqAccepted {
                             circuit_id,
                             dst_peer_id,
@@ -833,7 +791,7 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Err((circuit_id, dst_peer_id, error)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::CircuitReqAcceptFailed {
                             circuit_id,
                             dst_peer_id,
@@ -851,7 +809,7 @@ impl ConnectionHandler for Handler {
             .map(|fut| fut.poll_unpin(cx))
         {
             self.active_reservation = None;
-            return Poll::Ready(ConnectionHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::ReservationTimedOut {},
             ));
         }
@@ -868,12 +826,12 @@ impl ConnectionHandler for Handler {
                                 .active_reservation
                                 .replace(Delay::new(self.config.reservation_duration))
                                 .is_some();
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqAccepted { renewed },
                             ));
                         }
                         Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqAcceptFailed { error },
                             ));
                         }
@@ -886,12 +844,12 @@ impl ConnectionHandler for Handler {
 
                     match result {
                         Ok(()) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenied {},
                             ))
                         }
                         Err(error) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::ReservationReqDenyFailed { error },
                             ));
                         }
@@ -950,7 +908,9 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }
@@ -964,10 +924,10 @@ pub struct OutboundOpenInfo {
 
 pub(crate) struct CircuitParts {
     circuit_id: CircuitId,
-    src_stream: NegotiatedSubstream,
+    src_stream: Stream,
     src_pending_data: Bytes,
     dst_peer_id: PeerId,
     dst_handler_notifier: oneshot::Sender<()>,
-    dst_stream: NegotiatedSubstream,
+    dst_stream: Stream,
     dst_pending_data: Bytes,
 }

@@ -106,7 +106,8 @@ async fn main() {
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
                 peer,
-                result: Ok(ping::Success::Ping { rtt }),
+                result: Ok(rtt),
+                ..
             })) if peer != rendezvous_point => {
                 log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
             }

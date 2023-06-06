@@ -23,7 +23,7 @@ use futures::future::{BoxFuture, Either};
 use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use libp2p_core::transport::{Boxed, TransportEvent};
+use libp2p_core::transport::{Boxed, ListenerId, TransportEvent};
 use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
@@ -81,7 +81,9 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 }
 
 async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
-    transport.listen_on(addr.parse().unwrap()).unwrap();
+    transport
+        .listen_on(ListenerId::next(), addr.parse().unwrap())
+        .unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
         e => panic!("{e:?}"),

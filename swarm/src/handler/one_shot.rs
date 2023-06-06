@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
     SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
@@ -37,7 +37,7 @@ where
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInbound, ()>,
     /// If `Some`, something bad happened and we should shut down the handler with an error.
-    pending_error: Option<ConnectionHandlerUpgrErr<<TOutbound as OutboundUpgradeSend>::Error>>,
+    pending_error: Option<StreamUpgradeError<<TOutbound as OutboundUpgradeSend>::Error>>,
     /// Queue of events to produce in `poll()`.
     events_out: SmallVec<[TEvent; 4]>,
     /// Queue of outbound substreams to open.
@@ -121,9 +121,9 @@ where
     SubstreamProtocol<TInbound, ()>: Clone,
     TEvent: Debug + Send + 'static,
 {
-    type InEvent = TOutbound;
-    type OutEvent = TEvent;
-    type Error = ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
+    type FromBehaviour = TOutbound;
+    type ToBehaviour = TEvent;
+    type Error = StreamUpgradeError<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
     type OutboundOpenInfo = ();
@@ -133,7 +133,7 @@ where
         self.listen_protocol.clone()
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         self.send_request(event);
     }
 
@@ -148,7 +148,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -157,7 +157,9 @@ where
         }
 
         if !self.events_out.is_empty() {
-            return Poll::Ready(ConnectionHandlerEvent::Custom(self.events_out.remove(0)));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                self.events_out.remove(0),
+            ));
         } else {
             self.events_out.shrink_to_fit();
         }
@@ -217,7 +219,10 @@ where
                     self.keep_alive = KeepAlive::No;
                 }
             }
-            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

@@ -43,8 +43,9 @@ async fn is_response_outbound() {
     ));
     let cfg = request_response::Config::default();
 
-    let mut swarm1 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm1 = Swarm::new_ephemeral(|_| {
+        request_response::Behaviour::with_codec(PingCodec(), protocols, cfg)
+    });
 
     let request_id1 = swarm1
         .behaviour_mut()
@@ -87,11 +88,12 @@ async fn ping_protocol() {
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::Behaviour::with_codec(PingCodec(), protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::Behaviour::with_codec(PingCodec(), protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -178,11 +180,12 @@ async fn emits_inbound_connection_closed_failure() {
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::Behaviour::with_codec(PingCodec(), protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::Behaviour::with_codec(PingCodec(), protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -241,11 +244,12 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::Behaviour::with_codec(PingCodec(), protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::Behaviour::with_codec(PingCodec(), protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
