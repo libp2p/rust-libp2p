@@ -21,6 +21,7 @@ unsigned-varint = "0.7"
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.10"
+futures_ringbuf = "0.4.0"
 libp2p-core = { workspace = true }
 libp2p-yamux = { workspace = true }
 libp2p-plaintext = { workspace = true }
