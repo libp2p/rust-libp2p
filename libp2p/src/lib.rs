@@ -163,7 +163,9 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(target_arch = "wasm32"),
-    all(feature = "tcp", feature = "dns", feature = "async-std"),
+    feature = "tcp",
+    feature = "dns",
+    feature = "async-std",
     feature = "websocket",
     feature = "noise",
     feature = "yamux"
@@ -206,7 +208,9 @@ pub async fn development_transport(
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(target_arch = "wasm32"),
-    all(feature = "tcp", feature = "dns", feature = "tokio"),
+    feature = "tcp",
+    feature = "dns",
+    feature = "tokio",
     feature = "websocket",
     feature = "noise",
     feature = "yamux"
