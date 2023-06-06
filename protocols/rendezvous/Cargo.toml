@@ -30,7 +30,6 @@ void = "1"
 async-trait = "0.1"
 env_logger = "0.10.0"
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
-libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-identify = { workspace = true }
