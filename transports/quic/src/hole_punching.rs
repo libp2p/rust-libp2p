@@ -50,6 +50,16 @@ pub(crate) async fn maybe_hole_punched_connection(
         .await
 }
 
+pub(crate) async fn hole_puncher(
+    endpoint_channel: endpoint::Channel,
+    remote_addr: SocketAddr,
+    timeout_duration: Duration,
+) -> Error {
+    timeout(timeout_duration, punch_holes(endpoint_channel, remote_addr))
+        .await
+        .unwrap_or(Error::HandshakeTimedOut)
+}
+
 async fn punch_holes(mut endpoint_channel: endpoint::Channel, remote_addr: SocketAddr) -> Error {
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
@@ -70,14 +80,4 @@ async fn punch_holes(mut endpoint_channel: endpoint::Channel, remote_addr: Socke
             return Error::EndpointDriverCrashed;
         }
     }
-}
-
-pub(crate) async fn hole_puncher(
-    endpoint_channel: endpoint::Channel,
-    remote_addr: SocketAddr,
-    timeout_duration: Duration,
-) -> Error {
-    timeout(timeout_duration, punch_holes(endpoint_channel, remote_addr))
-        .await
-        .unwrap_or(Error::HandshakeTimedOut)
 }
