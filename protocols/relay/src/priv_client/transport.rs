@@ -48,10 +48,11 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
+///    # use libp2p_identity::PeerId;
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = relay::client::new(
 ///        PeerId::random(),
@@ -70,10 +71,11 @@ use thiserror::Error;
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
+///    # use libp2p_identity::PeerId;
 ///    # let relay_id = PeerId::random();
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
