@@ -56,7 +56,7 @@ pub(crate) async fn new(
         transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-            request_response: request_response::cbor::Behaviour::<FileRequest, FileResponse>::new(
+            request_response: request_response::cbor::Behaviour::new(
                 [(
                     StreamProtocol::new("/file-exchange/1"),
                     ProtocolSupport::Full,
