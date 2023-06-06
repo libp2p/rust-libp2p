@@ -2164,7 +2164,7 @@ mod tests {
             }));
 
         let other_id = PeerId::random();
-        let other_addr = address.with(multiaddr::Protocol::P2p(other_id.into()));
+        let other_addr = address.with(multiaddr::Protocol::P2p(other_id));
 
         swarm2.dial(other_addr.clone()).unwrap();
 
@@ -2313,7 +2313,7 @@ mod tests {
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
                     .into_iter()
-                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target.into())))
+                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target)))
                     .collect::<Vec<_>>();
 
                 assert_eq!(expected_addresses, failed_addresses);

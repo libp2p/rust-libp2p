@@ -589,7 +589,7 @@ impl Reservation {
                     .into_iter()
                     .map(|a| {
                         a.with(Protocol::P2pCircuit)
-                            .with(Protocol::P2p(local_peer_id.into()))
+                            .with(Protocol::P2p(local_peer_id))
                     })
                     .collect(),
             },

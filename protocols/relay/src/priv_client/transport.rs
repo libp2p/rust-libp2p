@@ -267,9 +267,7 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
                     return Err(Error::MultipleCircuitRelayProtocolsUnsupported.into());
                 }
             }
-            Protocol::P2p(hash) => {
-                let peer_id = PeerId::from_multihash(hash).map_err(|_| Error::InvalidHash)?;
-
+            Protocol::P2p(peer_id) => {
                 if before_circuit {
                     if relayed_multiaddr.relay_peer_id.is_some() {
                         return Err(Error::MalformedMultiaddr.into());
@@ -378,7 +376,7 @@ impl Stream for Listener {
                         upgrade: ready(Ok(stream)),
                         listener_id,
                         local_addr: relay_addr.with(Protocol::P2pCircuit),
-                        send_back_addr: Protocol::P2p(src_peer_id.into()).into(),
+                        send_back_addr: Protocol::P2p(src_peer_id).into(),
                     })
                 }
                 ToListenerMsg::Reservation(Err(())) => self.close(Err(Error::Reservation)),

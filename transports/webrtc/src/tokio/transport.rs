@@ -617,7 +617,10 @@ mod tests {
                     assert!(
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
-                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::WebRTC)));
+                    assert!(matches!(
+                        listen_addr.iter().nth(2),
+                        Some(Protocol::WebRTCDirect)
+                    ));
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }
