@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::MultihashGeneric;
 use sha2::Digest as _;
 use std::fmt;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
@@ -26,7 +25,7 @@ use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
-type Multihash = MultihashGeneric<64>;
+type Multihash = multihash::Multihash<64>;
 
 /// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
 #[derive(Eq, PartialEq, Copy, Clone)]
