@@ -167,7 +167,7 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
     feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
     feature = "async-std",
 ))]
 pub async fn development_transport(
@@ -212,7 +212,7 @@ pub async fn development_transport(
     feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
     feature = "tokio",
 ))]
 pub fn tokio_development_transport(
