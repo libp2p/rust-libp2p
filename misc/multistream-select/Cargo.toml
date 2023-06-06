@@ -23,7 +23,7 @@ async-std = "1.6.2"
 env_logger = "0.10"
 futures_ringbuf = "0.4.0"
 libp2p-core = { workspace = true }
-libp2p-mplex = { workspace = true }
+libp2p-yamux = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["async-std"] }
 libp2p-identity = { workspace = true, features = ["ed25519"] }

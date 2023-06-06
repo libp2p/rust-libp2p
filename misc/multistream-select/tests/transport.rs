@@ -27,7 +27,6 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_mplex::MplexConfig;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{dummy, SwarmBuilder, SwarmEvent};
 use rand::random;
@@ -45,7 +44,7 @@ fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
             .authenticate(PlainText2Config {
                 local_public_key: keys.public(),
             })
-            .multiplex(MplexConfig::default())
+            .multiplex(libp2p_yamux::Config::default())
             .boxed(),
     )
 }
