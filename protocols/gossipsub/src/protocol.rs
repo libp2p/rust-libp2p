@@ -515,7 +515,7 @@ mod tests {
     use crate::config::Config;
     use crate::{Behaviour, ConfigBuilder};
     use crate::{IdentTopic as Topic, Version};
-    use libp2p_core::identity::Keypair;
+    use libp2p_identity::Keypair;
     use quickcheck::*;
 
     #[derive(Clone, Debug)]

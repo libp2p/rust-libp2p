@@ -395,9 +395,10 @@ where
     /// ```
     /// # use libp2p_swarm::SwarmBuilder;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_core::{Multiaddr, PeerId, Transport};
+    /// # use libp2p_core::{Multiaddr, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
+    /// # use libp2p_identity::PeerId;
     /// #
     /// let mut swarm = SwarmBuilder::without_executor(
     ///     DummyTransport::new().boxed(),

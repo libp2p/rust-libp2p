@@ -31,9 +31,9 @@ pub enum PlainTextError {
     InvalidPayload(DecodeError),
 
     /// Failed to parse public key from bytes in protobuf message.
-    InvalidPublicKey(libp2p_core::identity::error::DecodingError),
+    InvalidPublicKey(libp2p_identity::DecodingError),
 
-    /// Failed to parse the [`PeerId`](libp2p_core::PeerId) from bytes in the protobuf message.
+    /// Failed to parse the [`PeerId`](libp2p_identity::PeerId) from bytes in the protobuf message.
     InvalidPeerId(libp2p_core::multihash::Error),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
@@ -93,8 +93,8 @@ impl From<DecodeError> for PlainTextError {
     }
 }
 
-impl From<libp2p_core::identity::error::DecodingError> for PlainTextError {
-    fn from(err: libp2p_core::identity::error::DecodingError) -> PlainTextError {
+impl From<libp2p_identity::DecodingError> for PlainTextError {
+    fn from(err: libp2p_identity::DecodingError) -> PlainTextError {
         PlainTextError::InvalidPublicKey(err)
     }
 }
