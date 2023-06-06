@@ -25,7 +25,7 @@
 
 - Remove deprecated `identity` module.
   Depend on `libp2p-identity` directly instead or import it via the `libp2p::identity` re-export.
-  See [PR XXXX].
+  See [PR 4040].
 
 [spec]: https://github.com/libp2p/specs/blob/master/connections/README.md#multistream-select
 [PR 3567]: https://github.com/libp2p/rust-libp2p/pull/3567
@@ -35,7 +35,7 @@
 [PR 3867]: https://github.com/libp2p/rust-libp2p/pull/3867
 [PR 3883]: https://github.com/libp2p/rust-libp2p/pull/3883
 [PR 3915]: https://github.com/libp2p/rust-libp2p/pull/3915
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4040]: https://github.com/libp2p/rust-libp2p/pull/4040
 
 ## 0.39.2
 
