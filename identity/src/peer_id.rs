@@ -248,14 +248,6 @@ mod tests {
 
     #[test]
     #[cfg(feature = "ed25519")]
-    fn peer_id_is_public_key() {
-        let key = crate::Keypair::generate_ed25519().public();
-        let peer_id = key.to_peer_id();
-        assert_eq!(peer_id.is_public_key(&key), Some(true));
-    }
-
-    #[test]
-    #[cfg(feature = "ed25519")]
     fn peer_id_into_bytes_then_from_bytes() {
         let peer_id = crate::Keypair::generate_ed25519().public().to_peer_id();
         let second = PeerId::from_bytes(&peer_id.to_bytes()).unwrap();
