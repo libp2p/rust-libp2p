@@ -68,7 +68,7 @@ pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
-pub mod listen_opts;
+mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
@@ -122,7 +122,7 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
-use listen_opts::ListenOpts;
+pub use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
