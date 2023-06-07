@@ -111,8 +111,9 @@ impl<P: Provider> GenTransport<P> {
         Ok((socket_addr, version, peer_id))
     }
 
-    fn eligible_listeners(&mut self, socket_addr: &SocketAddr) -> Vec<&mut Listener<P>> {
-        self.listeners
+    fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
+        let mut listeners: Vec<_> = self
+            .listeners
             .iter_mut()
             .filter(|l| {
                 if l.is_closed {
@@ -122,7 +123,19 @@ impl<P: Provider> GenTransport<P> {
                 SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
-            .collect()
+            .collect();
+        match listeners.len() {
+            0 => None,
+            1 => listeners.pop(),
+            _ => {
+                // Pick any listener to use for dialing.
+                // We hash the socket address to achieve determinism.
+                let mut hasher = DefaultHasher::new();
+                socket_addr.hash(&mut hasher);
+                let index = hasher.finish() as usize % listeners.len();
+                Some(listeners.swap_remove(index))
+            }
+        }
     }
 }
 
@@ -187,10 +200,8 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let handshake_timeout = self.handshake_timeout;
 
-        let mut listeners = self.eligible_listeners(&socket_addr);
-
-        let dialer_state = match listeners.as_mut_slice() {
-            [] => {
+        let dialer_state = match self.eligible_listener(&socket_addr) {
+            None => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
@@ -204,15 +215,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 };
                 &mut dialer.state
             }
-            [listener] => &mut listener.dialer_state,
-            listeners => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                &mut listeners[index].dialer_state
-            }
+            Some(listener) => &mut listener.dialer_state,
         };
         Ok(dialer_state.new_dial(socket_addr, handshake_timeout, version))
     }
@@ -224,23 +227,13 @@ impl<P: Provider> Transport for GenTransport<P> {
         let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        let listeners = self.eligible_listeners(&socket_addr);
-
-        let endpoint_channel = match listeners.as_slice() {
-            [] => {
+        let endpoint_channel = match self.eligible_listener(&socket_addr) {
+            None => {
                 return Err(TransportError::Other(
                     Error::NoActiveListenerForDialAsListener,
                 ));
             }
-            [listener] => listener.endpoint_channel.clone(),
-            listeners => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                listeners[index].endpoint_channel.clone()
-            }
+            Some(listener) => listener.endpoint_channel.clone(),
         };
 
         let hole_puncher = hole_puncher(endpoint_channel, socket_addr, self.handshake_timeout);

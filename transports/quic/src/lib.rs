@@ -63,8 +63,8 @@ mod hole_punching;
 mod provider;
 mod transport;
 
-use std::net::SocketAddr;
 use libp2p_identity::PeerId;
+use std::net::SocketAddr;
 
 pub use connection::{Connecting, Connection, Substream};
 pub use endpoint::Config;
