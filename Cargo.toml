@@ -99,7 +99,7 @@ multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
-multiaddr = { git = "https://github.com/thomaseizinger/rust-multiaddr", branch = "typesafe-p2p" }
+multiaddr = "0.18.0"
 multihash = "0.19.0"
 
 
