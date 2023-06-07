@@ -125,6 +125,39 @@ impl<P: Provider> GenTransport<P> {
             }
         }
     }
+
+    /// Extract the addr, quic version and peer id from the given [`Multiaddr`].
+    fn remote_multiaddr_to_socketaddr(
+        &self,
+        addr: Multiaddr,
+        check_unspecified_addr: bool,
+    ) -> Result<
+        (SocketAddr, ProtocolVersion, Option<PeerId>),
+        TransportError<<Self as Transport>::Error>,
+    > {
+        let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if check_unspecified_addr {
+            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+                return Err(TransportError::MultiaddrNotSupported(addr));
+            }
+        }
+        Ok((socket_addr, version, peer_id))
+    }
+
+    fn eligible_listeners(&mut self, socket_addr: &SocketAddr) -> Vec<&mut Listener<P>> {
+        self.listeners
+            .iter_mut()
+            .filter(|l| {
+                if l.is_closed {
+                    return false;
+                }
+                let listen_addr = l.socket_addr();
+                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect()
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -138,9 +171,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
         let need_if_watcher = socket_addr.ip().is_unspecified();
@@ -191,25 +222,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, true)?;
 
-        let listeners = self
-            .listeners
-            .iter_mut()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                let listen_addr = l.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
-            })
-            .collect::<Vec<_>>();
+        let listeners = self.eligible_listeners(&socket_addr);
 
         let endpoint = match listeners.len() {
             0 => {
@@ -266,27 +281,10 @@ impl<P: Provider> Transport for GenTransport<P> {
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, _version, peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
-        let Some(peer_id) = peer_id else {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+            self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
+        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
-        let listeners = self
-            .listeners
-            .iter_mut()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                let listen_addr = l.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
-            })
-            .collect::<Vec<_>>();
+        let listeners = self.eligible_listeners(&socket_addr);
 
         let socket = match listeners.len() {
             0 => {
