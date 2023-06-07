@@ -21,8 +21,8 @@ impl ListenOpts {
     }
 
     /// Get the [`Multiaddr`] that is being listened on
-    pub fn address(&self) -> Multiaddr {
-        self.address.clone()
+    pub fn address(&self) -> &Multiaddr {
+        &self.address
     }
 }
 

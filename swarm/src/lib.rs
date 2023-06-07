@@ -375,7 +375,7 @@ where
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let opts = ListenOpts::new(addr);
         let id = opts.listener_id();
-        self.add_listener(opts);
+        self.add_listener(opts)?;
         Ok(id)
     }
 
@@ -543,22 +543,26 @@ where
         self.confirmed_external_addr.iter()
     }
 
-    fn add_listener(&mut self, opts: ListenOpts) {
+    fn add_listener(&mut self, opts: ListenOpts) -> Result<(), TransportError<io::Error>> {
         let addr = opts.address();
         let listener_id = opts.listener_id();
 
-        if let Err(e) = self.transport.listen_on(listener_id, addr) {
+        if let Err(e) = self.transport.listen_on(listener_id, addr.clone()) {
             self.behaviour
                 .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
                     listener_id,
                     err: &e,
                 }));
+
+            return Err(e);
         }
 
         self.behaviour
             .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
                 listener_id,
             }));
+
+        Ok(())
     }
 
     /// Add a **confirmed** external address for the local node.
@@ -1034,7 +1038,7 @@ where
                 }
             }
             ToSwarm::ListenOn { opts } => {
-                self.add_listener(opts);
+                let _ = self.add_listener(opts);
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
