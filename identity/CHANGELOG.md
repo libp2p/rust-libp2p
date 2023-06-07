@@ -13,6 +13,14 @@
 
 - Remove deprecated items. See [PR 3928].
 
+- Remove `PeerId::try_from_multiaddr`.
+  `multiaddr::Protocol::P2p` is now type-safe and contains a `PeerId` directly, rendering this function obsolete.
+  See [PR 3656].
+
+- Remove `PeerId::is_public_key` because it is unused and can be implemented externally.
+  See [PR 3656].
+
+[PR 3656]: https://github.com/libp2p/rust-libp2p/pull/3656
 [PR 3850]: https://github.com/libp2p/rust-libp2p/pull/3850
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3863]: https://github.com/libp2p/rust-libp2p/pull/3863

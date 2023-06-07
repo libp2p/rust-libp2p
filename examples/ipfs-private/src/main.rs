@@ -18,19 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A minimal node that can interact with ipfs
-//!
-//! This node implements the gossipsub, ping and identify protocols. It supports
-//! the ipfs private swarms feature by reading the pre shared key file `swarm.key`
-//! from the IPFS_PATH environment variable or from the default location.
-//!
-//! You can pass any number of nodes to be dialed.
-//!
-//! On startup, this example will show a list of addresses that you can dial
-//! from a go-ipfs or js-ipfs node.
-//!
-//! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
-//! to work, the ipfs node needs to be configured to use gossipsub.
+#![doc = include_str!("../README.md")]
+
 use async_std::io;
 use either::Either;
 use futures::{prelude::*, select};
@@ -249,7 +238,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         match event {
                             ping::Event {
                                 peer,
-                                result: Result::Ok(ping::Success::Ping { rtt }),
+                                result: Result::Ok(rtt),
+                                ..
                             } => {
                                 println!(
                                     "ping: rtt to {} is {} ms",
@@ -259,25 +249,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             }
                             ping::Event {
                                 peer,
-                                result: Result::Ok(ping::Success::Pong),
-                            } => {
-                                println!("ping: pong from {}", peer.to_base58());
-                            }
-                            ping::Event {
-                                peer,
                                 result: Result::Err(ping::Failure::Timeout),
+                                ..
                             } => {
                                 println!("ping: timeout to {}", peer.to_base58());
                             }
                             ping::Event {
                                 peer,
                                 result: Result::Err(ping::Failure::Unsupported),
+                                ..
                             } => {
                                 println!("ping: {} does not support ping protocol", peer.to_base58());
                             }
                             ping::Event {
                                 peer,
                                 result: Result::Err(ping::Failure::Other { error }),
+                                ..
                             } => {
                                 println!("ping: ping::Failure with {}: {error}", peer.to_base58());
                             }

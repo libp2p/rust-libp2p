@@ -100,9 +100,12 @@ where
             return Poll::Ready(Ok(stream));
         }
 
-        self.inbound_stream_waker = Some(cx.waker().clone());
+        if let Poll::Ready(res) = self.poll_inner(cx) {
+            return Poll::Ready(res);
+        }
 
-        self.poll_inner(cx)
+        self.inbound_stream_waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 
     fn poll_outbound(

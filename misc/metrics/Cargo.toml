@@ -19,7 +19,7 @@ relay = ["libp2p-relay"]
 dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-instant = "0.1.11"
+instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dcutr =  { workspace = true, optional = true }
 libp2p-identify = { workspace = true, optional = true }
@@ -29,7 +29,7 @@ libp2p-relay =  { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 prometheus-client = { version = "0.21.1"}
-once_cell = "1.16.0"
+once_cell = "1.18.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub =  { workspace = true, optional = true }
