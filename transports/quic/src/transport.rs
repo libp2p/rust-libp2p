@@ -446,7 +446,9 @@ impl<P: Provider> Listener<P> {
     }
 
     fn socket_addr(&self) -> SocketAddr {
-        self.socket.local_addr().unwrap()
+        self.socket
+            .local_addr()
+            .expect("Cannot fail because the socket is bound")
     }
 
     /// Poll for a next If Event.
