@@ -14,7 +14,7 @@ use rand::{distributions, Rng};
 use std::{
     collections::HashMap,
     io,
-    net::SocketAddr,
+    net::{SocketAddr, UdpSocket},
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll},
@@ -65,25 +65,21 @@ impl FusedFuture for MaybeHolePunchedConnection {
 }
 
 pub(crate) struct HolePuncher {
-    socket: socket2::Socket,
+    socket: UdpSocket,
+    remote_addr: SocketAddr,
     timeout: Delay,
     interval_timeout: Delay,
 }
 
 impl HolePuncher {
     pub(crate) fn new(
-        local_addr: SocketAddr,
+        socket: UdpSocket,
         remote_addr: SocketAddr,
         timeout: Duration,
     ) -> io::Result<Self> {
-        let domain = socket2::Domain::for_address(remote_addr);
-        let socket = socket2::Socket::new(domain, socket2::Type::DGRAM, None)?;
-        socket.set_reuse_port(true)?;
-        socket.bind(&local_addr.into())?;
-        socket.connect(&remote_addr.into())?;
-
         Ok(Self {
             socket,
+            remote_addr,
             timeout: Delay::new(timeout),
             interval_timeout: Delay::new(Duration::from_secs(0)),
         })
@@ -107,7 +103,7 @@ impl Future for HolePuncher {
             .take(64)
             .collect();
 
-        if let Err(e) = self.socket.send(&contents) {
+        if let Err(e) = self.socket.send_to(&contents, self.remote_addr) {
             if !matches!(e.kind(), io::ErrorKind::WouldBlock) {
                 return Poll::Ready(Error::Io(e));
             }
