@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::OtherVariantError;
 use crate::error::{DecodingError, SigningError};
 #[cfg(any(
     feature = "ecdsa",
@@ -27,8 +26,6 @@ use crate::error::{DecodingError, SigningError};
     feature = "rsa"
 ))]
 use crate::proto;
-use quick_protobuf::{BytesReader, Writer};
-use std::convert::TryFrom;
 
 #[cfg(feature = "ed25519")]
 use crate::ed25519;
@@ -159,6 +156,7 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
+    #[allow(unused_variables)]
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
