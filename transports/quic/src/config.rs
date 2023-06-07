@@ -25,7 +25,7 @@ use std::{sync::Arc, time::Duration};
 #[derive(Clone)]
 pub struct Config {
     /// Timeout for the initial handshake when establishing a connection.
-    /// The actual timeout is the minimum of this an the [`Config::max_idle_timeout`].
+    /// The actual timeout is the minimum of this and the [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
     /// Maximum duration of inactivity in ms to accept before timing out the connection.
     pub max_idle_timeout: u32,
