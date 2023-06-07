@@ -6,9 +6,9 @@ use std::{
 use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenerClosed,
-    ListenerError, NetworkBehaviour, NewListenAddr, PollParameters, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm, listen_opts::ListenOpts,
+    derive_prelude::NewListener, dummy, listen_opts::ListenOpts, ConnectionDenied, ConnectionId,
+    FromSwarm, ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, PollParameters,
+    Swarm, SwarmEvent, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use libp2p_swarm_test::SwarmExt;

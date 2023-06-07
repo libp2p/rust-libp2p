@@ -1,7 +1,6 @@
 use crate::ListenerId;
 use libp2p_core::Multiaddr;
 
-
 #[derive(Debug)]
 pub struct ListenOpts {
     id: ListenerId,

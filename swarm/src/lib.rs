@@ -65,10 +65,10 @@ mod upgrade;
 
 pub mod behaviour;
 pub mod dial_opts;
-pub mod listen_opts;
 pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
+pub mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
