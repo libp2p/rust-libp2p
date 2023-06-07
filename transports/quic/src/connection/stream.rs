@@ -27,20 +27,20 @@ use std::{
 use futures::{AsyncRead, AsyncWrite};
 
 /// A single stream on a connection
-pub struct Substream {
+pub struct Stream {
     /// A send part of the stream
     send: quinn::SendStream,
     /// A receive part of the stream
     recv: quinn::RecvStream,
 }
 
-impl Substream {
+impl Stream {
     pub(super) fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
         Self { send, recv }
     }
 }
 
-impl AsyncRead for Substream {
+impl AsyncRead for Stream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
@@ -50,7 +50,7 @@ impl AsyncRead for Substream {
     }
 }
 
-impl AsyncWrite for Substream {
+impl AsyncWrite for Stream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,

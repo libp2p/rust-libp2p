@@ -64,7 +64,7 @@ mod provider;
 mod transport;
 
 pub use config::Config;
-pub use connection::{Connecting, Connection, Substream};
+pub use connection::{Connecting, Connection, Stream};
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]

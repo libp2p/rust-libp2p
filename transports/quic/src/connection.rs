@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod connecting;
-mod substream;
+mod stream;
 
 pub use connecting::Connecting;
-pub use substream::Substream;
+pub use stream::Stream;
 
 use crate::{ConnectionError, Error};
 
@@ -62,7 +62,7 @@ impl Connection {
 }
 
 impl StreamMuxer for Connection {
-    type Substream = Substream;
+    type Substream = Stream;
     type Error = Error;
 
     fn poll_inbound(
@@ -78,8 +78,8 @@ impl StreamMuxer for Connection {
 
         let (send, recv) = futures::ready!(incoming.poll_unpin(cx)).map_err(ConnectionError)?;
         this.incoming.take();
-        let substream = Substream::new(send, recv);
-        Poll::Ready(Ok(substream))
+        let stream = Stream::new(send, recv);
+        Poll::Ready(Ok(stream))
     }
 
     fn poll_outbound(
@@ -95,8 +95,8 @@ impl StreamMuxer for Connection {
 
         let (send, recv) = futures::ready!(outgoing.poll_unpin(cx)).map_err(ConnectionError)?;
         this.outgoing.take();
-        let substream = Substream::new(send, recv);
-        Poll::Ready(Ok(substream))
+        let stream = Stream::new(send, recv);
+        Poll::Ready(Ok(stream))
     }
 
     fn poll(
