@@ -8,7 +8,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenerClosed,
     ListenerError, NetworkBehaviour, NewListenAddr, PollParameters, Swarm, SwarmEvent, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    THandlerInEvent, THandlerOutEvent, ToSwarm, listen_opts::ListenOpts,
 };
 
 use libp2p_swarm_test::SwarmExt;
@@ -59,13 +59,10 @@ struct Behaviour {
 
 impl Behaviour {
     pub(crate) fn listen(&mut self, addr: Multiaddr) -> ListenerId {
-        let listener_id = ListenerId::next();
+        let opts = ListenOpts::new(addr);
+        let listener_id = opts.listener_id();
         assert!(!self.listeners.contains(&listener_id));
-        self.events.push_back(ToSwarm::ListenOn {
-            id: listener_id,
-            address: addr,
-        });
-
+        self.events.push_back(ToSwarm::ListenOn { opts });
         self.listeners.insert(listener_id);
 
         listener_id

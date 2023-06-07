@@ -65,6 +65,7 @@ mod upgrade;
 
 pub mod behaviour;
 pub mod dial_opts;
+pub mod listen_opts;
 pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
@@ -121,6 +122,7 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
+use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
@@ -371,8 +373,9 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = ListenerId::next();
-        self.add_listener(id, addr);
+        let opts = ListenOpts::new(addr);
+        let id = opts.listener_id();
+        self.add_listener(opts);
         Ok(id)
     }
 
@@ -540,7 +543,10 @@ where
         self.confirmed_external_addr.iter()
     }
 
-    fn add_listener(&mut self, listener_id: ListenerId, addr: Multiaddr) {
+    fn add_listener(&mut self, opts: ListenOpts) {
+        let addr = opts.address();
+        let listener_id = opts.listener_id();
+
         if let Err(e) = self.transport.listen_on(listener_id, addr) {
             self.behaviour
                 .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
@@ -1027,8 +1033,8 @@ where
                     });
                 }
             }
-            ToSwarm::ListenOn { id, address } => {
-                self.add_listener(id, address);
+            ToSwarm::ListenOn { opts } => {
+                self.add_listener(opts);
             }
             ToSwarm::RemoveListener { id } => {
                 self.remove_listener(id);
