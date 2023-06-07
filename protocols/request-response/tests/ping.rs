@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::iter;
 
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn is_response_outbound() {
     let _ = env_logger::try_init();
     let ping = Ping("ping".to_string().into_bytes());
@@ -79,6 +80,7 @@ async fn is_response_outbound() {
 
 /// Exercises a simple ping protocol.
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
@@ -172,6 +174,7 @@ async fn ping_protocol() {
 }
 
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
@@ -236,6 +239,7 @@ async fn emits_inbound_connection_closed_failure() {
 /// If the substream were not properly closed when dropped, the sender would instead
 /// run into a timeout waiting for the response.
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
