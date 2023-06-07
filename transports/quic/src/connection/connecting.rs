@@ -23,7 +23,7 @@
 use crate::{Connection, ConnectionError, Error};
 
 use futures::{
-    future::{select, Either, Select},
+    future::{select, Either, FutureExt, Select},
     prelude::*,
 };
 use futures_timer::Delay;
@@ -69,10 +69,8 @@ impl Connecting {
 impl Future for Connecting {
     type Output = Result<(PeerId, Connection), Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let connecting = Pin::new(&mut self.get_mut().connecting);
-
-        let connection = match futures::ready!(connecting.poll(cx)) {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let connection = match futures::ready!(self.connecting.poll_unpin(cx)) {
             Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
             Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
         };

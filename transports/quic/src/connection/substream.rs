@@ -42,25 +42,28 @@ impl Substream {
 
 impl AsyncRead for Substream {
     fn poll_read(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
+        Pin::new(&mut self.recv).poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for Substream {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.send).poll_write(cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.send).poll_flush(cx)
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        let this = self.get_mut();
-        AsyncWrite::poll_close(Pin::new(&mut this.send), cx)
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.send).poll_close(cx)
     }
 }
