@@ -1038,6 +1038,7 @@ where
                 }
             }
             ToSwarm::ListenOn { opts } => {
+                // Error is dispatched internally, safe to ignore.
                 let _ = self.add_listener(opts);
             }
             ToSwarm::RemoveListener { id } => {
