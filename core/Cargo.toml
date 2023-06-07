@@ -39,11 +39,9 @@ libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 multihash = { version = "0.17.0", default-features = false, features = ["arb"] }
 quickcheck = { workspace = true }
+libp2p-identity = { workspace = true, features = ["ed25519"] }
 
 [features]
-secp256k1 = [ "libp2p-identity/secp256k1" ]
-ecdsa = [ "libp2p-identity/ecdsa" ]
-rsa = [ "libp2p-identity/rsa" ]
 serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
