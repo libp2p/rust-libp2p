@@ -55,7 +55,7 @@ pub(crate) async fn maybe_hole_punched_connection(
         if let Err((peer_id, connection)) = sender.send((peer_id, connection)) {
             Ok((peer_id, connection))
         } else {
-            Err(Error::HandshakeTimedOut)
+            Err(Error::SuccessfulHolePunchRedirectingConnToDialer)
         }
     } else {
         Ok((peer_id, connection))

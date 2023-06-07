@@ -106,6 +106,10 @@ pub enum Error {
     /// Error when holepunching for a remote is already in progress
     #[error("Already punching hole for ({0}, {1}).")]
     HolePunchInProgress(SocketAddr, PeerId),
+
+    /// Error when an incoming connection is passed to the `diaL_as_listener` dialer
+    #[error("Incoming connection redirected to holepunching dialer")]
+    SuccessfulHolePunchRedirectingConnToDialer
 }
 
 /// Dialing a remote peer failed.
