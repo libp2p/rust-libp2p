@@ -1,14 +1,10 @@
 use async_std::io;
-use async_trait::async_trait;
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 
 use libp2p::{
-    core::{
-        upgrade::{read_length_prefixed, write_length_prefixed},
-        Multiaddr,
-    },
+    core::Multiaddr,
     identity,
     kad::{
         record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult,
@@ -22,9 +18,9 @@ use libp2p::{
 
 use libp2p::core::upgrade::Version;
 use libp2p::StreamProtocol;
+use serde::{Deserialize, Serialize};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::error::Error;
-use std::iter;
 
 /// Creates the network components, namely:
 ///
@@ -60,13 +56,12 @@ pub(crate) async fn new(
         transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-            request_response: request_response::Behaviour::with_codec(
-                FileExchangeCodec(),
-                iter::once((
+            request_response: request_response::cbor::Behaviour::new(
+                [(
                     StreamProtocol::new("/file-exchange/1"),
                     ProtocolSupport::Full,
-                )),
-                Default::default(),
+                )],
+                request_response::Config::default(),
             ),
         },
         peer_id,
@@ -307,7 +302,7 @@ impl EventLoop {
                 let local_peer_id = *self.swarm.local_peer_id();
                 eprintln!(
                     "Local node is listening on {:?}",
-                    address.with(Protocol::P2p(local_peer_id.into()))
+                    address.with(Protocol::P2p(local_peer_id))
                 );
             }
             SwarmEvent::IncomingConnection { .. } => {}
@@ -355,10 +350,7 @@ impl EventLoop {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
-                    match self
-                        .swarm
-                        .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
-                    {
+                    match self.swarm.dial(peer_addr.with(Protocol::P2p(peer_id))) {
                         Ok(()) => {
                             e.insert(sender);
                         }
@@ -413,7 +405,7 @@ impl EventLoop {
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
-    request_response: request_response::Behaviour<FileExchangeCodec>,
+    request_response: request_response::cbor::Behaviour<FileRequest, FileResponse>,
     kademlia: Kademlia<MemoryStore>,
 }
 
@@ -474,77 +466,7 @@ pub(crate) enum Event {
 }
 
 // Simple file exchange protocol
-
-#[derive(Clone)]
-struct FileExchangeCodec();
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct FileRequest(String);
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct FileResponse(Vec<u8>);
-
-#[async_trait]
-impl request_response::Codec for FileExchangeCodec {
-    type Protocol = StreamProtocol;
-    type Request = FileRequest;
-    type Response = FileResponse;
-
-    async fn read_request<T>(&mut self, _: &StreamProtocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, 1_000_000).await?;
-
-        if vec.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        Ok(FileRequest(String::from_utf8(vec).unwrap()))
-    }
-
-    async fn read_response<T>(
-        &mut self,
-        _: &StreamProtocol,
-        io: &mut T,
-    ) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, 500_000_000).await?; // update transfer maximum
-
-        if vec.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        Ok(FileResponse(vec))
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &StreamProtocol,
-        io: &mut T,
-        FileRequest(data): FileRequest,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &StreamProtocol,
-        io: &mut T,
-        FileResponse(data): FileResponse,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-}

@@ -138,7 +138,7 @@ pub enum FromEnvelopeError {
     InvalidPeerRecord(#[from] DecodeError),
     /// Failed to decode the peer ID.
     #[error("Failed to decode bytes as PeerId")]
-    InvalidPeerId(#[from] multihash::Error),
+    InvalidPeerId(#[from] libp2p_identity::ParseError),
     /// The signer of the envelope is different than the peer id in the record.
     #[error("The signer of the envelope is different than the peer id in the record")]
     MismatchedSignature,

@@ -1907,7 +1907,6 @@ where
 
         match error {
             DialError::LocalPeerId { .. }
-            | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
             | DialError::Denied { .. }
