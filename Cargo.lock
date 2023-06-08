@@ -1309,7 +1309,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
 ]
 
 [[package]]
@@ -1521,7 +1520,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
  "serde",
  "void",
 ]
@@ -2195,7 +2193,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "multiaddr",
 ]
 
 [[package]]
@@ -3704,7 +3701,6 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
- "multiaddr",
 ]
 
 [[package]]
