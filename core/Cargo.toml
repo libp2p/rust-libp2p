@@ -18,8 +18,8 @@ futures-timer = "3"
 instant = "0.1.12"
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
 log = "0.4"
-multiaddr = { version = "0.17.1" }
-multihash = { version = "0.17.0", default-features = false, features = ["std"] }
+multiaddr = { workspace = true }
+multihash = { workspace = true }
 multistream-select = { workspace = true }
 once_cell = "1.18.0"
 parking_lot = "0.12.0"
@@ -37,7 +37,7 @@ void = "1"
 async-std = { version = "1.6.2", features = ["attributes"] }
 libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
-multihash = { version = "0.17.0", default-features = false, features = ["arb"] }
+multihash = { workspace = true , features = ["arb"] }
 quickcheck = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 

@@ -393,7 +393,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, certhash: Option<Fingerprin
     let addr = Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::WebRTC);
+        .with(Protocol::WebRTCDirect);
 
     if let Some(fp) = certhash {
         return addr.with(Protocol::Certhash(fp.to_multihash()));
@@ -416,7 +416,7 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
     let webrtc = iter.next()?;
 
     let port = match (port, webrtc) {
-        (Protocol::Udp(port), Protocol::WebRTC) => port,
+        (Protocol::Udp(port), Protocol::WebRTCDirect) => port,
         _ => return None,
     };
 
@@ -442,7 +442,7 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)>
     let certhash = iter.next()?;
 
     let (port, fingerprint) = match (port, webrtc, certhash) {
-        (Protocol::Udp(port), Protocol::WebRTC, Protocol::Certhash(cert_hash)) => {
+        (Protocol::Udp(port), Protocol::WebRTCDirect, Protocol::Certhash(cert_hash)) => {
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
 
             (port, fingerprint)
@@ -617,7 +617,10 @@ mod tests {
                     assert!(
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
-                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::WebRTC)));
+                    assert!(matches!(
+                        listen_addr.iter().nth(2),
+                        Some(Protocol::WebRTCDirect)
+                    ));
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }

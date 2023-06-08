@@ -56,7 +56,7 @@ async fn periodic_identify() {
                 s1_info.observed_addr,
                 swarm1_memory_listen
                     .clone()
-                    .with(Protocol::P2p(swarm1_peer_id.into()))
+                    .with(Protocol::P2p(swarm1_peer_id))
             );
             assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
             assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
