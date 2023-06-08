@@ -109,7 +109,7 @@ pub enum Error {
 
     /// Error when an incoming connection is passed to the `diaL_as_listener` dialer
     #[error("Incoming connection redirected to holepunching dialer")]
-    SuccessfulHolePunchRedirectingConnToDialer
+    SuccessfulHolePunchRedirectingConnToDialer,
 }
 
 /// Dialing a remote peer failed.

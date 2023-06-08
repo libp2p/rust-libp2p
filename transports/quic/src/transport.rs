@@ -673,7 +673,7 @@ fn multiaddr_to_socketaddr(
     for proto in iter {
         match proto {
             Protocol::P2p(id) => {
-                peer_id = Some(PeerId::from_multihash(id).ok()?);
+                peer_id = Some(id);
             }
             _ => return None,
         }
