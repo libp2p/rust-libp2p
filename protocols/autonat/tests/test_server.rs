@@ -69,7 +69,7 @@ async fn test_dial_back() {
     let expect_addr = Multiaddr::empty()
         .with(Protocol::Ip4(observed_client_ip))
         .with(Protocol::Tcp(client_port))
-        .with(Protocol::P2p(client_id.into()));
+        .with(Protocol::P2p(client_id));
     let request_probe_id = match server.next_behaviour_event().await {
         Event::InboundProbe(InboundProbeEvent::Request {
             peer,

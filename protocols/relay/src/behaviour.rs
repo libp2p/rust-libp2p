@@ -812,7 +812,7 @@ impl Action {
                         // Add local peer ID in case it isn't present yet.
                         .filter_map(|a| match a.iter().last()? {
                             Protocol::P2p(_) => Some(a),
-                            _ => Some(a.with(Protocol::P2p(local_peer_id.into()))),
+                            _ => Some(a.with(Protocol::P2p(local_peer_id))),
                         })
                         .collect(),
                 }),

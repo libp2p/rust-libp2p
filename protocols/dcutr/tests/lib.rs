@@ -49,9 +49,9 @@ async fn connect() {
     async_std::task::spawn(relay.loop_on_next());
 
     let dst_relayed_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id));
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
 
     wait_for_reservation(
@@ -84,7 +84,7 @@ async fn connect() {
         }
     }
 
-    let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id.into()));
+    let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id));
 
     src.wait(move |e| match e {
         SwarmEvent::ConnectionEstablished { endpoint, .. } => {
