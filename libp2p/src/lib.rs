@@ -163,24 +163,13 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(
-        all(feature = "tcp-async-io", feature = "dns-async-std"),
-        all(feature = "tcp", feature = "dns", feature = "async-std")
-    ),
+    feature = "tcp",
+    feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
+    feature = "async-std",
 ))]
-#[cfg_attr(
-    all(
-        any(feature = "tcp-async-io", feature = "dns-async-std"),
-        not(feature = "async-std")
-    ),
-    deprecated(
-        since = "0.49.0",
-        note = "The `tcp-async-io` and `dns-async-std` features are deprecated. Use the new `tcp` and `dns` features together with the `async-std` feature."
-    )
-)]
 pub async fn development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
@@ -219,24 +208,13 @@ pub async fn development_transport(
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(
-        all(feature = "tcp-tokio", feature = "dns-tokio"),
-        all(feature = "tcp", feature = "dns", feature = "tokio")
-    ),
+    feature = "tcp",
+    feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
+    feature = "tokio",
 ))]
-#[cfg_attr(
-    all(
-        any(feature = "tcp-tokio", feature = "dns-tokio"),
-        not(feature = "tokio")
-    ),
-    deprecated(
-        since = "0.49.0",
-        note = "The `tcp-tokio` and `dns-tokio` features are deprecated. Use the new `tcp` and `dns` feature together with the `tokio` feature."
-    )
-)]
 pub fn tokio_development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {

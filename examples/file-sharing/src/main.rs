@@ -27,7 +27,7 @@ use clap::Parser;
 
 use futures::prelude::*;
 use futures::StreamExt;
-use libp2p::{core::Multiaddr, multiaddr::Protocol, PeerId};
+use libp2p::{core::Multiaddr, multiaddr::Protocol};
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // In case the user provided an address of a peer on the CLI, dial it.
     if let Some(addr) = opt.peer {
         let peer_id = match addr.iter().last() {
-            Some(Protocol::P2p(hash)) => PeerId::from_multihash(hash).expect("Valid hash."),
+            Some(Protocol::P2p(peer_id)) => peer_id,
             _ => return Err("Expect peer multiaddr to contain peer ID.".into()),
         };
         network_client

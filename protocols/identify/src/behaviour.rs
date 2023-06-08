@@ -446,7 +446,7 @@ pub enum Event {
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
     if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {
-        return multi_addr_peer_id == *peer_id.as_ref();
+        return multi_addr_peer_id == *peer_id;
     }
     true
 }
@@ -504,8 +504,8 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(multiaddr::Protocol::P2p(peer_id.into()));
-        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id.into()));
+        addr.push(multiaddr::Protocol::P2p(peer_id));
+        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));
         assert!(!multiaddr_matches_peer_id(

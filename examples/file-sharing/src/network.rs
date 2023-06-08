@@ -302,7 +302,7 @@ impl EventLoop {
                 let local_peer_id = *self.swarm.local_peer_id();
                 eprintln!(
                     "Local node is listening on {:?}",
-                    address.with(Protocol::P2p(local_peer_id.into()))
+                    address.with(Protocol::P2p(local_peer_id))
                 );
             }
             SwarmEvent::IncomingConnection { .. } => {}
@@ -350,10 +350,7 @@ impl EventLoop {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
-                    match self
-                        .swarm
-                        .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
-                    {
+                    match self.swarm.dial(peer_addr.with(Protocol::P2p(peer_id))) {
                         Ok(()) => {
                             e.insert(sender);
                         }

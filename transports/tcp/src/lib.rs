@@ -1280,7 +1280,7 @@ mod tests {
         let tcp_observed_addr = Multiaddr::empty()
             .with(Protocol::Ip4(observed_ip))
             .with(Protocol::Tcp(1))
-            .with(Protocol::P2p(PeerId::random().into()));
+            .with(Protocol::P2p(PeerId::random()));
 
         let translated = transport
             .address_translation(&tcp_listen_addr, &tcp_observed_addr)
