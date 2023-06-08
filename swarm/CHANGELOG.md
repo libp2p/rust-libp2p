@@ -56,6 +56,9 @@
 
 - Rename `ConnectionHandlerEvent::Custom` to `ConnectionHandlerEvent::NotifyBehaviour`. See [PR 3955].
 
+- Remove `DialError::InvalidPeerId` variant. With the move to `multiaddr` `v0.18.0` peer IDs in `/p2p` are type safe and thus usage of the contained peer ID can not result in a parsing error.
+  See [PR 4037].
+
 - Remove deprecated items. See [PR 3956].
 
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
@@ -73,6 +76,7 @@
 [PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
 [PR 3955]: https://github.com/libp2p/rust-libp2p/pull/3955
 [PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
+[PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
 
 ## 0.42.2
 

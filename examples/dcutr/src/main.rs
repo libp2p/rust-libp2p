@@ -231,7 +231,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .dial(
                     opts.relay_address
                         .with(Protocol::P2pCircuit)
-                        .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
+                        .with(Protocol::P2p(opts.remote_peer_id.unwrap())),
                 )
                 .unwrap();
         }

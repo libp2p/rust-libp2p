@@ -91,7 +91,7 @@ async fn main() {
                                 let peer = registration.record.peer_id();
                                 log::info!("Discovered peer {} at {}", peer, address);
 
-                                let p2p_suffix = Protocol::P2p(*peer.as_ref());
+                                let p2p_suffix = Protocol::P2p(peer);
                                 let address_with_p2p =
                                     if !address.ends_with(&Multiaddr::empty().with(p2p_suffix.clone())) {
                                         address.clone().with(p2p_suffix)

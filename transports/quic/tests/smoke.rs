@@ -215,7 +215,7 @@ async fn wrong_peerid() {
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
-    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
+    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random()));
 
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, a_addr_random_peer).await;

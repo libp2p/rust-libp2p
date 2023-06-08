@@ -105,7 +105,7 @@ impl Behaviour {
             .iter()
             .cloned()
             .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
-            .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
+            .map(|a| a.with(Protocol::P2p(self.local_peer_id)))
             .collect()
     }
 

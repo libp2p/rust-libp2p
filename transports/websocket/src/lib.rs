@@ -338,7 +338,7 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random().into())))
+            .dial(addr.with(Protocol::P2p(PeerId::random())))
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);
