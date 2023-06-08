@@ -19,7 +19,7 @@ smallvec = "1.6.1"
 unsigned-varint = "0.7"
 
 [dev-dependencies]
-async-std = "1.6.2"
+async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.10"
 futures_ringbuf = "0.4.0"
 libp2p-core = { workspace = true }

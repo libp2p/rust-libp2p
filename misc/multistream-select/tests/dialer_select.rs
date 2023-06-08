@@ -22,6 +22,7 @@
 
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
+use std::time::Duration;
 
 #[test]
 fn select_proto_basic() {
@@ -175,4 +176,27 @@ fn negotiation_failed() {
             }
         }
     }
+}
+
+#[async_std::test]
+async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
+    let (client_connection, _server_connection) = futures_ringbuf::Endpoint::pair(1024 * 1024, 1);
+
+    let client = async_std::task::spawn(async move {
+        // Single protocol to allow for lazy (or optimistic) protocol negotiation.
+        let protos = vec!["/proto1"];
+        let (proto, mut io) =
+            dialer_select_proto(client_connection, protos.into_iter(), Version::V1Lazy)
+                .await
+                .unwrap();
+        assert_eq!(proto, "/proto1");
+
+        // client can close the connection even though protocol negotiation is not yet done, i.e.
+        // `_server_connection` had been untouched.
+        io.close().await.unwrap();
+    });
+
+    async_std::future::timeout(Duration::from_secs(10), client)
+        .await
+        .unwrap();
 }
