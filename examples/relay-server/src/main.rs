@@ -101,6 +101,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(async {
         loop {
             match swarm.next().await.expect("Infinite Stream.") {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
+                    ..
+                })) => {
+                    swarm.add_external_address(observed_addr);
+                }
                 SwarmEvent::Behaviour(event) => {
                     println!("{event:?}")
                 }
