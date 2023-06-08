@@ -18,27 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Ping example
-//!
-//! See ../src/tutorial.rs for a step-by-step guide building the example below.
-//!
-//! In the first terminal window, run:
-//!
-//! ```sh
-//! cargo run
-//! ```
-//!
-//! It will print the PeerId and the listening addresses, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//!
-//! The two nodes establish a connection, negotiate the ping protocol
-//! and begin pinging each other.
+#![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
 use libp2p::core::upgrade::Version;

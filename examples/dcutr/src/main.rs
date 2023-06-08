@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use futures::{
     executor::{block_on, ThreadPool},
@@ -229,7 +231,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .dial(
                     opts.relay_address
                         .with(Protocol::P2pCircuit)
-                        .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
+                        .with(Protocol::P2p(opts.remote_peer_id.unwrap())),
                 )
                 .unwrap();
         }

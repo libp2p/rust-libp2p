@@ -136,7 +136,6 @@ use futures::{prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
-    multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
     Endpoint, Multiaddr, Transport,
@@ -395,9 +394,10 @@ where
     /// ```
     /// # use libp2p_swarm::SwarmBuilder;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_core::{Multiaddr, PeerId, Transport};
+    /// # use libp2p_core::{Multiaddr, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
+    /// # use libp2p_identity::PeerId;
     /// #
     /// let mut swarm = SwarmBuilder::without_executor(
     ///     DummyTransport::new().boxed(),
@@ -414,9 +414,7 @@ where
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
         let dial_opts = opts.into();
 
-        let peer_id = dial_opts
-            .get_or_parse_peer_id()
-            .map_err(DialError::InvalidPeerId)?;
+        let peer_id = dial_opts.get_peer_id();
         let condition = dial_opts.peer_condition();
         let connection_id = dial_opts.connection_id();
 
@@ -1007,11 +1005,11 @@ where
         match event {
             ToSwarm::GenerateEvent(event) => return Some(SwarmEvent::Behaviour(event)),
             ToSwarm::Dial { opts } => {
-                let peer_id = opts.get_or_parse_peer_id();
+                let peer_id = opts.get_peer_id();
                 let connection_id = opts.connection_id();
                 if let Ok(()) = self.dial(opts) {
                     return Some(SwarmEvent::Dialing {
-                        peer_id: peer_id.ok().flatten(),
+                        peer_id,
                         connection_id,
                     });
                 }
@@ -1518,8 +1516,6 @@ pub enum DialError {
     DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
-    /// The provided peer identity is invalid.
-    InvalidPeerId(Multihash),
     /// The peer identity obtained on the connection did not match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
@@ -1560,9 +1556,6 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId(multihash) => {
-                write!(f, "Dial error: multihash {multihash:?} is not a PeerId")
-            }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
                 "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
@@ -1603,7 +1596,6 @@ impl error::Error for DialError {
             DialError::NoAddresses => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
-            DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
             DialError::Transport(_) => None,
             DialError::Denied { cause } => Some(cause),
@@ -1762,34 +1754,33 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
-        if &hash != peer.as_ref() {
+    if let Some(multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
+        if peer_id != peer {
             return Err(addr);
         }
-        Ok(addr)
-    } else {
-        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
+
+        return Ok(addr);
     }
+
+    Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::{executor, future};
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
+    use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
-    use libp2p_core::{Endpoint, UpgradeError};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;
-    use void::Void;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2174,7 +2165,7 @@ mod tests {
             }));
 
         let other_id = PeerId::random();
-        let other_addr = address.with(multiaddr::Protocol::P2p(other_id.into()));
+        let other_addr = address.with(multiaddr::Protocol::P2p(other_id));
 
         swarm2.dial(other_addr.clone()).unwrap();
 
@@ -2323,7 +2314,7 @@ mod tests {
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
                     .into_iter()
-                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target.into())))
+                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target)))
                     .collect::<Vec<_>>();
 
                 assert_eq!(expected_addresses, failed_addresses);
@@ -2374,15 +2365,13 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
-                    MemoryTransportError::Unreachable,
-                ))),
+                MemoryTransportError::Unreachable,
             )),
         )]);
 
         let string = format!("{error}");
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : Handshake failed: No listener on the given port.)]", string)
+        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
     }
 }
