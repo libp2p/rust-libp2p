@@ -45,6 +45,7 @@ full = [
     "wasm-ext",
     "wasm-ext-websocket",
     "websocket",
+    "webtransport-websys",
     "yamux",
 ]
 
@@ -81,6 +82,7 @@ wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
+webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
 
 [dependencies]
@@ -110,6 +112,7 @@ libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
+libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 
 multiaddr = { workspace = true }

@@ -76,11 +76,50 @@ jobs:
         run: |
           PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
-          
+
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
+  webtransport_tests:
+    name: Test WebTransport
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: transports/webtransport-websys
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - uses: docker/setup-buildx-action@v2
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.11.1
+
+      - name: Install Google Chrome
+        run: |
+          CHROME_VERSION=114.0.5735.106
+          curl -O https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_$CHROME_VERSION-1_amd64.deb
+          sudo dpkg -i google-chrome-stable_$CHROME_VERSION-1_amd64.deb
+
+      - name: Install chromedriver
+        run: |
+          CHROMEDRIVER_VERSION=114.0.5735.90
+          curl -O https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
+          unzip chromedriver_linux64.zip
+
+      - name: Build echo-server
+        run: docker buildx build -o type=local,dest=echo-server -t echo-server echo-server
+
+      - name: Run wasm-pack test (Chrome)
+        run: |
+          ./echo-server/echo-server &
+          wasm-pack test --chrome --chromedriver=./chromedriver --headless
 
   cross:
     name: Compile on ${{ matrix.target }}
@@ -283,6 +322,8 @@ jobs:
       members: ${{ steps.cargo-metadata.outputs.members }}
     steps:
       - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - id: cargo-metadata
         run: |
