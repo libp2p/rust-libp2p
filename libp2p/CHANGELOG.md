@@ -1,5 +1,17 @@
 ## 0.52.0 - unreleased
 
+### Callouts
+
+- > Observed addresses (aka. external address candidates) of the local node, reported by a remote node via `libp2p-identify`, are no longer automatically considered confirmed external addresses, in other words they are no longer trusted by default.
+
+  See [../protocols/identify/CHANGELOG.md#0430].
+
+- > Automatically configure client/server mode based on external addresses.
+
+  See [../protocols/kad/CHANGELOG.md#0440].
+
+### Details
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 
