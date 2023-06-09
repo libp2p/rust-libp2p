@@ -10,14 +10,26 @@ can dial/listen for ourselves we can do the following:
 
 1. Start redis (needed by the tests): `docker run --rm -it -p 6379:6379
    redis/redis-stack`.
-2. In one terminal run the dialer: `REDIS_ADDR=localhost:6379 ip="0.0.0.0"
+2. In one terminal run the dialer: `redis_addr=localhost:6379 ip="0.0.0.0"
    transport=quic-v1 security=quic muxer=quic is_dialer="true" cargo run --bin ping`
-3. In another terminal, run the listener: `REDIS_ADDR=localhost:6379
+3. In another terminal, run the listener: `redis_addr=localhost:6379
    ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo run --bin ping`
 
 
 To test the interop with other versions do something similar, except replace one
 of these nodes with the other version's interop test.
+
+# Running this test with webtransport dialer in browser
+
+To run the webtransport test from within the browser, you'll need the
+`chromedriver` in your `$PATH`, compatible with your Chrome browser.
+Firefox is not yet supported as it doesn't support all required features yet
+(in v114 there is no support for certhashes).
+
+2.
+   - Build the wasm package: `wasm-pack build --target web`
+   - Run the dialer pointing it to the built package: `redis_addr=127.0.0.1:6379 proxy_addr=127.0.0.1:6378
+     ip=0.0.0.0 transport=webtransport is_dialer=true wasm_pkg_dir=pkg cargo run --bin wasm_ping`
 
 # Running all interop tests locally with Compose
 
