@@ -210,13 +210,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner
-            .handle_established_outbound_connection(_connection_id, peer, addr, role_override)
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
     fn on_connection_handler_event(
