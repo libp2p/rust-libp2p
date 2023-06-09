@@ -654,11 +654,9 @@ mod tests {
     use super::*;
     use crate::codec::{Message, NewRegistration};
     use crate::Namespace;
-    use async_std;
     use futures::AsyncWriteExt;
     use futures_ringbuf::Endpoint;
     use libp2p_core::PeerRecord;
-    use libp2p_identity;
     use libp2p_request_response::Codec;
 
     #[test]
