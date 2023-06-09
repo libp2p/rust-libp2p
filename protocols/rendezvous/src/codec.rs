@@ -702,10 +702,7 @@ mod tests {
 
         // Write/read request
 
-        let (mut a, mut b) = Endpoint::pair(
-            MAX_MESSAGE_LEN_BYTES,
-            MAX_MESSAGE_LEN_BYTES,
-        );
+        let (mut a, mut b) = Endpoint::pair(MAX_MESSAGE_LEN_BYTES, MAX_MESSAGE_LEN_BYTES);
 
         codec
             .write_request(protocol, &mut a, exp_msg.clone())
@@ -723,10 +720,7 @@ mod tests {
 
         // Write/read response
 
-        let (mut a, mut b) = Endpoint::pair(
-            MAX_MESSAGE_LEN_BYTES,
-            MAX_MESSAGE_LEN_BYTES,
-        );
+        let (mut a, mut b) = Endpoint::pair(MAX_MESSAGE_LEN_BYTES, MAX_MESSAGE_LEN_BYTES);
 
         codec
             .write_response(protocol, &mut a, exp_msg.clone())

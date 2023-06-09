@@ -77,7 +77,7 @@ impl Behaviour {
         Self {
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
-                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Full)),
+                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Inbound)),
                 libp2p_request_response::Config::default(),
             ),
 
@@ -383,7 +383,6 @@ impl Registrations {
         let namespace = new_registration.namespace;
         let registration_id = RegistrationId::new();
 
-        // todo check can we save a `Registration` as the right part?
         if let Some(old_registration) = self
             .registrations_for_peer
             .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
@@ -477,11 +476,10 @@ impl Registrations {
         self.cookies
             .insert(new_cookie.clone(), reggos_of_last_discover);
 
-        // todo if have it done like I want, this will be an excess block of code
-        let reggos = &self.registrations;
+        let regs = &self.registrations;
         let registrations = ids
             .into_iter()
-            .map(move |id| reggos.get(&id).expect("bad internal data structure"));
+            .map(move |id| regs.get(&id).expect("bad internal data structure"));
 
         Ok((registrations, new_cookie))
     }

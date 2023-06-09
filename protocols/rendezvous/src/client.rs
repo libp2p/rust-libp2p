@@ -104,7 +104,7 @@ impl Behaviour {
         Self {
             inner: libp2p_request_response::Behaviour::with_codec(
                 crate::codec::Codec::default(),
-                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Full)),
+                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
                 libp2p_request_response::Config::default(),
             ),
             error_events: Default::default(),

@@ -669,6 +669,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cache-padded"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "981520c98f422fcc584dc1a95c334e6953900b9106bc47a9839b81790009eb21"
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -810,7 +816,7 @@ dependencies = [
  "anstyle",
  "bitflags",
  "clap_lex",
- "strsim",
+ "strsim 0.10.0",
 ]
 
 [[package]]
@@ -1122,12 +1128,36 @@ dependencies = [
 
 [[package]]
 name = "darling"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d706e75d87e35569db781a9b5e2416cff1236a47ed380831f959382ccd5f858"
+dependencies = [
+ "darling_core 0.10.2",
+ "darling_macro 0.10.2",
+]
+
+[[package]]
+name = "darling"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b750cb3417fd1b327431a470f388520309479ab0bf5e323505daf0290cd3850"
 dependencies = [
- "darling_core",
- "darling_macro",
+ "darling_core 0.14.4",
+ "darling_macro 0.14.4",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0c960ae2da4de88a91b2d920c2a7233b400bc33cb28453a2987822d8392519b"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim 0.9.3",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1140,7 +1170,18 @@ dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
- "strsim",
+ "strsim 0.10.0",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9b5a2f4ac4969822c62224815d069952656cadc7084fdca9751e6d959189b72"
+dependencies = [
+ "darling_core 0.10.2",
+ "quote",
  "syn 1.0.109",
 ]
 
@@ -1150,7 +1191,7 @@ version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
 dependencies = [
- "darling_core",
+ "darling_core 0.14.4",
  "quote",
  "syn 1.0.109",
 ]
@@ -1258,7 +1299,7 @@ version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f91d4cfa921f1c05904dc3c57b4a32c38aed3340cce209f3a6fd1478babafc4"
 dependencies = [
- "darling",
+ "darling 0.14.4",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -1705,13 +1746,26 @@ dependencies = [
 
 [[package]]
 name = "futures_ringbuf"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b905098b5519bd63b2a1f9f4615198b0e38a473ce201ffdbd4dea6eb63087ddc"
+dependencies = [
+ "futures",
+ "log",
+ "log-derive",
+ "ringbuf 0.2.8",
+ "rustc_version",
+]
+
+[[package]]
+name = "futures_ringbuf"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6628abb6eb1fc74beaeb20cd0670c43d158b0150f7689b38c3eaf663f99bdec7"
 dependencies = [
  "futures",
  "log",
- "ringbuf",
+ "ringbuf 0.3.3",
  "rustc_version",
 ]
 
@@ -2451,7 +2505,7 @@ dependencies = [
  "async-std",
  "flate2",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "libp2p-tcp",
  "quickcheck-ext",
@@ -2691,7 +2745,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "futures-timer",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "log",
 ]
@@ -2704,7 +2758,7 @@ dependencies = [
  "curve25519-dalek 3.2.0",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "libp2p-identity",
  "log",
@@ -2777,7 +2831,7 @@ dependencies = [
  "bytes",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "libp2p-identity",
  "log",
@@ -2873,7 +2927,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
- "futures_ringbuf",
+ "futures_ringbuf 0.3.1",
  "instant",
  "libp2p-core",
  "libp2p-identify",
@@ -2902,7 +2956,7 @@ dependencies = [
  "async-trait",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "instant",
  "libp2p-core",
  "libp2p-identity",
@@ -3198,6 +3252,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "log-derive"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a42526bb432bcd1b43571d5f163984effa25409a29f1a3242a54d0577d55bcf"
+dependencies = [
+ "darling 0.10.2",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "lru"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3351,7 +3417,7 @@ dependencies = [
  "bytes",
  "env_logger 0.10.0",
  "futures",
- "futures_ringbuf",
+ "futures_ringbuf 0.4.0",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-plaintext",
@@ -4184,6 +4250,15 @@ dependencies = [
 
 [[package]]
 name = "ringbuf"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f65af18d50f789e74aaf23bbb3f65dcd22a3cb6e029b5bced149f6bd57c5c2a2"
+dependencies = [
+ "cache-padded",
+]
+
+[[package]]
+name = "ringbuf"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79abed428d1fd2a128201cec72c5f6938e2da607c6f3745f769fabea399d950a"
@@ -4713,6 +4788,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "strsim"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6446ced80d6c486436db5c078dde11a9f73d42b57fb273121e160b84f63d894c"
 
 [[package]]
 name = "strsim"
