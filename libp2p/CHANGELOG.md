@@ -4,11 +4,11 @@
 
 - > Observed addresses (aka. external address candidates) of the local node, reported by a remote node via `libp2p-identify`, are no longer automatically considered confirmed external addresses, in other words they are no longer trusted by default.
 
-  See [../protocols/identify/CHANGELOG.md#0430].
+  See [`libp2p-identify` changelog](../protocols/identify/CHANGELOG.md#0430).
 
 - > Automatically configure client/server mode based on external addresses.
 
-  See [../protocols/kad/CHANGELOG.md#0440].
+  See [`libp2p-kad` changelog](../protocols/kad/CHANGELOG.md#0440).
 
 ### Details
 
