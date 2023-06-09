@@ -1,0 +1,33 @@
+FROM rust:1.67.0 as builder
+
+# Run with access to the target cache to speed up builds
+WORKDIR /workspace
+ADD . .
+
+RUN rustup target add wasm32-unknown-unknown
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo install wasm-pack@0.11.1 --locked
+
+RUN --mount=type=cache,target=./target \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    wasm-pack build --target web interop-tests
+
+RUN --mount=type=cache,target=./target \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo build --release --package interop-tests --bin wasm_ping
+
+RUN --mount=type=cache,target=./target \
+    mv ./target/release/wasm_ping /usr/local/bin/testplan
+RUN --mount=type=cache,target=./target \
+    mv ./interop-tests/pkg /usr/local/share/testplan-pkg
+
+FROM selenium/standalone-chrome:112.0
+COPY --from=builder /usr/local/bin/testplan /usr/local/bin/testplan
+COPY --from=builder /usr/local/share/testplan-pkg /usr/local/share/testplan-pkg
+
+ENV RUST_BACKTRACE=1
+ENV wasm_pkg_dir="/usr/local/share/testplan-pkg"
+ENV proxy_addr="127.0.0.1:6378"
+
+ENTRYPOINT ["testplan"]
