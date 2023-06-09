@@ -23,6 +23,7 @@
 mod proto {
     #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
+    pub use self::payload::proto::NoiseExtensions;
     pub use self::payload::proto::NoiseHandshakePayload;
 }
 
@@ -32,7 +33,9 @@ use crate::{DecodeError, Error};
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
+use multihash::Multihash;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use std::collections::HashSet;
 use std::io;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -49,6 +52,15 @@ pub(crate) struct State<T> {
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
+    /// The WebTransport certhashes of the responder, if any.
+    responder_webtransport_certhashes: Option<HashSet<Multihash<64>>>,
+    /// The received extensions of the remote, if any.
+    remote_extensions: Option<Extensions>,
+}
+
+/// Extensions
+struct Extensions {
+    webtransport_certhashes: HashSet<Multihash<64>>,
 }
 
 impl<T> State<T> {
@@ -63,12 +75,15 @@ impl<T> State<T> {
         session: snow::HandshakeState,
         identity: KeypairIdentity,
         expected_remote_key: Option<identity::PublicKey>,
+        responder_webtransport_certhashes: Option<HashSet<Multihash<64>>>,
     ) -> Self {
         Self {
             identity,
             io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey: expected_remote_key,
+            responder_webtransport_certhashes,
+            remote_extensions: None,
         }
     }
 }
@@ -77,6 +92,7 @@ impl<T> State<T> {
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
     pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
+        let is_initiator = self.io.is_initiator();
         let (pubkey, io) = self.io.into_transport()?;
 
         let id_pk = self
@@ -91,7 +107,43 @@ impl<T> State<T> {
             return Err(Error::BadSignature);
         }
 
+        // Check WebTransport certhashes that responder reported back to us.
+        if is_initiator {
+            // We check only if we care (i.e. Config::with_webtransport_certhashes was used).
+            if let Some(expected_certhashes) = self.responder_webtransport_certhashes {
+                let ext = self.remote_extensions.ok_or_else(|| {
+                    Error::UnknownWebTransportCerthashes(
+                        expected_certhashes.to_owned(),
+                        HashSet::new(),
+                    )
+                })?;
+
+                let received_certhashes = ext.webtransport_certhashes;
+
+                // Expected WebTransport certhashes must be a strict subset
+                // of the reported ones.
+                if !expected_certhashes.is_subset(&received_certhashes) {
+                    return Err(Error::UnknownWebTransportCerthashes(
+                        expected_certhashes,
+                        received_certhashes,
+                    ));
+                }
+            }
+        }
+
         Ok((id_pk, io))
+    }
+}
+
+impl From<proto::NoiseExtensions> for Extensions {
+    fn from(value: proto::NoiseExtensions) -> Self {
+        Extensions {
+            webtransport_certhashes: value
+                .webtransport_certhashes
+                .into_iter()
+                .filter_map(|bytes| Multihash::read(&bytes[..]).ok())
+                .collect(),
+        }
     }
 }
 
@@ -149,6 +201,10 @@ where
         state.dh_remote_pubkey_sig = Some(pb.identity_sig);
     }
 
+    if let Some(extensions) = pb.extensions {
+        state.remote_extensions = Some(extensions.into());
+    }
+
     Ok(())
 }
 
@@ -163,6 +219,17 @@ where
     };
 
     pb.identity_sig = state.identity.signature.clone();
+
+    // If this is the responder then send WebTransport certhashes to initiator, if any.
+    if state.io.is_responder() {
+        if let Some(ref certhashes) = state.responder_webtransport_certhashes {
+            let ext = pb
+                .extensions
+                .get_or_insert_with(proto::NoiseExtensions::default);
+
+            ext.webtransport_certhashes = certhashes.iter().map(|hash| hash.to_bytes()).collect();
+        }
+    }
 
     let mut msg = Vec::with_capacity(pb.get_size());
 
