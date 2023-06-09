@@ -30,7 +30,7 @@ use std::convert::{TryFrom, TryInto};
 use std::{fmt, io};
 
 pub type Ttl = u64;
-pub type Limit = u64;
+pub(crate) type Limit = u64;
 
 const MAX_MESSAGE_LEN_BYTES: usize = 1024 * 1024;
 
@@ -206,7 +206,7 @@ pub enum ErrorCode {
     Unavailable,
 }
 
-pub struct RendezvousCodec {
+pub(crate) struct RendezvousCodec {
     inner: quick_protobuf_codec::Codec<proto::Message>,
 }
 
@@ -243,14 +243,8 @@ impl Decoder for RendezvousCodec {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Codec {}
-
-impl Default for Codec {
-    fn default() -> Self {
-        Codec {}
-    }
-}
 
 #[async_trait]
 impl libp2p_request_response::Codec for Codec {

@@ -122,13 +122,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner.handle_established_inbound_connection(
-            _connection_id,
+            connection_id,
             peer,
             local_addr,
             remote_addr,
@@ -137,13 +137,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner
-            .handle_established_outbound_connection(_connection_id, peer, addr, role_override)
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
     fn on_connection_handler_event(
@@ -168,46 +168,44 @@ impl NetworkBehaviour for Behaviour {
         }
 
         let poll_res = self.inner.poll(cx, params);
-        if let Poll::Ready(to_swarm) = poll_res {
-            if let ToSwarm::GenerateEvent(event) = to_swarm {
-                let opt_event = match event {
-                    libp2p_request_response::Event::Message {
-                        peer: peer_id,
-                        message:
-                            libp2p_request_response::Message::Request {
-                                request, channel, ..
-                            },
-                    } => {
-                        let (event, response) =
-                            handle_request(peer_id, request, &mut self.registrations);
-                        if let Some(resp) = response {
-                            self.inner
-                                .send_response(channel, resp)
-                                .expect("Send response");
-                        }
-
-                        Some(event)
+        if let Poll::Ready(ToSwarm::GenerateEvent(event)) = poll_res {
+            let opt_event = match event {
+                libp2p_request_response::Event::Message {
+                    peer: peer_id,
+                    message:
+                        libp2p_request_response::Message::Request {
+                            request, channel, ..
+                        },
+                } => {
+                    let (event, response) =
+                        handle_request(peer_id, request, &mut self.registrations);
+                    if let Some(resp) = response {
+                        self.inner
+                            .send_response(channel, resp)
+                            .expect("Send response");
                     }
-                    libp2p_request_response::Event::ResponseSent { .. } => None,
-                    libp2p_request_response::Event::InboundFailure {
-                        peer,
-                        request_id,
-                        error,
-                    } => {
-                        log::warn!("Inbound request {request_id} with peer {peer} failed: {error}");
 
-                        None
-                    }
-                    libp2p_request_response::Event::Message {
-                        peer: _,
-                        message: libp2p_request_response::Message::Response { .. },
-                    } => None,
-                    libp2p_request_response::Event::OutboundFailure { .. } => None,
-                };
-
-                if let Some(out_event) = opt_event {
-                    return Poll::Ready(ToSwarm::GenerateEvent(out_event));
+                    Some(event)
                 }
+                libp2p_request_response::Event::ResponseSent { .. } => None,
+                libp2p_request_response::Event::InboundFailure {
+                    peer,
+                    request_id,
+                    error,
+                } => {
+                    log::warn!("Inbound request {request_id} with peer {peer} failed: {error}");
+
+                    None
+                }
+                libp2p_request_response::Event::Message {
+                    peer: _,
+                    message: libp2p_request_response::Message::Response { .. },
+                } => None,
+                libp2p_request_response::Event::OutboundFailure { .. } => None,
+            };
+
+            if let Some(out_event) = opt_event {
+                return Poll::Ready(ToSwarm::GenerateEvent(out_event));
             }
         }
 
@@ -284,7 +282,7 @@ fn handle_request(
             Ok((registrations, cookie)) => {
                 let discovered = registrations.cloned().collect::<Vec<_>>();
 
-                let response = Message::DiscoverResponse(Ok((discovered.clone(), cookie.clone())));
+                let response = Message::DiscoverResponse(Ok((discovered.clone(), cookie)));
 
                 let event = Event::DiscoverServed {
                     enquirer: peer_id,

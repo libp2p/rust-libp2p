@@ -176,7 +176,7 @@ impl Behaviour {
             &rendezvous_node,
             Discover {
                 namespace: namespace.clone(),
-                cookie: cookie.clone(),
+                cookie,
                 limit,
             },
         );
@@ -195,13 +195,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner.handle_established_inbound_connection(
-            _connection_id,
+            connection_id,
             peer,
             local_addr,
             remote_addr,
@@ -221,12 +221,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_connection_handler_event(
         &mut self,
-        _peer_id: PeerId,
-        _connection_id: ConnectionId,
-        _event: THandlerOutEvent<Self>,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
         self.inner
-            .on_connection_handler_event(_peer_id, _connection_id, _event);
+            .on_connection_handler_event(peer_id, connection_id, event);
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -246,19 +246,17 @@ impl NetworkBehaviour for Behaviour {
 
         let poll_res = self.inner.poll(cx, params);
 
-        if let Poll::Ready(to_swarm) = &poll_res {
-            if let ToSwarm::GenerateEvent(event) = to_swarm {
-                if let libp2p_request_response::Event::Message {
-                    peer: _,
-                    message: libp2p_request_response::Message::Request { .. },
-                } = event
-                {
-                    return Poll::Pending;
-                }
+        if let Poll::Ready(ToSwarm::GenerateEvent(event)) = &poll_res {
+            if let libp2p_request_response::Event::Message {
+                peer: _,
+                message: libp2p_request_response::Message::Request { .. },
+            } = event
+            {
+                return Poll::Pending;
+            }
 
-                if let libp2p_request_response::Event::InboundFailure { .. } = event {
-                    return Poll::Pending;
-                }
+            if let libp2p_request_response::Event::InboundFailure { .. } = event {
+                return Poll::Pending;
             };
         }
 
@@ -280,7 +278,7 @@ impl NetworkBehaviour for Behaviour {
                     let (rendezvous_node, namespace) = self
                         .waiting_for_register
                         .remove(&request_id)
-                        .expect(format!("unknown request_id: {request_id}").as_str());
+                        .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
                     Event::RegisterFailed(RegisterError::Remote {
                         rendezvous_node,
                         namespace,
@@ -302,7 +300,7 @@ impl NetworkBehaviour for Behaviour {
             })
         });
 
-        if let Poll::Pending = &result {
+        if result.is_pending() {
             if let Some(expired_registration) =
                 futures::ready!(self.expiring_registrations.poll_next_unpin(cx))
             {
@@ -346,9 +344,9 @@ impl Behaviour {
             RegisterResponse(result) => {
                 let (rendezvous_node, namespace) = self
                     .waiting_for_register
-                    .remove(&request_id)
-                    .expect(format!("unknown request_id: {request_id}").as_str());
-                let res = match result {
+                    .remove(request_id)
+                    .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
+                match result {
                     Ok(ttl) => Event::Registered {
                         rendezvous_node,
                         ttl,
@@ -357,17 +355,15 @@ impl Behaviour {
                     Err(error_code) => Event::RegisterFailed(RegisterError::Remote {
                         rendezvous_node,
                         namespace,
-                        error: error_code.clone(),
+                        error: error_code,
                     }),
-                };
-
-                res
+                }
             }
             DiscoverResponse(response) => {
                 let (rendezvous_node, ns) = self
                     .waiting_for_discovery
-                    .remove(&request_id)
-                    .expect(format!("unknown request_id: {request_id}").as_str());
+                    .remove(request_id)
+                    .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
                 let res = match response {
                     Ok((registrations, cookie)) => {
                         self.discovered_peers
