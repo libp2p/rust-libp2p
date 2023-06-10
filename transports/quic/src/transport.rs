@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
-use crate::hole_punching::{hole_puncher, maybe_hole_punched_connection, HolePunchMap};
+use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
@@ -76,7 +76,7 @@ pub struct GenTransport<P: Provider> {
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
     /// Holepunching attempts
-    hole_punch_attempts: HolePunchMap,
+    hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -142,7 +142,7 @@ impl<P: Provider> GenTransport<P> {
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Connection);
     type Error = Error;
-    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -157,7 +157,6 @@ impl<P: Provider> Transport for GenTransport<P> {
             listener_id,
             socket_addr,
             self.quinn_config.clone(),
-            self.hole_punch_attempts.clone(),
             self.handshake_timeout,
             version,
         )?;
@@ -240,23 +239,32 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         let (sender, receiver) = oneshot::channel();
 
-        let hole_punch_attempts = self.hole_punch_attempts.clone();
-
-        if !hole_punch_attempts.try_insert((socket_addr, peer_id), sender) {
-            return Err(TransportError::Other(Error::HolePunchInProgress(
-                socket_addr,
-                peer_id,
-            )));
-        }
+        match self.hole_punch_attempts.entry(socket_addr) {
+            Entry::Occupied(mut sender_entry) => {
+                if sender_entry.get().is_canceled() {
+                    sender_entry.insert(sender);
+                } else {
+                    return Err(TransportError::Other(Error::HolePunchInProgress(
+                        socket_addr,
+                    )));
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(sender);
+            }
+        };
 
         Ok(Box::pin(async move {
             futures::pin_mut!(hole_puncher);
             match futures::future::select(receiver, hole_puncher).await {
-                Either::Left((connection, _)) => Ok(connection.unwrap()),
-                Either::Right((hole_punch_err, _)) => {
-                    hole_punch_attempts.remove(&(socket_addr, peer_id));
-                    Err(hole_punch_err)
+                Either::Left((message, _)) => {
+                    let (inbound_peer_id, connection) = message.unwrap().await?;
+                    if inbound_peer_id != peer_id {
+                        log::warn!("inbound connection from ({socket_addr}, {inbound_peer_id} incorrectly matched with outbound hole punch for ({socket_addr}, {peer_id}).");
+                    }
+                    Ok((inbound_peer_id, connection))
                 }
+                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
             }
         }))
     }
@@ -279,7 +287,38 @@ impl<P: Provider> Transport for GenTransport<P> {
         }
 
         if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
-            return Poll::Ready(ev);
+            match ev {
+                TransportEvent::Incoming {
+                    listener_id,
+                    upgrade,
+                    local_addr,
+                    send_back_addr,
+                } => {
+                    let socket_addr =
+                        multiaddr_to_socketaddr(&send_back_addr, self.support_draft_29)
+                            .unwrap()
+                            .0;
+
+                    if let Some(sender) = self.hole_punch_attempts.remove(&socket_addr) {
+                        if let Err(upgrade) = sender.send(upgrade) {
+                            return Poll::Ready(TransportEvent::Incoming {
+                                listener_id,
+                                upgrade,
+                                local_addr,
+                                send_back_addr,
+                            });
+                        }
+                    } else {
+                        return Poll::Ready(TransportEvent::Incoming {
+                            listener_id,
+                            upgrade,
+                            local_addr,
+                            send_back_addr,
+                        });
+                    }
+                }
+                _ => return Poll::Ready(ev),
+            }
         }
 
         self.waker = Some(cx.waker().clone());
@@ -407,9 +446,6 @@ struct Listener<P: Provider> {
     /// None if we are only listening on a single interface.
     if_watcher: Option<P::IfWatcher>,
 
-    /// Hole punching attempts
-    hole_punch_attempts: HolePunchMap,
-
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
 
@@ -425,7 +461,6 @@ impl<P: Provider> Listener<P> {
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         config: QuinnConfig,
-        hole_punch_attempts: HolePunchMap,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
@@ -451,7 +486,6 @@ impl<P: Provider> Listener<P> {
             listener_id,
             version,
             new_connections_rx,
-            hole_punch_attempts,
             handshake_timeout,
             if_watcher,
             is_closed: false,
@@ -536,7 +570,7 @@ impl<P: Provider> Listener<P> {
 }
 
 impl<P: Provider> Stream for Listener<P> {
-    type Item = TransportEvent<<GenTransport<P> as Transport>::ListenerUpgrade, Error>;
+    type Item = TransportEvent<Connecting, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -555,18 +589,10 @@ impl<P: Provider> Stream for Listener<P> {
             match self.new_connections_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(connection)) => {
                     let local_addr = socketaddr_to_multiaddr(connection.local_addr(), self.version);
-                    let remote_addr = connection.remote_addr();
-                    let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
-
-                    let upgrade = maybe_hole_punched_connection(
-                        self.hole_punch_attempts.clone(),
-                        remote_addr,
-                        Connecting::new(connection, self.handshake_timeout),
-                    )
-                    .boxed();
-
+                    let send_back_addr =
+                        socketaddr_to_multiaddr(&connection.remote_addr(), self.version);
                     let event = TransportEvent::Incoming {
-                        upgrade,
+                        upgrade: Connecting::new(connection, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,

@@ -63,7 +63,6 @@ mod hole_punching;
 mod provider;
 mod transport;
 
-use libp2p_identity::PeerId;
 use std::net::SocketAddr;
 
 pub use connection::{Connecting, Connection, Substream};
@@ -104,12 +103,8 @@ pub enum Error {
     NoActiveListenerForDialAsListener,
 
     /// Error when holepunching for a remote is already in progress
-    #[error("Already punching hole for ({0}, {1}).")]
-    HolePunchInProgress(SocketAddr, PeerId),
-
-    /// Error when an incoming connection is passed to the `diaL_as_listener` dialer
-    #[error("Incoming connection redirected to holepunching dialer")]
-    SuccessfulHolePunchRedirectingConnToDialer,
+    #[error("Already punching hole for {0}).")]
+    HolePunchInProgress(SocketAddr),
 }
 
 /// Dialing a remote peer failed.
