@@ -225,14 +225,13 @@ impl<P: Provider> Transport for GenTransport<P> {
         let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        let endpoint_channel = match self.eligible_listener(&socket_addr) {
-            None => {
-                return Err(TransportError::Other(
-                    Error::NoActiveListenerForDialAsListener,
-                ));
-            }
-            Some(listener) => listener.endpoint_channel.clone(),
-        };
+        let endpoint_channel = self
+            .eligible_listener(&socket_addr)
+            .ok_or(TransportError::Other(
+                Error::NoActiveListenerForDialAsListener,
+            ))?
+            .endpoint_channel
+            .clone();
 
         let hole_puncher = hole_puncher(endpoint_channel, socket_addr, self.handshake_timeout);
 
@@ -240,13 +239,12 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         match self.hole_punch_attempts.entry(socket_addr) {
             Entry::Occupied(mut sender_entry) => {
-                if sender_entry.get().is_canceled() {
-                    sender_entry.insert(sender);
-                } else {
+                if !sender_entry.get().is_canceled() {
                     return Err(TransportError::Other(Error::HolePunchInProgress(
                         socket_addr,
                     )));
                 }
+                sender_entry.insert(sender);
             }
             Entry::Vacant(entry) => {
                 entry.insert(sender);
@@ -259,7 +257,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 Either::Left((message, _)) => {
                     let (inbound_peer_id, connection) = message.unwrap().await?;
                     if inbound_peer_id != peer_id {
-                        log::warn!("inbound connection from ({socket_addr}, {inbound_peer_id} incorrectly matched with outbound hole punch for ({socket_addr}, {peer_id}).");
+                        log::warn!("inbound connection from ({socket_addr}, {inbound_peer_id}) incorrectly matched with outbound hole punch for ({socket_addr}, {peer_id}).");
                     }
                     Ok((inbound_peer_id, connection))
                 }
