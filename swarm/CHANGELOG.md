@@ -1,5 +1,8 @@
 ## 0.43.0 - unreleased
 
+- Allow `NetworkBehaviours` to create and remove listeners.
+  See [PR 3292].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 
@@ -61,6 +64,7 @@
 
 - Remove deprecated items. See [PR 3956].
 
+[PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715

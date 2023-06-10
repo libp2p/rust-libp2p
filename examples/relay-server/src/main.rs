@@ -108,6 +108,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     swarm.add_external_address(observed_addr);
                 }
                 SwarmEvent::Behaviour(event) => {
+                    if let BehaviourEvent::Identify(identify::Event::Received {
+                        info: identify::Info { observed_addr, .. },
+                        ..
+                    }) = &event
+                    {
+                        swarm.add_external_address(observed_addr.clone());
+                    }
+
                     println!("{event:?}")
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
