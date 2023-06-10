@@ -23,8 +23,7 @@ use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
-use futures::channel::mpsc;
-use futures::channel::oneshot;
+use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, Either};
 use futures::ready;
 use futures::stream::StreamExt;
