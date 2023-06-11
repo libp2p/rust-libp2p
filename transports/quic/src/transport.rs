@@ -239,6 +239,8 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         match self.hole_punch_attempts.entry(socket_addr) {
             Entry::Occupied(mut sender_entry) => {
+                // Stale senders, i.e. from failed hole punches are not removed.
+                // Thus, we can just overwrite a stale sender.
                 if !sender_entry.get().is_canceled() {
                     return Err(TransportError::Other(Error::HolePunchInProgress(
                         socket_addr,
@@ -255,9 +257,11 @@ impl<P: Provider> Transport for GenTransport<P> {
             futures::pin_mut!(hole_puncher);
             match futures::future::select(receiver, hole_puncher).await {
                 Either::Left((message, _)) => {
-                    let (inbound_peer_id, connection) = message.unwrap().await?;
+                    let (inbound_peer_id, connection) = message
+                        .expect("hole punch connection sender is never dropped before receiver")
+                        .await?;
                     if inbound_peer_id != peer_id {
-                        log::warn!("inbound connection from ({socket_addr}, {inbound_peer_id}) incorrectly matched with outbound hole punch for ({socket_addr}, {peer_id}).");
+                        log::warn!("expected inbound connection from {socket_addr} to resolve to  {peer_id} but got {inbound_peer_id}");
                     }
                     Ok((inbound_peer_id, connection))
                 }
