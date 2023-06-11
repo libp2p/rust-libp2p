@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
+use futures::future::Either;
 use rand::{distributions, Rng};
 
 use crate::{
@@ -12,12 +13,12 @@ pub(crate) async fn hole_puncher<P: Provider>(
     remote_addr: SocketAddr,
     timeout_duration: Duration,
 ) -> Error {
-    P::timeout(
-        timeout_duration,
-        punch_holes::<P>(endpoint_channel, remote_addr),
-    )
-    .await
-    .unwrap_or(Error::HandshakeTimedOut)
+    let punch_holes_future = punch_holes::<P>(endpoint_channel, remote_addr);
+    futures::pin_mut!(punch_holes_future);
+    match futures::future::select(P::sleep(timeout_duration), punch_holes_future).await {
+        Either::Left(_) => Error::HandshakeTimedOut,
+        Either::Right((hole_punch_err, _)) => hole_punch_err,
+    }
 }
 
 async fn punch_holes<P: Provider>(

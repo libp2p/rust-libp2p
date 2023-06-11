@@ -77,14 +77,6 @@ pub trait Provider: Unpin + Send + Sized + 'static {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<IfEvent>>;
 
-    /// Awaits a future or times out after a duration of time.
-    fn timeout<F>(
-        duration: Duration,
-        future: F,
-    ) -> BoxFuture<'static, Result<F::Output, Self::TimeoutError>>
-    where
-        F: Future + Send + 'static;
-
     /// Sleep for specified amount of time.
     fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
 }

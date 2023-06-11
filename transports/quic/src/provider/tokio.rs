@@ -98,16 +98,6 @@ impl super::Provider for Provider {
         watcher.poll_if_event(cx)
     }
 
-    fn timeout<F>(
-        duration: Duration,
-        future: F,
-    ) -> BoxFuture<'static, Result<F::Output, Self::TimeoutError>>
-    where
-        F: Future + Send + 'static,
-    {
-        tokio::time::timeout(duration, future).boxed()
-    }
-
     fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         tokio::time::sleep(duration).boxed()
     }
