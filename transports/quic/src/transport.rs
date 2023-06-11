@@ -287,11 +287,11 @@ impl<P: Provider> Transport for GenTransport<P> {
             self.dialer.remove(&key);
         }
 
-        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+        while let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
             match ev {
                 TransportEvent::Incoming {
                     listener_id,
-                    upgrade,
+                    mut upgrade,
                     local_addr,
                     send_back_addr,
                 } => {
@@ -301,22 +301,20 @@ impl<P: Provider> Transport for GenTransport<P> {
                             .0;
 
                     if let Some(sender) = self.hole_punch_attempts.remove(&socket_addr) {
-                        if let Err(upgrade) = sender.send(upgrade) {
-                            return Poll::Ready(TransportEvent::Incoming {
-                                listener_id,
-                                upgrade,
-                                local_addr,
-                                send_back_addr,
-                            });
+                        match sender.send(upgrade) {
+                            Ok(()) => continue,
+                            Err(timed_out_holepunch) => {
+                                upgrade = timed_out_holepunch;
+                            }
                         }
-                    } else {
-                        return Poll::Ready(TransportEvent::Incoming {
-                            listener_id,
-                            upgrade,
-                            local_addr,
-                            send_back_addr,
-                        });
                     }
+
+                    return Poll::Ready(TransportEvent::Incoming {
+                        listener_id,
+                        upgrade,
+                        local_addr,
+                        send_back_addr,
+                    });
                 }
                 _ => return Poll::Ready(ev),
             }
