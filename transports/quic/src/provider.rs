@@ -40,7 +40,6 @@ const RECEIVE_BUFFER_SIZE: usize = 65536;
 /// and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
-    type TimeoutError;
 
     /// Create a new providing that is wrapping the socket.
     ///

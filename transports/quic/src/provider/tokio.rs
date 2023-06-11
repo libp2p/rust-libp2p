@@ -42,7 +42,6 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
-    type TimeoutError = tokio::time::error::Elapsed;
 
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;

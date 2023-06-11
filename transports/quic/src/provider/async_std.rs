@@ -47,7 +47,6 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
-    type TimeoutError = async_std::future::TimeoutError;
 
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
