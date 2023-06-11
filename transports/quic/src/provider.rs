@@ -18,12 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::Future;
+use futures::{future::BoxFuture, Future};
 use if_watch::IfEvent;
 use std::{
     io,
     net::SocketAddr,
     task::{Context, Poll},
+    time::Duration,
 };
 
 #[cfg(feature = "async-std")]
@@ -39,6 +40,7 @@ const RECEIVE_BUFFER_SIZE: usize = 65536;
 /// and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
+    type TimeoutError;
 
     /// Create a new providing that is wrapping the socket.
     ///
@@ -74,4 +76,15 @@ pub trait Provider: Unpin + Send + Sized + 'static {
         watcher: &mut Self::IfWatcher,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<IfEvent>>;
+
+    /// Awaits a future or times out after a duration of time.
+    fn timeout<F>(
+        duration: Duration,
+        future: F,
+    ) -> BoxFuture<'static, Result<F::Output, Self::TimeoutError>>
+    where
+        F: Future + Send + 'static;
+
+    /// Sleep for specified amount of time.
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
 }

@@ -233,7 +233,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             .endpoint_channel
             .clone();
 
-        let hole_puncher = hole_puncher(endpoint_channel, socket_addr, self.handshake_timeout);
+        let hole_puncher = hole_puncher::<P>(endpoint_channel, socket_addr, self.handshake_timeout);
 
         let (sender, receiver) = oneshot::channel();
 

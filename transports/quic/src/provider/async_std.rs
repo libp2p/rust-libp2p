@@ -26,6 +26,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::GenTransport;
@@ -46,6 +47,7 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
+    type TimeoutError = async_std::future::TimeoutError;
 
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
@@ -103,6 +105,20 @@ impl super::Provider for Provider {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<if_watch::IfEvent>> {
         watcher.poll_if_event(cx)
+    }
+
+    fn timeout<F>(
+        duration: Duration,
+        future: F,
+    ) -> BoxFuture<'static, Result<F::Output, Self::TimeoutError>>
+    where
+        F: Future + Send + 'static,
+    {
+        async_std::future::timeout(duration, future).boxed()
+    }
+
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        async_std::task::sleep(duration).boxed()
     }
 }
 

@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{ready, Future};
+use futures::{future::BoxFuture, ready, Future, FutureExt};
 use std::{
     io,
     net::SocketAddr,
     task::{Context, Poll},
+    time::Duration,
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
 
@@ -41,6 +42,7 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
+    type TimeoutError = tokio::time::error::Elapsed;
 
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;
@@ -94,5 +96,19 @@ impl super::Provider for Provider {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<if_watch::IfEvent>> {
         watcher.poll_if_event(cx)
+    }
+
+    fn timeout<F>(
+        duration: Duration,
+        future: F,
+    ) -> BoxFuture<'static, Result<F::Output, Self::TimeoutError>>
+    where
+        F: Future + Send + 'static,
+    {
+        tokio::time::timeout(duration, future).boxed()
+    }
+
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        tokio::time::sleep(duration).boxed()
     }
 }

@@ -2,30 +2,31 @@ use std::{net::SocketAddr, time::Duration};
 
 use rand::{distributions, Rng};
 
-#[cfg(feature = "async-std")]
-use async_std::{future::timeout, task::sleep};
-#[cfg(feature = "tokio")]
-use tokio::time::{sleep, timeout};
-
 use crate::{
     endpoint::{self, ToEndpoint},
-    Error,
+    Error, Provider,
 };
 
-pub(crate) async fn hole_puncher(
+pub(crate) async fn hole_puncher<P: Provider>(
     endpoint_channel: endpoint::Channel,
     remote_addr: SocketAddr,
     timeout_duration: Duration,
 ) -> Error {
-    timeout(timeout_duration, punch_holes(endpoint_channel, remote_addr))
-        .await
-        .unwrap_or(Error::HandshakeTimedOut)
+    P::timeout(
+        timeout_duration,
+        punch_holes::<P>(endpoint_channel, remote_addr),
+    )
+    .await
+    .unwrap_or(Error::HandshakeTimedOut)
 }
 
-async fn punch_holes(mut endpoint_channel: endpoint::Channel, remote_addr: SocketAddr) -> Error {
+async fn punch_holes<P: Provider>(
+    mut endpoint_channel: endpoint::Channel,
+    remote_addr: SocketAddr,
+) -> Error {
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
-        sleep(sleep_duration).await;
+        P::sleep(sleep_duration).await;
 
         let random_udp_packet = ToEndpoint::SendUdpPacket(quinn_proto::Transmit {
             destination: remote_addr,
