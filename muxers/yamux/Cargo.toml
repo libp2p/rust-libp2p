@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 thiserror = "1.0"
-yamux = "0.10.0"
+yamux = "0.11.1"
 log = "0.4"
 
 [dev-dependencies]
