@@ -3120,7 +3120,7 @@ name = "libp2p-webtransport-websys"
 version = "0.1.0"
 dependencies = [
  "futures",
- "getrandom 0.2.9",
+ "getrandom 0.2.10",
  "js-sys",
  "libp2p-core",
  "libp2p-identity",
