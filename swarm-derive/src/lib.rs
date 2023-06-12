@@ -732,6 +732,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
                 }
+                std::task::Poll::Ready(#network_behaviour_action::ListenOn { opts }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ListenOn { opts });
+                }
+                std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id });
+                }
                 std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
                         peer_id,

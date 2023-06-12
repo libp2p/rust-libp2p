@@ -28,6 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
+use crate::listen_opts::ListenOpts;
 use crate::{
     ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
     THandlerOutEvent,
@@ -250,6 +251,12 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
     Dial { opts: DialOpts },
 
+    /// Instructs the [`Swarm`](crate::Swarm) to listen on the provided address.
+    ListenOn { opts: ListenOpts },
+
+    /// Instructs the [`Swarm`](crate::Swarm) to remove the listener.
+    RemoveListener { id: ListenerId },
+
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
@@ -324,6 +331,8 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -353,6 +362,8 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,

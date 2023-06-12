@@ -68,6 +68,7 @@ pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
+mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
@@ -121,6 +122,7 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
+pub use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
@@ -370,12 +372,9 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = ListenerId::next();
-        self.transport.listen_on(id, addr)?;
-        self.behaviour
-            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                listener_id: id,
-            }));
+        let opts = ListenOpts::new(addr);
+        let id = opts.listener_id();
+        self.add_listener(opts)?;
         Ok(id)
     }
 
@@ -540,6 +539,28 @@ where
     /// TODO
     pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
         self.confirmed_external_addr.iter()
+    }
+
+    fn add_listener(&mut self, opts: ListenOpts) -> Result<(), TransportError<io::Error>> {
+        let addr = opts.address();
+        let listener_id = opts.listener_id();
+
+        if let Err(e) = self.transport.listen_on(listener_id, addr.clone()) {
+            self.behaviour
+                .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
+                    listener_id,
+                    err: &e,
+                }));
+
+            return Err(e);
+        }
+
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
+                listener_id,
+            }));
+
+        Ok(())
     }
 
     /// Add a **confirmed** external address for the local node.
@@ -1013,6 +1034,13 @@ where
                         connection_id,
                     });
                 }
+            }
+            ToSwarm::ListenOn { opts } => {
+                // Error is dispatched internally, safe to ignore.
+                let _ = self.add_listener(opts);
+            }
+            ToSwarm::RemoveListener { id } => {
+                self.remove_listener(id);
             }
             ToSwarm::NotifyHandler {
                 peer_id,
