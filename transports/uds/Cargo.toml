@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
-log = "0.4.18"
+log = "0.4.19"
 futures = "0.3.28"
 tokio = { version = "1.28", default-features = false, features = ["net"], optional = true }
 
