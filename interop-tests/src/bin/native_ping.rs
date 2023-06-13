@@ -8,12 +8,16 @@ mod config;
 async fn main() -> Result<()> {
     let config = config::Config::from_env()?;
 
-    interop_tests::run_test(
+    let result = interop_tests::run_test(
         config.transport.parse()?,
         &config.ip,
         config.is_dialer,
         Duration::from_secs(config.test_timeout),
         &config.redis_addr,
     )
-    .await
+    .await?;
+
+    println!("{result}");
+
+    Ok(())
 }

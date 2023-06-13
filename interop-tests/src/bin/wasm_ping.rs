@@ -169,13 +169,14 @@ async fn serve_index_js(
     let script = format!(
         r#"
             // import a wasm initialization fn and our test entrypoint
-            import init, {{ run_test }} from "/interop_tests.js";
+            import init, {{ run_test_wasm }} from "/interop_tests.js";
 
             const runWasm = async () => {{
                 // initialize wasm
                 let res = await init()
                     // run our entrypoint with params from the env
-                    .then(() => run_test(
+                    .then(() => run_test_wasm(
+                        "{}",
                         "{}",
                         {},
                         "{}",
@@ -190,7 +191,7 @@ async fn serve_index_js(
 
             runWasm();
         "#,
-        config.transport, config.is_dialer, config.test_timeout,
+        config.transport, config.ip, config.is_dialer, config.test_timeout,
     );
 
     Ok(([(header::CONTENT_TYPE, "application/javascript")], script))
