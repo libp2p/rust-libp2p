@@ -13,12 +13,15 @@ mod arch;
 use arch::{build_transport, init_logger, swarm_builder, Instant, RedisClient};
 
 pub async fn run_test(
-    transport: Transport,
+    transport: &str,
     ip: &str,
     is_dialer: bool,
-    test_timeout: Duration,
+    test_timeout: u64,
     redis_addr: &str,
 ) -> Result<String> {
+    let test_timeout = Duration::from_secs(test_timeout);
+    let transport = transport.parse().context("failed to parse transport")?;
+
     init_logger();
 
     let local_key = identity::Keypair::generate_ed25519();
@@ -120,16 +123,9 @@ pub async fn run_test_wasm(
     test_timeout_seconds: u64,
     redis_proxy_addr: &str,
 ) -> Result<String, JsValue> {
-    let test_timeout = Duration::from_secs(test_timeout_seconds);
-    let transport = transport
-        .parse()
-        .map_err(|e| format!("Couldn't parse transport: {e}"))?;
-
-    let result = run_test(transport, ip, is_dialer, test_timeout, redis_proxy_addr)
+    run_test(transport, ip, is_dialer, test_timeout, redis_proxy_addr)
         .await
-        .map_err(|e| format!("Running tests failed: {e}"))?;
-
-    Ok(result)
+        .map_err(|e| format!("Running tests failed: {e}"))
 }
 
 /// A request to redis proxy that will pop the value from the list
