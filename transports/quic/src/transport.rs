@@ -197,7 +197,6 @@ impl<P: Provider> Transport for GenTransport<P> {
             socket_c,
             endpoint,
             self.handshake_timeout,
-            need_if_watcher,
             version,
         )?;
         self.listeners.push(listener);
@@ -421,17 +420,17 @@ impl<P: Provider> Listener<P> {
         socket: UdpSocket,
         endpoint: quinn::Endpoint,
         handshake_timeout: Duration,
-        need_if_watcher: bool,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
-        if need_if_watcher {
+        let local_addr = socket.local_addr()?;
+        if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(&socket.local_addr()?, version);
+            let ma = socketaddr_to_multiaddr(&local_addr, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
