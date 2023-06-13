@@ -138,7 +138,8 @@ impl<P: Provider> GenTransport<P> {
     > {
         let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified()) {
+        if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
+        {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
         Ok((socket_addr, version, peer_id))
