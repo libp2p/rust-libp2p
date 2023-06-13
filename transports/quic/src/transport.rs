@@ -138,10 +138,8 @@ impl<P: Provider> GenTransport<P> {
     > {
         let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if check_unspecified_addr {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                return Err(TransportError::MultiaddrNotSupported(addr));
-            }
+        if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified()) {
+            return Err(TransportError::MultiaddrNotSupported(addr));
         }
         Ok((socket_addr, version, peer_id))
     }
@@ -285,7 +283,7 @@ impl<P: Provider> Transport for GenTransport<P> {
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, _version, peer_id) =
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
-        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
+        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         let socket = self
             .eligible_listener(&socket_addr)
