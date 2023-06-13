@@ -18,6 +18,7 @@ serde = { version = "1", features = ["derive"] }
 rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum = "0.6"
 libp2p = { path = "../libp2p", features = [
     "ping",
     "noise",
@@ -33,16 +34,16 @@ libp2p = { path = "../libp2p", features = [
 libp2p-quic = { workspace = true, features = ["tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 libp2p-mplex = { path = "../muxers/mplex" }
+mime_guess = "2.0"
 redis = { version = "0.23.0", default-features = false, features = [
     "tokio-comp",
 ] }
+rust-embed = "6.7"
+thirtyfour = "0.31"
 tokio = { version = "1.28.2", features = ["full"] }
-# for redis proxy
+tower-http = { version = "0.4", features = ["cors", "fs", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-axum = "0.6"
-tower-http = { version = "0.4", features = ["cors", "fs", "trace"] }
-thirtyfour = "0.31"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 libp2p = { path = "../libp2p", features = [

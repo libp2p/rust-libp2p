@@ -3,15 +3,15 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use axum::http::header;
-use axum::response::{Html, IntoResponse};
+use axum::body;
+use axum::http::{header, Uri};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use redis::{AsyncCommands, Client};
 use thirtyfour::prelude::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 use tracing::warn;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
@@ -19,6 +19,13 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use interop_tests::BlpopRequest;
 
 mod config;
+
+/// Embedded Wasm package
+///
+/// Make sure to build the wasm with `wasm-pack build --target web`
+#[derive(rust_embed::RustEmbed)]
+#[folder = "pkg"]
+struct WasmPackage;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,7 +40,6 @@ async fn main() -> Result<()> {
     let test_timeout = Duration::from_secs(config.test_timeout);
     let proxy_addr = env::var("proxy_addr").unwrap_or_else(|_| "127.0.0.1:6378".into());
     let proxy_addr_clone = proxy_addr.clone();
-    let wasm_pkg_dir = env::var("wasm_pkg_dir").unwrap_or_else(|_| "interop-tests/pkg".into());
 
     // create a redis client
     let client = Client::open(config.redis_addr.as_str()).context("Could not connect to redis")?;
@@ -50,7 +56,7 @@ async fn main() -> Result<()> {
             get(|| async move { serve_index_js(&config, &proxy_addr_clone).await }),
         )
         // Wasm app static files
-        .fallback_service(ServeDir::new(wasm_pkg_dir))
+        .fallback(serve_wasm_pkg)
         // Middleware
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http())
@@ -188,4 +194,17 @@ async fn serve_index_js(
     );
 
     Ok(([(header::CONTENT_TYPE, "application/javascript")], script))
+}
+
+async fn serve_wasm_pkg(uri: Uri) -> Result<Response, StatusCode> {
+    let path = uri.path().trim_start_matches('/').to_string();
+    if let Some(content) = WasmPackage::get(&path) {
+        let mime = mime_guess::from_path(&path).first_or_octet_stream();
+        Ok(Response::builder()
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(body::boxed(body::Full::from(content.data)))
+            .unwrap())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }

@@ -2354,9 +2354,11 @@ dependencies = [
  "libp2p-quic",
  "libp2p-webrtc",
  "log",
+ "mime_guess",
  "rand 0.8.5",
  "redis",
  "reqwest",
+ "rust-embed",
  "serde",
  "thirtyfour",
  "tokio",
@@ -4712,6 +4714,40 @@ dependencies = [
  "serde",
  "thiserror",
  "webrtc-util",
+]
+
+[[package]]
+name = "rust-embed"
+version = "6.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b73e721f488c353141288f223b599b4ae9303ecf3e62923f40a492f0634a4dc3"
+dependencies = [
+ "rust-embed-impl",
+ "rust-embed-utils",
+ "walkdir",
+]
+
+[[package]]
+name = "rust-embed-impl"
+version = "6.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e22ce362f5561923889196595504317a4372b84210e6e335da529a65ea5452b5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rust-embed-utils",
+ "syn 2.0.18",
+ "walkdir",
+]
+
+[[package]]
+name = "rust-embed-utils"
+version = "7.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "512b0ab6853f7e14e3c8754acb43d6f748bb9ced66aa5915a6553ac8213f7731"
+dependencies = [
+ "sha2 0.10.6",
+ "walkdir",
 ]
 
 [[package]]
