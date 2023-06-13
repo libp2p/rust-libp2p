@@ -193,8 +193,8 @@ mod wasm {
     pub(crate) struct RedisClient(String);
 
     impl RedisClient {
-        pub(crate) fn new(redis_proxy_addr: &str) -> Result<Self> {
-            Ok(Self(redis_proxy_addr.to_owned()))
+        pub(crate) fn new(redis_addr: &str) -> Result<Self> {
+            Ok(Self(redis_addr.to_owned()))
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {

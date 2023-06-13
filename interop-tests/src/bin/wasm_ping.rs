@@ -1,4 +1,3 @@
-use std::env;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -20,6 +19,8 @@ use interop_tests::BlpopRequest;
 
 mod config;
 
+const BIND_ADDR: &str = "127.0.0.1:8080";
+
 /// Embedded Wasm package
 ///
 /// Make sure to build the wasm with `wasm-pack build --target web`
@@ -38,8 +39,6 @@ async fn main() -> Result<()> {
     // read env variables
     let config = config::Config::from_env()?;
     let test_timeout = Duration::from_secs(config.test_timeout);
-    let proxy_addr = env::var("proxy_addr").unwrap_or_else(|_| "127.0.0.1:6378".into());
-    let proxy_addr_clone = proxy_addr.clone();
 
     // create a redis client
     let client = Client::open(config.redis_addr.as_str()).context("Could not connect to redis")?;
@@ -49,10 +48,7 @@ async fn main() -> Result<()> {
         // Redis proxy
         .route("/blpop", post(redis_blpop))
         // Wasm ping test trigger
-        .route(
-            "/",
-            get(|| async move { serve_index_html(&config, &proxy_addr_clone).await }),
-        )
+        .route("/", get(|| async move { serve_index_html(&config).await }))
         // Wasm app static files
         .fallback(serve_wasm_pkg)
         // Middleware
@@ -61,13 +57,13 @@ async fn main() -> Result<()> {
         .with_state(client);
 
     // Run the service in background
-    tokio::spawn(axum::Server::bind(&proxy_addr.parse()?).serve(app.into_make_service()));
+    tokio::spawn(axum::Server::bind(&BIND_ADDR.parse()?).serve(app.into_make_service()));
 
     // Execute the the test with a webdriver
-    run_test(&proxy_addr, test_timeout).await
+    run_test(test_timeout).await
 }
 
-async fn run_test(proxy_addr: &str, timeout: Duration) -> Result<()> {
+async fn run_test(timeout: Duration) -> Result<()> {
     // start a webdriver process
     // currently only the chromedriver is supported as firefox doesn't
     // have support yet for the certhashes
@@ -94,7 +90,7 @@ async fn run_test(proxy_addr: &str, timeout: Duration) -> Result<()> {
     caps.set_headless()?;
     let driver = WebDriver::new("http://localhost:45782", caps).await?;
     // go to the wasm test service
-    driver.goto(format!("http://{}", proxy_addr)).await?;
+    driver.goto(format!("http://{BIND_ADDR}")).await?;
     // wait for the script to finish and set the result
     match driver
         .query(By::Id("result"))
@@ -141,10 +137,7 @@ async fn redis_blpop(
 }
 
 /// Serve the main page which loads our javascript
-async fn serve_index_html(
-    config: &config::Config,
-    redis_proxy_addr: &str,
-) -> Result<impl IntoResponse, StatusCode> {
+async fn serve_index_html(config: &config::Config) -> Result<impl IntoResponse, StatusCode> {
     let config::Config {
         transport,
         ip,
@@ -171,7 +164,7 @@ async fn serve_index_html(
                         "{ip}",
                         {is_dialer},
                         "{test_timeout}",
-                        "{redis_proxy_addr}"
+                        "{BIND_ADDR}"
                     ))
                     // handle the `Err` variant
                     .catch(e => `${{e}}`);
