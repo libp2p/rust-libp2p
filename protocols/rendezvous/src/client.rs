@@ -266,20 +266,11 @@ impl NetworkBehaviour for Behaviour {
                         error: ErrorCode::Unavailable,
                     })
                 }
-                // By specification, a client able only send a request (get a response)
-                // and can't receive any inbound request.
-                // That is why the next cases should be considered as unreachable.
-                libp2p_request_response::Event::InboundFailure { .. } => {
-                    unreachable!()
-                }
-                libp2p_request_response::Event::ResponseSent { .. } => {
-                    unreachable!()
-                }
-                libp2p_request_response::Event::Message {
+                libp2p_request_response::Event::InboundFailure { .. } | libp2p_request_response::Event::ResponseSent { .. } | libp2p_request_response::Event::Message {
                     peer: _,
                     message: libp2p_request_response::Message::Request { .. },
                 } => {
-                    unreachable!()
+                    unreachable!("rendezvous clients never receive requests")
                 }
             })
         });
