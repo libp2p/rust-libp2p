@@ -10,33 +10,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run-multidim-interop-native:
-    name: Run native multidimensional interoperability tests
+  run-multidim-interop:
+    name: Run multidimensional interoperability tests
     runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v2
       - name: Build native image
         run: docker buildx build --load -t native-rust-libp2p-head . -f interop-tests/Dockerfile
-      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
-        name: Run native tests
+      - name: Run native tests
+        uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
         with:
           test-filter: native-rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/native-ping-version.json
           s3-cache-bucket: libp2p-by-tf-aws-bootstrap
           s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
           s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
-
-  run-multidim-interop-chromium:
-    name: Run chromium multidimensional interoperability tests
-    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v2
       - name: Build chromium image
         run: docker buildx build --load -t chromium-rust-libp2p-head . -f interop-tests/Dockerfile.chromium
-      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
-        name: Run chromium tests
+      - name: Run chromium tests
+        uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
         with:
           test-filter: chromium-rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/chromium-ping-version.json
