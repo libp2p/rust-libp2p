@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{ready, Future};
+use futures::{future::BoxFuture, ready, Future, FutureExt};
 use std::{
     io,
     net::SocketAddr,
     task::{Context, Poll},
+    time::Duration,
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
 
@@ -94,5 +95,9 @@ impl super::Provider for Provider {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<if_watch::IfEvent>> {
         watcher.poll_if_event(cx)
+    }
+
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        tokio::time::sleep(duration).boxed()
     }
 }
