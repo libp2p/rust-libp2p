@@ -3,16 +3,16 @@ use std::env;
 use anyhow::{Context, Result};
 
 #[derive(Debug, Clone)]
-pub struct Config {
-    pub transport: String,
-    pub ip: String,
-    pub is_dialer: bool,
-    pub test_timeout: u64,
-    pub redis_addr: String,
+pub(crate) struct Config {
+    pub(crate) transport: String,
+    pub(crate) ip: String,
+    pub(crate) is_dialer: bool,
+    pub(crate) test_timeout: u64,
+    pub(crate) redis_addr: String,
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
+    pub(crate) fn from_env() -> Result<Self> {
         let transport =
             env::var("transport").context("transport environment variable is not set")?;
         let ip = env::var("ip").context("ip environment variable is not set")?;
