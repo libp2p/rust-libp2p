@@ -13,7 +13,7 @@ can dial/listen for ourselves we can do the following:
 2. In one terminal run the dialer: `redis_addr=localhost:6379 ip="0.0.0.0"
    transport=quic-v1 security=quic muxer=quic is_dialer="true" cargo run --bin ping`
 3. In another terminal, run the listener: `redis_addr=localhost:6379
-   ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo run --bin ping`
+   ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo run --bin native_ping`
 
 
 To test the interop with other versions do something similar, except replace one
