@@ -22,7 +22,7 @@ pub async fn run_test(
     is_dialer: bool,
     test_timeout: Duration,
     redis_addr: &str,
-) -> Result<String> {
+) -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info"))
         .target(Target::Stdout)
         .init();
@@ -130,9 +130,10 @@ pub async fn run_test(
         };
 
         let handshake_plus_ping = handshake_start.elapsed().as_millis() as f32;
-        Ok(format!(
+        println!(
             r#"{{"handshakePlusOneRTTMillis": {handshake_plus_ping:.1}, "pingRTTMilllis": {rtt:.1}}}"#
-        ))
+        );
+        Ok(())
     } else {
         log::info!(
             "Test instance, listening for incoming connections on: {:?}.",

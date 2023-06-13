@@ -13,10 +13,12 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
-use tracing::{error, warn};
+use tracing::warn;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use interop_tests::BlpopRequest;
+
+mod config;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -27,20 +29,14 @@ async fn main() -> Result<()> {
         .init();
 
     // read env variables
-    let redis_addr = env::var("redis_addr")
-        .map(|addr| format!("redis://{addr}"))
-        .unwrap_or_else(|_| "redis://redis:6379".into());
+    let config = config::Config::from_env()?;
+    let test_timeout = Duration::from_secs(config.test_timeout);
     let proxy_addr = env::var("proxy_addr").unwrap_or_else(|_| "127.0.0.1:6378".into());
     let proxy_addr_clone = proxy_addr.clone();
     let wasm_pkg_dir = env::var("wasm_pkg_dir").unwrap_or_else(|_| "interop-tests/pkg".into());
-    let test_timeout = Duration::from_secs(
-        env::var("test_timeout_seconds")
-            .unwrap_or_else(|_| "180".into())
-            .parse::<u64>()?,
-    );
 
     // create a redis client
-    let client = Client::open(redis_addr).context("Could not connect to redis")?;
+    let client = Client::open(config.redis_addr.as_str()).context("Could not connect to redis")?;
 
     // create a wasm-app service
     let app = Router::new()
@@ -51,7 +47,7 @@ async fn main() -> Result<()> {
         .route("/index.html", get(serve_index_html))
         .route(
             "/index.js",
-            get(|| async move { serve_index_js(&proxy_addr_clone).await }),
+            get(|| async move { serve_index_js(&config, &proxy_addr_clone).await }),
         )
         // Wasm app static files
         .fallback_service(ServeDir::new(wasm_pkg_dir))
@@ -159,21 +155,10 @@ async fn serve_index_html() -> Result<impl IntoResponse, StatusCode> {
 }
 
 /// Serve a js script which runs the main test function
-async fn serve_index_js(redis_proxy_addr: &str) -> Result<impl IntoResponse, StatusCode> {
-    // get environment variables to parametrize the script
-    let transport = env::var("transport").map_err(|e| {
-        error!("Error getting transport env var: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    let is_dialer = env::var("is_dialer").unwrap_or_else(|_| "true".into());
-    let test_timeout = env::var("test_timeout_seconds")
-        .unwrap_or_else(|_| "180".into())
-        .parse::<u64>()
-        .map_err(|e| {
-            error!("Error parsing timeout seconds: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
+async fn serve_index_js(
+    config: &config::Config,
+    redis_proxy_addr: &str,
+) -> Result<impl IntoResponse, StatusCode> {
     // create the script
     let script = format!(
         r#"
@@ -185,9 +170,9 @@ async fn serve_index_js(redis_proxy_addr: &str) -> Result<impl IntoResponse, Sta
                 let res = await init()
                     // run our entrypoint with params from the env
                     .then(() => run_test(
-                        "{transport}",
-                        {is_dialer},
-                        "{test_timeout}",
+                        "{}",
+                        {},
+                        "{}",
                         "{redis_proxy_addr}"
                     ))
                     // handle the `Err` variant
@@ -198,7 +183,8 @@ async fn serve_index_js(redis_proxy_addr: &str) -> Result<impl IntoResponse, Sta
             }};
 
             runWasm();
-        "#
+        "#,
+        config.transport, config.is_dialer, config.test_timeout,
     );
 
     Ok(([(header::CONTENT_TYPE, "application/javascript")], script))

@@ -4,9 +4,9 @@ use anyhow::{bail, ensure, Context, Result};
 use futures::StreamExt;
 use libp2p::swarm::{keep_alive, SwarmBuilder, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, PeerId};
+use wasm_bindgen::prelude::*;
 
 use crate::{Behaviour, BehaviourEvent, BlpopRequest, Transport};
-use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub async fn run_test(
