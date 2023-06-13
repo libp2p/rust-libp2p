@@ -2709,6 +2709,8 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "log",
+ "multiaddr",
+ "multihash",
  "once_cell",
  "quick-protobuf",
  "quickcheck-ext",
