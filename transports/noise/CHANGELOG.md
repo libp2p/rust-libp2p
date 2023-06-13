@@ -5,8 +5,12 @@
 
 - Remove deprecated APIs. See [PR 3511].
 
+- Add `Config::with_webtransport_certhashes`. See [PR 3991].
+  This can be used by WebTransport implementers to send (responder) or verify (initiator) certhashes.
+
 [PR 3511]: https://github.com/libp2p/rust-libp2p/pull/3511
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3991
 
 ## 0.42.2
 

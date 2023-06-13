@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::MultihashGeneric;
 use sha2::Digest as _;
 use std::fmt;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
@@ -26,7 +25,7 @@ use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
-type Multihash = MultihashGeneric<64>;
+type Multihash = multihash::Multihash<64>;
 
 /// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
 #[derive(Eq, PartialEq, Copy, Clone)]
@@ -57,7 +56,7 @@ impl Fingerprint {
         Some(Self(buf))
     }
 
-    /// Converts [`Multihash`](MultihashGeneric) to [`Fingerprint`].
+    /// Converts [`Multihash`](multihash::Multihash) to [`Fingerprint`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
         if hash.code() != MULTIHASH_SHA256_CODE {
             // Only support SHA256 for now.
@@ -69,7 +68,7 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
-    /// Converts this fingerprint to [`Multihash`](MultihashGeneric).
+    /// Converts this fingerprint to [`Multihash`](multihash::Multihash).
     pub fn to_multihash(self) -> Multihash {
         Multihash::wrap(MULTIHASH_SHA256_CODE, &self.0).expect("fingerprint's len to be 32 bytes")
     }

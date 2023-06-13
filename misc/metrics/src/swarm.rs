@@ -259,9 +259,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         record(OutgoingConnectionError::DialPeerConditionFalse)
                     }
                     libp2p_swarm::DialError::Aborted => record(OutgoingConnectionError::Aborted),
-                    libp2p_swarm::DialError::InvalidPeerId { .. } => {
-                        record(OutgoingConnectionError::InvalidPeerId)
-                    }
                     libp2p_swarm::DialError::WrongPeerId { .. } => {
                         record(OutgoingConnectionError::WrongPeerId)
                     }
@@ -371,7 +368,6 @@ enum OutgoingConnectionError {
     NoAddresses,
     DialPeerConditionFalse,
     Aborted,
-    InvalidPeerId,
     WrongPeerId,
     TransportMultiaddrNotSupported,
     TransportOther,

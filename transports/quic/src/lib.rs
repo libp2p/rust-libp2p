@@ -63,8 +63,11 @@ mod hole_punching;
 mod provider;
 mod transport;
 
+use std::net::SocketAddr;
+
 pub use config::Config;
 pub use connection::{Connecting, Connection, Stream};
+
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
@@ -95,6 +98,14 @@ pub enum Error {
     /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out.")]
     HandshakeTimedOut,
+
+    /// Error when `Transport::dial_as_listener` is called without an active listener.
+    #[error("Tried to dial as listener without an active listener.")]
+    NoActiveListenerForDialAsListener,
+
+    /// Error when holepunching for a remote is already in progress
+    #[error("Already punching hole for {0}).")]
+    HolePunchInProgress(SocketAddr),
 }
 
 /// Dialing a remote peer failed.

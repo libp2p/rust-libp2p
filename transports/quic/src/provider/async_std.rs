@@ -19,10 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_std::task::spawn;
-use futures::Future;
+use futures::{future::BoxFuture, Future, FutureExt};
 use std::{
     io,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::GenTransport;
@@ -53,5 +54,9 @@ impl super::Provider for Provider {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<if_watch::IfEvent>> {
         watcher.poll_if_event(cx)
+    }
+
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        async_std::task::sleep(duration).boxed()
     }
 }

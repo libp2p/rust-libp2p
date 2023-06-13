@@ -19,12 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{Config, QuinnConfig};
-use crate::hole_punching::*;
+use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
 use crate::{ConnectError, Connecting, Connection, Error};
 
 use futures::channel::oneshot;
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Either};
 use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
@@ -70,12 +70,12 @@ pub struct GenTransport<P: Provider> {
     support_draft_29: bool,
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
-    /// Hole punching attempts
-    hole_punch_map: HolePunchMap,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, quinn::Endpoint>,
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
+    /// Holepunching attempts
+    hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -86,14 +86,15 @@ impl<P: Provider> GenTransport<P> {
         let quinn_config = config.into();
         Self {
             listeners: SelectAll::new(),
-            hole_punch_map: Default::default(),
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
             waker: None,
             support_draft_29,
+            hole_punch_attempts: Default::default(),
         }
     }
+
     /// Create a new [`quinn::Endpoint`] with the given configs.
     fn new_endpoint(
         endpoint_config: quinn::EndpointConfig,
@@ -145,8 +146,10 @@ impl<P: Provider> GenTransport<P> {
         Ok((socket_addr, version, peer_id))
     }
 
-    fn eligible_listeners(&mut self, socket_addr: &SocketAddr) -> Vec<&mut Listener<P>> {
-        self.listeners
+    /// Pick any listener to use for dialing.
+    fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
+        let mut listeners: Vec<_> = self
+            .listeners
             .iter_mut()
             .filter(|l| {
                 if l.is_closed {
@@ -156,14 +159,24 @@ impl<P: Provider> GenTransport<P> {
                 SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
-            .collect()
+            .collect();
+        if listeners.is_empty() {
+            None
+        } else {
+            // Pick any listener to use for dialing.
+            // We hash the socket address to achieve determinism.
+            let mut hasher = DefaultHasher::new();
+            socket_addr.hash(&mut hasher);
+            let index = hasher.finish() as usize % listeners.len();
+            Some(listeners.swap_remove(index))
+        }
     }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Connection);
     type Error = Error;
-    type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+    type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -182,7 +195,6 @@ impl<P: Provider> Transport for GenTransport<P> {
             listener_id,
             socket_c,
             endpoint,
-            self.hole_punch_map.clone(),
             self.handshake_timeout,
             need_if_watcher,
             version,
@@ -224,10 +236,8 @@ impl<P: Provider> Transport for GenTransport<P> {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, true)?;
 
-        let listeners = self.eligible_listeners(&socket_addr);
-
-        let endpoint = match listeners.len() {
-            0 => {
+        let endpoint = match self.eligible_listener(&socket_addr) {
+            None => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
@@ -251,14 +261,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 };
                 dialer
             }
-            _ => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                listeners[index].endpoint.clone()
-            }
+            Some(listener) => listener.endpoint.clone(),
         };
         let handshake_timeout = self.handshake_timeout;
         let mut client_config = self.quinn_config.client_config.clone();
@@ -284,39 +287,47 @@ impl<P: Provider> Transport for GenTransport<P> {
             self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr.clone()))?;
 
-        let listeners = self.eligible_listeners(&socket_addr);
+        let socket = self
+            .eligible_listener(&socket_addr)
+            .ok_or(TransportError::Other(
+                Error::NoActiveListenerForDialAsListener,
+            ))?
+            .try_clone_socket()
+            .map_err(Self::Error::from)?;
 
-        let socket = match listeners.len() {
-            0 => {
-                return Err(TransportError::MultiaddrNotSupported(addr)); // FIXME return correct error
+        let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
+
+        let (sender, receiver) = oneshot::channel();
+
+        match self.hole_punch_attempts.entry(socket_addr) {
+            Entry::Occupied(mut sender_entry) => {
+                // Stale senders, i.e. from failed hole punches are not removed.
+                // Thus, we can just overwrite a stale sender.
+                if !sender_entry.get().is_canceled() {
+                    return Err(TransportError::Other(Error::HolePunchInProgress(
+                        socket_addr,
+                    )));
+                }
+                sender_entry.insert(sender);
             }
-            _ => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                listeners[index]
-                    .try_clone_socket()
-                    .map_err(Self::Error::from)?
+            Entry::Vacant(entry) => {
+                entry.insert(sender);
             }
         };
 
-        let hole_puncher = HolePuncher::new(socket, socket_addr, self.handshake_timeout)
-            .map_err(|e| TransportError::Other(Error::Io(e)))?;
-
-        let (sender, receiver) = oneshot::channel();
-        let mut hole_punch_map = self.hole_punch_map.lock().unwrap();
-        hole_punch_map.insert((socket_addr, peer_id), sender);
-
-        Ok(Box::pin(async {
-            futures::select! {
-                hole_punched = receiver.fuse() => {
-                    Ok(hole_punched.unwrap())
-                },
-                err = hole_puncher.fuse() => {
-                    Err(err)
+        Ok(Box::pin(async move {
+            futures::pin_mut!(hole_puncher);
+            match futures::future::select(receiver, hole_puncher).await {
+                Either::Left((message, _)) => {
+                    let (inbound_peer_id, connection) = message
+                        .expect("hole punch connection sender is never dropped before receiver")
+                        .await?;
+                    if inbound_peer_id != peer_id {
+                        log::warn!("expected inbound connection from {socket_addr} to resolve to  {peer_id} but got {inbound_peer_id}");
+                    }
+                    Ok((inbound_peer_id, connection))
                 }
+                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
             }
         }))
     }
@@ -325,8 +336,37 @@ impl<P: Provider> Transport for GenTransport<P> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
-            return Poll::Ready(ev);
+        while let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            match ev {
+                TransportEvent::Incoming {
+                    listener_id,
+                    mut upgrade,
+                    local_addr,
+                    send_back_addr,
+                } => {
+                    let socket_addr =
+                        multiaddr_to_socketaddr(&send_back_addr, self.support_draft_29)
+                            .unwrap()
+                            .0;
+
+                    if let Some(sender) = self.hole_punch_attempts.remove(&socket_addr) {
+                        match sender.send(upgrade) {
+                            Ok(()) => continue,
+                            Err(timed_out_holepunch) => {
+                                upgrade = timed_out_holepunch;
+                            }
+                        }
+                    }
+
+                    return Poll::Ready(TransportEvent::Incoming {
+                        listener_id,
+                        upgrade,
+                        local_addr,
+                        send_back_addr,
+                    });
+                }
+                _ => return Poll::Ready(ev),
+            }
         }
 
         self.waker = Some(cx.waker().clone());
@@ -364,9 +404,6 @@ struct Listener<P: Provider> {
     /// None if we are only listening on a single interface.
     if_watcher: Option<P::IfWatcher>,
 
-    /// Hole punching attempts
-    hole_punch_map: HolePunchMap,
-
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
 
@@ -382,7 +419,6 @@ impl<P: Provider> Listener<P> {
         listener_id: ListenerId,
         socket: UdpSocket,
         endpoint: quinn::Endpoint,
-        hole_punch_map: HolePunchMap,
         handshake_timeout: Duration,
         need_if_watcher: bool,
         version: ProtocolVersion,
@@ -406,7 +442,6 @@ impl<P: Provider> Listener<P> {
 
         Ok(Listener {
             endpoint,
-            hole_punch_map,
             socket,
             accept,
             listener_id,
@@ -514,15 +549,8 @@ impl<P: Provider> Stream for Listener<P> {
                     let remote_addr = connecting.remote_address();
                     let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
 
-                    let upgrade = MaybeHolePunchedConnection::new(
-                        self.hole_punch_map.clone(),
-                        remote_addr,
-                        Connecting::new(connecting, self.handshake_timeout),
-                    )
-                    .boxed();
-
                     let event = TransportEvent::Incoming {
-                        upgrade,
+                        upgrade: Connecting::new(connecting, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -620,8 +648,7 @@ fn multiaddr_to_socketaddr(
     for proto in iter {
         match proto {
             Protocol::P2p(id) => {
-                let new_peer_id = PeerId::from_multihash(id).ok()?;
-                peer_id.replace(new_peer_id);
+                peer_id = Some(id);
             }
             _ => return None,
         }

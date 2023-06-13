@@ -112,7 +112,7 @@ libp2p-swarm = { workspace = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 
-multiaddr = { version = "0.17.0" }
+multiaddr = { workspace = true }
 pin-project = "1.0.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
