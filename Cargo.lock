@@ -2305,6 +2305,7 @@ dependencies = [
  "reqwest",
  "rust-embed",
  "serde",
+ "serde_json",
  "thirtyfour",
  "tokio",
  "tower-http 0.4.0",

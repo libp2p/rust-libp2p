@@ -13,7 +13,7 @@ pub(crate) use wasm::{build_transport, init_logger, swarm_builder, Instant, Redi
 type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod native {
+pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
@@ -148,13 +148,14 @@ mod native {
 }
 
 #[cfg(target_arch = "wasm32")]
-mod wasm {
+pub(crate) mod wasm {
     use anyhow::{bail, Result};
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
+    use log::info;
 
-    use crate::{BlpopRequest, Transport};
+    use crate::{BlpopRequest, Report, TestOutcome, Transport};
 
     use super::BoxedTransport;
 
@@ -194,8 +195,8 @@ mod wasm {
     pub(crate) struct RedisClient(String);
 
     impl RedisClient {
-        pub(crate) fn new(redis_addr: &str) -> Result<Self> {
-            Ok(Self(redis_addr.to_owned()))
+        pub(crate) fn new(base_url: &str) -> Result<Self> {
+            Ok(Self(base_url.to_owned()))
         }
 
         pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
@@ -211,5 +212,20 @@ mod wasm {
                 .await?;
             Ok(res)
         }
+    }
+
+    pub(crate) async fn send_test_result(base_url: &str, result: Result<Report>) -> Result<()> {
+        let outcome = match result {
+            Ok(report) => TestOutcome::Success(report),
+            Err(e) => TestOutcome::Failure(e.to_string()),
+        };
+        info!("Sending test outcome: {outcome:?}");
+        reqwest::Client::new()
+            .post(&format!("http://{}/results", base_url))
+            .json(&outcome)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
     }
 }

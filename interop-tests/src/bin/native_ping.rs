@@ -6,7 +6,7 @@ mod config;
 async fn main() -> Result<()> {
     let config = config::Config::from_env()?;
 
-    let result = interop_tests::run_test(
+    let report = interop_tests::run_test(
         &config.transport,
         &config.ip,
         config.is_dialer,
@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    println!("{result}");
+    println!("{}", serde_json::to_string(&report)?);
 
     Ok(())
 }

@@ -1,7 +1,7 @@
 use std::process::Stdio;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use axum::body;
 use axum::http::{header, Uri};
 use axum::response::{Html, IntoResponse, Response};
@@ -10,12 +10,13 @@ use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use redis::{AsyncCommands, Client};
 use thirtyfour::prelude::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use tracing::warn;
+use tracing::{error, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use interop_tests::BlpopRequest;
+use interop_tests::{BlpopRequest, TestOutcome};
 
 mod config;
 
@@ -27,6 +28,13 @@ const BIND_ADDR: &str = "127.0.0.1:8080";
 #[derive(rust_embed::RustEmbed)]
 #[folder = "pkg"]
 struct WasmPackage;
+
+#[derive(Clone)]
+struct TestState {
+    redis_client: Client,
+    config: config::Config,
+    results_tx: mpsc::Sender<TestOutcome>,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -41,29 +49,55 @@ async fn main() -> Result<()> {
     let test_timeout = Duration::from_secs(config.test_timeout);
 
     // create a redis client
-    let client = Client::open(config.redis_addr.as_str()).context("Could not connect to redis")?;
+    let redis_client =
+        Client::open(config.redis_addr.as_str()).context("Could not connect to redis")?;
+    let (results_tx, mut results_rx) = mpsc::channel(1);
+
+    let state = TestState {
+        redis_client,
+        config,
+        results_tx,
+    };
 
     // create a wasm-app service
     let app = Router::new()
         // Redis proxy
         .route("/blpop", post(redis_blpop))
+        // Report tests sattus
+        .route("/results", post(post_results))
         // Wasm ping test trigger
-        .route("/", get(|| async move { serve_index_html(&config).await }))
+        .route("/", get(serve_index_html))
         // Wasm app static files
         .fallback(serve_wasm_pkg)
         // Middleware
         .layer(CorsLayer::very_permissive())
         .layer(TraceLayer::new_for_http())
-        .with_state(client);
+        .with_state(state);
 
     // Run the service in background
     tokio::spawn(axum::Server::bind(&BIND_ADDR.parse()?).serve(app.into_make_service()));
 
-    // Execute the the test with a webdriver
-    run_test(test_timeout).await
+    // Start executing the test in a browser
+    let driver = open_in_browser().await?;
+
+    // Wait for the outcome to be reported
+    let outcome = match tokio::time::timeout(test_timeout, results_rx.recv()).await {
+        Ok(received) => received.unwrap_or(TestOutcome::Failure("Results channel closed".into())),
+        Err(_) => TestOutcome::Failure("Test timed out".into()),
+    };
+
+    // Close the browser after we got the results
+    driver.quit().await?;
+
+    match outcome {
+        TestOutcome::Success(report) => println!("{}", serde_json::to_string(&report)?),
+        TestOutcome::Failure(error) => bail!("Running tests failed: {error}"),
+    }
+
+    Ok(())
 }
 
-async fn run_test(timeout: Duration) -> Result<()> {
+async fn open_in_browser() -> Result<WebDriver> {
     // start a webdriver process
     // currently only the chromedriver is supported as firefox doesn't
     // have support yet for the certhashes
@@ -91,33 +125,17 @@ async fn run_test(timeout: Duration) -> Result<()> {
     let driver = WebDriver::new("http://localhost:45782", caps).await?;
     // go to the wasm test service
     driver.goto(format!("http://{BIND_ADDR}")).await?;
-    // wait for the script to finish and set the result
-    match driver
-        .query(By::Id("result"))
-        .wait(timeout, Duration::from_millis(200))
-        .first()
-        .await
-    {
-        // print the result
-        Ok(span) => {
-            println!("{}", span.text().await?);
-            driver.quit().await?;
-            Ok(())
-        }
-        // or return a timeout error
-        Err(e) => {
-            driver.quit().await?;
-            Err(e).context("Timed out waiting for the test result")
-        }
-    }
+
+    Ok(driver)
 }
 
 /// Redis proxy handler.
 /// `blpop` is currently the only redis client method used in a ping dialer.
 async fn redis_blpop(
-    State(client): State<Client>,
+    state: State<TestState>,
     request: Json<BlpopRequest>,
 ) -> Result<Json<Vec<String>>, StatusCode> {
+    let client = state.0.redis_client;
     let mut conn = client.get_async_connection().await.map_err(|e| {
         warn!("Failed to connect to redis: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
@@ -136,15 +154,26 @@ async fn redis_blpop(
     Ok(Json(res))
 }
 
+/// Receive test results
+async fn post_results(
+    state: State<TestState>,
+    request: Json<TestOutcome>,
+) -> Result<(), StatusCode> {
+    state.0.results_tx.send(request.0).await.map_err(|_| {
+        error!("Failed to send results");
+        StatusCode::INTERNAL_SERVER_ERROR
+    })
+}
+
 /// Serve the main page which loads our javascript
-async fn serve_index_html(config: &config::Config) -> Result<impl IntoResponse, StatusCode> {
+async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, StatusCode> {
     let config::Config {
         transport,
         ip,
         is_dialer,
         test_timeout,
         ..
-    } = config;
+    } = state.0.config;
     Ok(Html(format!(
         r#"
         <!DOCTYPE html>
@@ -157,20 +186,15 @@ async fn serve_index_html(config: &config::Config) -> Result<impl IntoResponse, 
                 import init, {{ run_test_wasm }} from "/interop_tests.js";
 
                 // initialize wasm
-                let res = await init()
-                    // run our entrypoint with params from the env
-                    .then(() => run_test_wasm(
-                        "{transport}",
-                        "{ip}",
-                        {is_dialer},
-                        "{test_timeout}",
-                        "{BIND_ADDR}"
-                    ))
-                    // handle the `Err` variant
-                    .catch(e => `${{e}}`);
-
-                // update the body with the result span
-                document.body.innerHTML = `<span id="result">${{res}}<span>`;
+                await init()
+                // run our entrypoint with params from the env
+                await run_test_wasm(
+                    "{transport}",
+                    "{ip}",
+                    {is_dialer},
+                    "{test_timeout}",
+                    "{BIND_ADDR}"
+                )
             </script>
         </head>
 
