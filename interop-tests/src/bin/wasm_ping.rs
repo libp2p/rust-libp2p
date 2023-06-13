@@ -49,11 +49,9 @@ async fn main() -> Result<()> {
         // Redis proxy
         .route("/blpop", post(redis_blpop))
         // Wasm ping test trigger
-        .route("/", get(serve_index_html))
-        .route("/index.html", get(serve_index_html))
         .route(
-            "/index.js",
-            get(|| async move { serve_index_js(&config, &proxy_addr_clone).await }),
+            "/",
+            get(|| async move { serve_index_html(&config, &proxy_addr_clone).await }),
         )
         // Wasm app static files
         .fallback(serve_wasm_pkg)
@@ -143,43 +141,36 @@ async fn redis_blpop(
 }
 
 /// Serve the main page which loads our javascript
-async fn serve_index_html() -> Result<impl IntoResponse, StatusCode> {
-    let html = r#"
+async fn serve_index_html(
+    config: &config::Config,
+    redis_proxy_addr: &str,
+) -> Result<impl IntoResponse, StatusCode> {
+    let config::Config {
+        transport,
+        ip,
+        is_dialer,
+        test_timeout,
+        ..
+    } = config;
+    Ok(Html(format!(
+        r#"
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8" />
             <title>libp2p ping test</title>
-            <script type="module" src="./index.js"></script>
-        </head>
+            <script type="module"">
+                // import a wasm initialization fn and our test entrypoint
+                import init, {{ run_test_wasm }} from "/interop_tests.js";
 
-        <body></body>
-        </html>
-    "#;
-
-    Ok(Html(html))
-}
-
-/// Serve a js script which runs the main test function
-async fn serve_index_js(
-    config: &config::Config,
-    redis_proxy_addr: &str,
-) -> Result<impl IntoResponse, StatusCode> {
-    // create the script
-    let script = format!(
-        r#"
-            // import a wasm initialization fn and our test entrypoint
-            import init, {{ run_test_wasm }} from "/interop_tests.js";
-
-            const runWasm = async () => {{
                 // initialize wasm
                 let res = await init()
                     // run our entrypoint with params from the env
                     .then(() => run_test_wasm(
-                        "{}",
-                        "{}",
-                        {},
-                        "{}",
+                        "{transport}",
+                        "{ip}",
+                        {is_dialer},
+                        "{test_timeout}",
                         "{redis_proxy_addr}"
                     ))
                     // handle the `Err` variant
@@ -187,14 +178,13 @@ async fn serve_index_js(
 
                 // update the body with the result span
                 document.body.innerHTML = `<span id="result">${{res}}<span>`;
-            }};
+            </script>
+        </head>
 
-            runWasm();
-        "#,
-        config.transport, config.ip, config.is_dialer, config.test_timeout,
-    );
-
-    Ok(([(header::CONTENT_TYPE, "application/javascript")], script))
+        <body></body>
+        </html>
+    "#
+    )))
 }
 
 async fn serve_wasm_pkg(uri: Uri) -> Result<Response, StatusCode> {
