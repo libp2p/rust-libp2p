@@ -161,10 +161,6 @@ async fn serve_index_html() -> Result<impl IntoResponse, StatusCode> {
 /// Serve a js script which runs the main test function
 async fn serve_index_js(redis_proxy_addr: &str) -> Result<impl IntoResponse, StatusCode> {
     // get environment variables to parametrize the script
-    let ip = env::var("ip").map_err(|e| {
-        error!("Error getting ip env var: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
     let transport = env::var("transport").map_err(|e| {
         error!("Error getting transport env var: {e}");
         StatusCode::INTERNAL_SERVER_ERROR
@@ -182,15 +178,14 @@ async fn serve_index_js(redis_proxy_addr: &str) -> Result<impl IntoResponse, Sta
     let script = format!(
         r#"
             // import a wasm initialization fn and our test entrypoint
-            import init, {{ run_test_wasm }} from "/interop_tests.js";
+            import init, {{ run_test }} from "/interop_tests.js";
 
             const runWasm = async () => {{
                 // initialize wasm
                 let res = await init()
                     // run our entrypoint with params from the env
-                    .then(() => run_test_wasm(
+                    .then(() => run_test(
                         "{transport}",
-                        "{ip}",
                         {is_dialer},
                         "{test_timeout}",
                         "{redis_proxy_addr}"
