@@ -1730,6 +1730,14 @@ impl ConnectionDenied {
 
         Ok(*inner)
     }
+
+    /// Attempt to downcast to a particular reason for why the connection was denied.
+    pub fn downcast_ref<E>(&self) -> Option<&E>
+    where
+        E: error::Error + Send + Sync + 'static,
+    {
+        self.inner.downcast_ref::<E>()
+    }
 }
 
 impl fmt::Display for ConnectionDenied {
