@@ -188,7 +188,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
-        let need_if_watcher = socket_addr.ip().is_unspecified();
         let socket = UdpSocket::bind(socket_addr).map_err(Self::Error::from)?;
         let socket_c = socket.try_clone().map_err(Self::Error::from)?;
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
