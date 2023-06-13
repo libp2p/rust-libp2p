@@ -120,9 +120,6 @@ pub async fn run_test_wasm(
     test_timeout_seconds: u64,
     redis_proxy_addr: &str,
 ) -> Result<String, JsValue> {
-    console_error_panic_hook::set_once();
-    wasm_logger::init(wasm_logger::Config::default());
-
     let test_timeout = Duration::from_secs(test_timeout_seconds);
     let transport = transport
         .parse()

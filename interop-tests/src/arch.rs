@@ -161,6 +161,7 @@ mod wasm {
     pub(crate) type Instant = wasm_timer::Instant;
 
     pub(crate) fn init_logger() {
+        console_error_panic_hook::set_once();
         wasm_logger::init(wasm_logger::Config::default());
     }
 
