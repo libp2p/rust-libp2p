@@ -256,12 +256,11 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let res = FramedRead::new(io, RendezvousCodec::default())
-            .next()
-            .await
-            .ok_or(Err(io::ErrorKind::InvalidInput.into()))?;
+        if let Some(result) = FramedRead::new(io, RendezvousCodec::default()).next().await {
+            return Ok(result?);
+        }
 
-        Ok(res?)
+        Err(io::ErrorKind::InvalidInput.into())
     }
 
     async fn read_response<T>(

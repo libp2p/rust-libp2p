@@ -93,12 +93,12 @@ impl Behaviour {
 
         match PeerRecord::new(&self.keypair, external_addresses) {
             Ok(peer_record) => {
-                self.inner.send_request(
+                let req_id = self.inner.send_request(
                     &rendezvous_node,
                     Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
                 );
                 self.waiting_for_register
-                    .insert(req_id, (rendezvous_node, namespace))
+                    .insert(req_id, (rendezvous_node, namespace));
             }
             Err(signing_error) => {
                 self.error_events.push_back(Event::RegisterFailed(
@@ -241,23 +241,7 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(ToSwarm::GenerateEvent(event));
         }
 
-        let poll_res = self.inner.poll(cx, params);
-
-        if let Poll::Ready(ToSwarm::GenerateEvent(event)) = &poll_res {
-            if let libp2p_request_response::Event::Message {
-                peer: _,
-                message: libp2p_request_response::Message::Request { .. },
-            } = event
-            {
-                return Poll::Pending;
-            }
-
-            if let libp2p_request_response::Event::InboundFailure { .. } = event {
-                return Poll::Pending;
-            };
-        }
-
-        let result = poll_res.map(|to_swarm| {
+        let result = self.inner.poll(cx, params).map(|to_swarm| {
             to_swarm.map_out(|event| match event {
                 libp2p_request_response::Event::Message {
                     peer: _,
