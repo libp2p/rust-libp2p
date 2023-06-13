@@ -159,15 +159,17 @@ impl<P: Provider> GenTransport<P> {
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
             .collect();
-        if listeners.is_empty() {
-            None
-        } else {
-            // Pick any listener to use for dialing.
-            // We hash the socket address to achieve determinism.
-            let mut hasher = DefaultHasher::new();
-            socket_addr.hash(&mut hasher);
-            let index = hasher.finish() as usize % listeners.len();
-            Some(listeners.swap_remove(index))
+        match listeners.len() {
+            0 => None,
+            1 => listeners.pop(),
+            _ => {
+                // Pick any listener to use for dialing.
+                // We hash the socket address to achieve determinism.
+                let mut hasher = DefaultHasher::new();
+                socket_addr.hash(&mut hasher);
+                let index = hasher.finish() as usize % listeners.len();
+                Some(listeners.swap_remove(index))
+            }
         }
     }
 }
