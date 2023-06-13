@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::Message::*;
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
+use crate::codec::{
+    Codec, Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl,
+};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
@@ -237,56 +239,93 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.error_events.pop_front() {
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
-        }
+        use libp2p_request_response as req_res;
 
-        let result = self.inner.poll(cx, params).map(|to_swarm| {
-            to_swarm.map_out(|event| match event {
-                libp2p_request_response::Event::Message {
-                    peer: _,
+        loop {
+            if let Some(event) = self.error_events.pop_front() {
+                return Poll::Ready(ToSwarm::GenerateEvent(event));
+            }
+
+            match self.inner.poll(cx, params) {
+                Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
-                        libp2p_request_response::Message::Response {
+                        req_res::Message::Response {
                             request_id,
                             response,
                         },
-                } => self.handle_response(&request_id, response),
-                libp2p_request_response::Event::OutboundFailure {
-                    peer: _,
-                    request_id,
-                    error: _,
-                } => {
-                    let (rendezvous_node, namespace) = self
-                        .waiting_for_register
-                        .remove(&request_id)
-                        .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
-                    Event::RegisterFailed(RegisterError::Remote {
-                        rendezvous_node,
-                        namespace,
-                        error: ErrorCode::Unavailable,
-                    })
+                    ..
+                })) => {
+                    let event = self.handle_response(&request_id, response);
+
+                    return Poll::Ready(ToSwarm::GenerateEvent(event));
                 }
-                libp2p_request_response::Event::InboundFailure { .. } | libp2p_request_response::Event::ResponseSent { .. } | libp2p_request_response::Event::Message {
-                    peer: _,
-                    message: libp2p_request_response::Message::Request { .. },
-                } => {
+                Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::OutboundFailure {
+                    request_id,
+                    ..
+                })) => {
+                    if let Some((rendezvous_node, namespace)) =
+                        self.waiting_for_register.remove(&request_id)
+                    {
+                        return Poll::Ready(ToSwarm::GenerateEvent(Event::RegisterFailed(
+                            RegisterError::Remote {
+                                rendezvous_node,
+                                namespace,
+                                error: ErrorCode::Unavailable,
+                            },
+                        )));
+                    };
+
+                    if let Some((rendezvous_node, namespace)) =
+                        self.waiting_for_discovery.remove(&request_id)
+                    {
+                        return Poll::Ready(ToSwarm::GenerateEvent(Event::DiscoverFailed {
+                            rendezvous_node,
+                            namespace,
+                            error: ErrorCode::Unavailable,
+                        }));
+                    };
+
+                    continue; // not a request we care about
+                }
+                Poll::Ready(ToSwarm::GenerateEvent(
+                    req_res::Event::InboundFailure { .. }
+                    | req_res::Event::ResponseSent { .. }
+                    | req_res::Event::Message {
+                        message: req_res::Message::Request { .. },
+                        ..
+                    },
+                )) => {
                     unreachable!("rendezvous clients never receive requests")
                 }
-            })
-        });
+                Poll::Ready(
+                    other @ (ToSwarm::ExternalAddrConfirmed(_)
+                    | ToSwarm::ExternalAddrExpired(_)
+                    | ToSwarm::NewExternalAddrCandidate(_)
+                    | ToSwarm::NotifyHandler { .. }
+                    | ToSwarm::Dial { .. }
+                    | ToSwarm::CloseConnection { .. }
+                    | ToSwarm::ListenOn { .. }
+                    | ToSwarm::RemoveListener { .. }),
+                ) => {
+                    let new_to_swarm =
+                        other.map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
-        if result.is_pending() {
-            if let Some(expired_registration) =
-                futures::ready!(self.expiring_registrations.poll_next_unpin(cx))
+                    return Poll::Ready(new_to_swarm);
+                }
+                Poll::Pending => {}
+            }
+
+            if let Poll::Ready(Some(expired_registration)) =
+                self.expiring_registrations.poll_next_unpin(cx)
             {
                 self.discovered_peers.remove(&expired_registration);
                 return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired {
                     peer: expired_registration.0,
                 }));
             }
-        }
 
-        result
+            return Poll::Pending;
+        }
     }
 
     fn handle_pending_outbound_connection(
