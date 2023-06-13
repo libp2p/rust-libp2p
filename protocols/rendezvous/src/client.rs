@@ -36,47 +36,6 @@ use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-#[derive(Debug, thiserror::Error)]
-pub enum RegisterError {
-    #[error("We don't know about any externally reachable addresses of ours")]
-    NoExternalAddresses,
-    #[error("Failed to make a new PeerRecord")]
-    FailedToMakeRecord(#[from] SigningError),
-    #[error("Failed to register with Rendezvous node")]
-    Remote {
-        rendezvous_node: PeerId,
-        namespace: Namespace,
-        error: ErrorCode,
-    },
-}
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum Event {
-    /// We successfully discovered other nodes with using the contained rendezvous node.
-    Discovered {
-        rendezvous_node: PeerId,
-        registrations: Vec<Registration>,
-        cookie: Cookie,
-    },
-    /// We failed to discover other nodes on the contained rendezvous node.
-    DiscoverFailed {
-        rendezvous_node: PeerId,
-        namespace: Option<Namespace>,
-        error: ErrorCode,
-    },
-    /// We successfully registered with the contained rendezvous node.
-    Registered {
-        rendezvous_node: PeerId,
-        ttl: Ttl,
-        namespace: Namespace,
-    },
-    /// We failed to register with the contained rendezvous node.
-    RegisterFailed(RegisterError),
-    /// The connection details we learned from this node expired.
-    Expired { peer: PeerId },
-}
-
 pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
@@ -132,24 +91,21 @@ impl Behaviour {
             return;
         }
 
-        let opt_req_id = match PeerRecord::new(&self.keypair, external_addresses) {
-            Ok(peer_record) => Some(self.inner.send_request(
-                &rendezvous_node,
-                Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
-            )),
+        match PeerRecord::new(&self.keypair, external_addresses) {
+            Ok(peer_record) => {
+                self.inner.send_request(
+                    &rendezvous_node,
+                    Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
+                );
+                self.waiting_for_register
+                    .insert(req_id, (rendezvous_node, namespace))
+            }
             Err(signing_error) => {
                 self.error_events.push_back(Event::RegisterFailed(
                     RegisterError::FailedToMakeRecord(signing_error),
                 ));
-
-                None
             }
         };
-
-        if let Some(req_id) = opt_req_id {
-            self.waiting_for_register
-                .insert(req_id, (rendezvous_node, namespace));
-        }
     }
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
@@ -184,6 +140,47 @@ impl Behaviour {
         self.waiting_for_discovery
             .insert(req_id, (rendezvous_node, namespace));
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RegisterError {
+    #[error("We don't know about any externally reachable addresses of ours")]
+    NoExternalAddresses,
+    #[error("Failed to make a new PeerRecord")]
+    FailedToMakeRecord(#[from] SigningError),
+    #[error("Failed to register with Rendezvous node")]
+    Remote {
+        rendezvous_node: PeerId,
+        namespace: Namespace,
+        error: ErrorCode,
+    },
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum Event {
+    /// We successfully discovered other nodes with using the contained rendezvous node.
+    Discovered {
+        rendezvous_node: PeerId,
+        registrations: Vec<Registration>,
+        cookie: Cookie,
+    },
+    /// We failed to discover other nodes on the contained rendezvous node.
+    DiscoverFailed {
+        rendezvous_node: PeerId,
+        namespace: Option<Namespace>,
+        error: ErrorCode,
+    },
+    /// We successfully registered with the contained rendezvous node.
+    Registered {
+        rendezvous_node: PeerId,
+        ttl: Ttl,
+        namespace: Namespace,
+    },
+    /// We failed to register with the contained rendezvous node.
+    RegisterFailed(RegisterError),
+    /// The connection details we learned from this node expired.
+    Expired { peer: PeerId },
 }
 
 impl NetworkBehaviour for Behaviour {
