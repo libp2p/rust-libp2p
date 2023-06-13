@@ -2,7 +2,7 @@ use std::env;
 use std::process::Stdio;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use axum::http::header;
 use axum::response::{Html, IntoResponse};
 use axum::routing::get;
@@ -76,7 +76,7 @@ async fn run_test(proxy_addr: &str, timeout: Duration) -> Result<()> {
     let driver_out = driver
         .stdout
         .take()
-        .ok_or_else(|| anyhow!("No stdout found for webdriver"))?;
+        .context("No stdout found for webdriver")?;
     // wait for the 'ready' message
     let mut reader = BufReader::new(driver_out).lines();
     while let Some(line) = reader.next_line().await? {
