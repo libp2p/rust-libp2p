@@ -266,6 +266,9 @@ impl NetworkBehaviour for Behaviour {
                         error: ErrorCode::Unavailable,
                     })
                 }
+                // By specification, a client able only send a request (get a response)
+                // and can't receive any inbound request.
+                // That is why the next cases should be considered as unreachable.
                 libp2p_request_response::Event::InboundFailure { .. } => {
                     unreachable!()
                 }
