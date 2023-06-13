@@ -213,7 +213,7 @@ pub(crate) struct RendezvousCodec {
 impl Default for RendezvousCodec {
     fn default() -> Self {
         Self {
-            inner: quick_protobuf_codec::Codec::new(MAX_MESSAGE_LEN_BYTES), // 1MB
+            inner: quick_protobuf_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
         }
     }
 }
