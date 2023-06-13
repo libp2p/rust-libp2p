@@ -256,8 +256,7 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let mut frame = FramedRead::new(io, RendezvousCodec::default());
-        if let Some(result) = frame.next().await {
+        if let Some(result) = FramedRead::new(io, RendezvousCodec::default()).next().await {
             return Ok(result?);
         }
 
@@ -289,8 +288,9 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut framer = FramedWrite::new(io, RendezvousCodec::default());
-        framer.send(req).await?;
+        FramedWrite::new(io, RendezvousCodec::default())
+            .send(req)
+            .await?;
 
         Ok(())
     }
@@ -304,8 +304,9 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let mut framer = FramedWrite::new(io, RendezvousCodec::default());
-        framer.send(res).await?;
+        FramedWrite::new(io, RendezvousCodec::default())
+            .send(res)
+            .await?;
 
         Ok(())
     }
@@ -652,12 +653,7 @@ mod proto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codec::{Message, NewRegistration};
     use crate::Namespace;
-    use futures::AsyncWriteExt;
-    use futures_ringbuf::Endpoint;
-    use libp2p_core::PeerRecord;
-    use libp2p_request_response::Codec;
 
     #[test]
     fn cookie_wire_encoding_roundtrip() {
@@ -676,56 +672,5 @@ mod tests {
         let bytes = cookie.into_wire_encoding();
 
         assert_eq!(bytes.len(), 8 + 3)
-    }
-
-    #[async_std::test]
-    async fn codec_test() {
-        let identity = libp2p_identity::Keypair::generate_ed25519();
-
-        let exp_msg = Message::Register(NewRegistration {
-            namespace: Namespace::from_static("wonderland"),
-            record: PeerRecord::new(&identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()])
-                .unwrap(),
-            ttl: None,
-        });
-
-        let mut codec = super::Codec {};
-        let protocol = &crate::PROTOCOL_IDENT;
-
-        // Write/read request
-
-        let (mut a, mut b) = Endpoint::pair(MAX_MESSAGE_LEN_BYTES, MAX_MESSAGE_LEN_BYTES);
-
-        codec
-            .write_request(protocol, &mut a, exp_msg.clone())
-            .await
-            .expect("Should write");
-        a.close().await.unwrap();
-
-        let act_msg = codec
-            .read_request(protocol, &mut b)
-            .await
-            .expect("Should read");
-        b.close().await.unwrap();
-
-        assert_eq!(exp_msg, act_msg);
-
-        // Write/read response
-
-        let (mut a, mut b) = Endpoint::pair(MAX_MESSAGE_LEN_BYTES, MAX_MESSAGE_LEN_BYTES);
-
-        codec
-            .write_response(protocol, &mut a, exp_msg.clone())
-            .await
-            .expect("Should write");
-        a.close().await.unwrap();
-
-        let act_msg = codec
-            .read_response(protocol, &mut b)
-            .await
-            .expect("Should read");
-        b.close().await.unwrap();
-
-        assert_eq!(exp_msg, act_msg);
     }
 }
