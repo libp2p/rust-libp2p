@@ -120,12 +120,12 @@ pub async fn run_test_wasm(
     transport: &str,
     ip: &str,
     is_dialer: bool,
-    test_timeout_seconds: u64,
+    test_timeout: u64,
     redis_proxy_addr: &str,
-) -> Result<String, JsValue> {
+) -> Result<String, JsError> {
     run_test(transport, ip, is_dialer, test_timeout, redis_proxy_addr)
         .await
-        .map_err(|e| format!("Running tests failed: {e}"))
+        .map_err(|e| JsError::new(&format!("{e:#}")))
 }
 
 /// A request to redis proxy that will pop the value from the list
