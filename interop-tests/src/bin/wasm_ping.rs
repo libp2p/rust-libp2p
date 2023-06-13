@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use axum::http::header;
-use axum::response::IntoResponse;
+use axum::response::{Html, IntoResponse};
 use axum::routing::get;
 use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use redis::{AsyncCommands, Client};
@@ -151,7 +151,7 @@ async fn serve_index_html() -> Result<impl IntoResponse, StatusCode> {
         </html>
     "#;
 
-    Ok(([(header::CONTENT_TYPE, "text/html")], html))
+    Ok(Html(html))
 }
 
 /// Serve a js script which runs the main test function
