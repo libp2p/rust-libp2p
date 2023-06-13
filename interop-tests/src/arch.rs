@@ -34,9 +34,9 @@ mod native {
 
     use super::BoxedTransport;
 
-    pub type Instant = std::time::Instant;
+    pub(crate) type Instant = std::time::Instant;
 
-    pub fn init_logger() {
+    pub(crate) fn init_logger() {
         env_logger::Builder::from_env(Env::default().default_filter_or("info"))
             .target(Target::Stdout)
             .init();
@@ -49,7 +49,7 @@ mod native {
         })
     }
 
-    pub fn build_transport(
+    pub(crate) fn build_transport(
         local_key: Keypair,
         ip: &str,
         transport: Transport,
@@ -117,7 +117,7 @@ mod native {
         Ok((transport, addr))
     }
 
-    pub fn swarm_builder<TBehaviour: NetworkBehaviour>(
+    pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
         transport: BoxedTransport,
         behaviour: TBehaviour,
         peer_id: PeerId,
@@ -125,21 +125,21 @@ mod native {
         SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
     }
 
-    pub struct RedisClient(redis::Client);
+    pub(crate) struct RedisClient(redis::Client);
 
     impl RedisClient {
-        pub fn new(redis_addr: &str) -> Result<Self> {
+        pub(crate) fn new(redis_addr: &str) -> Result<Self> {
             Ok(Self(
                 redis::Client::open(redis_addr).context("Could not connect to redis")?,
             ))
         }
 
-        pub async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
+        pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
             let mut conn = self.0.get_async_connection().await?;
             Ok(conn.blpop(key, timeout as usize).await?)
         }
 
-        pub async fn rpush(&self, key: &str, value: String) -> Result<()> {
+        pub(crate) async fn rpush(&self, key: &str, value: String) -> Result<()> {
             let mut conn = self.0.get_async_connection().await?;
             conn.rpush(key, value).await?;
             Ok(())
@@ -158,13 +158,13 @@ mod wasm {
 
     use super::BoxedTransport;
 
-    pub type Instant = wasm_timer::Instant;
+    pub(crate) type Instant = wasm_timer::Instant;
 
-    pub fn init_logger() {
+    pub(crate) fn init_logger() {
         wasm_logger::init(wasm_logger::Config::default());
     }
 
-    pub fn build_transport(
+    pub(crate) fn build_transport(
         local_key: Keypair,
         ip: &str,
         transport: Transport,
@@ -182,7 +182,7 @@ mod wasm {
         }
     }
 
-    pub fn swarm_builder<TBehaviour: NetworkBehaviour>(
+    pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
         transport: BoxedTransport,
         behaviour: TBehaviour,
         peer_id: PeerId,
@@ -190,14 +190,14 @@ mod wasm {
         SwarmBuilder::with_wasm_executor(transport, behaviour, peer_id)
     }
 
-    pub struct RedisClient(String);
+    pub(crate) struct RedisClient(String);
 
     impl RedisClient {
-        pub fn new(redis_proxy_addr: &str) -> Result<Self> {
+        pub(crate) fn new(redis_proxy_addr: &str) -> Result<Self> {
             Ok(Self(redis_proxy_addr.to_owned()))
         }
 
-        pub async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
+        pub(crate) async fn blpop(&self, key: &str, timeout: u64) -> Result<Vec<String>> {
             let res = reqwest::Client::new()
                 .post(&format!("http://{}/blpop", self.0))
                 .json(&BlpopRequest {
