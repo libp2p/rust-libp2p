@@ -26,7 +26,7 @@ libp2p-mplex = { path = "../muxers/mplex" }
 mime_guess = "2.0"
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 rust-embed = "6.7"
-thirtyfour = "0.31"
+thirtyfour = "0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
 tokio = { version = "1.28.2", features = ["full"] }
 tower-http = { version = "0.4", features = ["cors", "fs", "trace"] }
 tracing = "0.1"
