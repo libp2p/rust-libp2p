@@ -1190,6 +1190,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
+ "libp2p-quic",
  "log",
 ]
 
@@ -4113,6 +4114,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "libp2p-quic",
 ]
 
 [[package]]

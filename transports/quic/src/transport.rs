@@ -19,11 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
+use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
 use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Either};
 use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
@@ -73,6 +74,8 @@ pub struct GenTransport<P: Provider> {
     dialer: HashMap<SocketFamily, Dialer>,
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
+    /// Holepunching attempts
+    hole_punch_attempts: HashMap<SocketAddr, oneshot::Sender<Connecting>>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -88,6 +91,49 @@ impl<P: Provider> GenTransport<P> {
             dialer: HashMap::new(),
             waker: None,
             support_draft_29,
+            hole_punch_attempts: Default::default(),
+        }
+    }
+
+    fn remote_multiaddr_to_socketaddr(
+        &self,
+        addr: Multiaddr,
+    ) -> Result<
+        (SocketAddr, ProtocolVersion, Option<PeerId>),
+        TransportError<<Self as Transport>::Error>,
+    > {
+        let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+        Ok((socket_addr, version, peer_id))
+    }
+
+    fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
+        let mut listeners: Vec<_> = self
+            .listeners
+            .iter_mut()
+            .filter(|l| {
+                if l.is_closed {
+                    return false;
+                }
+                let listen_addr = l.endpoint_channel.socket_addr();
+                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect();
+        match listeners.len() {
+            0 => None,
+            1 => listeners.pop(),
+            _ => {
+                // Pick any listener to use for dialing.
+                // We hash the socket address to achieve determinism.
+                let mut hasher = DefaultHasher::new();
+                socket_addr.hash(&mut hasher);
+                let index = hasher.finish() as usize % listeners.len();
+                Some(listeners.swap_remove(index))
+            }
         }
     }
 }
@@ -103,8 +149,9 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version, _peer_id) =
+            multiaddr_to_socketaddr(&addr, self.support_draft_29)
+                .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener = Listener::new(
             listener_id,
             socket_addr,
@@ -147,27 +194,12 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        }
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr)?;
 
-        let mut listeners = self
-            .listeners
-            .iter_mut()
-            .filter(|l| {
-                if l.is_closed {
-                    return false;
-                }
-                let listen_addr = l.endpoint_channel.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
-            })
-            .collect::<Vec<_>>();
+        let handshake_timeout = self.handshake_timeout;
 
-        let dialer_state = match listeners.len() {
-            0 => {
+        let dialer_state = match self.eligible_listener(&socket_addr) {
+            None => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
@@ -181,28 +213,61 @@ impl<P: Provider> Transport for GenTransport<P> {
                 };
                 &mut dialer.state
             }
-            1 => &mut listeners[0].dialer_state,
-            _ => {
-                // Pick any listener to use for dialing.
-                // We hash the socket address to achieve determinism.
-                let mut hasher = DefaultHasher::new();
-                socket_addr.hash(&mut hasher);
-                let index = hasher.finish() as usize % listeners.len();
-                &mut listeners[index].dialer_state
-            }
+            Some(listener) => &mut listener.dialer_state,
         };
-        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
+        Ok(dialer_state.new_dial(socket_addr, handshake_timeout, version))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
-        // `addr`. See DCUtR specification below.
-        //
-        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-        Err(TransportError::MultiaddrNotSupported(addr))
+        let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
+        let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
+
+        let endpoint_channel = self
+            .eligible_listener(&socket_addr)
+            .ok_or(TransportError::Other(
+                Error::NoActiveListenerForDialAsListener,
+            ))?
+            .endpoint_channel
+            .clone();
+
+        let hole_puncher = hole_puncher::<P>(endpoint_channel, socket_addr, self.handshake_timeout);
+
+        let (sender, receiver) = oneshot::channel();
+
+        match self.hole_punch_attempts.entry(socket_addr) {
+            Entry::Occupied(mut sender_entry) => {
+                // Stale senders, i.e. from failed hole punches are not removed.
+                // Thus, we can just overwrite a stale sender.
+                if !sender_entry.get().is_canceled() {
+                    return Err(TransportError::Other(Error::HolePunchInProgress(
+                        socket_addr,
+                    )));
+                }
+                sender_entry.insert(sender);
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(sender);
+            }
+        };
+
+        Ok(Box::pin(async move {
+            futures::pin_mut!(hole_puncher);
+            match futures::future::select(receiver, hole_puncher).await {
+                Either::Left((message, _)) => {
+                    let (inbound_peer_id, connection) = message
+                        .expect("hole punch connection sender is never dropped before receiver")
+                        .await?;
+                    if inbound_peer_id != peer_id {
+                        log::warn!("expected inbound connection from {socket_addr} to resolve to  {peer_id} but got {inbound_peer_id}");
+                    }
+                    Ok((inbound_peer_id, connection))
+                }
+                Either::Right((hole_punch_err, _)) => Err(hole_punch_err),
+            }
+        }))
     }
 
     fn poll(
@@ -222,8 +287,37 @@ impl<P: Provider> Transport for GenTransport<P> {
             self.dialer.remove(&key);
         }
 
-        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
-            return Poll::Ready(ev);
+        while let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            match ev {
+                TransportEvent::Incoming {
+                    listener_id,
+                    mut upgrade,
+                    local_addr,
+                    send_back_addr,
+                } => {
+                    let socket_addr =
+                        multiaddr_to_socketaddr(&send_back_addr, self.support_draft_29)
+                            .unwrap()
+                            .0;
+
+                    if let Some(sender) = self.hole_punch_attempts.remove(&socket_addr) {
+                        match sender.send(upgrade) {
+                            Ok(()) => continue,
+                            Err(timed_out_holepunch) => {
+                                upgrade = timed_out_holepunch;
+                            }
+                        }
+                    }
+
+                    return Poll::Ready(TransportEvent::Incoming {
+                        listener_id,
+                        upgrade,
+                        local_addr,
+                        send_back_addr,
+                    });
+                }
+                _ => return Poll::Ready(ev),
+            }
         }
 
         self.waker = Some(cx.waker().clone());
@@ -594,15 +688,18 @@ fn ip_to_listenaddr(
 fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
     support_draft_29: bool,
-) -> Option<(SocketAddr, ProtocolVersion)> {
+) -> Option<(SocketAddr, ProtocolVersion, Option<PeerId>)> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
+    let mut peer_id = None;
     for proto in iter {
         match proto {
-            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(id) => {
+                peer_id = Some(id);
+            }
             _ => return None,
         }
     }
@@ -614,10 +711,10 @@ fn multiaddr_to_socketaddr(
 
     match (proto1, proto2) {
         (Protocol::Ip4(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         (Protocol::Ip6(ip), Protocol::Udp(port)) => {
-            Some((SocketAddr::new(ip.into(), port), version))
+            Some((SocketAddr::new(ip.into(), port), version, peer_id))
         }
         _ => None,
     }
@@ -691,7 +788,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -703,7 +801,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -715,7 +814,7 @@ mod test {
             Some((SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 55148,
-            ), ProtocolVersion::V1))
+            ), ProtocolVersion::V1, Some("12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ".parse().unwrap())))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -724,7 +823,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
         assert_eq!(
@@ -741,7 +841,8 @@ mod test {
                     )),
                     8080,
                 ),
-                ProtocolVersion::V1
+                ProtocolVersion::V1,
+                None
             ))
         );
 
@@ -757,7 +858,8 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
-                ProtocolVersion::Draft29
+                ProtocolVersion::Draft29,
+                None
             ))
         );
     }
