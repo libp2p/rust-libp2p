@@ -8,35 +8,24 @@ defaults:
         {{ body | get_section("## Description", "") }}
         
         Pull-Request: #{{ number }}.
-        
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
-
         {% set unique_authors = {} %}
         {% for commit in commits %}
           {% set should_add_coauthor = true %}
-        
-          {# Merge commits should not add attribution #}
           {% if commit.parents|length > 1 %}
-            {% set should_add_coauthor = false %}
+            {% set should_add_coauthor = false %} {# Merge commits should not add attribution #}
           {% endif %}
-        
-          {# The original author will already be attributed by GitHub #}
           {% if commit.author == author %}
-            {% set should_add_coauthor = false %}
+            {% set should_add_coauthor = false %} {# The original author will already be attributed by GitHub #}
           {% endif %}
-        
-          {# Only attribute each author once #}
           {% if unique_authors.get(commit.email_author) %}
-            {% set should_add_coauthor = false %}
+            {% set should_add_coauthor = false %} {# Only attribute each author once #}
           {% endif %}
-        
           {% if should_add_coauthor %}
+            {% set _ = unique_authors.update({commit.email_author: true}) %}
             Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
           {% endif %}
-        
-          {% set _ = unique_authors.update({commit.email_author: true}) %}
         {% endfor %}
-        
         {# GitHub requires that the `Co-authored-by` lines are AT THE VERY END of a commit, hence nothing must come after this. #}
 
 pull_request_rules:
