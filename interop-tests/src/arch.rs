@@ -4,11 +4,11 @@ use libp2p::PeerId;
 
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{build_transport, init_logger, swarm_builder, Instant, RedisClient};
+pub(crate) use native::{build_transport, init_logger, sleep, swarm_builder, Instant, RedisClient};
 
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
-pub(crate) use wasm::{build_transport, init_logger, swarm_builder, Instant, RedisClient};
+pub(crate) use wasm::{build_transport, init_logger, sleep, swarm_builder, Instant, RedisClient};
 
 type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
@@ -19,6 +19,8 @@ pub(crate) mod native {
     use anyhow::{bail, Context, Result};
     use either::Either;
     use env_logger::{Env, Target};
+    use futures::future::BoxFuture;
+    use futures::FutureExt;
     use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
@@ -40,6 +42,10 @@ pub(crate) mod native {
         env_logger::Builder::from_env(Env::default().default_filter_or("info"))
             .target(Target::Stdout)
             .init();
+    }
+
+    pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        tokio::time::sleep(duration).boxed()
     }
 
     fn muxer_protocol_from_env() -> Result<Either<yamux::Config, mplex::MplexConfig>> {
@@ -150,9 +156,11 @@ pub(crate) mod native {
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm {
     use anyhow::{bail, Result};
+    use futures::future::{BoxFuture, FutureExt};
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
+    use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
 
@@ -163,6 +171,10 @@ pub(crate) mod wasm {
     pub(crate) fn init_logger() {
         console_error_panic_hook::set_once();
         wasm_logger::init(wasm_logger::Config::default());
+    }
+
+    pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        futures_timer::Delay::new(duration).boxed()
     }
 
     pub(crate) fn build_transport(
@@ -210,6 +222,10 @@ pub(crate) mod wasm {
                 .json()
                 .await?;
             Ok(res)
+        }
+
+        pub(crate) async fn rpush(&self, _: &str, _: String) -> Result<()> {
+            bail!("unimplemented")
         }
     }
 }

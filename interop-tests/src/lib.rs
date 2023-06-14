@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, PeerId};
 #[cfg(target_arch = "wasm32")]
@@ -41,14 +41,13 @@ pub async fn run_test(
     .build();
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
-    #[cfg(not(target_arch = "wasm32"))]
-    let id = {
-        log::info!(
-            "Test instance, listening for incoming connections on: {:?}.",
-            local_addr
-        );
-        swarm.listen_on(local_addr.parse()?)?
-    };
+
+    let mut maybe_id = None;
+
+    // See https://github.com/libp2p/rust-libp2p/issues/4071.
+    if transport == Transport::WebRtcDirect {
+        maybe_id = Some(swarm.listen_on(local_addr.parse()?)?);
+    }
 
     // Run a ping interop test. Based on `is_dialer`, either dial the address
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
@@ -84,10 +83,19 @@ pub async fn run_test(
                 ping_rtt_millis: rtt,
             })
         }
-        #[cfg(target_arch = "wasm32")]
-        false => bail!("Cannot run as listener in browser, please change is_dialer to true"),
-        #[cfg(not(target_arch = "wasm32"))]
         false => {
+            // Listen if we haven't done so already.
+            // This is a hack until https://github.com/libp2p/rust-libp2p/issues/4071 is fixed at which point we can do this unconditionally here.
+            let id = match maybe_id {
+                None => swarm.listen_on(local_addr.parse()?)?,
+                Some(id) => id,
+            };
+
+            log::info!(
+                "Test instance, listening for incoming connections on: {:?}.",
+                local_addr
+            );
+
             loop {
                 if let Some(SwarmEvent::NewListenAddr {
                     listener_id,
@@ -105,13 +113,19 @@ pub async fn run_test(
                 }
             }
 
-            // Drive Swarm in the background while we await for `dialerDone` to be ready.
-            tokio::spawn(async move {
-                loop {
-                    swarm.next().await;
+            // Drive Swarm while we await for `dialerDone` to be ready.
+            futures::future::select(
+                async move {
+                    loop {
+                        swarm.next().await;
+                    }
                 }
-            });
-            tokio::time::sleep(test_timeout).await;
+                .boxed(),
+                arch::sleep(test_timeout),
+            )
+            .await;
+
+            // The loop never ends so if we get here, we hit the timeout.
             bail!("Test should have been killed by the test runner!");
         }
     }
@@ -157,7 +171,7 @@ pub struct Report {
 }
 
 /// Supported transports by rust-libp2p.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Transport {
     Tcp,
     QuicV1,

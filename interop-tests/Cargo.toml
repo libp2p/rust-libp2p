@@ -41,3 +41,4 @@ wasm-logger = { version = "0.2.0" }
 wasm-timer = { version = "0.2.5" }
 reqwest = { version = "0.11", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
+futures-timer = "3.0.2"
