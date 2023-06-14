@@ -10,6 +10,7 @@ use axum::{extract::State, http::StatusCode, routing::post, Json, Router};
 use redis::{AsyncCommands, Client};
 use thirtyfour::prelude::*;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Child;
 use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
@@ -78,7 +79,7 @@ async fn main() -> Result<()> {
     tokio::spawn(axum::Server::bind(&BIND_ADDR.parse()?).serve(app.into_make_service()));
 
     // Start executing the test in a browser
-    let driver = open_in_browser().await?;
+    let (mut chrome, driver) = open_in_browser().await?;
 
     // Wait for the outcome to be reported
     let outcome = match tokio::time::timeout(test_timeout, results_rx.recv()).await {
@@ -88,6 +89,7 @@ async fn main() -> Result<()> {
 
     // Close the browser after we got the results
     driver.quit().await?;
+    chrome.kill().await?;
 
     match outcome {
         TestOutcome::Success(report) => println!("{}", serde_json::to_string(&report)?),
@@ -97,17 +99,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn open_in_browser() -> Result<WebDriver> {
+async fn open_in_browser() -> Result<(Child, WebDriver)> {
     // start a webdriver process
     // currently only the chromedriver is supported as firefox doesn't
     // have support yet for the certhashes
-    let mut driver = tokio::process::Command::new("chromedriver")
+    let mut chrome = tokio::process::Command::new("chromedriver")
         .arg("--port=45782")
         .stdout(Stdio::piped())
-        .kill_on_drop(true)
         .spawn()?;
     // read driver's stdout
-    let driver_out = driver
+    let driver_out = chrome
         .stdout
         .take()
         .context("No stdout found for webdriver")?;
@@ -126,7 +127,7 @@ async fn open_in_browser() -> Result<WebDriver> {
     // go to the wasm test service
     driver.goto(format!("http://{BIND_ADDR}")).await?;
 
-    Ok(driver)
+    Ok((chrome, driver))
 }
 
 /// Redis proxy handler.
