@@ -28,8 +28,8 @@ Firefox is not yet supported as it doesn't support all required features yet
 
 2.
    - Build the wasm package: `wasm-pack build --target web`
-   - Run the dialer pointing it to the built package: `redis_addr=127.0.0.1:6379 proxy_addr=127.0.0.1:6378
-     ip=0.0.0.0 transport=webtransport is_dialer=true cargo run --bin wasm_ping`
+   - Run the dialer: `redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webtransport
+     is_dialer=true cargo run --bin wasm_ping`
 
 # Running all interop tests locally with Compose
 

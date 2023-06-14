@@ -64,7 +64,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         // Redis proxy
         .route("/blpop", post(redis_blpop))
-        // Report tests sattus
+        // Report tests status
         .route("/results", post(post_results))
         // Wasm ping test trigger
         .route("/", get(serve_index_html))
