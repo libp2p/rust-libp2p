@@ -13,14 +13,17 @@ defaults:
         {% set unique_authors = {} %}
         {% for commit in commits %}
           {% set should_add_coauthor = true %}
+          {# Merge commits should not add attribution #}
           {% if commit.parents|length > 1 %}
-            {% set should_add_coauthor = false %} {# Merge commits should not add attribution #}
+            {% set should_add_coauthor = false %}
           {% endif %}
+          {# The original author will already be attributed by GitHub #}
           {% if commit.author == author %}
-            {% set should_add_coauthor = false %} {# The original author will already be attributed by GitHub #}
+            {% set should_add_coauthor = false %}
           {% endif %}
+          {# Only attribute each author once #}
           {% if unique_authors.get(commit.email_author) %}
-            {% set should_add_coauthor = false %} {# Only attribute each author once #}
+            {% set should_add_coauthor = false %}
           {% endif %}
           {% if should_add_coauthor %}
             {% set _ = unique_authors.update({commit.email_author: true}) %}
