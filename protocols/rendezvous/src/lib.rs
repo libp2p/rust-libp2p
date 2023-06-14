@@ -23,10 +23,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
+use libp2p_swarm::StreamProtocol;
 
 mod codec;
-mod handler;
-mod substream_handler;
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
 ///
@@ -42,6 +41,13 @@ pub const MIN_TTL: Ttl = 60 * 60 * 2;
 ///
 /// <https://github.com/libp2p/specs/tree/master/rendezvous#recommendations-for-rendezvous-points-configurations>.
 pub const MAX_TTL: Ttl = 60 * 60 * 72;
+
+/// The maximum namespace length.
+///
+/// <https://github.com/libp2p/specs/tree/master/rendezvous#recommendations-for-rendezvous-points-configurations>.
+pub const MAX_NAMESPACE: usize = 255;
+
+pub(crate) const PROTOCOL_IDENT: StreamProtocol = StreamProtocol::new("/rendezvous/1.0.0");
 
 pub mod client;
 pub mod server;
