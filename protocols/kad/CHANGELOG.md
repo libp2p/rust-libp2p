@@ -7,8 +7,10 @@
   See [PR 3896].
 
 - Automatically configure client/server mode based on external addresses.
-  If we have or learn about an external address of our node, we operate in server-mode and thus allow inbound requests.
+  If we have or learn about an external address of our node, e.g. through `Swarm::add_external_address` or automated through `libp2p-autonat`, we operate in server-mode and thus allow inbound requests.
   By default, a node is in client-mode and only allows outbound requests.
+  If you want to maintain the status quo, i.e. always operate in server mode, make sure to add at least one external address through `Swarm::add_external_address`.
+  See also [Kademlia specification](https://github.com/libp2p/specs/tree/master/kad-dht#client-and-server-mode) for an introduction to Kademlia client/server mode.
   See [PR 3877].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
