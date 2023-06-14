@@ -1,10 +1,16 @@
 use futures::FutureExt;
 use js_sys::Promise;
+use std::future::Future;
+use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 
 /// Convenient wrapper to poll a promise to completion.
+///
+/// # Panics
+///
+/// Panics if polled and promise is not initialized. Use `maybe_init` if unsure.
 #[derive(Debug)]
 pub(crate) struct FusedJsPromise {
     promise: Option<JsFuture>,
@@ -16,14 +22,8 @@ impl FusedJsPromise {
         FusedJsPromise { promise: None }
     }
 
-    /// Initialize promise if needed and then poll.
-    ///
-    /// If promise is not initialized then `init` is called to initialize it.
-    pub(crate) fn maybe_init_and_poll<F>(
-        &mut self,
-        cx: &mut Context,
-        init: F,
-    ) -> Poll<Result<JsValue, JsValue>>
+    /// Initialize promise if needed
+    pub(crate) fn maybe_init<F>(&mut self, init: F) -> &mut Self
     where
         F: FnOnce() -> Promise,
     {
@@ -31,15 +31,19 @@ impl FusedJsPromise {
             self.promise = Some(JsFuture::from(init()));
         }
 
-        self.poll(cx)
+        self
     }
 
-    /// Poll an already initialized promise.
-    ///
-    /// # Panics
-    ///
-    /// Panics if promise is not initialized. Use `maybe_init_and_poll` if unsure.
-    pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<Result<JsValue, JsValue>> {
+    /// Checks if promise is already running
+    pub(crate) fn is_active(&self) -> bool {
+        self.promise.is_some()
+    }
+}
+
+impl Future for FusedJsPromise {
+    type Output = Result<JsValue, JsValue>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let val = ready!(self
             .promise
             .as_mut()
@@ -50,10 +54,5 @@ impl FusedJsPromise {
         self.promise.take();
 
         Poll::Ready(val)
-    }
-
-    /// Checks if promise is already running
-    pub(crate) fn is_active(&self) -> bool {
-        self.promise.is_some()
     }
 }

@@ -1,3 +1,4 @@
+use futures::FutureExt;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent, StreamMuxerExt};
 use libp2p_core::{OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{Keypair, PeerId};
@@ -114,7 +115,8 @@ impl Connection {
         // Create bidirectional stream
         let val = ready!(self
             .create_stream_promise
-            .maybe_init_and_poll(cx, || self.session.create_bidirectional_stream()))
+            .maybe_init(|| self.session.create_bidirectional_stream())
+            .poll_unpin(cx))
         .map_err(Error::from_js_value)?;
 
         let bidi_stream = to_js_type::<WebTransportBidirectionalStream>(val)?;
@@ -131,7 +133,8 @@ impl Connection {
         // Read the next incoming stream from the JS channel
         let val = ready!(self
             .incoming_stream_promise
-            .maybe_init_and_poll(cx, || self.incoming_streams_reader.read()))
+            .maybe_init(|| self.incoming_streams_reader.read())
+            .poll_unpin(cx))
         .map_err(Error::from_js_value)?;
 
         let val = parse_reader_response(&val)

@@ -1,4 +1,4 @@
-use futures::{AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite, FutureExt};
 use js_sys::Uint8Array;
 use send_wrapper::SendWrapper;
 use std::io;
@@ -77,7 +77,8 @@ impl Stream {
         if desired_size <= 0 || self.writer_ready_promise.is_active() {
             ready!(self
                 .writer_ready_promise
-                .maybe_init_and_poll(cx, || self.writer.ready()))
+                .maybe_init(|| self.writer.ready())
+                .poll_unpin(cx))
             .map_err(to_io_error)?;
         }
 
@@ -95,13 +96,14 @@ impl Stream {
                 // Assume closed on error
                 let _ = ready!(self
                     .writer_closed_promise
-                    .maybe_init_and_poll(cx, || self.writer.closed()));
+                    .maybe_init(|| self.writer.closed())
+                    .poll_unpin(cx));
 
                 self.writer_state = StreamState::Closed;
             }
             StreamState::Closing => {
                 // Assume closed on error
-                let _ = ready!(self.writer_closed_promise.poll(cx));
+                let _ = ready!(self.writer_closed_promise.poll_unpin(cx));
                 self.writer_state = StreamState::Closed;
             }
             StreamState::Closed => {}
@@ -113,7 +115,8 @@ impl Stream {
     fn poll_reader_read(&mut self, cx: &mut Context) -> Poll<io::Result<Option<Uint8Array>>> {
         let val = ready!(self
             .reader_read_promise
-            .maybe_init_and_poll(cx, || self.reader.read()))
+            .maybe_init(|| self.reader.read())
+            .poll_unpin(cx))
         .map_err(to_io_error)?;
 
         let val = parse_reader_response(&val)
