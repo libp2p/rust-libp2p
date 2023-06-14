@@ -25,6 +25,7 @@ use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use libp2p_swarm::StreamProtocol;
+use quick_protobuf_codec::Codec as ProtobufCodec;
 use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
 use std::{fmt, io};
@@ -206,35 +207,27 @@ pub enum ErrorCode {
     Unavailable,
 }
 
-pub(crate) struct RendezvousCodec {
-    inner: quick_protobuf_codec::Codec<proto::Message>,
-}
-
-impl Default for RendezvousCodec {
-    fn default() -> Self {
-        Self {
-            inner: quick_protobuf_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
-        }
-    }
-}
-
-impl Encoder for RendezvousCodec {
+impl Encoder for Codec {
     type Item = Message;
     type Error = Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.inner.encode(proto::Message::from(item), dst)?;
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        pb.encode(proto::Message::from(item), dst)?;
 
         Ok(())
     }
 }
 
-impl Decoder for RendezvousCodec {
+impl Decoder for Codec {
     type Item = Message;
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let message = match self.inner.decode(src)? {
+        let mut pb: ProtobufCodec<proto::Message> = ProtobufCodec::new(MAX_MESSAGE_LEN_BYTES);
+
+        let message = match pb.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
         };
@@ -256,7 +249,7 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let message = FramedRead::new(io, RendezvousCodec::default())
+        let message = FramedRead::new(io, self.clone())
             .next()
             .await
             .ok_or(io::ErrorKind::UnexpectedEof)??;
@@ -272,7 +265,7 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncRead + Unpin + Send,
     {
-        let message = FramedRead::new(io, RendezvousCodec::default())
+        let message = FramedRead::new(io, self.clone())
             .next()
             .await
             .ok_or(io::ErrorKind::UnexpectedEof)??;
@@ -289,9 +282,7 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        FramedWrite::new(io, RendezvousCodec::default())
-            .send(req)
-            .await?;
+        FramedWrite::new(io, self.clone()).send(req).await?;
 
         Ok(())
     }
@@ -305,9 +296,7 @@ impl libp2p_request_response::Codec for Codec {
     where
         T: AsyncWrite + Unpin + Send,
     {
-        FramedWrite::new(io, RendezvousCodec::default())
-            .send(res)
-            .await?;
+        FramedWrite::new(io, self.clone()).send(res).await?;
 
         Ok(())
     }
