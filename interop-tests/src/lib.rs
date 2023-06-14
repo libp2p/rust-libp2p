@@ -41,6 +41,14 @@ pub async fn run_test(
     .build();
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
+    #[cfg(not(target_arch = "wasm32"))]
+    let id = {
+        log::info!(
+            "Test instance, listening for incoming connections on: {:?}.",
+            local_addr
+        );
+        swarm.listen_on(local_addr.parse()?)?
+    };
 
     // Run a ping interop test. Based on `is_dialer`, either dial the address
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
@@ -80,12 +88,6 @@ pub async fn run_test(
         false => bail!("Cannot run as listener in browser, please change is_dialer to true"),
         #[cfg(not(target_arch = "wasm32"))]
         false => {
-            log::info!(
-                "Test instance, listening for incoming connections on: {:?}.",
-                local_addr
-            );
-            let id = swarm.listen_on(local_addr.parse()?)?;
-
             loop {
                 if let Some(SwarmEvent::NewListenAddr {
                     listener_id,
