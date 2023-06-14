@@ -166,7 +166,7 @@ pub(crate) mod wasm {
 
     use super::BoxedTransport;
 
-    pub(crate) type Instant = wasm_timer::Instant;
+    pub(crate) type Instant = instant::Instant;
 
     pub(crate) fn init_logger() {
         console_error_panic_hook::set_once();
