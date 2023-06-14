@@ -176,15 +176,19 @@ impl NetworkBehaviour for Behaviour {
                                 request, channel, ..
                             },
                     }) => {
-                        let (event, response) =
-                            handle_request(peer_id, request, &mut self.registrations);
-                        if let Some(resp) = response {
-                            self.inner
-                                .send_response(channel, resp)
-                                .expect("Send response");
+                        if let Some((event, response)) =
+                            handle_request(peer_id, request, &mut self.registrations)
+                        {
+                            if let Some(resp) = response {
+                                self.inner
+                                    .send_response(channel, resp)
+                                    .expect("Send response");
+                            }
+
+                            return Poll::Ready(ToSwarm::GenerateEvent(event));
                         }
 
-                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                        continue;
                     }
                     ToSwarm::GenerateEvent(libp2p_request_response::Event::InboundFailure {
                         peer,
@@ -236,7 +240,7 @@ fn handle_request(
     peer_id: PeerId,
     message: Message,
     registrations: &mut Registrations,
-) -> (Event, Option<Message>) {
+) -> Option<(Event, Option<Message>)> {
     match message {
         Message::Register(registration) => {
             if registration.record.peer_id() != peer_id {
@@ -248,7 +252,7 @@ fn handle_request(
                     error,
                 };
 
-                return (event, Some(Message::RegisterResponse(Err(error))));
+                return Some((event, Some(Message::RegisterResponse(Err(error)))));
             }
 
             let namespace = registration.namespace.clone();
@@ -262,7 +266,7 @@ fn handle_request(
                         registration,
                     };
 
-                    (event, Some(response))
+                    Some((event, Some(response)))
                 }
                 Err(TtlOutOfRange::TooLong { .. }) | Err(TtlOutOfRange::TooShort { .. }) => {
                     let error = ErrorCode::InvalidTtl;
@@ -275,7 +279,7 @@ fn handle_request(
                         error,
                     };
 
-                    (event, Some(response))
+                    Some((event, Some(response)))
                 }
             }
         }
@@ -287,7 +291,7 @@ fn handle_request(
                 namespace,
             };
 
-            (event, None)
+            Some((event, None))
         }
         Message::Discover {
             namespace,
@@ -304,7 +308,7 @@ fn handle_request(
                     registrations: discovered,
                 };
 
-                (event, Some(response))
+                Some((event, Some(response)))
             }
             Err(_) => {
                 let error = ErrorCode::InvalidCookie;
@@ -316,15 +320,11 @@ fn handle_request(
                     error,
                 };
 
-                (event, Some(response))
+                Some((event, Some(response)))
             }
         },
-        Message::RegisterResponse(_) => {
-            unreachable!()
-        }
-        Message::DiscoverResponse(_) => {
-            unreachable!()
-        }
+        Message::RegisterResponse(_) => None,
+        Message::DiscoverResponse(_) => None,
     }
 }
 
