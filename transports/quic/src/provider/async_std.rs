@@ -26,6 +26,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use crate::GenTransport;
@@ -103,6 +104,10 @@ impl super::Provider for Provider {
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<if_watch::IfEvent>> {
         watcher.poll_if_event(cx)
+    }
+
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
+        async_std::task::sleep(duration).boxed()
     }
 }
 
