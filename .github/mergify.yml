@@ -21,7 +21,7 @@ defaults:
           {% endif %}
         
           {# The original author will already be attributed by GitHub #}
-          {% if commit.author == pull_request.user.login %}
+          {% if commit.author == author %}
             {% set should_add_coauthor = false %}
           {% endif %}
         
