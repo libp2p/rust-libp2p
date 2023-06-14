@@ -8,6 +8,7 @@ defaults:
         {{ body | get_section("## Description", "") }}
         
         Pull-Request: #{{ number }}.
+        
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
         {% set unique_authors = {} %}
         {% for commit in commits %}
