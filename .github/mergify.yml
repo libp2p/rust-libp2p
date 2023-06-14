@@ -8,10 +8,9 @@ defaults:
         {{ body | get_section("## Description", "") }}
         
         Pull-Request: #{{ number }}.
-        
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
-        {% for commit in commits | unique(False, 'email_author') %}
-          {% if commit.parents|length == 1 and commit.author != author %}
+        {% for commit in (commits | unique(False, 'email_author')) | rejectattr("author", "==", author) %}
+          {% if commit.parents|length == 1 %}
         Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
           {% endif %}
         {% endfor %}
