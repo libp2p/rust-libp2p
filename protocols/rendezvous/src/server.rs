@@ -35,7 +35,7 @@ use libp2p_swarm::{
 use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::iter::FromIterator;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
 pub struct Behaviour {
@@ -492,7 +492,11 @@ impl Registrations {
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
-        if let Poll::Ready(Some(expired_registration)) = self.next_expiry.poll_next_unpin(cx) {
+        loop {
+            let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
+                "This stream should never finish because it is initialised with a pending future",
+            );
+
             // clean up our cookies
             self.cookies.retain(|_, registrations| {
                 registrations.remove(&expired_registration);
@@ -503,33 +507,15 @@ impl Registrations {
 
             self.registrations_for_peer
                 .remove_by_right(&expired_registration);
-
-            return match self.registrations.remove(&expired_registration) {
-                None => self.poll(cx),
-                Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
-            };
+            match self.registrations.remove(&expired_registration) {
+                None => {
+                    continue;
+                }
+                Some(registration) => {
+                    return Poll::Ready(ExpiredRegistration(registration));
+                }
+            }
         }
-
-        Poll::Pending
-
-        /*let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
-            "This stream should never finish because it is initialised with a pending future",
-        );
-
-        // clean up our cookies
-        self.cookies.retain(|_, registrations| {
-            registrations.remove(&expired_registration);
-
-            // retain all cookies where there are still registrations left
-            !registrations.is_empty()
-        });
-
-        self.registrations_for_peer
-            .remove_by_right(&expired_registration);
-        match self.registrations.remove(&expired_registration) {
-            None => self.poll(cx),
-            Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
-        }*/
     }
 }
 
