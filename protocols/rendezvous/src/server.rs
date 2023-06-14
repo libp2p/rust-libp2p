@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{
-    Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl,
-};
+use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
 use crate::{MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
