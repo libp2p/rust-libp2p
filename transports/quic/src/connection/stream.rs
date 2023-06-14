@@ -33,7 +33,7 @@ pub struct Stream {
     /// A receive part of the stream
     recv: quinn::RecvStream,
     /// Whether the stream is closed or not
-    closed: bool,
+    close_result: Option<Result<(), ()>>,
 }
 
 impl Stream {
@@ -41,7 +41,7 @@ impl Stream {
         Self {
             send,
             recv,
-            closed: false,
+            close_result: None,
         }
     }
 }
@@ -52,10 +52,16 @@ impl AsyncRead for Stream {
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        if self.closed {
+        if let Some(close_result) = self.close_result {
+            if close_result.is_err() {
+                return Poll::Ready(Ok(0))
+            }
+        }
+        let read_result = futures::ready!(Pin::new(&mut self.recv).poll_read(cx, buf));
+        if read_result.is_err() {
             return Poll::Ready(Ok(0));
         }
-        Pin::new(&mut self.recv).poll_read(cx, buf)
+        Poll::Ready(read_result)
     }
 }
 
@@ -73,12 +79,16 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if self.closed {
+        if let Some(close_result) = self.close_result {
             // For some reason poll_close needs to be 'fuse'able
-            return Poll::Ready(Ok(()));
+            return Poll::Ready(close_result.map_err(|()| io::ErrorKind::Unsupported.into()));
         }
         let close_result = futures::ready!(Pin::new(&mut self.send).poll_close(cx));
-        self.closed = true;
+        self.close_result = if close_result.is_ok() {
+            Some(Ok(()))
+        } else {
+            Some(Err(()))
+        };
         Poll::Ready(close_result)
     }
 }
