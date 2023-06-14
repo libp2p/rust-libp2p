@@ -19,9 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::Message::*;
-use crate::codec::{
-    Codec, Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl,
-};
+use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
@@ -241,11 +239,11 @@ impl NetworkBehaviour for Behaviour {
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
 
-        loop {
-            if let Some(event) = self.error_events.pop_front() {
-                return Poll::Ready(ToSwarm::GenerateEvent(event));
-            }
+        if let Some(event) = self.error_events.pop_front() {
+            return Poll::Ready(ToSwarm::GenerateEvent(event));
+        }
 
+        loop {
             match self.inner.poll(cx, params) {
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
                     message:
@@ -255,35 +253,19 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ..
                 })) => {
-                    let event = self.handle_response(&request_id, response);
+                    if let Some(event) = self.handle_response(&request_id, response) {
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    }
 
-                    return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    continue; // not a request we care about
                 }
                 Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::OutboundFailure {
                     request_id,
                     ..
                 })) => {
-                    if let Some((rendezvous_node, namespace)) =
-                        self.waiting_for_register.remove(&request_id)
-                    {
-                        return Poll::Ready(ToSwarm::GenerateEvent(Event::RegisterFailed(
-                            RegisterError::Remote {
-                                rendezvous_node,
-                                namespace,
-                                error: ErrorCode::Unavailable,
-                            },
-                        )));
-                    };
-
-                    if let Some((rendezvous_node, namespace)) =
-                        self.waiting_for_discovery.remove(&request_id)
-                    {
-                        return Poll::Ready(ToSwarm::GenerateEvent(Event::DiscoverFailed {
-                            rendezvous_node,
-                            namespace,
-                            error: ErrorCode::Unavailable,
-                        }));
-                    };
+                    if let Some(event) = self.event_for_outbound_failure(&request_id) {
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    }
 
                     continue; // not a request we care about
                 }
@@ -353,73 +335,96 @@ impl NetworkBehaviour for Behaviour {
 }
 
 impl Behaviour {
-    fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Event {
+    fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
+        if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
+            return Some(Event::RegisterFailed(RegisterError::Remote {
+                rendezvous_node,
+                namespace,
+                error: ErrorCode::Unavailable,
+            }));
+        };
+
+        if let Some((rendezvous_node, namespace)) = self.waiting_for_discovery.remove(req_id) {
+            return Some(Event::DiscoverFailed {
+                rendezvous_node,
+                namespace,
+                error: ErrorCode::Unavailable,
+            });
+        };
+
+        None
+    }
+
+    fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Option<Event> {
         match response {
             RegisterResponse(result) => {
-                let (rendezvous_node, namespace) = self
-                    .waiting_for_register
-                    .remove(request_id)
-                    .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
-                match result {
-                    Ok(ttl) => Event::Registered {
-                        rendezvous_node,
-                        ttl,
-                        namespace,
-                    },
-                    Err(error_code) => Event::RegisterFailed(RegisterError::Remote {
-                        rendezvous_node,
-                        namespace,
-                        error: error_code,
-                    }),
+                if let Some((rendezvous_node, namespace)) =
+                    self.waiting_for_register.remove(request_id)
+                {
+                    return Some(match result {
+                        Ok(ttl) => Event::Registered {
+                            rendezvous_node,
+                            ttl,
+                            namespace,
+                        },
+                        Err(error_code) => Event::RegisterFailed(RegisterError::Remote {
+                            rendezvous_node,
+                            namespace,
+                            error: error_code,
+                        }),
+                    });
                 }
+
+                None
             }
             DiscoverResponse(response) => {
-                let (rendezvous_node, ns) = self
-                    .waiting_for_discovery
-                    .remove(request_id)
-                    .unwrap_or_else(|| panic!("unknown request_id: {request_id}"));
-                let res = match response {
-                    Ok((registrations, cookie)) => {
-                        self.discovered_peers
-                            .extend(registrations.iter().map(|registration| {
-                                let peer_id = registration.record.peer_id();
-                                let namespace = registration.namespace.clone();
+                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
+                    let res = match response {
+                        Ok((registrations, cookie)) => {
+                            self.discovered_peers.extend(registrations.iter().map(
+                                |registration| {
+                                    let peer_id = registration.record.peer_id();
+                                    let namespace = registration.namespace.clone();
 
-                                let addresses = registration.record.addresses().to_vec();
+                                    let addresses = registration.record.addresses().to_vec();
 
-                                ((peer_id, namespace), addresses)
-                            }));
+                                    ((peer_id, namespace), addresses)
+                                },
+                            ));
 
-                        self.expiring_registrations
-                            .extend(registrations.iter().cloned().map(|registration| {
-                                async move {
-                                    // if the timer errors we consider it expired
-                                    futures_timer::Delay::new(Duration::from_secs(
-                                        registration.ttl,
-                                    ))
-                                    .await;
+                            self.expiring_registrations
+                                .extend(registrations.iter().cloned().map(|registration| {
+                                    async move {
+                                        // if the timer errors we consider it expired
+                                        futures_timer::Delay::new(Duration::from_secs(
+                                            registration.ttl,
+                                        ))
+                                        .await;
 
-                                    (registration.record.peer_id(), registration.namespace)
-                                }
-                                .boxed()
-                            }));
+                                        (registration.record.peer_id(), registration.namespace)
+                                    }
+                                    .boxed()
+                                }));
 
-                        Event::Discovered {
-                            rendezvous_node,
-                            registrations,
-                            cookie,
+                            Event::Discovered {
+                                rendezvous_node,
+                                registrations,
+                                cookie,
+                            }
                         }
-                    }
-                    Err(error_code) => Event::DiscoverFailed {
-                        rendezvous_node,
-                        namespace: ns,
-                        error: error_code,
-                    },
-                };
+                        Err(error_code) => Event::DiscoverFailed {
+                            rendezvous_node,
+                            namespace: ns,
+                            error: error_code,
+                        },
+                    };
 
-                res
+                    return Some(res);
+                }
+
+                None
             }
-            _ => unreachable!(),
+            _ => unreachable!("rendezvous clients never receive requests"),
         }
     }
 }
