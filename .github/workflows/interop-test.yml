@@ -13,40 +13,19 @@ jobs:
   run-multidim-interop:
     name: Run multidimensional interoperability tests
     runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
-    needs: [run-multidim-interop-native, run-multidim-interop-chromium]
-    steps:
-      - run: echo Done
-
-  run-multidim-interop-native:
-    name: Run multidimensional interoperability tests (Native)
-    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
+    strategy:
+      matrix:
+        flavour: [chromium, native]
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-buildx-action@v2
-      - name: Build native image
-        run: docker buildx build --load -t native-rust-libp2p-head . -f interop-tests/Dockerfile
-      - name: Run native tests
+      - name: Build ${{ matrix.flavour }} image
+        run: docker buildx build --load -t ${{ matrix.flavour }}-rust-libp2p-head . -f interop-tests/Dockerfile.${{ matrix.flavour }}
+      - name: Run ${{ matrix.flavour }} tests
         uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
         with:
-          test-filter: native-rust-libp2p-head
-          extra-versions: ${{ github.workspace }}/interop-tests/native-ping-version.json
-          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
-          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
-          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
-
-  run-multidim-interop-chromium:
-    name: Run multidimensional interoperability tests (Chromium)
-    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: docker/setup-buildx-action@v2
-      - name: Build chromium image
-        run: docker buildx build --load -t chromium-rust-libp2p-head . -f interop-tests/Dockerfile.chromium
-      - name: Run chromium tests
-        uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
-        with:
-          test-filter: chromium-rust-libp2p-head
-          extra-versions: ${{ github.workspace }}/interop-tests/chromium-ping-version.json
+          test-filter: ${{ matrix.flavour }}-rust-libp2p-head
+          extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
           s3-cache-bucket: libp2p-by-tf-aws-bootstrap
           s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
           s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
