@@ -8,6 +8,10 @@ defaults:
         {{ body | get_section("## Description", "") }}
         
         Pull-Request: #{{ number }}.
+        
+        {% for commit in commits %}
+        Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
+        {% endfor %}
 
 pull_request_rules:
   - name: Ask to resolve conflict
