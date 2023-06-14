@@ -384,30 +384,28 @@ impl Behaviour {
                 None
             }
             DiscoverResponse(Ok((registrations, cookie))) => {
-                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id) {
-                    self.discovered_peers.extend(registrations.iter().map(
-                        |registration| {
+                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
+                {
+                    self.discovered_peers
+                        .extend(registrations.iter().map(|registration| {
                             let peer_id = registration.record.peer_id();
                             let namespace = registration.namespace.clone();
 
                             let addresses = registration.record.addresses().to_vec();
 
                             ((peer_id, namespace), addresses)
-                        },
-                    ));
+                        }));
 
                     self.expiring_registrations
                         .extend(registrations.iter().cloned().map(|registration| {
                             async move {
                                 // if the timer errors we consider it expired
-                                futures_timer::Delay::new(Duration::from_secs(
-                                    registration.ttl,
-                                ))
+                                futures_timer::Delay::new(Duration::from_secs(registration.ttl))
                                     .await;
 
                                 (registration.record.peer_id(), registration.namespace)
                             }
-                                .boxed()
+                            .boxed()
                         }));
 
                     return Some(Event::Discovered {
