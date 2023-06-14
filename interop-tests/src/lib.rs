@@ -127,8 +127,13 @@ pub async fn run_test_wasm(
     base_url: &str,
 ) -> Result<(), JsValue> {
     let result = run_test(transport, ip, is_dialer, test_timeout_secs, base_url).await;
-    arch::wasm::send_test_result(base_url, result)
-        .await
+    log::info!("Sending test result: {result:?}");
+    reqwest::Client::new()
+        .post(&format!("http://{}/results", base_url))
+        .json(&result.map_err(|e| e.to_string()))
+        .send()
+        .await?
+        .error_for_status()
         .map_err(|e| format!("Sending test result failed: {e}"))?;
 
     Ok(())
@@ -149,13 +154,6 @@ pub struct Report {
     handshake_plus_one_rtt_millis: f32,
     #[serde(rename = "pingRTTMilllis")]
     ping_rtt_millis: f32,
-}
-
-/// An outcome of the test, for wasm purposes
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub enum TestOutcome {
-    Success(Report),
-    Failure(String),
 }
 
 /// Supported transports by rust-libp2p.

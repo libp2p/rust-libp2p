@@ -153,9 +153,8 @@ pub(crate) mod wasm {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
-    use log::info;
 
-    use crate::{BlpopRequest, Report, TestOutcome, Transport};
+    use crate::{BlpopRequest, Transport};
 
     use super::BoxedTransport;
 
@@ -212,20 +211,5 @@ pub(crate) mod wasm {
                 .await?;
             Ok(res)
         }
-    }
-
-    pub(crate) async fn send_test_result(base_url: &str, result: Result<Report>) -> Result<()> {
-        let outcome = match result {
-            Ok(report) => TestOutcome::Success(report),
-            Err(e) => TestOutcome::Failure(e.to_string()),
-        };
-        info!("Sending test outcome: {outcome:?}");
-        reqwest::Client::new()
-            .post(&format!("http://{}/results", base_url))
-            .json(&outcome)
-            .send()
-            .await?
-            .error_for_status()?;
-        Ok(())
     }
 }

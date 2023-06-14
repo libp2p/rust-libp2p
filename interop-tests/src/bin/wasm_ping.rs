@@ -17,7 +17,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{error, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use interop_tests::{BlpopRequest, TestOutcome};
+use interop_tests::{BlpopRequest, Report};
 
 mod config;
 
@@ -34,7 +34,7 @@ struct WasmPackage;
 struct TestState {
     redis_client: Client,
     config: config::Config,
-    results_tx: mpsc::Sender<TestOutcome>,
+    results_tx: mpsc::Sender<Result<Report, String>>,
 }
 
 #[tokio::main]
@@ -82,18 +82,18 @@ async fn main() -> Result<()> {
     let (mut chrome, driver) = open_in_browser().await?;
 
     // Wait for the outcome to be reported
-    let outcome = match tokio::time::timeout(test_timeout, results_rx.recv()).await {
-        Ok(received) => received.unwrap_or(TestOutcome::Failure("Results channel closed".into())),
-        Err(_) => TestOutcome::Failure("Test timed out".into()),
+    let test_result = match tokio::time::timeout(test_timeout, results_rx.recv()).await {
+        Ok(received) => received.unwrap_or(Err("Results channel closed".to_owned())),
+        Err(_) => Err("Test timed out".to_owned()),
     };
 
     // Close the browser after we got the results
     driver.quit().await?;
     chrome.kill().await?;
 
-    match outcome {
-        TestOutcome::Success(report) => println!("{}", serde_json::to_string(&report)?),
-        TestOutcome::Failure(error) => bail!("Running tests failed: {error}"),
+    match test_result {
+        Ok(report) => println!("{}", serde_json::to_string(&report)?),
+        Err(error) => bail!("Tests failed: {error}"),
     }
 
     Ok(())
@@ -158,7 +158,7 @@ async fn redis_blpop(
 /// Receive test results
 async fn post_results(
     state: State<TestState>,
-    request: Json<TestOutcome>,
+    request: Json<Result<Report, String>>,
 ) -> Result<(), StatusCode> {
     state.0.results_tx.send(request.0).await.map_err(|_| {
         error!("Failed to send results");
