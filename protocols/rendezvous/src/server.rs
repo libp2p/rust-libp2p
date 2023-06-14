@@ -18,11 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
+use crate::codec::{
+    Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl,
+};
 use crate::{MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
-use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::{Endpoint, Multiaddr};
@@ -168,44 +169,63 @@ impl NetworkBehaviour for Behaviour {
         }
 
         let poll_res = self.inner.poll(cx, params);
-        if let Poll::Ready(ToSwarm::GenerateEvent(event)) = poll_res {
-            let opt_event = match event {
-                libp2p_request_response::Event::Message {
-                    peer: peer_id,
-                    message:
-                        libp2p_request_response::Message::Request {
-                            request, channel, ..
-                        },
-                } => {
-                    let (event, response) =
-                        handle_request(peer_id, request, &mut self.registrations);
-                    if let Some(resp) = response {
-                        self.inner
-                            .send_response(channel, resp)
-                            .expect("Send response");
+        if let Poll::Ready(to_swarm) = poll_res {
+            match to_swarm {
+                ToSwarm::GenerateEvent(event) => {
+                    let opt_event = match event {
+                        libp2p_request_response::Event::Message {
+                            peer: peer_id,
+                            message:
+                                libp2p_request_response::Message::Request {
+                                    request, channel, ..
+                                },
+                        } => {
+                            let (event, response) =
+                                handle_request(peer_id, request, &mut self.registrations);
+                            if let Some(resp) = response {
+                                self.inner
+                                    .send_response(channel, resp)
+                                    .expect("Send response");
+                            }
+
+                            Some(event)
+                        }
+                        libp2p_request_response::Event::ResponseSent { .. } => None,
+                        libp2p_request_response::Event::InboundFailure {
+                            peer,
+                            request_id,
+                            error,
+                        } => {
+                            log::warn!(
+                                "Inbound request {request_id} with peer {peer} failed: {error}"
+                            );
+
+                            None
+                        }
+                        libp2p_request_response::Event::Message {
+                            peer: _,
+                            message: libp2p_request_response::Message::Response { .. },
+                        } => None,
+                        libp2p_request_response::Event::OutboundFailure { .. } => None,
+                    };
+
+                    if let Some(out_event) = opt_event {
+                        return Poll::Ready(ToSwarm::GenerateEvent(out_event));
                     }
-
-                    Some(event)
                 }
-                libp2p_request_response::Event::ResponseSent { .. } => None,
-                libp2p_request_response::Event::InboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                } => {
-                    log::warn!("Inbound request {request_id} with peer {peer} failed: {error}");
+                ToSwarm::Dial { .. }
+                | ToSwarm::ListenOn { .. }
+                | ToSwarm::RemoveListener { .. }
+                | ToSwarm::NotifyHandler { .. }
+                | ToSwarm::NewExternalAddrCandidate(_)
+                | ToSwarm::ExternalAddrConfirmed(_)
+                | ToSwarm::ExternalAddrExpired(_)
+                | ToSwarm::CloseConnection { .. } => {
+                    let new_to_swarm = to_swarm
+                        .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
-                    None
+                    return Poll::Ready(new_to_swarm);
                 }
-                libp2p_request_response::Event::Message {
-                    peer: _,
-                    message: libp2p_request_response::Message::Response { .. },
-                } => None,
-                libp2p_request_response::Event::OutboundFailure { .. } => None,
-            };
-
-            if let Some(out_event) = opt_event {
-                return Poll::Ready(ToSwarm::GenerateEvent(out_event));
             }
         }
 
@@ -483,7 +503,27 @@ impl Registrations {
     }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
-        let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
+        if let Poll::Ready(Some(expired_registration)) = self.next_expiry.poll_next_unpin(cx) {
+            // clean up our cookies
+            self.cookies.retain(|_, registrations| {
+                registrations.remove(&expired_registration);
+
+                // retain all cookies where there are still registrations left
+                !registrations.is_empty()
+            });
+
+            self.registrations_for_peer
+                .remove_by_right(&expired_registration);
+
+            return match self.registrations.remove(&expired_registration) {
+                None => self.poll(cx),
+                Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
+            };
+        }
+
+        Poll::Pending
+
+        /*let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
             "This stream should never finish because it is initialised with a pending future",
         );
 
@@ -500,7 +540,7 @@ impl Registrations {
         match self.registrations.remove(&expired_registration) {
             None => self.poll(cx),
             Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
-        }
+        }*/
     }
 }
 
