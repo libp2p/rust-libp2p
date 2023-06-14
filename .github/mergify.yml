@@ -11,6 +11,7 @@ defaults:
         
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
         {% set co_authored_by = {} %}
+        {# We exclude merge commits (> 1 parent), commits from the PR author and only want to render one `Co-Authored-By` line per contributor. #}
         {% for commit in commits
             if  commit.parents|length <= 1 
             and commit.author != author
