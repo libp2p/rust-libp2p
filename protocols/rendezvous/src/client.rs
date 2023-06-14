@@ -357,69 +357,75 @@ impl Behaviour {
 
     fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Option<Event> {
         match response {
-            RegisterResponse(result) => {
+            RegisterResponse(Ok(ttl)) => {
                 if let Some((rendezvous_node, namespace)) =
                     self.waiting_for_register.remove(request_id)
                 {
-                    return Some(match result {
-                        Ok(ttl) => Event::Registered {
-                            rendezvous_node,
-                            ttl,
-                            namespace,
-                        },
-                        Err(error_code) => Event::RegisterFailed(RegisterError::Remote {
-                            rendezvous_node,
-                            namespace,
-                            error: error_code,
-                        }),
+                    return Some(Event::Registered {
+                        rendezvous_node,
+                        ttl,
+                        namespace,
                     });
                 }
 
                 None
             }
-            DiscoverResponse(response) => {
-                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
-                    let res = match response {
-                        Ok((registrations, cookie)) => {
-                            self.discovered_peers.extend(registrations.iter().map(
-                                |registration| {
-                                    let peer_id = registration.record.peer_id();
-                                    let namespace = registration.namespace.clone();
+            RegisterResponse(Err(error_code)) => {
+                if let Some((rendezvous_node, namespace)) =
+                    self.waiting_for_register.remove(request_id)
+                {
+                    return Some(Event::RegisterFailed(RegisterError::Remote {
+                        rendezvous_node,
+                        namespace,
+                        error: error_code,
+                    }));
+                }
 
-                                    let addresses = registration.record.addresses().to_vec();
+                None
+            }
+            DiscoverResponse(Ok((registrations, cookie))) => {
+                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id) {
+                    self.discovered_peers.extend(registrations.iter().map(
+                        |registration| {
+                            let peer_id = registration.record.peer_id();
+                            let namespace = registration.namespace.clone();
 
-                                    ((peer_id, namespace), addresses)
-                                },
-                            ));
+                            let addresses = registration.record.addresses().to_vec();
 
-                            self.expiring_registrations
-                                .extend(registrations.iter().cloned().map(|registration| {
-                                    async move {
-                                        // if the timer errors we consider it expired
-                                        futures_timer::Delay::new(Duration::from_secs(
-                                            registration.ttl,
-                                        ))
-                                        .await;
-
-                                        (registration.record.peer_id(), registration.namespace)
-                                    }
-                                    .boxed()
-                                }));
-
-                            Event::Discovered {
-                                rendezvous_node,
-                                registrations,
-                                cookie,
-                            }
-                        }
-                        Err(error_code) => Event::DiscoverFailed {
-                            rendezvous_node,
-                            namespace: ns,
-                            error: error_code,
+                            ((peer_id, namespace), addresses)
                         },
-                    };
+                    ));
 
-                    return Some(res);
+                    self.expiring_registrations
+                        .extend(registrations.iter().cloned().map(|registration| {
+                            async move {
+                                // if the timer errors we consider it expired
+                                futures_timer::Delay::new(Duration::from_secs(
+                                    registration.ttl,
+                                ))
+                                    .await;
+
+                                (registration.record.peer_id(), registration.namespace)
+                            }
+                                .boxed()
+                        }));
+
+                    return Some(Event::Discovered {
+                        rendezvous_node,
+                        registrations,
+                        cookie,
+                    });
+                }
+
+                None
+            }
+            DiscoverResponse(Err(error_code)) => {
+                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
+                    return Some(Event::DiscoverFailed {
+                        rendezvous_node,
+                        namespace: ns,
+                        error: error_code,
+                    });
                 }
 
                 None
