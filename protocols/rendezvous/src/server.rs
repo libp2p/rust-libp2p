@@ -166,59 +166,65 @@ impl NetworkBehaviour for Behaviour {
             )));
         }
 
-        if let Poll::Ready(to_swarm) = self.inner.poll(cx, params) {
-            return match to_swarm {
-                ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
-                    peer: peer_id,
-                    message:
-                        libp2p_request_response::Message::Request {
-                            request, channel, ..
-                        },
-                }) => {
-                    let (event, response) =
-                        handle_request(peer_id, request, &mut self.registrations);
-                    if let Some(resp) = response {
-                        self.inner
-                            .send_response(channel, resp)
-                            .expect("Send response");
+        loop {
+            if let Poll::Ready(to_swarm) = self.inner.poll(cx, params) {
+                match to_swarm {
+                    ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
+                        peer: peer_id,
+                        message:
+                            libp2p_request_response::Message::Request {
+                                request, channel, ..
+                            },
+                    }) => {
+                        let (event, response) =
+                            handle_request(peer_id, request, &mut self.registrations);
+                        if let Some(resp) = response {
+                            self.inner
+                                .send_response(channel, resp)
+                                .expect("Send response");
+                        }
+
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
                     }
+                    ToSwarm::GenerateEvent(libp2p_request_response::Event::InboundFailure {
+                        peer,
+                        request_id,
+                        error,
+                    }) => {
+                        log::warn!("Inbound request {request_id} with peer {peer} failed: {error}");
 
-                    Poll::Ready(ToSwarm::GenerateEvent(event))
-                }
-                ToSwarm::GenerateEvent(libp2p_request_response::Event::InboundFailure {
-                    peer,
-                    request_id,
-                    error,
-                }) => {
-                    log::warn!("Inbound request {request_id} with peer {peer} failed: {error}");
+                        continue;
+                    }
+                    ToSwarm::GenerateEvent(libp2p_request_response::Event::ResponseSent {
+                        ..
+                    })
+                    | ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
+                        peer: _,
+                        message: libp2p_request_response::Message::Response { .. },
+                    })
+                    | ToSwarm::GenerateEvent(libp2p_request_response::Event::OutboundFailure {
+                        ..
+                    }) => {
+                        continue;
+                    }
+                    ToSwarm::Dial { .. }
+                    | ToSwarm::ListenOn { .. }
+                    | ToSwarm::RemoveListener { .. }
+                    | ToSwarm::NotifyHandler { .. }
+                    | ToSwarm::NewExternalAddrCandidate(_)
+                    | ToSwarm::ExternalAddrConfirmed(_)
+                    | ToSwarm::ExternalAddrExpired(_)
+                    | ToSwarm::CloseConnection { .. } => {
+                        let new_to_swarm = to_swarm
+                            .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
 
-                    Poll::Pending
-                }
-                ToSwarm::GenerateEvent(libp2p_request_response::Event::ResponseSent { .. })
-                | ToSwarm::GenerateEvent(libp2p_request_response::Event::Message {
-                    peer: _,
-                    message: libp2p_request_response::Message::Response { .. },
-                })
-                | ToSwarm::GenerateEvent(libp2p_request_response::Event::OutboundFailure {
-                    ..
-                }) => Poll::Pending,
-                ToSwarm::Dial { .. }
-                | ToSwarm::ListenOn { .. }
-                | ToSwarm::RemoveListener { .. }
-                | ToSwarm::NotifyHandler { .. }
-                | ToSwarm::NewExternalAddrCandidate(_)
-                | ToSwarm::ExternalAddrConfirmed(_)
-                | ToSwarm::ExternalAddrExpired(_)
-                | ToSwarm::CloseConnection { .. } => {
-                    let new_to_swarm = to_swarm
-                        .map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
+                        return Poll::Ready(new_to_swarm);
+                    }
+                };
+            }
 
-                    Poll::Ready(new_to_swarm)
-                }
-            };
+            return Poll::Pending;
         }
-
-        Poll::Pending
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
