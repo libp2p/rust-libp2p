@@ -77,7 +77,7 @@ impl libp2p_core::Transport for Transport {
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let endpoint = Endpoint::from_multiaddr(&addr).map_err(|e| match e {
             e @ Error::InvalidMultiaddr(_) => {
-                log::error!("{}", e);
+                log::warn!("{}", e);
                 TransportError::MultiaddrNotSupported(addr)
             }
             e => TransportError::Other(e),
