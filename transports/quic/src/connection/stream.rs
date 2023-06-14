@@ -54,7 +54,7 @@ impl AsyncRead for Stream {
     ) -> Poll<io::Result<usize>> {
         if let Some(close_result) = self.close_result {
             if close_result.is_err() {
-                return Poll::Ready(Ok(0))
+                return Poll::Ready(Ok(0));
             }
         }
         let read_result = futures::ready!(Pin::new(&mut self.recv).poll_read(cx, buf));
