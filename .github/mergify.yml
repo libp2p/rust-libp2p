@@ -10,14 +10,10 @@ defaults:
         Pull-Request: #{{ number }}.
         
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
-        {% set co_authored_by = {} %}
-        {# We exclude merge commits (> 1 parent), commits from the PR author and only want to render one `Co-Authored-By` line per contributor. #}
-        {% for commit in commits
-            if  commit.parents|length <= 1 
-            and commit.author != author
-            and not co_authored_by.get(commit.email_author) %}
-          {% set _ = co_authored_by.update({commit.email_author: true}) %}
+        {% for commit in commits | unique(False, 'email_author') %}
+          {% if commit.parents|length == 1 and commit.author != author %}
         Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
+          {% endif %}
         {% endfor %}
         {# GitHub requires that the `Co-authored-by` lines are AT THE VERY END of a commit, hence nothing must come after this. #}
 
