@@ -32,11 +32,17 @@ pub struct Stream {
     send: quinn::SendStream,
     /// A receive part of the stream
     recv: quinn::RecvStream,
+    /// Whether the stream is closed or not
+    closed: bool,
 }
 
 impl Stream {
     pub(super) fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
-        Self { send, recv }
+        Self {
+            send,
+            recv,
+            closed: false,
+        }
     }
 }
 
@@ -46,6 +52,9 @@ impl AsyncRead for Stream {
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
+        if self.closed {
+            return Poll::Ready(Ok(0));
+        }
         Pin::new(&mut self.recv).poll_read(cx, buf)
     }
 }
@@ -64,6 +73,12 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.send).poll_close(cx)
+        if self.closed {
+            // For some reason poll_close needs to be 'fuse'able
+            return Poll::Ready(Ok(()));
+        }
+        let close_result = futures::ready!(Pin::new(&mut self.send).poll_close(cx));
+        self.closed = true;
+        Poll::Ready(close_result)
     }
 }
