@@ -8,6 +8,13 @@ defaults:
         {{ body | get_section("## Description", "") }}
         
         Pull-Request: #{{ number }}.
+        {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
+        {% for commit in (commits | unique(False, 'email_author')) | rejectattr("author", "==", author) %}
+          {% if commit.parents|length == 1 %}
+        Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
+          {% endif %}
+        {% endfor %}
+        {# GitHub requires that the `Co-authored-by` lines are AT THE VERY END of a commit, hence nothing must come after this. #}
 
 pull_request_rules:
   - name: Ask to resolve conflict
