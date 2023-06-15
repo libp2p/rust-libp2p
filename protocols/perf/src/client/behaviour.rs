@@ -104,7 +104,7 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::default())
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(ConnectionEstablished { peer_id, .. }) => {
                 self.connected.insert(peer_id);

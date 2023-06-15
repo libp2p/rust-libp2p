@@ -17,7 +17,7 @@ impl ListenAddresses {
     /// Feed a [`FromSwarm`] event to this struct.
     ///
     /// Returns whether the event changed our set of listen addresses.
-    pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
+    pub fn on_swarm_event(&mut self, event: &FromSwarm) -> bool {
         match event {
             FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
                 self.addresses.insert((*addr).clone())
@@ -33,7 +33,6 @@ impl ListenAddresses {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dummy;
     use libp2p_core::{multiaddr::Protocol, transport::ListenerId};
     use once_cell::sync::Lazy;
 
@@ -60,14 +59,14 @@ mod tests {
         assert!(!changed)
     }
 
-    fn new_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
+    fn new_listen_addr() -> FromSwarm<'static> {
         FromSwarm::NewListenAddr(NewListenAddr {
             listener_id: ListenerId::next(),
             addr: &MEMORY_ADDR,
         })
     }
 
-    fn expired_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
+    fn expired_listen_addr() -> FromSwarm<'static> {
         FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
             listener_id: ListenerId::next(),
             addr: &MEMORY_ADDR,

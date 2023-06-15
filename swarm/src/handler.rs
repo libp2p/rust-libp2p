@@ -158,6 +158,15 @@ pub trait ConnectionHandler: Send + 'static {
         >,
     >;
 
+    /// Gracefully close the [`ConnectionHandler`].
+    ///
+    /// Implementations may transfer one or more events to their [`NetworkBehaviour`] implementation
+    /// by emitting [`Poll::Ready`] with [`Self::ToBehaviour`]. Implementations should eventually
+    /// return [`Poll::Ready(None)`] to signal successful closing.
+    fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
+        Poll::Ready(None)
+    }
+
     /// Adds a closure that turns the input event into something else.
     fn map_in_event<TNewIn, TMap>(self, map: TMap) -> MapInEvent<Self, TNewIn, TMap>
     where

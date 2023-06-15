@@ -66,6 +66,10 @@
 
 - Add ability to `downcast_ref` ConnectionDenied errors. See [PR 4020].
 
+- Remove `handler` field from `ConnectionClosed`.
+  If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
+  See [PR XXXX.
+
 [PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
@@ -84,6 +88,7 @@
 [PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
 [PR 4020]: https://github.com/libp2p/rust-libp2p/pull/4020
 [PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 ## 0.42.2
 

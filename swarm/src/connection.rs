@@ -41,8 +41,8 @@ use crate::{
 };
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::FutureExt;
 use futures::StreamExt;
+use futures::{stream, FutureExt};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
@@ -206,8 +206,22 @@ where
 
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
-    pub(crate) fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (self.handler, self.muxing.close())
+    pub(crate) fn close(
+        self,
+    ) -> (
+        impl futures::Stream<Item = THandler::ToBehaviour>,
+        impl Future<Output = io::Result<()>>,
+    ) {
+        let Connection {
+            mut handler,
+            muxing,
+            ..
+        } = self;
+
+        (
+            stream::poll_fn(move |cx| handler.poll_close(cx)),
+            muxing.close(),
+        )
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and

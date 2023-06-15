@@ -122,16 +122,10 @@ where
         Ok(handler)
     }
 
-    fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: behaviour::FromSwarm) {
         match self {
-            Either::Left(b) => b.on_swarm_event(event.map_handler(|h| match h {
-                Either::Left(h) => h,
-                Either::Right(_) => unreachable!(),
-            })),
-            Either::Right(b) => b.on_swarm_event(event.map_handler(|h| match h {
-                Either::Right(h) => h,
-                Either::Left(_) => unreachable!(),
-            })),
+            Either::Left(b) => b.on_swarm_event(event),
+            Either::Right(b) => b.on_swarm_event(event),
         }
     }
 
