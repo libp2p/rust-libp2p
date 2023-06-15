@@ -204,8 +204,7 @@ where
         self.handler.on_behaviour_event(event);
     }
 
-    /// Begins an orderly shutdown of the connection, returning the connection
-    /// handler and a `Future` that resolves when connection shutdown is complete.
+    /// Begins an orderly shutdown of the connection, returning a stream of final events a `Future` that resolves when connection shutdown is complete.
     pub(crate) fn close(
         self,
     ) -> (
