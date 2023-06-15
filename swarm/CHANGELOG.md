@@ -68,7 +68,7 @@
 
 - Remove `handler` field from `ConnectionClosed`.
   If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
-  See [PR XXXX.
+  See [PR 4076.
 
 [PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
@@ -88,7 +88,7 @@
 [PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
 [PR 4020]: https://github.com/libp2p/rust-libp2p/pull/4020
 [PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4076]: https://github.com/libp2p/rust-libp2p/pull/4076
 
 ## 0.42.2
 
