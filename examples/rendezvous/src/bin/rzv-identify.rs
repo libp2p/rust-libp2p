@@ -78,11 +78,14 @@ async fn main() {
             SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
                 ..
             })) => {
-                swarm.behaviour_mut().rendezvous.register(
+                if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
-                );
+                ) {
+                    log::error!("Failed to register {}", error);
+                    return;
+                }
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::client::Event::Registered {

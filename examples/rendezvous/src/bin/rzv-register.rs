@@ -74,11 +74,14 @@ async fn main() {
                 log::error!("Lost connection to rendezvous point {}", error);
             }
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                swarm.behaviour_mut().rendezvous.register(
+                if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
-                );
+                ) {
+                    log::error!("Failed to register {}", error);
+                    return;
+                }
                 log::info!("Connection established with rendezvous point {}", peer_id);
             }
             // once `/identify` did its job, we know our external address and can register
