@@ -73,11 +73,8 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm) {
-        match event {
-            FromSwarm::ConnectionClosed(_) => {
-                assert_eq!(self.state, 0);
-            }
-            _ => {}
+        if let FromSwarm::ConnectionClosed(_) = event {
+            assert_eq!(self.state, 0);
         }
     }
 
