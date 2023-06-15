@@ -2881,6 +2881,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-ping",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
