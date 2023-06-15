@@ -1,4 +1,4 @@
-## 0.52.0 - unreleased
+## 0.52.0 
 
 ### Callouts
 

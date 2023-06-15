@@ -1,4 +1,4 @@
-## 0.13.0 - unreleased
+## 0.13.0 
 
 - Previously `libp2p-metrics::identify` would increase a counter / gauge / histogram on each
   received identify information. These metrics are misleading, as e.g. they depend on the identify
