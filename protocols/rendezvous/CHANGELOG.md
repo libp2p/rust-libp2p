@@ -1,8 +1,13 @@
 ## 0.13.0 - unreleased
 
+- Changed the signature of the function `client::Behavior::register()`,
+  it returns `Result<(), RegisterError>` now.
+  See [PR 4073].
+
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+[PR 4073]: https://github.com/libp2p/rust-libp2p/pull/4073
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 
 ## 0.12.1
