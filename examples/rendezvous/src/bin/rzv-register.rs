@@ -79,7 +79,7 @@ async fn main() {
                     rendezvous_point,
                     None,
                 ) {
-                    log::error!("Failed to register {}", error);
+                    log::error!("Failed to register: {error}");
                     return;
                 }
                 log::info!("Connection established with rendezvous point {}", peer_id);
