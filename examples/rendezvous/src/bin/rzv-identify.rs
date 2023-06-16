@@ -83,7 +83,7 @@ async fn main() {
                     rendezvous_point,
                     None,
                 ) {
-                    log::error!("Failed to register {}", error);
+                    log::error!("Failed to register: {error}");
                     return;
                 }
             }
