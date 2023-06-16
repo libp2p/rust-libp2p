@@ -38,7 +38,7 @@ async fn given_successful_registration_then_successful_discovery() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None)
-        .expect("Should send register request");
+        .unwrap();
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
@@ -111,7 +111,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None)
-        .expect("Should send register request");
+        .unwrap();
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
@@ -135,7 +135,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, Some(refresh_ttl))
-        .expect("Should send register request");
+        .unwrap();
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
@@ -178,7 +178,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
             *robert.local_peer_id(),
             Some(100_000_000),
         )
-        .expect("Should send register request");
+        .unwrap();
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
@@ -207,7 +207,7 @@ async fn discover_allows_for_dial_by_peer_id() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None)
-        .expect("Should send register request");
+        .unwrap();
     match alice.next_behaviour_event().await {
         rendezvous::client::Event::Registered { .. } => {}
         event => panic!("Unexpected event: {event:?}"),
@@ -259,7 +259,7 @@ async fn eve_cannot_register() {
 
     eve.behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None)
-        .expect("Should send register request");
+        .unwrap();
 
     match libp2p_swarm_test::drive(&mut eve, &mut robert).await {
         (
@@ -290,7 +290,7 @@ async fn can_combine_client_and_server() {
         .behaviour_mut()
         .client
         .register(namespace.clone(), *robert.local_peer_id(), None)
-        .expect("Should send register request");
+        .unwrap();
     match libp2p_swarm_test::drive(&mut charlie, &mut robert).await {
         (
             [CombinedEvent::Client(rendezvous::client::Event::Registered { .. })],
@@ -302,7 +302,7 @@ async fn can_combine_client_and_server() {
     alice
         .behaviour_mut()
         .register(namespace, *charlie.local_peer_id(), None)
-        .expect("Should send register request");
+        .unwrap();
     match libp2p_swarm_test::drive(&mut charlie, &mut alice).await {
         (
             [CombinedEvent::Server(rendezvous::server::Event::PeerRegistered { .. })],
@@ -328,7 +328,7 @@ async fn registration_on_clients_expire() {
     alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, Some(registration_ttl))
-        .expect("Should send register request");
+        .unwrap();
     match alice.next_behaviour_event().await {
         rendezvous::client::Event::Registered { .. } => {}
         event => panic!("Unexpected event: {event:?}"),

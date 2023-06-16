@@ -90,19 +90,15 @@ impl Behaviour {
             return Err(RegisterError::NoExternalAddresses);
         }
 
-        match PeerRecord::new(&self.keypair, external_addresses) {
-            Ok(peer_record) => {
-                let req_id = self.inner.send_request(
-                    &rendezvous_node,
-                    Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
-                );
-                self.waiting_for_register
-                    .insert(req_id, (rendezvous_node, namespace));
+        let peer_record = PeerRecord::new(&self.keypair, external_addresses)?;
+        let req_id = self.inner.send_request(
+            &rendezvous_node,
+            Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
+        );
+        self.waiting_for_register
+            .insert(req_id, (rendezvous_node, namespace));
 
-                Ok(())
-            }
-            Err(signing_error) => Err(RegisterError::FailedToMakeRecord(signing_error)),
-        }
+        Ok(())
     }
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
