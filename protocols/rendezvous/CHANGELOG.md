@@ -2,6 +2,8 @@
 
 - Changed the signature of the function `client::Behavior::register()`,
   it returns `Result<(), RegisterError>` now.
+  Remove the `Remote` variant from `RegisterError` and instead put the information from `Remote`
+  directly into the variant from the `Event` enum.
   See [PR 4073].
 
 - Raise MSRV to 1.65.

@@ -141,12 +141,6 @@ pub enum RegisterError {
     NoExternalAddresses,
     #[error("Failed to make a new PeerRecord")]
     FailedToMakeRecord(#[from] SigningError),
-    #[error("Failed to register with Rendezvous node")]
-    Remote {
-        rendezvous_node: PeerId,
-        namespace: Namespace,
-        error: ErrorCode,
-    },
 }
 
 #[derive(Debug)]
@@ -171,7 +165,11 @@ pub enum Event {
         namespace: Namespace,
     },
     /// We failed to register with the contained rendezvous node.
-    RegisterFailed(RegisterError),
+    RegisterFailed {
+        rendezvous_node: PeerId,
+        namespace: Namespace,
+        error: ErrorCode,
+    },
     /// The connection details we learned from this node expired.
     Expired { peer: PeerId },
 }
@@ -326,11 +324,11 @@ impl NetworkBehaviour for Behaviour {
 impl Behaviour {
     fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
         if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
-            return Some(Event::RegisterFailed(RegisterError::Remote {
+            return Some(Event::RegisterFailed {
                 rendezvous_node,
                 namespace,
                 error: ErrorCode::Unavailable,
-            }));
+            });
         };
 
         if let Some((rendezvous_node, namespace)) = self.waiting_for_discovery.remove(req_id) {
@@ -363,11 +361,11 @@ impl Behaviour {
                 if let Some((rendezvous_node, namespace)) =
                     self.waiting_for_register.remove(request_id)
                 {
-                    return Some(Event::RegisterFailed(RegisterError::Remote {
+                    return Some(Event::RegisterFailed {
                         rendezvous_node,
                         namespace,
                         error: error_code,
-                    }));
+                    });
                 }
 
                 None

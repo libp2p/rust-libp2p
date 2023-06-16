@@ -88,14 +88,12 @@ async fn should_return_error_when_no_external_addresses() {
     let server = new_server(rendezvous::server::Config::default()).await;
     let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
 
-    let res = client
+    let actual = client
         .behaviour_mut()
-        .register(namespace.clone(), *server.local_peer_id(), None);
+        .register(namespace.clone(), *server.local_peer_id(), None)
+        .unwrap_err();
 
-    match res {
-        Err(RegisterError::NoExternalAddresses) => {}
-        _ => panic!("Should get the RegisterError::NoExternalAddresses"),
-    }
+    assert!(matches!(actual, RegisterError::NoExternalAddresses))
 }
 
 #[tokio::test]
@@ -182,10 +180,10 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            [rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
+            [rendezvous::client::Event::RegisterFailed {
                 error,
                 ..
-            })],
+            }],
             [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(error, rendezvous::ErrorCode::InvalidTtl);
@@ -263,10 +261,10 @@ async fn eve_cannot_register() {
 
     match libp2p_swarm_test::drive(&mut eve, &mut robert).await {
         (
-            [rendezvous::client::Event::RegisterFailed(rendezvous::client::RegisterError::Remote {
+            [rendezvous::client::Event::RegisterFailed {
                 error: err_code,
                 ..
-            })],
+            }],
             [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(err_code, rendezvous::ErrorCode::NotAuthorized);
