@@ -180,10 +180,7 @@ async fn given_invalid_ttl_then_unsuccessful_registration() {
 
     match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
         (
-            [rendezvous::client::Event::RegisterFailed {
-                error,
-                ..
-            }],
+            [rendezvous::client::Event::RegisterFailed { error, .. }],
             [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {
             assert_eq!(error, rendezvous::ErrorCode::InvalidTtl);
@@ -262,8 +259,7 @@ async fn eve_cannot_register() {
     match libp2p_swarm_test::drive(&mut eve, &mut robert).await {
         (
             [rendezvous::client::Event::RegisterFailed {
-                error: err_code,
-                ..
+                error: err_code, ..
             }],
             [rendezvous::server::Event::PeerNotRegistered { .. }],
         ) => {

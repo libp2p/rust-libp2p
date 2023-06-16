@@ -100,12 +100,12 @@ async fn main() {
                 );
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
-                                      rendezvous::client::Event::RegisterFailed {
-                                          rendezvous_node,
-                                          namespace,
-                                          error,
-                                      },
-                                  )) => {
+                rendezvous::client::Event::RegisterFailed {
+                    rendezvous_node,
+                    namespace,
+                    error,
+                },
+            )) => {
                 log::error!(
                     "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
                     rendezvous_node,
