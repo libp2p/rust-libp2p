@@ -31,7 +31,7 @@ use libp2p_swarm::{
     ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
     THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::iter;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -40,8 +40,6 @@ pub struct Behaviour {
     inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
 
     keypair: Keypair,
-
-    error_events: VecDeque<Event>,
 
     waiting_for_register: HashMap<RequestId, (PeerId, Namespace)>,
     waiting_for_discovery: HashMap<RequestId, (PeerId, Option<Namespace>)>,
@@ -66,7 +64,6 @@ impl Behaviour {
                 iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
                 libp2p_request_response::Config::default(),
             ),
-            error_events: Default::default(),
             keypair,
             waiting_for_register: Default::default(),
             waiting_for_discovery: Default::default(),
@@ -82,30 +79,26 @@ impl Behaviour {
     ///
     /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
     /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
-    pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
+    pub fn register(
+        &mut self,
+        namespace: Namespace,
+        rendezvous_node: PeerId,
+        ttl: Option<Ttl>,
+    ) -> Result<(), RegisterError> {
         let external_addresses = self.external_addresses.iter().cloned().collect::<Vec<_>>();
         if external_addresses.is_empty() {
-            self.error_events
-                .push_back(Event::RegisterFailed(RegisterError::NoExternalAddresses));
-
-            return;
+            return Err(RegisterError::NoExternalAddresses);
         }
 
-        match PeerRecord::new(&self.keypair, external_addresses) {
-            Ok(peer_record) => {
-                let req_id = self.inner.send_request(
-                    &rendezvous_node,
-                    Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
-                );
-                self.waiting_for_register
-                    .insert(req_id, (rendezvous_node, namespace));
-            }
-            Err(signing_error) => {
-                self.error_events.push_back(Event::RegisterFailed(
-                    RegisterError::FailedToMakeRecord(signing_error),
-                ));
-            }
-        };
+        let peer_record = PeerRecord::new(&self.keypair, external_addresses)?;
+        let req_id = self.inner.send_request(
+            &rendezvous_node,
+            Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
+        );
+        self.waiting_for_register
+            .insert(req_id, (rendezvous_node, namespace));
+
+        Ok(())
     }
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
@@ -148,12 +141,6 @@ pub enum RegisterError {
     NoExternalAddresses,
     #[error("Failed to make a new PeerRecord")]
     FailedToMakeRecord(#[from] SigningError),
-    #[error("Failed to register with Rendezvous node")]
-    Remote {
-        rendezvous_node: PeerId,
-        namespace: Namespace,
-        error: ErrorCode,
-    },
 }
 
 #[derive(Debug)]
@@ -178,7 +165,11 @@ pub enum Event {
         namespace: Namespace,
     },
     /// We failed to register with the contained rendezvous node.
-    RegisterFailed(RegisterError),
+    RegisterFailed {
+        rendezvous_node: PeerId,
+        namespace: Namespace,
+        error: ErrorCode,
+    },
     /// The connection details we learned from this node expired.
     Expired { peer: PeerId },
 }
@@ -238,10 +229,6 @@ impl NetworkBehaviour for Behaviour {
         params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         use libp2p_request_response as req_res;
-
-        if let Some(event) = self.error_events.pop_front() {
-            return Poll::Ready(ToSwarm::GenerateEvent(event));
-        }
 
         loop {
             match self.inner.poll(cx, params) {
@@ -337,11 +324,11 @@ impl NetworkBehaviour for Behaviour {
 impl Behaviour {
     fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
         if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
-            return Some(Event::RegisterFailed(RegisterError::Remote {
+            return Some(Event::RegisterFailed {
                 rendezvous_node,
                 namespace,
                 error: ErrorCode::Unavailable,
-            }));
+            });
         };
 
         if let Some((rendezvous_node, namespace)) = self.waiting_for_discovery.remove(req_id) {
@@ -374,11 +361,11 @@ impl Behaviour {
                 if let Some((rendezvous_node, namespace)) =
                     self.waiting_for_register.remove(request_id)
                 {
-                    return Some(Event::RegisterFailed(RegisterError::Remote {
+                    return Some(Event::RegisterFailed {
                         rendezvous_node,
                         namespace,
                         error: error_code,
-                    }));
+                    });
                 }
 
                 None
