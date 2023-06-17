@@ -47,7 +47,7 @@ impl Future for FusedJsPromise {
         let val = ready!(self
             .promise
             .as_mut()
-            .expect("CachedJsPromise not initialized")
+            .expect("FusedJsPromise not initialized")
             .poll_unpin(cx));
 
         // Future finished, drop it
