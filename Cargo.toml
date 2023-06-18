@@ -21,7 +21,7 @@ members = [
     "misc/metrics",
     "misc/multistream-select",
     "misc/request-response",
-	"misc/quick-protobuf-codec",
+    "misc/quick-protobuf-codec",
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
     "muxers/mplex",
