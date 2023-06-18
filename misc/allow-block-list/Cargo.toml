@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
-void = "1"
+never-say-never = "6.6.666"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }

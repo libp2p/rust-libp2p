@@ -212,7 +212,7 @@ where
     ) {
         let out = match out {
             future::Either::Left(out) => out,
-            future::Either::Right(v) => void::unreachable(v),
+            future::Either::Right(never) => never,
         };
 
         if let Either::Left(info) = info {
@@ -253,7 +253,7 @@ where
 
         let err = match err {
             Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(never) => never,
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

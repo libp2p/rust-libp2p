@@ -36,12 +36,12 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
     PollParameters, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use never_say_never::Never;
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -331,7 +331,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let event = match event {
             Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => v,
         };
 
         match event {
@@ -775,7 +775,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(ToSwarm<Event, Either<handler::In, Void>>),
+    Done(ToSwarm<Event, Either<handler::In, Never>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -783,8 +783,8 @@ enum Action {
     },
 }
 
-impl From<ToSwarm<Event, Either<handler::In, Void>>> for Action {
-    fn from(action: ToSwarm<Event, Either<handler::In, Void>>) -> Self {
+impl From<ToSwarm<Event, Either<handler::In, Never>>> for Action {
+    fn from(action: ToSwarm<Event, Either<handler::In, Never>>) -> Self {
         Self::Done(action)
     }
 }
@@ -794,7 +794,7 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> ToSwarm<Event, Either<handler::In, Void>> {
+    ) -> ToSwarm<Event, Either<handler::In, Never>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

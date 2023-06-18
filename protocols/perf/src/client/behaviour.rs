@@ -32,7 +32,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use void::Void;
+use never_say_never::Never;
 
 use crate::client::handler::Handler;
 
@@ -41,7 +41,7 @@ use super::{RunId, RunParams, RunStats};
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub result: Result<RunStats, StreamUpgradeError<Never>>,
 }
 
 #[derive(Default)]

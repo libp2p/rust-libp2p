@@ -23,7 +23,7 @@ quick-protobuf-codec = { workspace = true }
 quick-protobuf = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0"
-void = "1.0"
+never-say-never = "6.6.666"
 either = "1.8.0"
 
 [dev-dependencies]

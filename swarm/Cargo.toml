@@ -22,7 +22,7 @@ libp2p-swarm-derive = { workspace = true, optional = true }
 log = "0.4"
 rand = "0.8"
 smallvec = "1.6.1"
-void = "1"
+never-say-never = "6.6.666"
 wasm-bindgen-futures = { version = "0.4.36", optional = true }
 getrandom = { version = "0.2.9", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 once_cell = "1.18.0"
@@ -52,7 +52,7 @@ libp2p-swarm-derive = { workspace = true }
 libp2p-swarm-test = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-void = "1"
+never-say-never = "6.6.666"
 once_cell = "1.18.0"
 trybuild = "1.0.80"
 

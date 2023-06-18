@@ -221,7 +221,7 @@ where
         _: ConnectionId,
         ev: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(ev)
+        ev
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {

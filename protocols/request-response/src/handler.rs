@@ -36,6 +36,7 @@ use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError},
     SubstreamProtocol,
 };
+use never_say_never::Never;
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
@@ -239,7 +240,7 @@ where
 {
     type FromBehaviour = RequestProtocol<TCodec>;
     type ToBehaviour = Event<TCodec>;
-    type Error = void::Void;
+    type Error = Never;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;

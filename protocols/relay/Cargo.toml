@@ -26,7 +26,7 @@ quick-protobuf-codec = { workspace = true }
 rand = "0.8.4"
 static_assertions = "1"
 thiserror = "1.0"
-void = "1"
+never-say-never = "6.6.666"
 
 [dev-dependencies]
 env_logger = "0.10.0"

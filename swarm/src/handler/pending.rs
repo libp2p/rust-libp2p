@@ -24,8 +24,8 @@ use crate::handler::{
     FullyNegotiatedOutbound, KeepAlive, SubstreamProtocol,
 };
 use libp2p_core::upgrade::PendingUpgrade;
+use never_say_never::Never;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]
@@ -40,12 +40,12 @@ impl PendingConnectionHandler {
 }
 
 impl ConnectionHandler for PendingConnectionHandler {
-    type FromBehaviour = Void;
-    type ToBehaviour = Void;
-    type Error = Void;
+    type FromBehaviour = Never;
+    type ToBehaviour = Never;
+    type Error = Never;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo = Never;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -53,7 +53,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        void::unreachable(v)
+        v
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -86,17 +86,10 @@ impl ConnectionHandler for PendingConnectionHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => protocol,
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol,
-                info: _info,
-            }) => {
-                void::unreachable(protocol);
-                #[allow(unreachable_code, clippy::used_underscore_binding)]
-                {
-                    void::unreachable(_info);
-                }
-            }
+                protocol, ..
+            }) => protocol,
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)

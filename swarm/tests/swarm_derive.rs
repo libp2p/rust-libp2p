@@ -26,6 +26,7 @@ use libp2p_swarm::{
     behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
+use never_say_never::Never;
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -467,7 +468,7 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ToSwarm = void::Void;
+        type ToSwarm = Never;
 
         fn handle_established_inbound_connection(
             &mut self,
@@ -495,7 +496,7 @@ fn custom_out_event_no_type_parameters() {
             _connection: ConnectionId,
             message: THandlerOutEvent<Self>,
         ) {
-            void::unreachable(message);
+            message
         }
 
         fn poll(
@@ -534,12 +535,6 @@ fn custom_out_event_no_type_parameters() {
     #[derive(Debug)]
     enum OutEvent {
         None,
-    }
-
-    impl From<void::Void> for OutEvent {
-        fn from(_e: void::Void) -> Self {
-            Self::None
-        }
     }
 
     require_net_behaviour::<Behaviour<String>>();

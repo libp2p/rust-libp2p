@@ -39,6 +39,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
 use log::debug;
+use never_say_never::Never;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
@@ -138,7 +139,7 @@ pub struct Handler {
     /// Once all substreams are dropped and this handler has no other work,
     /// [`KeepAlive::Until`] can be set, allowing the connection to be closed
     /// eventually.
-    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
+    alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<Never>>,
 
     circuit_deny_futs:
         HashMap<PeerId, BoxFuture<'static, Result<(), protocol::inbound_stop::UpgradeError>>>,
@@ -499,7 +500,7 @@ impl ConnectionHandler for Handler {
         loop {
             match self.alive_lend_out_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Err(oneshot::Canceled))) => {}
-                Poll::Ready(Some(Ok(v))) => void::unreachable(v),
+                Poll::Ready(Some(Ok(v))) => v,
                 Poll::Ready(None) | Poll::Pending => break,
             }
         }

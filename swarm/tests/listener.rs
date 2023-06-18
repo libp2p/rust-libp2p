@@ -1,3 +1,4 @@
+use never_say_never::Never;
 use std::{
     collections::{HashSet, VecDeque},
     task::{Context, Poll},
@@ -75,7 +76,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = void::Void;
+    type ToSwarm = Never;
 
     fn handle_established_inbound_connection(
         &mut self,

@@ -5,8 +5,8 @@ use libp2p_core::Transport;
 use libp2p_identity as identity;
 use libp2p_ping as ping;
 use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmBuilder};
+use never_say_never::Never;
 use rand::thread_rng;
-use void::Void;
 
 /// An example WebRTC server that will accept connections and run the ping protocol on them.
 #[tokio::main]
@@ -52,11 +52,5 @@ enum Event {
 impl From<ping::Event> for Event {
     fn from(e: ping::Event) -> Self {
         Event::Ping(e)
-    }
-}
-
-impl From<Void> for Event {
-    fn from(event: Void) -> Self {
-        void::unreachable(event)
     }
 }

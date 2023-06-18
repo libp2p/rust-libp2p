@@ -1374,7 +1374,7 @@ where
     ///
     /// Spawning a task is similar too:
     /// ```typescript
-    /// function spawn(task: () => Promise<void>) {
+    /// function spawn(task: () => Promise<Never>) {
     ///     task()
     /// }
     /// ```

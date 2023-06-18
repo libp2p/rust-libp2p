@@ -24,7 +24,7 @@ smallvec = "1.6.1"
 socket2 = { version = "0.5.3", features = ["all"] }
 tokio = { version = "1.28", default-features = false, features = ["net", "time"], optional = true}
 trust-dns-proto = { version = "0.22.0", default-features = false, features = ["mdns", "tokio-runtime"] }
-void = "1.0.2"
+never-say-never = "6.6.666"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]

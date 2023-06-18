@@ -35,10 +35,10 @@ use libp2p_swarm::{
     ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
     THandlerInEvent, ToSwarm,
 };
+use never_say_never::Never;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
-use void::Void;
 
 pub(crate) const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
@@ -67,12 +67,12 @@ pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
-    Handler(StreamUpgradeError<Void>),
+    Handler(StreamUpgradeError<Never>),
 }
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Void>>>,
+    queued_events: VecDeque<ToSwarm<Event, Either<handler::relayed::Command, Never>>>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -341,7 +341,7 @@ impl NetworkBehaviour for Behaviour {
                     .or_default() += 1;
                 self.queued_events.push_back(ToSwarm::Dial { opts });
             }
-            Either::Right(never) => void::unreachable(never),
+            Either::Right(never) => never,
         };
     }
 

@@ -33,7 +33,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
 use log::error;
-use void::Void;
+use never_say_never::Never;
 
 use super::RunStats;
 
@@ -63,12 +63,12 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour= Never;
     type ToBehaviour = Event;
-    type Error = Void;
+    type Error= Never;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo= Never;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -76,7 +76,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
-        void::unreachable(v)
+        {}
     }
 
     fn on_connection_event(

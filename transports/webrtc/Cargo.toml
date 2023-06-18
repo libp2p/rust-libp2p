@@ -48,7 +48,7 @@ libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-ping = { workspace = true }
 tokio = { version = "1.28", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1"
+never-say-never = "6.6.666"
 quickcheck = "1.0.3"
 
 [[test]]

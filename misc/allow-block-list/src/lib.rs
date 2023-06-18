@@ -67,10 +67,10 @@ use libp2p_swarm::{
     dummy, CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
+use never_say_never::Never;
 use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll, Waker};
-use void::Void;
 
 /// A [`NetworkBehaviour`] that can act as an allow or block list.
 #[derive(Default, Debug)]
@@ -191,7 +191,7 @@ where
     S: Enforce,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Never;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -255,7 +255,7 @@ where
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        event
     }
 
     fn poll(

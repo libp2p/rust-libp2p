@@ -542,7 +542,7 @@ impl KademliaHandler {
         // is a `Void`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
-            future::Either::Right(p) => void::unreachable(p),
+            future::Either::Right(p) => p,
         };
 
         if let ProtocolStatus::Unknown = self.protocol_status {

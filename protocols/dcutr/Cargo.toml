@@ -23,7 +23,7 @@ log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"
-void = "1"
+never-say-never = "6.6.666"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }

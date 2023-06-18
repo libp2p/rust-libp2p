@@ -35,6 +35,7 @@ use libp2p_swarm::handler::{
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
+use never_say_never::Never;
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 
@@ -45,19 +46,11 @@ pub enum Command {
 
 #[derive(Debug)]
 pub enum Event {
-    InboundConnectRequest {
-        remote_addr: Multiaddr,
-    },
-    InboundNegotiationFailed {
-        error: StreamUpgradeError<void::Void>,
-    },
+    InboundConnectRequest { remote_addr: Multiaddr },
+    InboundNegotiationFailed { error: StreamUpgradeError<Never> },
     InboundConnectNegotiated(Vec<Multiaddr>),
-    OutboundNegotiationFailed {
-        error: StreamUpgradeError<void::Void>,
-    },
-    OutboundConnectNegotiated {
-        remote_addrs: Vec<Multiaddr>,
-    },
+    OutboundNegotiationFailed { error: StreamUpgradeError<Never> },
+    OutboundConnectNegotiated { remote_addrs: Vec<Multiaddr> },
 }
 
 pub struct Handler {
@@ -135,7 +128,7 @@ impl Handler {
                 self.attempts += 1;
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            future::Either::Right(output) => void::unreachable(output),
+            future::Either::Right(output) => output,
         }
     }
 
@@ -170,7 +163,7 @@ impl Handler {
     ) {
         self.pending_error = Some(StreamUpgradeError::Apply(match error {
             Either::Left(e) => Either::Left(e),
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => v,
         }));
     }
 

@@ -31,6 +31,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
+use never_say_never::Never;
 use std::collections::VecDeque;
 use std::{
     error::Error,
@@ -38,7 +39,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use void::Void;
 
 /// The configuration for outbound pings.
 #[derive(Debug, Clone)]
@@ -202,7 +202,7 @@ impl Handler {
                     "ping protocol negotiation timed out",
                 )),
             },
-            StreamUpgradeError::Apply(e) => void::unreachable(e),
+            StreamUpgradeError::Apply(e) => e,
             StreamUpgradeError::Io(e) => Failure::Other { error: Box::new(e) },
         };
 
@@ -211,9 +211,9 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = Void;
+    type FromBehaviour = Never;
     type ToBehaviour = Result<Duration, Failure>;
-    type Error = Void;
+    type Error = Never;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
@@ -223,7 +223,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
-    fn on_behaviour_event(&mut self, _: Void) {}
+    fn on_behaviour_event(&mut self, _: Never) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No

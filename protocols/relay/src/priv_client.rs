@@ -43,12 +43,12 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
+use never_say_never::Never;
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use transport::Transport;
-use void::Void;
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -99,7 +99,7 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Void>>>,
+    queued_actions: VecDeque<ToSwarm<Event, Either<handler::In, Never>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
@@ -243,7 +243,7 @@ impl NetworkBehaviour for Behaviour {
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,
-            Either::Right(v) => void::unreachable(v),
+            Either::Right(v) => v,
         };
 
         let event = match handler_event {
@@ -393,7 +393,7 @@ enum ConnectionState {
         /// This is flagged as "dead-code" by the compiler because we never read from it here.
         /// However, it is actual use is to trigger the `Canceled` error in the `Transport` when this `Sender` is dropped.
         #[allow(dead_code)]
-        drop_notifier: oneshot::Sender<void::Void>,
+        drop_notifier: oneshot::Sender<Never>,
     },
 }
 
@@ -402,7 +402,7 @@ impl Unpin for ConnectionState {}
 impl ConnectionState {
     pub(crate) fn new_inbound(
         circuit: inbound_stop::Circuit,
-        drop_notifier: oneshot::Sender<void::Void>,
+        drop_notifier: oneshot::Sender<Never>,
     ) -> Self {
         ConnectionState::InboundAccepting {
             accept: async {
@@ -423,7 +423,7 @@ impl ConnectionState {
     pub(crate) fn new_outbound(
         substream: Stream,
         read_buffer: Bytes,
-        drop_notifier: oneshot::Sender<void::Void>,
+        drop_notifier: oneshot::Sender<Never>,
     ) -> Self {
         ConnectionState::Operational {
             substream,

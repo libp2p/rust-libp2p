@@ -36,8 +36,8 @@ use futures::{
     SinkExt, StreamExt,
 };
 use libp2p_core::muxing::StreamMuxerBox;
+use never_say_never::Never;
 use std::pin::Pin;
-use void::Void;
 
 /// Commands that can be sent to a task driving an established connection.
 #[derive(Debug)]
@@ -94,7 +94,7 @@ pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
 pub(crate) async fn new_for_pending_outgoing_connection(
     connection_id: ConnectionId,
     dial: ConcurrentDial,
-    abort_receiver: oneshot::Receiver<Void>,
+    abort_receiver: oneshot::Receiver<Never>,
     mut events: mpsc::Sender<PendingConnectionEvent>,
 ) {
     match futures::future::select(abort_receiver, Box::pin(dial)).await {
@@ -106,7 +106,7 @@ pub(crate) async fn new_for_pending_outgoing_connection(
                 })
                 .await;
         }
-        Either::Left((Ok(v), _)) => void::unreachable(v),
+        Either::Left((Ok(v), _)) => v,
         Either::Right((Ok((address, output, errors)), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {
@@ -130,7 +130,7 @@ pub(crate) async fn new_for_pending_outgoing_connection(
 pub(crate) async fn new_for_pending_incoming_connection<TFut>(
     connection_id: ConnectionId,
     future: TFut,
-    abort_receiver: oneshot::Receiver<Void>,
+    abort_receiver: oneshot::Receiver<Never>,
     mut events: mpsc::Sender<PendingConnectionEvent>,
 ) where
     TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
@@ -144,7 +144,7 @@ pub(crate) async fn new_for_pending_incoming_connection<TFut>(
                 })
                 .await;
         }
-        Either::Left((Ok(v), _)) => void::unreachable(v),
+        Either::Left((Ok(v), _)) => v,
         Either::Right((Ok(output), _)) => {
             let _ = events
                 .send(PendingConnectionEvent::ConnectionEstablished {

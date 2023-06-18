@@ -1528,8 +1528,8 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "never-say-never",
  "serde",
- "void",
 ]
 
 [[package]]
@@ -2342,7 +2342,7 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "void",
+ "never-say-never",
 ]
 
 [[package]]
@@ -2377,9 +2377,9 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
+ "never-say-never",
  "quickcheck-ext",
  "rand 0.8.5",
- "void",
 ]
 
 [[package]]
@@ -2399,6 +2399,7 @@ dependencies = [
  "multiaddr",
  "multihash",
  "multistream-select",
+ "never-say-never",
  "once_cell",
  "parking_lot",
  "pin-project",
@@ -2410,7 +2411,6 @@ dependencies = [
  "smallvec",
  "thiserror",
  "unsigned-varint",
- "void",
 ]
 
 [[package]]
@@ -2438,11 +2438,11 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
- "void",
 ]
 
 [[package]]
@@ -2520,6 +2520,7 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "prometheus-client",
  "quick-protobuf",
  "quick-protobuf-codec",
@@ -2530,7 +2531,6 @@ dependencies = [
  "sha2 0.10.6",
  "smallvec",
  "unsigned-varint",
- "void",
 ]
 
 [[package]]
@@ -2549,11 +2549,11 @@ dependencies = [
  "libp2p-swarm-test",
  "log",
  "lru",
+ "never-say-never",
  "quick-protobuf",
  "quick-protobuf-codec",
  "smallvec",
  "thiserror",
- "void",
 ]
 
 [[package]]
@@ -2569,6 +2569,7 @@ dependencies = [
  "libsecp256k1",
  "log",
  "multihash",
+ "never-say-never",
  "p256 0.13.2",
  "quick-protobuf",
  "quickcheck-ext",
@@ -2580,7 +2581,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.6",
  "thiserror",
- "void",
  "zeroize",
 ]
 
@@ -2606,6 +2606,7 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
@@ -2615,7 +2616,6 @@ dependencies = [
  "thiserror",
  "uint",
  "unsigned-varint",
- "void",
 ]
 
 [[package]]
@@ -2636,12 +2636,12 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "rand 0.8.5",
  "smallvec",
  "socket2 0.5.3",
  "tokio",
  "trust-dns-proto",
- "void",
 ]
 
 [[package]]
@@ -2744,12 +2744,12 @@ dependencies = [
  "libp2p-tls",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
- "void",
 ]
 
 [[package]]
@@ -2767,9 +2767,9 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-test",
  "log",
+ "never-say-never",
  "quickcheck-ext",
  "rand 0.8.5",
- "void",
 ]
 
 [[package]]
@@ -2856,13 +2856,13 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
  "static_assertions",
  "thiserror",
- "void",
 ]
 
 [[package]]
@@ -2887,12 +2887,12 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
  "tokio",
- "void",
 ]
 
 [[package]]
@@ -2913,12 +2913,12 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
+ "never-say-never",
  "rand 0.8.5",
  "serde",
  "serde_cbor",
  "serde_json",
  "smallvec",
- "void",
 ]
 
 [[package]]
@@ -2944,13 +2944,13 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "multistream-select",
+ "never-say-never",
  "once_cell",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
  "tokio",
  "trybuild",
- "void",
  "wasm-bindgen-futures",
 ]
 
@@ -3067,6 +3067,7 @@ dependencies = [
  "libp2p-swarm",
  "log",
  "multihash",
+ "never-say-never",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck",
@@ -3080,7 +3081,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "unsigned-varint",
- "void",
  "webrtc",
 ]
 
@@ -3433,6 +3433,12 @@ dependencies = [
  "log",
  "tokio",
 ]
+
+[[package]]
+name = "never-say-never"
+version = "6.6.666"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf5a574dadd7941adeaa71823ecba5e28331b8313fb2e1c6a5c7e5981ea53ad6"
 
 [[package]]
 name = "nix"
@@ -5215,12 +5221,6 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "waitgroup"

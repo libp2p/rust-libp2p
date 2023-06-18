@@ -11,15 +11,15 @@ use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
+use never_say_never::Never;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything.
 pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type ToSwarm = Void;
+    type ToSwarm = Never;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -47,7 +47,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
-        void::unreachable(event)
+        event
     }
 
     fn poll(
@@ -82,20 +82,20 @@ impl NetworkBehaviour for Behaviour {
 pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
-    type FromBehaviour = Void;
-    type ToBehaviour = Void;
-    type Error = Void;
+    type FromBehaviour = Never;
+    type ToBehaviour = Never;
+    type Error = Never;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
-    type OutboundOpenInfo = Void;
+    type OutboundOpenInfo = Never;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
-        void::unreachable(event)
+        event
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -128,13 +128,13 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         match event {
             ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => protocol,
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
-            }) => void::unreachable(protocol),
+            }) => protocol,
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 StreamUpgradeError::Timeout => unreachable!(),
-                StreamUpgradeError::Apply(e) => void::unreachable(e),
+                StreamUpgradeError::Apply(e) => e,
                 StreamUpgradeError::NegotiationFailed | StreamUpgradeError::Io(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }

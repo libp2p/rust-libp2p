@@ -22,7 +22,7 @@ serde = { version = "1.0", optional = true}
 serde_json = { version = "1.0.96", optional = true }
 serde_cbor = { version = "0.11.2", optional = true }
 smallvec = "1.6.1"
-void = "1.0.2"
+never-say-never = "6.6.666"
 log = "0.4.19"
 
 [features]

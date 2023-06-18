@@ -34,13 +34,13 @@ use libp2p_swarm::handler::{
     SubstreamProtocol,
 };
 use libp2p_swarm::Stream;
+use never_say_never::Never;
 use smallvec::SmallVec;
 use std::{
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
-use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
 /// by the handler.
@@ -395,7 +395,7 @@ impl EnabledHandler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
-    type Error = Void;
+    type Error = Never;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
     type OutboundOpenInfo = ();
@@ -520,7 +520,7 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => match protocol {
                         Either::Left(protocol) => handler.on_fully_negotiated_inbound(protocol),
-                        Either::Right(v) => void::unreachable(v),
+                        Either::Right(v) => v,
                     },
                     ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                         handler.on_fully_negotiated_outbound(fully_negotiated_outbound)
@@ -534,7 +534,7 @@ impl ConnectionHandler for Handler {
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
                         ..
-                    }) => void::unreachable(e),
+                    }) => e,
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::NegotiationFailed,
                         ..

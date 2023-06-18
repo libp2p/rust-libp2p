@@ -21,8 +21,8 @@
 
 use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future;
+use never_say_never::Never;
 use std::iter;
-use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.
@@ -53,8 +53,8 @@ impl<C, P> InboundUpgrade<C> for PendingUpgrade<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = Void;
-    type Error = Void;
+    type Output = Never;
+    type Error = Never;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
@@ -66,8 +66,8 @@ impl<C, P> OutboundUpgrade<C> for PendingUpgrade<P>
 where
     P: AsRef<str> + Clone,
 {
-    type Output = Void;
-    type Error = Void;
+    type Output = Never;
+    type Error = Never;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {

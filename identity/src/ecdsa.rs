@@ -24,6 +24,7 @@ use super::error::DecodingError;
 use core::cmp;
 use core::fmt;
 use core::hash;
+use never_say_never::Never;
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -32,7 +33,6 @@ use p256::{
     EncodedPoint,
 };
 use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
-use void::Void;
 use zeroize::Zeroize;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
@@ -181,7 +181,7 @@ impl PublicKey {
     /// Try to decode a public key from a DER encoded byte buffer as defined by SEC1 standard.
     pub fn try_decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
-            DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
+            DecodingError::failed_to_parse::<Never, _>("ASN.1-encoded ecdsa p256 public key", None)
         })?;
         Self::try_from_bytes(buf)
     }

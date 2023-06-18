@@ -30,10 +30,10 @@ use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
 use log::{debug, trace};
+use never_say_never::Never;
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
 use thiserror::Error;
-use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -128,7 +128,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = BoxFuture<'static, Result<Info, UpgradeError>>;
-    type Error = Void;
+    type Error = Never;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {

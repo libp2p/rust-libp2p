@@ -34,7 +34,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use void::Void;
+use never_say_never::Never;
 
 use super::{RunId, RunParams, RunStats};
 
@@ -47,7 +47,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub(crate) result: Result<RunStats, StreamUpgradeError<Never>>,
 }
 
 pub struct Handler {
@@ -88,7 +88,7 @@ impl Default for Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = Command;
     type ToBehaviour = Event;
-    type Error = Void;
+    type Error= Never;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();

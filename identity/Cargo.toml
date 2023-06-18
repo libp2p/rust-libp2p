@@ -25,7 +25,7 @@ sec1 = { version = "0.7", default-features = false, optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = { version = "0.10.0", optional = true }
 thiserror = { version = "1.0", optional = true }
-void = { version = "1.0", optional = true }
+never-say-never = { version = "6.6.666", optional = true }
 zeroize = { version = "1.6", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -33,7 +33,7 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 
 [features]
 secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:rand", "dep:sha2", "dep:zeroize" ]
-ecdsa = [ "dep:p256", "dep:rand", "dep:void", "dep:zeroize", "dep:sec1" ]
+ecdsa = [ "dep:p256", "dep:rand", "dep:never-say-never", "dep:zeroize", "dep:sec1" ]
 rsa = [ "dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize" ]
 ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize" ]
 peerid = [ "dep:multihash", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]

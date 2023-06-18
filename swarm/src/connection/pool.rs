@@ -40,6 +40,7 @@ use futures::{
 use instant::Instant;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use never_say_never::Never;
 use std::task::Waker;
 use std::{
     collections::{hash_map, HashMap},
@@ -49,7 +50,6 @@ use std::{
     task::Context,
     task::Poll,
 };
-use void::Void;
 
 mod concurrent_dial;
 mod task;
@@ -194,7 +194,7 @@ struct PendingConnection {
     peer_id: Option<PeerId>,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
-    abort_notifier: Option<oneshot::Sender<Void>>,
+    abort_notifier: Option<oneshot::Sender<Never>>,
     /// The moment we became aware of this possible connection, useful for timing metrics.
     accepted_at: Instant,
 }

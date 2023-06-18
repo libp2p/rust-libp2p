@@ -209,10 +209,7 @@ impl EventLoop {
         }
     }
 
-    async fn handle_event(
-        &mut self,
-        event: SwarmEvent<ComposedEvent, Either<void::Void, io::Error>>,
-    ) {
+    async fn handle_event(&mut self, event: SwarmEvent<ComposedEvent, Either<Never, io::Error>>) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
                 KademliaEvent::OutboundQueryProgressed {
