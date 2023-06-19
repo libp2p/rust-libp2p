@@ -4045,7 +4045,6 @@ dependencies = [
  "pem",
  "ring",
  "time",
- "x509-parser 0.13.2",
  "yasna",
 ]
 
@@ -4058,6 +4057,7 @@ dependencies = [
  "pem",
  "ring",
  "time",
+ "x509-parser 0.14.0",
  "yasna",
 ]
 
@@ -5385,9 +5385,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc"
-version = "0.6.0"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d3bc9049bdb2cea52f5fd4f6f728184225bdb867ed0dc2410eab6df5bdd67bb"
+checksum = "072e218dd661ea9074ba20cf80be38b8346729337abe96940800fb4b3ed2692f"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -5398,7 +5398,7 @@ dependencies = [
  "log",
  "pem",
  "rand 0.8.5",
- "rcgen 0.9.3",
+ "rcgen 0.10.0",
  "regex",
  "ring",
  "rtcp",
@@ -5427,9 +5427,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-data"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ef36a4d12baa6e842582fe9ec16a57184ba35e1a09308307b67d43ec8883100"
+checksum = "5c3c7ba7d11733e448d8d2d054814e97c558f52293f0e0a2eb05840f28b3be12"
 dependencies = [
  "bytes",
  "derive_builder",
@@ -5521,9 +5521,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-media"
-version = "0.5.1"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f72e1650a8ae006017d1a5280efb49e2610c19ccc3c0905b03b648aee9554991"
+checksum = "6136216b40e2e87ca977fbfdaa1cddfa067feef2d011341139e7aaea3d7215d4"
 dependencies = [
  "byteorder",
  "bytes",
@@ -5534,9 +5534,9 @@ dependencies = [
 
 [[package]]
 name = "webrtc-sctp"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d47adcd9427eb3ede33d5a7f3424038f63c965491beafcc20bc650a2f6679c0"
+checksum = "7df742d91cfbd982f6ab2bfd45a7c3ddfce5b2f55913b2f63877404d1b3259db"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -5785,6 +5785,24 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry 0.4.0",
+ "rusticata-macros",
+ "thiserror",
+ "time",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0ecbeb7b67ce215e40e3cc7f2ff902f94a223acf44995934763467e7b1febc8"
+dependencies = [
+ "asn1-rs 0.5.2",
+ "base64 0.13.1",
+ "data-encoding",
+ "der-parser 8.2.0",
+ "lazy_static",
+ "nom",
+ "oid-registry 0.6.1",
  "ring",
  "rusticata-macros",
  "thiserror",
