@@ -1,4 +1,4 @@
-## 0.43.0 - unreleased
+## 0.43.0 
 
 - Allow `NetworkBehaviours` to create and remove listeners.
   See [PR 3292].

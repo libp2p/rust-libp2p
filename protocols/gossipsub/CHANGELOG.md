@@ -1,4 +1,4 @@
-## 0.45.0 - unreleased
+## 0.45.0 
 
 - Raise MSRV to 1.65.
   See [PR 3715].
