@@ -160,9 +160,8 @@ pub trait ConnectionHandler: Send + 'static {
 
     /// Gracefully close the [`ConnectionHandler`].
     ///
-    /// Implementations may transfer one or more events to their [`NetworkBehaviour`] implementation
-    /// by emitting [`Poll::Ready`] with [`Self::ToBehaviour`]. Implementations should eventually
-    /// return [`Poll::Ready(None)`] to signal successful closing.
+    /// The contract for this function is equivalent to a [`Stream`](futures::Stream).
+    /// It will be polled to completion _in parallel_ with closing the underlying physical connection.
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         Poll::Ready(None)
     }
