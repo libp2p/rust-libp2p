@@ -162,6 +162,9 @@ pub trait ConnectionHandler: Send + 'static {
     ///
     /// The contract for this function is equivalent to a [`Stream`](futures::Stream).
     /// It will be polled to completion _in parallel_ with closing the underlying physical connection.
+    /// Performing IO on the connection will likely fail.
+    ///
+    /// To signal completion, [`Poll::Ready(None)`] should be returned.
     fn poll_close(&mut self, _: &mut Context<'_>) -> Poll<Option<Self::ToBehaviour>> {
         Poll::Ready(None)
     }
