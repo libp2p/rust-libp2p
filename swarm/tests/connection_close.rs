@@ -22,7 +22,7 @@ async fn sends_remaining_events_to_behaviour_on_connection_close() {
     swarm1.disconnect_peer_id(*swarm2.local_peer_id()).unwrap();
 
     match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-        ([SwarmEvent::ConnectionClosed { .. }], [_, SwarmEvent::ConnectionClosed { .. }]) => {
+        ([SwarmEvent::ConnectionClosed { .. }], [SwarmEvent::ConnectionClosed { .. }]) => {
             assert_eq!(swarm1.behaviour().state, 0);
             assert_eq!(swarm2.behaviour().state, 0);
         }
