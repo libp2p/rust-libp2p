@@ -64,6 +64,8 @@
 
 - Remove deprecated items. See [PR 3956].
 
+- Add ability to `downcast_ref` ConnectionDenied errors. See [PR 4020].
+
 [PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
@@ -80,6 +82,7 @@
 [PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
 [PR 3955]: https://github.com/libp2p/rust-libp2p/pull/3955
 [PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
+[PR 4020]: https://github.com/libp2p/rust-libp2p/pull/4020
 [PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
 
 ## 0.42.2
