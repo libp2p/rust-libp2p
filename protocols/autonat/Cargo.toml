@@ -26,7 +26,7 @@ quick-protobuf = "0.8"
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
 env_logger = "0.10"
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
