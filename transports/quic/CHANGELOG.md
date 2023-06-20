@@ -1,4 +1,4 @@
-## 0.8.0-alpha - unreleased
+## 0.8.0-alpha
 
 - Raise MSRV to 1.65.
   See [PR 3715].
