@@ -8,15 +8,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Kademlia client mode
-
-| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
-|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
-| Optimization | in progress | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
-
-Kademlia client mode will enhance routing table health and thus have a positive impact on all
-Kademlia operations.
-
 ## QUIC - evaluate and move to quinn
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
@@ -49,7 +40,6 @@ Reduce maintenance burden and reduce dependency footprint.
 | Connectivity | todo   | Q4/2023           |          | AutoNATv2    | AutoNATv2  |
 
 Be smart on address prioritization. go-libp2p made a lot of progress here. Lots to learn. See https://github.com/libp2p/go-libp2p/issues/2229 and https://github.com/libp2p/rust-libp2p/issues/1896#issuecomment-1537774383.
-
 
 ## AutoNATv2
 
@@ -119,7 +109,6 @@ Leverage protocols like UPnP to configure port-forwarding on ones router when be
 firewall. Another technique in addition to hole punching increasing the probability for a node to
 become publicly reachable when behind a firewall and/or NAT.
 
-
 ## Done
 
 ### Alpha QUIC support
@@ -137,7 +126,6 @@ https://github.com/libp2p/rust-libp2p/pull/2289.
 | Category     | Status | Target Completion | Tracking                                 | Dependencies                                   | Dependents                                                        |
 |--------------|--------|-------------------|------------------------------------------|------------------------------------------------|-------------------------------------------------------------------|
 | Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/pull/100 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
-
 
 We are currently implementing WebRTC for **browser-to-server** connectivity in
 https://github.com/libp2p/rust-libp2p/pull/2622. More specifically the server side. This will enable
@@ -183,3 +171,12 @@ protocols) between `NetworkBehaviour` implementations.
 
 Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
 would deserve its own roadmap item.
+
+## Kademlia client mode
+
+| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
+|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
+| Optimization | Done | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
+
+Kademlia client mode will enhance routing table health and thus have a positive impact on all
+Kademlia operations.
