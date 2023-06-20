@@ -16,15 +16,6 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
-## QUIC - implement hole punching
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
-
-Add hole punching support for QUIC. See also [DCUtR specification on usage with
-QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
-
 ## Attempt to switch from webrtc-rs to str0m
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
@@ -171,6 +162,15 @@ protocols) between `NetworkBehaviour` implementations.
 
 Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
 would deserve its own roadmap item.
+
+## QUIC - implement hole punching
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | done   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
+
+Add hole punching support for QUIC. See also [DCUtR specification on usage with
+QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
 
 ## Kademlia client mode
 
