@@ -1,4 +1,4 @@
-## 0.13.0 - unreleased
+## 0.13.0 
 
 - Changed the signature of the function `client::Behavior::register()`,
   it returns `Result<(), RegisterError>` now.
