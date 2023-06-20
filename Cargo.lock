@@ -1190,6 +1190,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
+ "libp2p-quic",
  "log",
 ]
 
@@ -2708,6 +2709,8 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "log",
+ "multiaddr",
+ "multihash",
  "once_cell",
  "quick-protobuf",
  "quickcheck-ext",
@@ -2878,6 +2881,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-ping",
+ "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",
@@ -3349,11 +3353,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
- "libp2p-core",
- "libp2p-identity",
- "libp2p-plaintext",
- "libp2p-swarm",
- "libp2p-yamux",
  "log",
  "pin-project",
  "quickcheck-ext",
@@ -4112,6 +4111,7 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "libp2p-quic",
 ]
 
 [[package]]

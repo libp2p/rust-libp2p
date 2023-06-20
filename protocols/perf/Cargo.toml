@@ -35,7 +35,7 @@ void = "1"
 
 [dev-dependencies]
 rand = "0.8"
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
