@@ -75,7 +75,7 @@ libp2p-kad = { version = "0.44.0", path = "protocols/kad" }
 libp2p-mdns = { version = "0.44.0", path = "protocols/mdns" }
 libp2p-metrics = { version = "0.13.0", path = "misc/metrics" }
 libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
-libp2p-muxer-test-harness = { version = "0.1.0", path = "muxers/test-harness" }
+libp2p-muxer-test-harness = { path = "muxers/test-harness" }
 libp2p-noise = { version = "0.43.0", path = "transports/noise" }
 libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.43.0", path = "protocols/ping" }
