@@ -1,4 +1,4 @@
-## 0.40.0 - unreleased
+## 0.40.0 
 
 - Allow `ListenerId` to be user-controlled, i.e. to be provided on `Transport::listen_on`.
   See [PR 3567].
