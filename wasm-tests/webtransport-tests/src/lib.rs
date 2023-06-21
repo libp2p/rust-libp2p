@@ -128,6 +128,34 @@ async fn multiple_conn_multiple_streams_sequential() {
 }
 
 #[wasm_bindgen_test]
+async fn read_leftovers() {
+    let addr = fetch_server_addr().await;
+    let keypair = Keypair::generate_ed25519();
+
+    let mut transport = Transport::new(Config::new(&keypair));
+    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+
+    let mut stream = create_stream(&mut conn).await;
+
+    // Test that stream works
+    send_recv(&mut stream).await;
+
+    stream.write_all(b"hello").await.unwrap();
+
+    let mut buf = [0u8; 3];
+
+    // Read first half
+    let len = stream.read(&mut buf[..]).await.unwrap();
+    assert_eq!(len, 3);
+    assert_eq!(&buf[..len], b"hel");
+
+    // Read second half
+    let len = stream.read(&mut buf[..]).await.unwrap();
+    assert_eq!(len, 2);
+    assert_eq!(&buf[..len], b"lo");
+}
+
+#[wasm_bindgen_test]
 async fn allow_read_after_closing_writer() {
     let addr = fetch_server_addr().await;
     let keypair = Keypair::generate_ed25519();
