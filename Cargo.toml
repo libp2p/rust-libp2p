@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "core",
-    "examples/chat-example",
     "examples/autonat",
+    "examples/chat-example",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
@@ -54,6 +54,7 @@ members = [
     "transports/webrtc",
     "transports/websocket",
     "transports/webtransport-websys",
+    "wasm-tests/webtransport-tests",
 ]
 resolver = "2"
 

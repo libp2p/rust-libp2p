@@ -3279,7 +3279,6 @@ name = "libp2p-webtransport-websys"
 version = "0.1.0"
 dependencies = [
  "futures",
- "getrandom 0.2.10",
  "js-sys",
  "libp2p-core",
  "libp2p-identity",
@@ -3292,7 +3291,6 @@ dependencies = [
  "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-bindgen-test",
  "web-sys",
 ]
 
@@ -6359,6 +6357,24 @@ dependencies = [
  "thiserror",
  "tokio",
  "winapi",
+]
+
+[[package]]
+name = "webtransport-tests"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "getrandom 0.2.10",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-webtransport-websys",
+ "multiaddr",
+ "multihash",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

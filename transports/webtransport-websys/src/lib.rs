@@ -13,6 +13,3 @@ pub use self::connection::Connection;
 pub use self::error::Error;
 pub use self::stream::Stream;
 pub use self::transport::{Config, Transport};
-
-#[cfg(test)]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);

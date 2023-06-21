@@ -3,8 +3,8 @@
 First you need to build and start the echo-server:
 
 ```
-docker build -t echo-server echo-server
-docker run -it --rm --network=host echo-server
+docker build -t webtransport-echo-server echo-server
+docker run -it --rm --network=host webtransport-echo-server
 ```
 
 On another terminal run:

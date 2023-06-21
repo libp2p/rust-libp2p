@@ -38,10 +38,7 @@ web-sys = { version = "0.3.63", features = [
 ] }
 
 [dev-dependencies]
-getrandom = { version = "0.2.9", features = ["js"] }
 multibase = "0.9.1"
-wasm-bindgen-test = "0.3.36"
-web-sys = { version = "0.3.63", features = ["Response", "Window"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

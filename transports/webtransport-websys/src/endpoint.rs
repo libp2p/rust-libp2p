@@ -151,14 +151,13 @@ impl Endpoint {
 mod tests {
     use super::*;
     use std::str::FromStr;
-    use wasm_bindgen_test::wasm_bindgen_test;
 
     fn multihash_from_str(s: &str) -> Multihash<64> {
         let (_base, bytes) = multibase::decode(s).unwrap();
         Multihash::from_bytes(&bytes).unwrap()
     }
 
-    #[wasm_bindgen_test]
+    #[test]
     fn valid_webtransport_multiaddr() {
         let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
@@ -186,7 +185,7 @@ mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[test]
     fn valid_webtransport_multiaddr_without_certhashes() {
         let addr = Multiaddr::from_str("/ip4/127.0.0.1/udp/44874/quic-v1/webtransport/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
@@ -200,7 +199,7 @@ mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[test]
     fn ipv6_webtransport() {
         let addr = Multiaddr::from_str("/ip6/::1/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();
@@ -213,7 +212,7 @@ mod tests {
         );
     }
 
-    #[wasm_bindgen_test]
+    #[test]
     fn dns_webtransport() {
         let addr = Multiaddr::from_str("/dns/libp2p.io/udp/44874/quic-v1/webtransport/certhash/uEiCaDd1Ca1A8IVJ3hsIxIyi11cwxaDKqzVrBkGJbKZU5ng/certhash/uEiDv-VGW8oXxui_G_Kqp-87YjvET-Hr2qYAMYPePJDcsjQ/p2p/12D3KooWR7EfNv5SLtgjMRjUwR8AvNu3hP4fLrtSa9fmHHXKYWNG").unwrap();
         let endpoint = Endpoint::from_multiaddr(&addr).unwrap();

@@ -74,35 +74,3 @@ pub(crate) fn parse_reader_response(resp: &JsValue) -> Result<Option<JsValue>, J
 pub(crate) fn to_io_error(value: JsValue) -> io::Error {
     io::Error::new(io::ErrorKind::Other, Error::from_js_value(value))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use js_sys::{Promise, TypeError, Uint8Array};
-    use wasm_bindgen_test::wasm_bindgen_test;
-
-    #[wasm_bindgen_test]
-    fn check_js_typecasting() {
-        // Successful typecast.
-        let value = JsValue::from(Uint8Array::new_with_length(0));
-        assert!(to_js_type::<Uint8Array>(value).is_ok());
-
-        // Type can not be typecasted.
-        let value = JsValue::from(Uint8Array::new_with_length(0));
-        assert!(matches!(
-            to_js_type::<Promise>(value),
-            Err(Error::JsCastFailed)
-        ));
-
-        // Request typecasting, however the underlying value is an error.
-        let value = JsValue::from(TypeError::new("abc"));
-        assert!(matches!(
-            to_js_type::<Promise>(value),
-            Err(Error::JsError(_))
-        ));
-
-        // Explicitly request js_sys::Error typecasting.
-        let value = JsValue::from(TypeError::new("abc"));
-        assert!(to_js_type::<js_sys::Error>(value).is_ok());
-    }
-}

@@ -1,0 +1,18 @@
+[package]
+name = "webtransport-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures = "0.3.28"
+getrandom = { version = "0.2.9", features = ["js"] }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-webtransport-websys = { workspace = true }
+multiaddr = { workspace = true }
+multihash = { workspace = true }
+wasm-bindgen = "0.2.86"
+wasm-bindgen-futures = "0.4.36"
+wasm-bindgen-test = "0.3.36"
+web-sys = { version = "0.3.63", features = ["Response", "Window"] }
