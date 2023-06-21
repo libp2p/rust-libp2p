@@ -1,5 +1,5 @@
 use futures::FutureExt;
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent, StreamMuxerExt};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::{OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{Keypair, PeerId};
 use multihash::Multihash;
@@ -14,27 +14,24 @@ use web_sys::ReadableStreamDefaultReader;
 use crate::bindings::{WebTransport, WebTransportBidirectionalStream};
 use crate::endpoint::Endpoint;
 use crate::fused_js_promise::FusedJsPromise;
-use crate::stream::StreamSend;
 use crate::utils::{detach_promise, parse_reader_response, to_js_type};
 use crate::{Error, Stream};
 
 /// An opened WebTransport connection.
 #[derive(Debug)]
 pub struct Connection {
+    // Swarm needs all types to be Send. WASM is single-threaded
+    // and it is safe to use SendWrapper.
+    inner: SendWrapper<ConnectionInner>,
+}
+
+#[derive(Debug)]
+struct ConnectionInner {
     session: WebTransport,
     create_stream_promise: FusedJsPromise,
     incoming_stream_promise: FusedJsPromise,
     incoming_streams_reader: ReadableStreamDefaultReader,
     closed: bool,
-}
-
-/// Connection wrapped in [`SendWrapper`].
-///
-/// This is needed by Swarm. WASM is single-threaded and it is safe
-/// to use [`SendWrapper`].
-#[derive(Debug)]
-pub(crate) struct ConnectionSend {
-    inner: SendWrapper<Connection>,
 }
 
 impl Connection {
@@ -55,14 +52,28 @@ impl Connection {
             to_js_type::<ReadableStreamDefaultReader>(incoming_streams.get_reader())?;
 
         Ok(Connection {
-            session,
-            create_stream_promise: FusedJsPromise::new(),
-            incoming_stream_promise: FusedJsPromise::new(),
-            incoming_streams_reader,
-            closed: false,
+            inner: SendWrapper::new(ConnectionInner {
+                session,
+                create_stream_promise: FusedJsPromise::new(),
+                incoming_stream_promise: FusedJsPromise::new(),
+                incoming_streams_reader,
+                closed: false,
+            }),
         })
     }
 
+    pub(crate) async fn authenticate(
+        &mut self,
+        keypair: &Keypair,
+        remote_peer: Option<PeerId>,
+        certhashes: HashSet<Multihash<64>>,
+    ) -> Result<PeerId, Error> {
+        let fut = SendWrapper::new(self.inner.authenticate(keypair, remote_peer, certhashes));
+        fut.await
+    }
+}
+
+impl ConnectionInner {
     /// Authenticates with the server
     ///
     /// This methods runs the security handshake as descripted
@@ -70,7 +81,7 @@ impl Connection {
     /// of the server.
     ///
     /// [1]: https://github.com/libp2p/specs/tree/master/webtransport#security-handshake
-    pub(crate) async fn authenticate(
+    async fn authenticate(
         &mut self,
         keypair: &Keypair,
         remote_peer: Option<PeerId>,
@@ -80,7 +91,7 @@ impl Connection {
             .await
             .map_err(Error::from_js_value)?;
 
-        let stream = StreamSend::new(self.create_stream().await?);
+        let stream = poll_fn(|cx| self.poll_create_bidirectional_stream(cx)).await?;
         let mut noise = libp2p_noise::Config::new(keypair)?;
 
         if !certhashes.is_empty() {
@@ -100,11 +111,6 @@ impl Connection {
         }
 
         Ok(peer_id)
-    }
-
-    /// Creates new outbound stream.
-    async fn create_stream(&mut self) -> Result<Stream, Error> {
-        poll_fn(|cx| self.poll_outbound_unpin(cx)).await
     }
 
     /// Initiates and polls a promise from `create_bidirectional_stream`.
@@ -160,6 +166,12 @@ impl Connection {
     }
 }
 
+impl Drop for ConnectionInner {
+    fn drop(&mut self) {
+        self.close_session();
+    }
+}
+
 /// WebTransport native multiplexing
 impl StreamMuxer for Connection {
     type Substream = Stream;
@@ -169,21 +181,21 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.poll_incoming_bidirectional_streams(cx)
+        self.inner.poll_incoming_bidirectional_streams(cx)
     }
 
     fn poll_outbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.poll_create_bidirectional_stream(cx)
+        self.inner.poll_create_bidirectional_stream(cx)
     }
 
     fn poll_close(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.close_session();
+        self.inner.close_session();
         Poll::Ready(Ok(()))
     }
 
@@ -192,51 +204,5 @@ impl StreamMuxer for Connection {
         _cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
-    }
-}
-
-impl Drop for Connection {
-    fn drop(&mut self) {
-        self.close_session();
-    }
-}
-
-impl ConnectionSend {
-    pub(crate) fn new(conn: Connection) -> Self {
-        ConnectionSend {
-            inner: SendWrapper::new(conn),
-        }
-    }
-}
-
-impl StreamMuxer for ConnectionSend {
-    type Substream = StreamSend;
-    type Error = Error;
-
-    fn poll_inbound(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let stream = ready!(self.get_mut().inner.poll_inbound_unpin(cx))?;
-        Poll::Ready(Ok(StreamSend::new(stream)))
-    }
-
-    fn poll_outbound(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let stream = ready!(self.get_mut().inner.poll_outbound_unpin(cx))?;
-        Poll::Ready(Ok(StreamSend::new(stream)))
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.get_mut().inner.poll_close_unpin(cx)
-    }
-
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        self.get_mut().inner.poll_unpin(cx)
     }
 }
