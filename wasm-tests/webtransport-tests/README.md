@@ -1,4 +1,4 @@
-# Run tests
+# Manually run tests
 
 First you need to build and start the echo-server:
 
