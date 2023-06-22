@@ -22,7 +22,7 @@
 
 use super::*;
 
-use crate::kbucket_priv::Distance;
+use crate::kbucket::Distance;
 use crate::record_priv::{store::MemoryStore, Key};
 use crate::{K_VALUE, SHA_256_MH};
 use futures::{executor::block_on, future::poll_fn, prelude::*};
@@ -71,6 +71,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();
+    swarm.add_external_address(address.clone());
 
     (address, swarm)
 }
@@ -137,7 +138,7 @@ fn build_fully_connected_nodes_with_config(
     swarms
 }
 
-fn random_multihash() -> Multihash {
+fn random_multihash() -> Multihash<64> {
     Multihash::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
@@ -234,10 +235,10 @@ fn bootstrap() {
 
 #[test]
 fn query_iter() {
-    fn distances<K>(key: &kbucket_priv::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
+    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
         peers
             .into_iter()
-            .map(kbucket_priv::Key::from)
+            .map(kbucket::Key::from)
             .map(|k| k.distance(key))
             .collect()
     }
@@ -253,7 +254,7 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket_priv::Key::from(search_target);
+        let search_target_key = kbucket::Key::from(search_target);
         let qid = swarms[0].behaviour_mut().get_closest_peers(search_target);
 
         match swarms[0].behaviour_mut().query(&qid) {
@@ -290,7 +291,7 @@ fn query_iter() {
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
                             assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
-                            let key = kbucket_priv::Key::new(ok.key);
+                            let key = kbucket::Key::new(ok.key);
                             assert_eq!(expected_distances, distances(&key, ok.peers));
                             return Poll::Ready(());
                         }
@@ -653,7 +654,7 @@ fn put_record() {
                 assert_eq!(r.expires, expected.expires);
                 assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
 
-                let key = kbucket_priv::Key::new(r.key.clone());
+                let key = kbucket::Key::new(r.key.clone());
                 let mut expected = swarms
                     .iter()
                     .skip(1)
@@ -661,9 +662,9 @@ fn put_record() {
                     .cloned()
                     .collect::<Vec<_>>();
                 expected.sort_by(|id1, id2| {
-                    kbucket_priv::Key::from(*id1)
+                    kbucket::Key::from(*id1)
                         .distance(&key)
-                        .cmp(&kbucket_priv::Key::from(*id2).distance(&key))
+                        .cmp(&kbucket::Key::from(*id2).distance(&key))
                 });
 
                 let expected = expected
@@ -992,11 +993,11 @@ fn add_provider() {
                     .map(Swarm::local_peer_id)
                     .cloned()
                     .collect::<Vec<_>>();
-                let kbucket_key = kbucket_priv::Key::new(key);
+                let kbucket_key = kbucket::Key::new(key);
                 expected.sort_by(|id1, id2| {
-                    kbucket_priv::Key::from(*id1)
+                    kbucket::Key::from(*id1)
                         .distance(&kbucket_key)
-                        .cmp(&kbucket_priv::Key::from(*id2).distance(&kbucket_key))
+                        .cmp(&kbucket::Key::from(*id2).distance(&kbucket_key))
                 });
 
                 let expected = expected
@@ -1101,7 +1102,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut bob = build_node();
 
     let key = Key::from(
-        Multihash::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
+        Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
@@ -1253,7 +1254,7 @@ fn manual_bucket_inserts() {
         .skip(2)
         .map(|(a, s)| {
             let pid = *Swarm::local_peer_id(s);
-            let addr = a.clone().with(Protocol::P2p(pid.into()));
+            let addr = a.clone().with(Protocol::P2p(pid));
             (addr, pid)
         })
         .collect::<HashMap<_, _>>();

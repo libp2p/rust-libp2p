@@ -22,7 +22,7 @@ use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr, ProtocolName,
+    Multiaddr,
 };
 use either::Either;
 use futures::prelude::*;
@@ -115,21 +115,6 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EitherName<A, B> {
-    A(A),
-    B(B),
-}
-
-impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
-    fn protocol_name(&self) -> &[u8] {
-        match self {
-            EitherName::A(a) => a.protocol_name(),
-            EitherName::B(b) => b.protocol_name(),
-        }
-    }
-}
-
 impl<A, B> Transport for Either<A, B>
 where
     B: Transport,
@@ -169,14 +154,18 @@ where
         }
     }
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            Either::Left(a) => a.listen_on(addr).map_err(|e| match e {
+            Either::Left(a) => a.listen_on(id, addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Left(err)),
             }),
-            Either::Right(b) => b.listen_on(addr).map_err(|e| match e {
+            Either::Right(b) => b.listen_on(id, addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Right(err)),
             }),

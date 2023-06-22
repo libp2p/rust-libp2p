@@ -32,7 +32,6 @@ use log::{debug, trace};
 use parking_lot::Mutex;
 use soketto::{
     connection::{self, CloseReason},
-    extension::deflate::Deflate,
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
@@ -51,7 +50,6 @@ pub struct WsConfig<T> {
     max_data_size: usize,
     tls_config: tls::Config,
     max_redirects: u8,
-    use_deflate: bool,
     /// Websocket protocol of the inner listener.
     ///
     /// This is the suffix of the address provided in `listen_on`.
@@ -67,7 +65,6 @@ impl<T> WsConfig<T> {
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
             max_redirects: 0,
-            use_deflate: false,
             listener_protos: HashMap::new(),
         }
     }
@@ -99,12 +96,6 @@ impl<T> WsConfig<T> {
         self.tls_config = c;
         self
     }
-
-    /// Should the deflate extension (RFC 7692) be used if supported?
-    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.use_deflate = flag;
-        self
-    }
 }
 
 type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
@@ -122,7 +113,11 @@ where
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let mut inner_addr = addr.clone();
         let proto = match inner_addr.pop() {
             Some(p @ Protocol::Wss(_)) => {
@@ -139,10 +134,10 @@ where
                 return Err(TransportError::MultiaddrNotSupported(addr));
             }
         };
-        match self.transport.lock().listen_on(inner_addr) {
-            Ok(id) => {
+        match self.transport.lock().listen_on(id, inner_addr) {
+            Ok(()) => {
                 self.listener_protos.insert(id, proto);
-                Ok(id)
+                Ok(())
             }
             Err(e) => Err(e.map(Error::Transport)),
         }
@@ -281,19 +276,12 @@ where
 
         let transport = self.transport.clone();
         let tls_config = self.tls_config.clone();
-        let use_deflate = self.use_deflate;
         let max_redirects = self.max_redirects;
 
         let future = async move {
             loop {
-                match Self::dial_once(
-                    transport.clone(),
-                    addr,
-                    tls_config.clone(),
-                    use_deflate,
-                    role_override,
-                )
-                .await
+                match Self::dial_once(transport.clone(), addr, tls_config.clone(), role_override)
+                    .await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
@@ -317,7 +305,6 @@ where
         transport: Arc<Mutex<T>>,
         addr: WsAddress,
         tls_config: tls::Config,
-        use_deflate: bool,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
@@ -360,10 +347,6 @@ where
 
         let mut client = handshake::Client::new(stream, &addr.host_port, addr.path.as_ref());
 
-        if use_deflate {
-            client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
-        }
-
         match client
             .handshake()
             .map_err(|e| Error::Handshake(Box::new(e)))
@@ -399,7 +382,6 @@ where
         let remote_addr2 = remote_addr.clone(); // used for logging
         let tls_config = self.tls_config.clone();
         let max_size = self.max_data_size;
-        let use_deflate = self.use_deflate;
 
         async move {
             let stream = upgrade.map_err(Error::Transport).await?;
@@ -435,10 +417,6 @@ where
             );
 
             let mut server = handshake::Server::new(stream);
-
-            if use_deflate {
-                server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
-            }
 
             let ws_key = {
                 let request = server

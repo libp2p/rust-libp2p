@@ -1,11 +1,14 @@
-## 0.10.0 - unreleased
+## 0.10.0 
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 - Remove deprecated items. See [PR 3700].
 
+- Keep connection alive while we are using it. See [PR 3960].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3700]: https://github.com/libp2p/rust-libp2p/pull/3700
+[PR 3960]: https://github.com/libp2p/rust-libp2p/pull/3960
 
 ## 0.9.1
 

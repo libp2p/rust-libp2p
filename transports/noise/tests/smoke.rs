@@ -50,15 +50,15 @@ fn xx() {
 
         futures::executor::block_on(async move {
             let (
-                (reported_client_id, mut client_session),
-                (reported_server_id, mut server_session),
+                (reported_client_id, mut server_session),
+                (reported_server_id, mut client_session),
             ) = futures::future::try_join(
                 noise::Config::new(&server_id)
                     .unwrap()
-                    .upgrade_inbound(server, b""),
+                    .upgrade_inbound(server, ""),
                 noise::Config::new(&client_id)
                     .unwrap()
-                    .upgrade_outbound(client, b""),
+                    .upgrade_outbound(client, ""),
             )
             .await
             .unwrap();

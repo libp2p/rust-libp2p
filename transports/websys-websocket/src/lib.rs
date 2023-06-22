@@ -66,7 +66,11 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        _: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

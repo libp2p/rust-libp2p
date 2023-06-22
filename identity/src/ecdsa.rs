@@ -31,7 +31,9 @@ use p256::{
     },
     EncodedPoint,
 };
+use sec1::{DecodeEcPrivateKey, EncodeEcPrivateKey};
 use void::Void;
+use zeroize::Zeroize;
 
 /// An ECDSA keypair generated using `secp256r1` curve.
 #[derive(Clone)]
@@ -107,20 +109,31 @@ impl SecretKey {
         self.0.to_bytes().to_vec()
     }
 
-    /// Decode a secret key from a byte buffer containing raw scalar of the key.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead"
-    )]
-    pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
-        Self::try_from_bytes(buf)
-    }
-
     /// Try to parse a secret key from a byte buffer containing raw scalar of the key.
     pub fn try_from_bytes(buf: impl AsRef<[u8]>) -> Result<SecretKey, DecodingError> {
-        SigningKey::from_bytes(buf.as_ref())
+        SigningKey::from_bytes(buf.as_ref().into())
             .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
+    }
+
+    /// Encode the secret key into DER-encoded byte buffer.
+    pub(crate) fn encode_der(&self) -> Vec<u8> {
+        self.0
+            .to_sec1_der()
+            .expect("Encoding to pkcs#8 format to succeed")
+            .to_bytes()
+            .to_vec()
+    }
+
+    /// Try to decode a secret key from a DER-encoded byte buffer, zeroize the buffer on success.
+    pub(crate) fn try_decode_der(buf: &mut [u8]) -> Result<Self, DecodingError> {
+        match SigningKey::from_sec1_der(buf) {
+            Ok(key) => {
+                buf.zeroize();
+                Ok(SecretKey(key))
+            }
+            Err(e) => Err(DecodingError::failed_to_parse("ECDSA", e)),
+        }
     }
 }
 
@@ -144,15 +157,6 @@ impl PublicKey {
         self.0.verify(msg, &sig).is_ok()
     }
 
-    /// Decode a public key from a byte buffer containing raw components of a key with or without compression.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
-    )]
-    pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_from_bytes(k)
-    }
-
     /// Try to parse a public key from a byte buffer containing raw components of a key with or without compression.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let enc_pt = EncodedPoint::from_bytes(k)
@@ -172,15 +176,6 @@ impl PublicKey {
     pub fn encode_der(&self) -> Vec<u8> {
         let buf = self.to_bytes();
         Self::add_asn1_header(&buf)
-    }
-
-    /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_der` instead."
-    )]
-    pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_der(k)
     }
 
     /// Try to decode a public key from a DER encoded byte buffer as defined by SEC1 standard.

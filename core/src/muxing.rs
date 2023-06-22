@@ -57,10 +57,8 @@ use std::pin::Pin;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
-pub use self::singleton::SingletonMuxer;
 
 mod boxed;
-mod singleton;
 
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///

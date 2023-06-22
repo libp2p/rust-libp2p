@@ -48,7 +48,7 @@
 //! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
+//! [`PeerId`](libp2p_identity::PeerId) and a nonce (sequence number) of the message. The sequence numbers in
 //! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
 //! integers. When messages are signed, they are monotonically increasing integers starting from a
 //! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
@@ -83,7 +83,7 @@
 //!
 //! The [`Behaviour`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
 //! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
-//! [`libp2p_core::PeerId`] and [`Config`].
+//! [`PeerId`](libp2p_identity::PeerId) and [`Config`].
 //!
 //! [`Behaviour`]: struct.Behaviour.html
 
@@ -92,18 +92,19 @@
 //! An example of initialising a gossipsub compatible swarm:
 //!
 //! ```
-//! use libp2p_gossipsub::Event;
-//! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
-//! use libp2p_gossipsub::MessageAuthenticity;
-//! let local_key = Keypair::generate_ed25519();
-//! let local_peer_id = libp2p_core::PeerId::from(local_key.public());
+//! # use libp2p_gossipsub::Event;
+//! # use libp2p_core::{transport::{Transport, MemoryTransport}, Multiaddr};
+//! # use libp2p_gossipsub::MessageAuthenticity;
+//! # use libp2p_identity as identity;
+//! let local_key = identity::Keypair::generate_ed25519();
+//! let local_peer_id = local_key.public().to_peer_id();
 //!
-//! // Set up an encrypted TCP Transport over the Mplex
+//! // Set up an encrypted TCP Transport over yamux
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
-//!            .multiplex(libp2p_mplex::MplexConfig::new())
+//!            .authenticate(libp2p_noise::Config::new(&local_key).unwrap())
+//!            .multiplex(libp2p_yamux::Config::default())
 //!            .boxed();
 //!
 //! // Create a Gossipsub topic
@@ -123,11 +124,11 @@
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
 //!     // create the swarm (use an executor in a real example)
-//!     libp2p_swarm::Swarm::without_executor(
+//!     libp2p_swarm::SwarmBuilder::without_executor(
 //!         transport,
 //!         gossipsub,
 //!         local_peer_id,
-//!     )
+//!     ).build()
 //! };
 //!
 //! // Listen on a memory transport.

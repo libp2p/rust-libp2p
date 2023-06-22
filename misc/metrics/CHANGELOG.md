@@ -1,9 +1,38 @@
-## 0.13.0 - unreleased
+## 0.13.0 
+
+- Previously `libp2p-metrics::identify` would increase a counter / gauge / histogram on each
+  received identify information. These metrics are misleading, as e.g. they depend on the identify
+  interval and don't represent the set of currently connected peers. With this change, identify
+  information is tracked for the currently connected peers only. Instead of an increase on each
+  received identify information, metrics represent the status quo (Gauge).
+
+  Metrics removed:
+  - `libp2p_identify_protocols`
+  - `libp2p_identify_received_info_listen_addrs`
+  - `libp2p_identify_received_info_protocols`
+  - `libp2p_identify_listen_addresses`
+
+  Metrics added:
+  - `libp2p_identify_remote_protocols`
+  - `libp2p_identify_remote_listen_addresses`
+  - `libp2p_identify_local_observed_addresses`
+
+  See [PR 3325].
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
+- Replace `libp2p_swarm_connections_closed` `Counter` with `libp2p_swarm_connections_duration` `Histogram` which additionally tracks the duration of a connection.
+  Note that you can use the `_count` metric of the `Histogram` as a replacement for the `Counter`.
+  See [PR 3927].
+
+- Remove the `pong_received` counter because it is no longer exposed by `libp2p-ping`.
+  See [PR 3947].
+
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
+[PR 3325]: https://github.com/libp2p/rust-libp2p/pull/3325
+[PR 3947]: https://github.com/libp2p/rust-libp2p/pull/3947
 
 ## 0.12.0
 

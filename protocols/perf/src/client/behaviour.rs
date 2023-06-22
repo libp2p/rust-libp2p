@@ -28,8 +28,8 @@ use std::{
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionHandlerUpgrErr,
-    ConnectionId, FromSwarm, NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent,
+    derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
+    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use void::Void;
@@ -41,7 +41,7 @@ use super::{RunId, RunParams, RunStats};
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
+    pub result: Result<RunStats, StreamUpgradeError<Void>>,
 }
 
 #[derive(Default)]
@@ -82,7 +82,7 @@ pub enum PerfError {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_outbound_connection(
         &mut self,
@@ -128,8 +128,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -147,7 +148,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

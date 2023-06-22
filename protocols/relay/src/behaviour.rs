@@ -33,9 +33,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour, NotifyHandler,
+    PollParameters, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -150,10 +149,6 @@ pub enum Event {
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
-    CircuitReqReceiveFailed {
-        src_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
         src_peer_id: PeerId,
@@ -174,7 +169,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -254,7 +249,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type OutEvent = Event;
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -322,8 +317,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -537,15 +533,6 @@ impl NetworkBehaviour for Behaviour {
                 };
                 self.queued_actions.push_back(action.into());
             }
-            handler::Event::CircuitReqReceiveFailed { error } => {
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqReceiveFailed {
-                        src_peer_id: event_source,
-                        error,
-                    })
-                    .into(),
-                );
-            }
             handler::Event::CircuitReqDenied {
                 circuit_id,
                 dst_peer_id,
@@ -685,7 +672,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
@@ -825,7 +812,7 @@ impl Action {
                         // Add local peer ID in case it isn't present yet.
                         .filter_map(|a| match a.iter().last()? {
                             Protocol::P2p(_) => Some(a),
-                            _ => Some(a.with(Protocol::P2p(local_peer_id.into()))),
+                            _ => Some(a.with(Protocol::P2p(local_peer_id))),
                         })
                         .collect(),
                 }),

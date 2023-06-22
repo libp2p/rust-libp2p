@@ -279,6 +279,13 @@ impl Channel {
         Ok(Ok(()))
     }
 
+    pub(crate) async fn send(&mut self, to_endpoint: ToEndpoint) -> Result<(), Disconnected> {
+        self.to_endpoint
+            .send(to_endpoint)
+            .await
+            .map_err(|_| Disconnected {})
+    }
+
     /// Send a message to inform the [`Driver`] about an
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
@@ -404,7 +411,7 @@ impl<P: Provider> Driver<P> {
         rx: mpsc::Receiver<ToEndpoint>,
     ) -> Self {
         Driver {
-            endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config),
+            endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config, false),
             client_config,
             channel,
             rx,
@@ -603,7 +610,7 @@ impl<P: Provider> Future for Driver<P> {
                     // Start sending a packet on the socket.
                     if let Some(transmit) = self.next_packet_out.take() {
                         self.provider_socket
-                            .start_send(transmit.contents, transmit.destination);
+                            .start_send(transmit.contents.into(), transmit.destination);
                         continue;
                     }
 

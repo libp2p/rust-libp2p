@@ -29,7 +29,7 @@ use void::Void;
 pub struct DeniedUpgrade;
 
 impl UpgradeInfo for DeniedUpgrade {
-    type Info = &'static [u8];
+    type Info = &'static str;
     type InfoIter = iter::Empty<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {

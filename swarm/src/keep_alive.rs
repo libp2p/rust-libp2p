@@ -22,7 +22,7 @@ pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -57,7 +57,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 
@@ -73,8 +73,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredListenAddr(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_)
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }
@@ -84,8 +85,8 @@ impl NetworkBehaviour for Behaviour {
 pub struct ConnectionHandler;
 
 impl crate::handler::ConnectionHandler for ConnectionHandler {
-    type InEvent = Void;
-    type OutEvent = Void;
+    type FromBehaviour = Void;
+    type ToBehaviour = Void;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
@@ -96,7 +97,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::FromBehaviour) {
         void::unreachable(v)
     }
 
@@ -111,7 +112,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -136,7 +137,9 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::AddressChange(_) => {}
+            | ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
 }

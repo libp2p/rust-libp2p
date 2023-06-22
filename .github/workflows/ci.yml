@@ -28,55 +28,54 @@ jobs:
       fail-fast: false
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
+    env:
+      CRATE: ${{ matrix.crate }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install -y protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           shared-key: stable-cache
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package "$CRATE" --all-features
 
       - name: Check if we compile without any features activated
-        run: cargo build --package ${{ matrix.crate }} --no-default-features
+        run: cargo build --package "$CRATE" --no-default-features
 
       - run: cargo clean
 
       - name: Check if crate has been released
         id: check-released
         run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
+          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          crate: ${{ matrix.crate }}
+          crate: env.CRATE
 
       - name: Enforce no dependency on meta crate
         run: |
           cargo metadata --format-version=1 --no-deps | \
-          jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
+          jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
 
-      - uses: taiki-e/cache-cargo-install-action@7dd0cff2732612ac642812bcec4ada5a279239ed # v1
+      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
         with:
           tool: tomlq
 
       - name: Enforce version in `workspace.dependencies` matches latest version
-        if: matrix.crate != 'libp2p'
+        if: env.CRATE != 'libp2p'
         run: |
-          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .version')
-          SPECIFIED_VERSION=$(tomlq 'workspace.dependencies.${{ matrix.crate }}.version' --file ./Cargo.toml)
+          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
+          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
           
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
@@ -108,7 +107,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -133,7 +132,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -154,7 +153,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -171,7 +170,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -184,7 +183,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.69.0, # current stable
+          1.70.0, # current stable
           beta
         ]
     steps:
@@ -197,7 +196,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -214,7 +213,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -230,7 +229,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
         with:
           shared-key: stable-cache
           save-if: false
@@ -296,7 +295,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -322,5 +321,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
       - run: cargo metadata --locked --format-version=1 > /dev/null
