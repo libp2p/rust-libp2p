@@ -18,12 +18,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn single_conn_single_stream() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
@@ -31,12 +26,7 @@ async fn single_conn_single_stream() {
 
 #[wasm_bindgen_test]
 async fn single_conn_single_stream_incoming() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = incoming_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
@@ -44,13 +34,8 @@ async fn single_conn_single_stream_incoming() {
 
 #[wasm_bindgen_test]
 async fn single_conn_multiple_streams() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
+    let mut conn = new_connection_to_echo_server().await;
     let mut tasks = Vec::new();
-
-    let (_peer_id, mut conn) = transport.dial(addr).unwrap().await.unwrap();
     let mut streams = Vec::new();
 
     for i in 0..30 {
@@ -72,15 +57,11 @@ async fn single_conn_multiple_streams() {
 
 #[wasm_bindgen_test]
 async fn multiple_conn_multiple_streams() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
     let mut tasks = Vec::new();
     let mut conns = Vec::new();
 
     for _ in 0..10 {
-        let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+        let mut conn = new_connection_to_echo_server().await;
         let mut streams = Vec::new();
 
         for i in 0..10 {
@@ -107,13 +88,8 @@ async fn multiple_conn_multiple_streams() {
 
 #[wasm_bindgen_test]
 async fn multiple_conn_multiple_streams_sequential() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
     for _ in 0..10 {
-        let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+        let mut conn = new_connection_to_echo_server().await;
 
         for i in 0..10 {
             let mut stream = if i % 2 == 0 {
@@ -129,12 +105,7 @@ async fn multiple_conn_multiple_streams_sequential() {
 
 #[wasm_bindgen_test]
 async fn read_leftovers() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
-
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     // Test that stream works
@@ -157,12 +128,7 @@ async fn read_leftovers() {
 
 #[wasm_bindgen_test]
 async fn allow_read_after_closing_writer() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
-
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     // Test that stream works
@@ -188,11 +154,7 @@ async fn allow_read_after_closing_writer() {
 
 #[wasm_bindgen_test]
 async fn poll_outbound_error_after_connection_close() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
 
     // Make sure that poll_outbound works well before closing the connection
     let mut stream = create_stream(&mut conn).await;
@@ -210,11 +172,7 @@ async fn poll_outbound_error_after_connection_close() {
 
 #[wasm_bindgen_test]
 async fn poll_inbound_error_after_connection_close() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
 
     // Make sure that poll_inbound works well before closing the connection
     let mut stream = incoming_stream(&mut conn).await;
@@ -232,16 +190,10 @@ async fn poll_inbound_error_after_connection_close() {
 
 #[wasm_bindgen_test]
 async fn read_error_after_connection_drop() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
-
     drop(conn);
 
     let mut buf = [0u8; 16];
@@ -253,12 +205,7 @@ async fn read_error_after_connection_drop() {
 
 #[wasm_bindgen_test]
 async fn read_error_after_connection_close() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
@@ -276,16 +223,10 @@ async fn read_error_after_connection_close() {
 
 #[wasm_bindgen_test]
 async fn write_error_after_connection_drop() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
-
     drop(conn);
 
     let buf = [0u8; 16];
@@ -297,12 +238,7 @@ async fn write_error_after_connection_drop() {
 
 #[wasm_bindgen_test]
 async fn write_error_after_connection_close() {
-    let addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
-
-    let mut transport = Transport::new(Config::new(&keypair));
-
-    let (_peer_id, mut conn) = transport.dial(addr.clone()).unwrap().await.unwrap();
+    let mut conn = new_connection_to_echo_server().await;
     let mut stream = create_stream(&mut conn).await;
 
     send_recv(&mut stream).await;
@@ -366,6 +302,17 @@ async fn error_on_unknown_certhash() {
         e,
         Error::Noise(noise::Error::UnknownWebTransportCerthashes(..))
     ));
+}
+
+async fn new_connection_to_echo_server() -> Connection {
+    let addr = fetch_server_addr().await;
+    let keypair = Keypair::generate_ed25519();
+
+    let mut transport = Transport::new(Config::new(&keypair));
+
+    let (_peer_id, conn) = transport.dial(addr).unwrap().await.unwrap();
+
+    conn
 }
 
 /// Helper that returns the multiaddress of echo-server
