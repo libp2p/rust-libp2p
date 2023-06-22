@@ -8,7 +8,7 @@ else
 fi
 
 # cd to this script directory
-cd "$(dirname "${BASH_SOURCE[0]}")"
+cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 # Print the directory for debugging
 echo "Tests: $PWD"
@@ -19,10 +19,10 @@ id="$($docker run -d --network=host webtransport-echo-server)" || exit 1
 
 # Run tests
 wasm-pack test --chrome --headless
-EXIT_CODE=$?
+exit_code=$?
 
 # Remove echo-server container
 $docker rm -f "$id"
 
 # Propagate wasm-pack's exit code
-exit $EXIT_CODE
+exit $exit_code
