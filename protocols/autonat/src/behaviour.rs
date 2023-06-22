@@ -263,6 +263,13 @@ impl Behaviour {
         self.confidence
     }
 
+    // Connected peers with the observed address of each connection.
+    // If the endpoint of a connection is relayed or not global (in case of Config::only_global_ips),
+    // the observed address is `None`.
+    pub fn connected(&self) -> HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>> {
+        self.connected.clone()
+    }
+
     /// Add a peer to the list over servers that may be used for probes.
     /// These peers are used for dial-request even if they are currently not connection, in which case a connection will be
     /// establish before sending the dial-request.

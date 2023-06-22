@@ -176,6 +176,11 @@ impl Behaviour {
         }
     }
 
+    /// For each peer we're connected to, the observed address to send back to it.
+    pub fn connected(&self) -> HashMap<PeerId, HashMap<ConnectionId, Multiaddr>> {
+        self.connected.clone()
+    }
+
     /// Initiates an active push of the local peer information to the given peers.
     pub fn push<I>(&mut self, peers: I)
     where

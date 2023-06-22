@@ -351,6 +351,17 @@ where
     {
         Self::with_codec(TCodec::default(), protocols, cfg)
     }
+
+    /// The currently connected peers, their pending outbound and inbound responses and their known,
+    /// reachable addresses, if any.
+    pub fn connected(&self) -> HashMap<PeerId, SmallVec<[Connection; 2]>> {
+        self.connected.clone()
+    }
+
+    /// Externally managed addresses via `add_address` and `remove_address`.
+    pub fn addresses(&self) -> HashMap<PeerId, SmallVec<[Multiaddr; 6]>> {
+        self.addresses.clone()
+    }
 }
 
 impl<TCodec> Behaviour<TCodec>
@@ -922,7 +933,8 @@ where
 const EMPTY_QUEUE_SHRINK_THRESHOLD: usize = 100;
 
 /// Internal information tracked for an established connection.
-struct Connection {
+#[derive(Clone)]
+pub struct Connection {
     id: ConnectionId,
     address: Option<Multiaddr>,
     /// Pending outbound responses where corresponding inbound requests have
@@ -942,5 +954,13 @@ impl Connection {
             pending_outbound_responses: Default::default(),
             pending_inbound_responses: Default::default(),
         }
+    }
+
+    pub fn id(&self) -> ConnectionId {
+        self.id
+    }
+
+    pub fn address(&self) -> Option<Multiaddr> {
+        self.address.clone()
     }
 }
