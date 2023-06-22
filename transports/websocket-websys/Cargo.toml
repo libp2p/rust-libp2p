@@ -2,7 +2,7 @@
 name = "libp2p-websocket-websys"
 edition = "2021"
 rust-version = "1.60.0"
-description = "libp2p websocket transports for WASM browser runtime."
+description = "WebSocket for libp2p under WASM environment"
 version = "0.1.0"
 authors = ["Vince Vasta <vince.vasta@gmail.com>"]
 license = "MIT"
