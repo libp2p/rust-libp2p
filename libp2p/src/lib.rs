@@ -134,7 +134,7 @@ pub mod wasm_ext {
 pub use libp2p_websocket as websocket;
 #[cfg(feature = "websocket-websys")]
 #[doc(inline)]
-pub use libp2p_websys_websocket as websys_websocket;
+pub use libp2p_websocket_websys as websocket_websys;
 #[cfg(feature = "yamux")]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
