@@ -2326,7 +2326,7 @@ dependencies = [
  "libp2p-uds",
  "libp2p-wasm-ext",
  "libp2p-websocket",
- "libp2p-websys-websocket",
+ "libp2p-websocket-websys",
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
@@ -3108,7 +3108,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "libp2p-websys-websocket"
+name = "libp2p-websocket-websys"
 version = "0.1.0"
 dependencies = [
  "futures",

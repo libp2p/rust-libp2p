@@ -35,7 +35,7 @@
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
-- [`libp2p-websys-websocket` CHANGELOG](transports/websys-websocket/CHANGELOG.md)
+- [`libp2p-websocket-websys` CHANGELOG](transports/websocket-websys/CHANGELOG.md)
 
 ## Multiplexers
 
