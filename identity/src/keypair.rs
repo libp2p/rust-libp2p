@@ -59,6 +59,7 @@ use crate::secp256k1;
 
 #[cfg(feature = "ecdsa")]
 use crate::ecdsa;
+use crate::KeyType;
 
 /// Identity keypair of a node.
 ///
@@ -319,6 +320,19 @@ impl Keypair {
         )))]
         unreachable!()
     }
+
+    pub fn key_type(&self) -> KeyType {
+        match self.keypair {
+            #[cfg(feature = "ed25519")]
+            KeyPairInner::Ed25519(_) => KeyType::Ed25519,
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            KeyPairInner::Rsa(_) => KeyType::RSA,
+            #[cfg(feature = "secp256k1")]
+            KeyPairInner::Secp256k1(_) => KeyType::Secp256k1,
+            #[cfg(feature = "ecdsa")]
+            KeyPairInner::Ecdsa(_) => KeyType::Ecdsa
+        }
+    }
 }
 
 #[cfg(feature = "ecdsa")]
@@ -552,6 +566,20 @@ impl PublicKey {
     pub fn to_peer_id(&self) -> crate::PeerId {
         self.into()
     }
+
+    pub fn key_type(&self) -> KeyType {
+        match self.publickey {
+            #[cfg(feature = "ed25519")]
+            PublicKeyInner::Ed25519(_) => KeyType::Ed25519,
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            PublicKeyInner::Rsa(_) => KeyType::RSA,
+            #[cfg(feature = "secp256k1")]
+            PublicKeyInner::Secp256k1(_) => KeyType::Secp256k1,
+            #[cfg(feature = "ecdsa")]
+            PublicKeyInner::Ecdsa(_) => KeyType::Ecdsa
+        }
+    }
+
 }
 
 #[cfg(any(
@@ -750,7 +778,7 @@ mod tests {
         .unwrap();
         let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
 
-        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Ecdsa);
     }
 
     #[test]
@@ -765,11 +793,11 @@ mod tests {
         ))
         .unwrap();
 
-        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Secp256k1);
     }
 
     #[cfg(feature = "peerid")]
-    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey) {
+    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey, tpe: KeyType) {
         assert_eq!(&private_key.public(), public_key);
 
         let encoded_priv = private_key.to_protobuf_encoding().unwrap();
@@ -789,6 +817,7 @@ mod tests {
             decoded_public.to_peer_id(),
             "PeerId from roundtripped public key should be the same"
         );
+        assert_eq!(private_key.key_type(), tpe)
     }
 
     #[test]
@@ -845,6 +874,7 @@ mod tests {
         let converted_pubkey = PublicKey::from(ed25519_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Ed25519)
     }
 
     #[test]
@@ -858,6 +888,7 @@ mod tests {
         let converted_pubkey = PublicKey::from(secp256k1_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Secp256k1)
     }
 
     #[test]
@@ -868,5 +899,6 @@ mod tests {
         let converted_pubkey = PublicKey::from(ecdsa_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Ecdsa)
     }
 }
