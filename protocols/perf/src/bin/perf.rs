@@ -198,25 +198,22 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, connection_established) =
-        connect(&mut swarm, server_address.clone()).await?;
+    let start = Instant::now();
 
-    let RunDuration { upload, download } = perf(&mut swarm, server_peer_id, params).await?;
+    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+
+    perf(&mut swarm, server_peer_id, params).await?;
 
     #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct CustomResult {
-        connection_established_seconds: f64,
-        upload_seconds: f64,
-        download_seconds: f64,
+        latency: f64,
     }
 
     println!(
         "{}",
         serde_json::to_string(&CustomResult {
-            connection_established_seconds: connection_established.as_secs_f64(),
-            upload_seconds: upload.as_secs_f64(),
-            download_seconds: download.as_secs_f64(),
+            latency: start.elapsed().as_secs_f64(),
         })
         .unwrap()
     );
