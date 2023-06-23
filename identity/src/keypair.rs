@@ -321,6 +321,7 @@ impl Keypair {
         unreachable!()
     }
 
+    /// Return a [`KeyType`] of the [`Keypair`].
     pub fn key_type(&self) -> KeyType {
         match self.keypair {
             #[cfg(feature = "ed25519")]
@@ -330,7 +331,7 @@ impl Keypair {
             #[cfg(feature = "secp256k1")]
             KeyPairInner::Secp256k1(_) => KeyType::Secp256k1,
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(_) => KeyType::Ecdsa
+            KeyPairInner::Ecdsa(_) => KeyType::Ecdsa,
         }
     }
 }
@@ -567,6 +568,7 @@ impl PublicKey {
         self.into()
     }
 
+    /// Return a [`KeyType`] of the [`PublicKey`].
     pub fn key_type(&self) -> KeyType {
         match self.publickey {
             #[cfg(feature = "ed25519")]
@@ -576,10 +578,9 @@ impl PublicKey {
             #[cfg(feature = "secp256k1")]
             PublicKeyInner::Secp256k1(_) => KeyType::Secp256k1,
             #[cfg(feature = "ecdsa")]
-            PublicKeyInner::Ecdsa(_) => KeyType::Ecdsa
+            PublicKeyInner::Ecdsa(_) => KeyType::Ecdsa,
         }
     }
-
 }
 
 #[cfg(any(
