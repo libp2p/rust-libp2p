@@ -1,3 +1,10 @@
+## 0.52.1
+
+- Add `libp2p-webtransport-websys` providing WebTransport for WASM environments.
+  See [PR 4015].
+
+[PR 4015]: https://github.com/libp2p/rust-libp2p/pull/4015
+
 ## 0.52.0
 
 - Raise MSRV to 1.65.
