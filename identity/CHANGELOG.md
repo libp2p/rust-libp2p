@@ -3,6 +3,8 @@
 - Add key_type method to public key and key pair.
   See [PR 4107].
 
+[PR 4107]: https://github.com/libp2p/rust-libp2p/pull/4107
+
 ## 0.2.0
 
 - Raise MSRV to 1.65.
