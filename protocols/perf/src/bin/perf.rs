@@ -200,7 +200,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 
     let start = Instant::now();
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     perf(&mut swarm, server_peer_id, params).await?;
 
@@ -225,7 +225,7 @@ async fn latency(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: round-trip-time latency");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let mut rounds = 0;
     let start = Instant::now();
@@ -272,7 +272,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection single channel throughput");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let params = RunParams {
         to_send: 10 * 1024 * 1024,
@@ -288,7 +288,7 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection parallel requests per second");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let num = 1_000;
     let to_send = 1;
@@ -353,7 +353,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
 
         let start = Instant::now();
 
-        let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
         latency_connection_establishment.push(start.elapsed().as_secs_f64());
 
@@ -424,7 +424,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
 async fn connect(
     swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
     server_address: Multiaddr,
-) -> Result<(PeerId, Duration)> {
+) -> Result<PeerId> {
     let start = Instant::now();
     swarm.dial(server_address.clone()).unwrap();
 
@@ -443,7 +443,7 @@ async fn connect(
 
     info!("established connection in {duration_seconds:.4} s");
 
-    Ok((server_peer_id, duration))
+    Ok(server_peer_id)
 }
 
 async fn perf(
