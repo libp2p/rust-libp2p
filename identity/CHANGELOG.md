@@ -1,7 +1,7 @@
 ## 0.2.1 - unreleased
 
 - Add key_type method to public key and key pair.
-  See [PR 4107]
+  See [PR 4107].
 
 ## 0.2.0
 
