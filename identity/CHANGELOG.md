@@ -1,6 +1,6 @@
 ## 0.2.1 - unreleased
 
-- Add key_type method to public key and key pair.
+- Expose `KeyType` for `PublicKey` and `Keypair`.
   See [PR 4107].
 
 [PR 4107]: https://github.com/libp2p/rust-libp2p/pull/4107
