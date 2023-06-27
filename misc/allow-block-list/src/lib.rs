@@ -418,7 +418,7 @@ mod tests {
 
         let (
             [SwarmEvent::OutgoingConnectionError { error: DialError::Denied { cause: outgoing_cause }, .. }],
-            [_, _, _, SwarmEvent::IncomingConnectionError { error: ListenError::Denied { cause: incoming_cause }, .. }],
+            [_, SwarmEvent::IncomingConnectionError { error: ListenError::Denied { cause: incoming_cause }, .. }],
         ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await else {
             panic!("unexpected events")
         };
