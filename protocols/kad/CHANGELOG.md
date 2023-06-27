@@ -1,6 +1,9 @@
-## 0.44.1 - unreleased
-- Expose KBucketDistance.
+## 0.44.1
 
+- Expose `KBucketDistance`.
+  See [PR 4109].
+
+[PR 4109]: https://github.com/libp2p/rust-libp2p/pull/4109
 
 ## 0.44.0
 
