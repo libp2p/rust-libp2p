@@ -2734,7 +2734,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "asn1_der",
  "base64 0.21.2",
