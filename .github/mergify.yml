@@ -13,7 +13,7 @@ defaults:
         {%- for commit in commits -%}
           {%- if commit.parents|length != 1 -%}
             {%- set _ = commit.update({'merge': true}) -%}
-          {%- elif -%}
+          {%- else -%}
             {%- set _ = commit.update({'merge': false}) -%}
           {%- endif -%}
         {%- endfor -%}
