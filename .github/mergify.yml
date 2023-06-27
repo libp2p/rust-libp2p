@@ -13,6 +13,8 @@ defaults:
         {%- for commit in commits -%}
           {%- if commit.parents|length != 1 -%}
             {%- set _ = commit.update({'merge': true}) -%}
+          {%- else -%}
+            {%- set _ = commit.update({'merge': false}) -%}
           {%- endif -%}
         {%- endfor -%}
         {%- for commit in (commits | rejectattr("merge") | unique(False, 'email_author')) | rejectattr("author", "==", author) -%}
