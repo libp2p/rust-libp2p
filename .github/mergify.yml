@@ -9,9 +9,10 @@ defaults:
 
         Pull-Request: #{{ number }}.
         {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
+        {%- set _ = 0 -%}
         {%- for commit in commits -%}
           {%- if commit.parents|length != 1 -%}
-            {% set _ = commit.update({'merge': true}) %}
+            {%- set _ = commit.update({'merge': true}) -%}
           {%- endif -%}
         {%- endfor -%}
         {%- for commit in (commits | rejectattr("merge") | unique(False, 'email_author')) | rejectattr("author", "==", author) -%}
