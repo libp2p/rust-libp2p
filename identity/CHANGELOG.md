@@ -1,4 +1,4 @@
-## 0.2.1 - unreleased
+## 0.2.1
 
 - Expose `KeyType` for `PublicKey` and `Keypair`.
   See [PR 4107].
