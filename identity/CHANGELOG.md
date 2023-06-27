@@ -1,3 +1,10 @@
+## 0.2.1 - unreleased
+
+- Expose `KeyType` for `PublicKey` and `Keypair`.
+  See [PR 4107].
+
+[PR 4107]: https://github.com/libp2p/rust-libp2p/pull/4107
+
 ## 0.2.0
 
 - Raise MSRV to 1.65.
