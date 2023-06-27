@@ -148,7 +148,20 @@ async fn run_discovery_test(config: Config) {
 async fn create_swarm(config: Config) -> Swarm<Behaviour> {
     let mut swarm =
         Swarm::new_ephemeral(|key| Behaviour::new(config, key.public().to_peer_id()).unwrap());
-    swarm.listen().await;
+
+    // Manually listen on all interfaces because mDNS only works for non-loopback addresses.
+    let expected_listener_id = swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+        .unwrap();
+
+    swarm
+        .wait(|e| match e {
+            SwarmEvent::NewListenAddr { listener_id, .. } => {
+                (listener_id == expected_listener_id).then_some(())
+            }
+            _ => None,
+        })
+        .await;
 
     swarm
 }
