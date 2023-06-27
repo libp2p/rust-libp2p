@@ -1,5 +1,5 @@
-## 0.44.1
-- Expose KBucketDistance again
+## 0.44.1 - unreleased
+- Expose KBucketDistance.
 
 
 ## 0.44.0
