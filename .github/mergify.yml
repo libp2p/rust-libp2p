@@ -8,19 +8,8 @@ defaults:
         {{ body | get_section("## Description", "") }}
 
         Pull-Request: #{{ number }}.
-        {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
-        {%- set _ = 0 -%}
-        {%- for commit in commits -%}
-          {%- if commit.parents|length != 1 -%}
-            {%- set _ = commit.update({'merge': true}) -%}
-          {%- else -%}
-            {%- set _ = commit.update({'merge': false}) -%}
-          {%- endif -%}
-        {%- endfor -%}
-        {%- for commit in (commits | rejectattr("merge") | unique(False, 'email_author')) | rejectattr("author", "==", author) -%}
-        Co-authored-by: {{ commit.author }} <{{ commit.email_author }}>
-        {% endfor %}
-        {# GitHub requires that the `Co-authored-by` lines are AT THE VERY END of a commit, hence nothing must come after this. #}
+
+        {{ body | get_section("## Attributions", "") }}
 
 pull_request_rules:
   - name: Ask to resolve conflict
