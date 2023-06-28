@@ -79,7 +79,7 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if let Some(close_result) = self.close_result.clone() {
+        if let Some(close_result) = self.close_result {
             // For some reason poll_close needs to be 'fuse'able
             return Poll::Ready(close_result.map_err(Into::into));
         }
