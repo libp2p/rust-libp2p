@@ -22,6 +22,7 @@ use futures::{future::BoxFuture, Future};
 use if_watch::IfEvent;
 use std::{
     io,
+    net::SocketAddr,
     task::{Context, Poll},
     time::Duration,
 };
@@ -42,6 +43,7 @@ pub enum Runtime {
 /// Provider for a corresponding quinn runtime and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
+    type UdpSocket: Unpin + Send + Sync;
 
     /// Run the corresponding runtime
     fn runtime() -> Runtime;
@@ -62,4 +64,14 @@ pub trait Provider: Unpin + Send + Sized + 'static {
 
     /// Sleep for specified amount of time.
     fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
+
+    /// Creates new UdpSocket from a previously bound std::net::UdpSocket.
+    fn from_std_udp_socket(socket: std::net::UdpSocket) -> io::Result<Self::UdpSocket>;
+
+    /// Sends data on the socket to the given address. On success, returns the number of bytes written.
+    fn send_to<'a>(
+        udp_socket: &'a Self::UdpSocket,
+        buf: &'a [u8],
+        target: SocketAddr,
+    ) -> BoxFuture<'a, io::Result<usize>>;
 }

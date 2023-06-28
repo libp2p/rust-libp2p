@@ -21,6 +21,7 @@
 use futures::{future::BoxFuture, Future, FutureExt};
 use std::{
     io,
+    net::SocketAddr,
     task::{Context, Poll},
     time::Duration,
 };
@@ -35,6 +36,7 @@ pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
+    type UdpSocket = tokio::net::UdpSocket;
 
     fn runtime() -> super::Runtime {
         super::Runtime::Tokio
@@ -57,5 +59,17 @@ impl super::Provider for Provider {
 
     fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         tokio::time::sleep(duration).boxed()
+    }
+
+    fn from_std_udp_socket(socket: std::net::UdpSocket) -> io::Result<Self::UdpSocket> {
+        tokio::net::UdpSocket::from_std(socket)
+    }
+
+    fn send_to<'a>(
+        udp_socket: &'a Self::UdpSocket,
+        buf: &'a [u8],
+        target: SocketAddr,
+    ) -> BoxFuture<'a, io::Result<usize>> {
+        udp_socket.send_to(buf, target).boxed()
     }
 }

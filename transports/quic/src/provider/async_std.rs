@@ -36,6 +36,7 @@ pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
+    type UdpSocket = async_std::net::UdpSocket;
 
     fn runtime() -> super::Runtime {
         super::Runtime::AsyncStd
@@ -58,5 +59,17 @@ impl super::Provider for Provider {
 
     fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         async_std::task::sleep(duration).boxed()
+    }
+
+    fn from_std_udp_socket(socket: std::net::UdpSocket) -> io::Result<Self::UdpSocket> {
+        Ok(socket.into())
+    }
+
+    fn send_to<'a>(
+        udp_socket: &'a Self::UdpSocket,
+        buf: &'a [u8],
+        target: std::net::SocketAddr,
+    ) -> BoxFuture<'a, io::Result<usize>> {
+        udp_socket.send_to(buf, target).boxed()
     }
 }

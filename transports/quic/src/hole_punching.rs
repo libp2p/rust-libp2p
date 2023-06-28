@@ -5,7 +5,6 @@ use futures::future::Either;
 use rand::{distributions, Rng};
 
 use std::{
-    io,
     net::{SocketAddr, UdpSocket},
     time::Duration,
 };
@@ -24,6 +23,11 @@ pub(crate) async fn hole_puncher<P: Provider>(
 }
 
 async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) -> Error {
+    let socket = match P::from_std_udp_socket(socket) {
+        Ok(s) => s,
+        Err(e) => return Error::Io(e),
+    };
+
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
         P::sleep(sleep_duration).await;
@@ -33,10 +37,8 @@ async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) ->
             .take(64)
             .collect();
 
-        if let Err(e) = socket.send_to(&contents, remote_addr) {
-            if !matches!(e.kind(), io::ErrorKind::WouldBlock) {
-                return Error::Io(e);
-            }
+        if let Err(e) = P::send_to(&socket, &contents, remote_addr).await {
+            return Error::Io(e);
         }
     }
 }
