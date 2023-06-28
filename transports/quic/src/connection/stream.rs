@@ -33,7 +33,7 @@ pub struct Stream {
     /// A receive part of the stream
     recv: quinn::RecvStream,
     /// Whether the stream is closed or not
-    close_result: Option<Result<(), ()>>,
+    close_result: Option<Result<(), io::ErrorKind>>,
 }
 
 impl Stream {
@@ -79,16 +79,12 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        if let Some(close_result) = self.close_result {
+        if let Some(close_result) = self.close_result.clone() {
             // For some reason poll_close needs to be 'fuse'able
-            return Poll::Ready(close_result.map_err(|()| io::ErrorKind::Unsupported.into()));
+            return Poll::Ready(close_result.map_err(Into::into));
         }
         let close_result = futures::ready!(Pin::new(&mut self.send).poll_close(cx));
-        self.close_result = if close_result.is_ok() {
-            Some(Ok(()))
-        } else {
-            Some(Err(()))
-        };
+        self.close_result = Some(close_result.as_ref().map_err(|e| e.kind()).copied());
         Poll::Ready(close_result)
     }
 }
