@@ -61,6 +61,10 @@ async fn two_servers_add_each_other_to_routing_table() {
         (
             [Identify(_), Kad(UnroutablePeer { .. }), Identify(_), Kad(RoutingUpdated { peer: peer2, .. }), Identify(_)],
             [Identify(_), Identify(_)],
+        )
+        | (
+            [Identify(_), Kad(UnroutablePeer { .. }), Identify(_), Identify(_), Kad(RoutingUpdated { peer: peer2, .. })],
+            [Identify(_), Identify(_)],
         ) => {
             assert_eq!(peer2, server1_peer_id);
         }
