@@ -5,10 +5,6 @@
 
 Welcome to the rust-libp2p contribution guide! We appreciate your interest in improving our library.
 
-## Community Guidelines
-
-At rust-libp2p, we value a friendly and inclusive community. Harassment and abusive behavior are strictly prohibited. Please be respectful and kind to fellow contributors.
-
 ## Looking for ways to contribute?
 
 There are several ways you can contribute to rust-libp2p:
