@@ -67,7 +67,7 @@ pub use addresses::Addresses;
 pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
-    GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
+    GetClosestPeersResult, GetProvidersError, GetProvidersOk, ExplicitMode, GetProvidersResult, GetRecordError,
     GetRecordOk, GetRecordResult, InboundRequest, NoKnownPeers, PeerRecord, PutRecordContext,
     PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
     QueryResult, QueryStats, RoutingUpdate,

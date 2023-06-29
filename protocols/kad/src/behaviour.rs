@@ -115,6 +115,8 @@ pub struct Kademlia<TStore> {
 
     mode: Mode,
 
+    explicit_mode: ExplicitMode,
+
     /// The record storage.
     store: TStore,
 }
@@ -456,6 +458,7 @@ where
             local_peer_id: id,
             connections: Default::default(),
             mode: Mode::Client,
+            explicit_mode: ExplicitMode::Auto,
         }
     }
 
@@ -988,6 +991,31 @@ where
             ));
         }
         id
+    }
+
+    pub fn set_explicit_mode(&mut self, mode: ExplicitMode) {
+        self.explicit_mode = mode;
+
+        match self.explicit_mode {
+            ExplicitMode::Client => self.mode = Mode::Client,
+            ExplicitMode::Server => self.mode = Mode::Server,
+            ExplicitMode::Auto => {}
+        }
+
+        if !self.connections.is_empty() {
+            self.queued_events
+                .extend(
+                    self.connections
+                        .iter()
+                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                            peer_id: *peer_id,
+                            handler: NotifyHandler::One(*conn_id),
+                            event: KademliaHandlerIn::ReconfigureMode {
+                                new_mode: self.mode,
+                            },
+                        }),
+                );
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -2437,60 +2465,60 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        self.mode = match (self.external_addresses.as_slice(), self.mode) {
-            ([], Mode::Server) => {
-                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+        if matches!(self.explicit_mode, ExplicitMode::Auto) {
+            self.mode = match (self.external_addresses.as_slice(), self.mode) {
+                ([], Mode::Server) => {
+                    log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
 
-                Mode::Client
-            }
-            ([], Mode::Client) => {
-                // Previously client-mode, now also client-mode because no external addresses.
-
-                Mode::Client
-            }
-            (confirmed_external_addresses, Mode::Client) => {
-                if log::log_enabled!(log::Level::Debug) {
-                    let confirmed_external_addresses =
-                        to_comma_separated_list(confirmed_external_addresses);
-
-                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    Mode::Client
                 }
+                ([], Mode::Client) => {
+                    // Previously client-mode, now also client-mode because no external addresses.
 
-                Mode::Server
-            }
-            (confirmed_external_addresses, Mode::Server) => {
-                debug_assert!(
-                    !confirmed_external_addresses.is_empty(),
-                    "Previous match arm handled empty list"
+                    Mode::Client
+                }
+                (confirmed_external_addresses, Mode::Client) => {
+                    if log::log_enabled!(log::Level::Debug) {
+                        let confirmed_external_addresses =
+                            to_comma_separated_list(confirmed_external_addresses);
+
+                        log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    }
+
+                    Mode::Server
+                }
+                (confirmed_external_addresses, Mode::Server) => {
+                    debug_assert!(
+                        !confirmed_external_addresses.is_empty(),
+                        "Previous match arm handled empty list"
+                    );
+
+                    // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                    Mode::Server
+                }
+            };
+
+            if external_addresses_changed && !self.connections.is_empty() {
+                let num_connections = self.connections.len();
+
+                log::debug!(
+                    "External addresses changed, re-configuring {} established connection{}",
+                    num_connections,
+                    if num_connections > 1 { "s" } else { "" }
                 );
 
-                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
-                Mode::Server
-            }
-        };
-
-        if external_addresses_changed && !self.connections.is_empty() {
-            let num_connections = self.connections.len();
-
-            log::debug!(
-                "External addresses changed, re-configuring {} established connection{}",
-                num_connections,
-                if num_connections > 1 { "s" } else { "" }
-            );
-
-            self.queued_events
-                .extend(
-                    self.connections
-                        .iter()
-                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                self.queued_events
+                    .extend(self.connections.iter().map(|(conn_id, peer_id)| {
+                        ToSwarm::NotifyHandler {
                             peer_id: *peer_id,
                             handler: NotifyHandler::One(*conn_id),
                             event: KademliaHandlerIn::ReconfigureMode {
                                 new_mode: self.mode,
                             },
-                        }),
-                );
+                        }
+                    }));
+            }
         }
 
         match event {
@@ -3271,6 +3299,23 @@ impl fmt::Display for Mode {
         match self {
             Mode::Client => write!(f, "client"),
             Mode::Server => write!(f, "server"),
+        }
+    }
+}
+
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum ExplicitMode {
+    Auto,
+    Client,
+    Server,
+}
+
+impl fmt::Display for ExplicitMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExplicitMode::Auto => write!(f, "auto"),
+            ExplicitMode::Client => write!(f, "client"),
+            ExplicitMode::Server => write!(f, "server"),
         }
     }
 }
