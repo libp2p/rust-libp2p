@@ -51,13 +51,21 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
+        println!("Trying address on {}...", std::any::type_name::<A>());
         let addr = match self.0.listen_on(id, addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                println!("Failed on {}", std::any::type_name::<A>());
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Left)),
         };
 
+        println!("Trying address on {}...", std::any::type_name::<B>());
         let addr = match self.1.listen_on(id, addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                println!("Failed on {}", std::any::type_name::<B>());
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Right)),
         };
 
