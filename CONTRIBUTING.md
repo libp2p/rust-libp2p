@@ -8,7 +8,8 @@ Welcome to the rust-libp2p contribution guide! We appreciate your interest in im
 ## Looking for ways to contribute?
 
 There are several ways you can contribute to rust-libp2p:
-- Start contributing immediately via the opened [help wanted](https://github.com/libp2p/rust-libp2p/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) or [difficulty:easy](https://github.com/libp2p/rust-libp2p/issues?q=is%3Aissue+is%3Aopen+label%3Adifficulty%3Aeasy) issues on GitHub. These issues are suitable for newcomers and provide an excellent starting point.
+- Start contributing immediately via the opened [help wanted](https://github.com/libp2p/rust-libp2p/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) or [difficulty:easy](https://github.com/libp2p/rust-libp2p/issues?q=is%3Aissue+is%3Aopen+label%3Adifficulty%3Aeasy) issues on GitHub.
+  These issues are suitable for newcomers and provide an excellent starting point.
 - Reporting issues, bugs, mistakes, or inconsistencies.
 - Submitting a feature request.
 - Opening a new pull request: primary means of making concrete changes to the code.
@@ -17,20 +18,29 @@ There are several ways you can contribute to rust-libp2p:
 
 #### Pull Requests
 
-To streamline the contribution process, we aim to simplify the PR template. Instead of including all the information in the template itself, we will provide here clear guidelines and references.
+To streamline the contribution process, we aim to simplify the PR template.
+Instead of including all the information in the template itself, we will provide here clear guidelines and references.
 
-We always squash merge submitted pull requests. This means that we discourage force pushes, in order to make the diff between pushes easier for us to review. Squash merging allows us to maintain a clean and organized commit history.
+We always squash merge submitted pull requests.
+This means that we discourage force pushes, in order to make the diff between pushes easier for us to review.
+Squash merging allows us to maintain a clean and organized commit history.
 
 The PR title, which will become the commit message after the squashing process, should follow conventional commit spec.
 
 #### Writing Changelog Entries
 
-When making significant changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users. For detailed instructions on how to write changelog entries, please refer to the documentation in `docs/release.md`.
+When making significant changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
+For detailed instructions on how to write changelog entries, please refer to the documentation in `docs/release.md`.
 
 #### Bumping Versions
 
-To maintain consistency and clarity in our releases, it's important to correctly update the version of the relevant crate when making changes that require changelog entries. Detailed instructions on how to update versions can be found in the documentation available at `docs/release.md`. Accurate versioning is crucial to ensure proper tracking of changes.
+To maintain consistency and clarity in our releases, it's important to correctly update the version of the relevant crate when making changes that require changelog entries.
+Detailed instructions on how to update versions can be found in the documentation available at `docs/release.md`.
+Accurate versioning is crucial to ensure proper tracking of changes.
 
 #### Mergify and the Send-it Label
 
-To streamline our workflow, we utilize Mergify and the "send-it" label. Mergify automates merging actions and helps us manage pull requests more efficiently. The "send-it" label indicates that a pull request is ready to be merged. Please refrain from making further commits after the "send-it" label has been applied.
+To streamline our workflow, we utilize Mergify and the "send-it" label.
+Mergify automates merging actions and helps us manage pull requests more efficiently.
+The "send-it" label indicates that a pull request is ready to be merged.
+Please refrain from making further commits after the "send-it" label has been applied.
