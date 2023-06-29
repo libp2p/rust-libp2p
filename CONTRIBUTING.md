@@ -5,25 +5,6 @@
 
 Welcome to the rust-libp2p contribution guide! We appreciate your interest in improving our library.
 
-## Table of Contents
-
-- [Contributing Guidelines](#contributing-guidelines)
-  - [Table of Contents](#table-of-contents)
-  - [Community Guidelines](#community-guidelines)
-  - [Looking for ways to contribute?](#looking-for-ways-to-contribute)
-  - [Code Contribution Guidelines](#code-contribution-guidelines)
-    - [Discuss big changes as Issues first](#discuss-big-changes-as-issues-first)
-    - [Welcoming Pull Requests](#welcoming-pull-requests)
-    - [Code and Conventions](#code-and-conventions)
-      - [Commits](#commits)
-      - [Pull Requests](#pull-requests)
-      - [Tests](#tests)
-      - [Documentation](#documentation)
-      - [Writing Changelog Entries](#writing-changelog-entries)
-      - [Bumping Versions](#bumping-versions)
-      - [Mergify and the Send-it Label](#mergify-and-the-send-it-label)
-  - [Credits](#credits)
-
 ## Community Guidelines
 
 At rust-libp2p, we value a friendly and inclusive community. Harassment and abusive behavior are strictly prohibited. Please be respectful and kind to fellow contributors.
