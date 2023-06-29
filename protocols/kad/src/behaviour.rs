@@ -999,7 +999,9 @@ where
         match self.explicit_mode {
             ExplicitMode::Client => self.mode = Mode::Client,
             ExplicitMode::Server => self.mode = Mode::Server,
-            ExplicitMode::Auto => {}
+            ExplicitMode::Auto => {
+                return;
+            }
         }
 
         if !self.connections.is_empty() {
