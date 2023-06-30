@@ -54,7 +54,7 @@ pub struct Muxer<C> {
     inbound_stream_waker: Option<Waker>,
 }
 
-const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
+const MAX_BUFFERED_INBOUND_STREAMS: usize = 256; // This is equal to the ACK backlog in `rust-yamux`.
 
 impl<C> Muxer<C>
 where
