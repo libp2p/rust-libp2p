@@ -54,7 +54,11 @@ pub struct Muxer<C> {
     inbound_stream_waker: Option<Waker>,
 }
 
-const MAX_BUFFERED_INBOUND_STREAMS: usize = 256; // This is equal to the ACK backlog in `rust-yamux`.
+/// How many streams to buffer before we start resetting them.
+///
+/// This is equal to the ACK BACKLOG in `rust-yamux`.
+/// Thus, for peers running on a recent version of `rust-libp2p`, we should never need to reset streams because they'll voluntarily stop opening them once they hit the ACK backlog.
+const MAX_BUFFERED_INBOUND_STREAMS: usize = 256;
 
 impl<C> Muxer<C>
 where
