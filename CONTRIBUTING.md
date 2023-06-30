@@ -21,7 +21,7 @@ We always squash merge submitted pull requests.
 This means that we discourage force pushes, in order to make the diff between pushes easier for us to review.
 Squash merging allows us to maintain a clean and organized commit history.
 
-The PR title, which will become the commit message after the squashing process, should follow conventional commit spec.
+The PR title, which will become the commit message after the squashing process, should follow [conventional commit spec](https://www.conventionalcommits.org/en/v1.0.0/).
 
 #### Writing Changelog Entries
 
