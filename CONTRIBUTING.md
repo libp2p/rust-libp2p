@@ -12,8 +12,6 @@ There are several ways you can contribute to rust-libp2p:
   These issues are suitable for newcomers and provide an excellent starting point.
 - Reporting issues, bugs, mistakes, or inconsistencies.
   As many open source projects, we are short-staffed, we thus kindly ask you to be open to contribute a fix for discovered issues.
-- Submitting a feature request.
-- Opening a new pull request: primary means of making concrete changes to the code.
 
 ### Code and Conventions
 
