@@ -23,7 +23,7 @@ Squash merging allows us to maintain a clean and organized commit history.
 
 The PR title, which will become the commit message after the squashing process, should follow [conventional commit spec](https://www.conventionalcommits.org/en/v1.0.0/).
 
-#### Writing Changelog Entries
+#### Write changelog entries for user-facing changes
 
 When making user-facing changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
 For detailed instructions on how to write changelog entries, please refer to the documentation in [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
