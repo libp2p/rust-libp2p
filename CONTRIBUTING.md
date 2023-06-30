@@ -26,13 +26,12 @@ The PR title, which will become the commit message after the squashing process, 
 #### Writing Changelog Entries
 
 When making user-facing changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
-For detailed instructions on how to write changelog entries, please refer to the documentation in `docs/release.md`.
+For detailed instructions on how to write changelog entries, please refer to the documentation in [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
 #### Bumping Versions
 
 To maintain consistency and clarity in our releases, it's important to correctly update the version of the relevant crate when making changes that require changelog entries.
-Detailed instructions on how to update versions can be found in the documentation available at `docs/release.md`.
-Accurate versioning is crucial to ensure proper tracking of changes.
+Detailed instructions on how to update versions can be found in the documentation available at [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
 #### Mergify and the Send-it Label
 
@@ -40,3 +39,8 @@ To streamline our workflow, we utilize Mergify and the "send-it" label.
 Mergify automates merging actions and helps us manage pull requests more efficiently.
 The "send-it" label indicates that a pull request is ready to be merged.
 Please refrain from making further commits after the "send-it" label has been applied otherwise your PR will be dequeued from merging automatically.
+
+### Self-service CI
+
+We have a lot of automated CI checks for common errors.
+Please treat our CI as a self-service platform and try to fix any issues before requesting a review.
