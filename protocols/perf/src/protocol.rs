@@ -18,189 +18,184 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use instant::Instant;
-
+use async_trait::async_trait;
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use instant::Instant;
+use libp2p_request_response as request_response;
+use libp2p_swarm::StreamProtocol;
+use std::io;
 
-use crate::{client, server};
+use crate::{RunDuration, RunParams};
 
-const BUF: [u8; 1024] = [0; 1024];
+const BUF: [u8; 65536] = [0; 64 << 10];
 
-pub(crate) async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
-    params: client::RunParams,
-    mut stream: S,
-) -> Result<client::RunTimers, std::io::Error> {
-    let client::RunParams {
-        to_send,
-        to_receive,
-    } = params;
-
-    let mut receive_buf = vec![0; 1024];
-
-    stream.write_all(&(to_receive as u64).to_be_bytes()).await?;
-
-    let write_start = Instant::now();
-
-    let mut sent = 0;
-    while sent < to_send {
-        let n = std::cmp::min(to_send - sent, BUF.len());
-        let buf = &BUF[..n];
-
-        sent += stream.write(buf).await?;
-    }
-
-    stream.close().await?;
-
-    let write_done = Instant::now();
-
-    let mut received = 0;
-    while received < to_receive {
-        received += stream.read(&mut receive_buf).await?;
-    }
-
-    let read_done = Instant::now();
-
-    Ok(client::RunTimers {
-        write_start,
-        write_done,
-        read_done,
-    })
+#[derive(Debug)]
+pub enum Response {
+    Sender(usize),
+    Receiver(RunDuration),
 }
 
-pub(crate) async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
-    mut stream: S,
-) -> Result<server::RunStats, std::io::Error> {
-    let to_send = {
-        let mut buf = [0; 8];
-        stream.read_exact(&mut buf).await?;
+#[derive(Default)]
+pub struct Codec {
+    to_receive: Option<usize>,
 
-        u64::from_be_bytes(buf) as usize
-    };
-
-    let read_start = Instant::now();
-
-    let mut receive_buf = vec![0; 1024];
-    let mut received = 0;
-    loop {
-        let n = stream.read(&mut receive_buf).await?;
-        received += n;
-        if n == 0 {
-            break;
-        }
-    }
-
-    let read_done = Instant::now();
-
-    let mut sent = 0;
-    while sent < to_send {
-        let n = std::cmp::min(to_send - sent, BUF.len());
-        let buf = &BUF[..n];
-
-        sent += stream.write(buf).await?;
-    }
-
-    stream.close().await?;
-    let write_done = Instant::now();
-
-    Ok(server::RunStats {
-        params: server::RunParams { sent, received },
-        timers: server::RunTimers {
-            read_start,
-            read_done,
-            write_done,
-        },
-    })
+    write_start: Option<Instant>,
+    read_start: Option<Instant>,
+    read_done: Option<Instant>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::{executor::block_on, AsyncRead, AsyncWrite};
-    use std::{
-        pin::Pin,
-        sync::{Arc, Mutex},
-        task::Poll,
-    };
-
-    #[derive(Clone)]
-    struct DummyStream {
-        inner: Arc<Mutex<DummyStreamInner>>,
+impl Clone for Codec {
+    fn clone(&self) -> Self {
+        Default::default()
     }
+}
 
-    struct DummyStreamInner {
-        read: Vec<u8>,
-        write: Vec<u8>,
-    }
+#[async_trait]
+impl request_response::Codec for Codec {
+    /// The type of protocol(s) or protocol versions being negotiated.
+    type Protocol = StreamProtocol;
+    /// The type of inbound and outbound requests.
+    type Request = RunParams;
+    /// The type of inbound and outbound responses.
+    type Response = Response;
 
-    impl DummyStream {
-        fn new(read: Vec<u8>) -> Self {
-            Self {
-                inner: Arc::new(Mutex::new(DummyStreamInner {
-                    read,
-                    write: Vec::new(),
-                })),
+    /// Reads a request from the given I/O stream according to the
+    /// negotiated protocol.
+    async fn read_request<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Self::Request>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        let mut receive_buf = vec![0; 64 << 10];
+
+        let to_send = {
+            let mut buf = [0; 8];
+            io.read_exact(&mut buf).await?;
+
+            u64::from_be_bytes(buf) as usize
+        };
+
+        let mut received = 0;
+        loop {
+            let n = io.read(&mut receive_buf).await?;
+            received += n;
+            if n == 0 {
+                break;
             }
         }
+
+        Ok(RunParams {
+            to_receive: received,
+            to_send,
+        })
     }
 
-    impl Unpin for DummyStream {}
+    /// Reads a response from the given I/O stream according to the
+    /// negotiated protocol.
+    async fn read_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
+    where
+        T: AsyncRead + Unpin + Send,
+    {
+        assert!(self.write_start.is_some());
+        assert_eq!(self.read_start, None);
+        assert_eq!(self.read_done, None);
 
-    impl AsyncWrite for DummyStream {
-        fn poll_write(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-            buf: &[u8],
-        ) -> std::task::Poll<std::io::Result<usize>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_write(cx, buf)
+        self.read_start = Some(Instant::now());
+
+        let mut receive_buf = vec![0; 64 << 10];
+
+        let mut received = 0;
+        loop {
+            let n = io.read(&mut receive_buf).await?;
+            received += n;
+            // Make sure to wait for the remote to close the stream. Otherwise with `to_receive` of `0`
+            // one does not measure the full round-trip of the previous write.
+            if n == 0 {
+                break;
+            }
         }
 
-        fn poll_flush(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_flush(cx)
-        }
+        self.read_done = Some(Instant::now());
 
-        fn poll_close(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_close(cx)
-        }
+        assert_eq!(received, self.to_receive.unwrap());
+
+        Ok(Response::Receiver(RunDuration {
+            upload: self
+                .read_start
+                .unwrap()
+                .duration_since(self.write_start.unwrap()),
+            download: self
+                .read_done
+                .unwrap()
+                .duration_since(self.read_start.unwrap()),
+        }))
     }
 
-    impl AsyncRead for DummyStream {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-            buf: &mut [u8],
-        ) -> std::task::Poll<std::io::Result<usize>> {
-            let amt = std::cmp::min(buf.len(), self.inner.lock().unwrap().read.len());
-            let new = self.inner.lock().unwrap().read.split_off(amt);
+    /// Writes a request to the given I/O stream according to the
+    /// negotiated protocol.
+    async fn write_request<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        req: Self::Request,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        assert_eq!(self.to_receive, None);
+        assert_eq!(self.write_start, None);
+        assert_eq!(self.read_start, None);
+        assert_eq!(self.read_done, None);
 
-            buf[..amt].copy_from_slice(self.inner.lock().unwrap().read.as_slice());
+        self.write_start = Some(Instant::now());
 
-            self.inner.lock().unwrap().read = new;
-            Poll::Ready(Ok(amt))
+        let RunParams {
+            to_send,
+            to_receive,
+        } = req;
+
+        self.to_receive = Some(to_receive);
+
+        io.write_all(&(to_receive as u64).to_be_bytes()).await?;
+
+        let mut sent = 0;
+        while sent < to_send {
+            let n = std::cmp::min(to_send - sent, BUF.len());
+            let buf = &BUF[..n];
+
+            sent += io.write(buf).await?;
         }
+
+        Ok(())
     }
 
-    #[test]
-    fn test_client() {
-        let stream = DummyStream::new(vec![0]);
+    /// Writes a response to the given I/O stream according to the
+    /// negotiated protocol.
+    async fn write_response<T>(
+        &mut self,
+        _: &Self::Protocol,
+        io: &mut T,
+        response: Self::Response,
+    ) -> io::Result<()>
+    where
+        T: AsyncWrite + Unpin + Send,
+    {
+        let to_send = match response {
+            Response::Sender(to_send) => to_send,
+            Response::Receiver(_) => unreachable!(),
+        };
 
-        block_on(send_receive(
-            client::RunParams {
-                to_send: 0,
-                to_receive: 0,
-            },
-            stream.clone(),
-        ))
-        .unwrap();
+        let mut sent = 0;
+        while sent < to_send {
+            let n = std::cmp::min(to_send - sent, BUF.len());
+            let buf = &BUF[..n];
 
-        assert_eq!(
-            stream.inner.lock().unwrap().write,
-            0u64.to_be_bytes().to_vec()
-        );
+            sent += io.write(buf).await?;
+        }
+
+        Ok(())
     }
 }

@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = "1.65.0"
 description = "Peer-to-peer networking library"
-version = "0.52.0"
+version = "0.52.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,6 +14,7 @@ categories = ["network-programming", "asynchronous"]
 full = [
     "async-std",
     "autonat",
+    "cbor",
     "dcutr",
     "deflate",
     "dns",
@@ -27,11 +28,9 @@ full = [
     "mdns",
     "metrics",
     "noise",
-    "perf",
     "ping",
     "plaintext",
     "pnet",
-    "quic",
     "relay",
     "rendezvous",
     "request-response",
@@ -45,13 +44,14 @@ full = [
     "wasm-bindgen",
     "wasm-ext",
     "wasm-ext-websocket",
-    "webrtc",
     "websocket",
+    "webtransport-websys",
     "yamux",
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
+async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 autonat = ["dep:libp2p-autonat"]
+cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]
@@ -65,11 +65,9 @@ macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
-perf = ["dep:libp2p-perf"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
-quic = ["dep:libp2p-quic"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 rendezvous = ["dep:libp2p-rendezvous"]
 request-response = ["dep:libp2p-request-response"]
@@ -78,13 +76,13 @@ secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-webrtc?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
-webrtc = ["dep:libp2p-webrtc", "libp2p-webrtc?/pem"]
 websocket = ["dep:libp2p-websocket"]
+webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
 
 [dependencies]
@@ -114,21 +112,19 @@ libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
+libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 
-multiaddr = { version = "0.17.0" }
+multiaddr = { workspace = true }
 pin-project = "1.0.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-deflate = { workspace = true, optional = true }
 libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
-libp2p-perf = { workspace = true, optional = true }
-libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
-libp2p-webrtc = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]
