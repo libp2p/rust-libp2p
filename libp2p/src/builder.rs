@@ -113,8 +113,8 @@ pub struct DnsBuilder<P, T> {
 
 #[cfg(all(feature = "async-std", feature = "dns"))]
 impl<T> DnsBuilder<AsyncStd, T> {
-    pub async fn with_dns(self) -> Builder<libp2p_dns::DnsConfig<T>> {
-        Builder {
+    pub async fn with_dns(self) -> OtherTransportBuilder<libp2p_dns::DnsConfig<T>> {
+        OtherTransportBuilder {
             transport: libp2p_dns::DnsConfig::system(self.transport)
                 .await
                 .expect("TODO: Handle"),
@@ -124,18 +124,43 @@ impl<T> DnsBuilder<AsyncStd, T> {
 
 #[cfg(all(feature = "tokio", feature = "dns"))]
 impl<T> DnsBuilder<Tokio, T> {
-    pub fn with_dns(self) -> Builder<libp2p_dns::TokioDnsConfig<T>> {
-        Builder {
+    pub fn with_dns(self) -> OtherTransportBuilder<libp2p_dns::TokioDnsConfig<T>> {
+        OtherTransportBuilder {
             transport: libp2p_dns::TokioDnsConfig::system(self.transport).expect("TODO: Handle"),
         }
     }
 }
 
 impl<P, T> DnsBuilder<P, T> {
-    pub fn without_dns(self) -> Builder<T> {
+    pub fn without_dns(self) -> OtherTransportBuilder<T> {
+        OtherTransportBuilder {
+            transport: self.transport,
+        }
+    }
+}
+
+pub struct OtherTransportBuilder<T> {
+    transport: T,
+}
+
+impl<T: BuildableTransport> OtherTransportBuilder<T> {
+    pub fn with_other_transport(
+        self,
+        transport: impl BuildableTransport,
+    ) -> OtherTransportBuilder<impl BuildableTransport> {
+        OtherTransportBuilder {
+            transport: self
+                .transport
+                .or_transport(transport)
+                .map(|either, _| either.into_inner()),
+        }
+    }
+
+    pub fn build(self) -> libp2p_core::transport::Boxed<<T as Transport>::Output> {
         Builder {
             transport: self.transport,
         }
+        .build()
     }
 }
 
@@ -224,6 +249,23 @@ mod tests {
                 .with_tcp()
                 .without_relay()
                 .with_dns()
+                .build();
+    }
+
+    /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. QUIC or WebRTC.
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "tcp"))]
+    fn tcp_other_transport_other_transport() {
+        let key = libp2p_identity::Keypair::generate_ed25519();
+        let _: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)> =
+            TransportBuilder::new(key)
+                .with_tokio()
+                .with_tcp()
+                .without_relay()
+                .without_dns()
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
                 .build();
     }
 }
