@@ -1001,18 +1001,8 @@ where
             Some(mode) => {
                 self.mode = mode;
                 self.auto_mode = false;
-
                 if !self.connections.is_empty() {
-                    self.queued_events
-                        .extend(self.connections.iter().map(|(conn_id, peer_id)| {
-                            ToSwarm::NotifyHandler {
-                                peer_id: *peer_id,
-                                handler: NotifyHandler::One(*conn_id),
-                                event: KademliaHandlerIn::ReconfigureMode {
-                                    new_mode: self.mode,
-                                },
-                            }
-                        }));
+                    self.reconfigure_mode();
                 }
             }
             None => {
@@ -1023,6 +1013,21 @@ where
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
+    }
+
+    fn reconfigure_mode(&mut self) {
+        self.queued_events
+            .extend(
+                self.connections
+                    .iter()
+                    .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*conn_id),
+                        event: KademliaHandlerIn::ReconfigureMode {
+                            new_mode: self.mode,
+                        },
+                    }),
+            );
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -2517,16 +2522,7 @@ where
                     if num_connections > 1 { "s" } else { "" }
                 );
 
-                self.queued_events
-                    .extend(self.connections.iter().map(|(conn_id, peer_id)| {
-                        ToSwarm::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*conn_id),
-                            event: KademliaHandlerIn::ReconfigureMode {
-                                new_mode: self.mode,
-                            },
-                        }
-                    }));
+                self.reconfigure_mode();
             }
         }
 
