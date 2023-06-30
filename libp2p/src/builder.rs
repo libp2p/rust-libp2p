@@ -77,8 +77,8 @@ impl<P, T: BuildableTransport> RelayBuilder<P, T> {
     pub fn with_relay(
         self,
         relay_transport: libp2p_relay::client::Transport,
-    ) -> DnsBuilder<P, impl BuildableTransport> {
-        DnsBuilder {
+    ) -> OtherTransportBuilder<P, impl BuildableTransport> {
+        OtherTransportBuilder {
             transport: self
                 .transport
                 .or_transport(
@@ -96,7 +96,39 @@ impl<P, T: BuildableTransport> RelayBuilder<P, T> {
 }
 
 impl<P, T> RelayBuilder<P, T> {
-    pub fn without_relay(self) -> DnsBuilder<P, T> {
+    pub fn without_relay(self) -> OtherTransportBuilder<P, T> {
+        OtherTransportBuilder {
+            transport: self.transport,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct OtherTransportBuilder<P, T> {
+    transport: T,
+    keypair: libp2p_identity::Keypair,
+    phantom: PhantomData<P>,
+}
+
+impl<P, T: BuildableTransport> OtherTransportBuilder<P, T> {
+    pub fn with_other_transport(
+        self,
+        // TODO: could as well be a closure that takes keypair and maybe provider?
+        transport: impl BuildableTransport,
+    ) -> OtherTransportBuilder<P, impl BuildableTransport> {
+        OtherTransportBuilder {
+            transport: self
+                .transport
+                .or_transport(transport)
+                .map(|either, _| either.into_inner()),
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+
+    // TODO: Not the ideal name.
+    pub fn no_more_other_transports(self) -> DnsBuilder<P, impl BuildableTransport> {
         DnsBuilder {
             transport: self.transport,
             keypair: self.keypair,
@@ -113,8 +145,8 @@ pub struct DnsBuilder<P, T> {
 
 #[cfg(all(feature = "async-std", feature = "dns"))]
 impl<T> DnsBuilder<AsyncStd, T> {
-    pub async fn with_dns(self) -> OtherTransportBuilder<libp2p_dns::DnsConfig<T>> {
-        OtherTransportBuilder {
+    pub async fn with_dns(self) -> Builder<libp2p_dns::DnsConfig<T>> {
+        Builder {
             transport: libp2p_dns::DnsConfig::system(self.transport)
                 .await
                 .expect("TODO: Handle"),
@@ -124,43 +156,18 @@ impl<T> DnsBuilder<AsyncStd, T> {
 
 #[cfg(all(feature = "tokio", feature = "dns"))]
 impl<T> DnsBuilder<Tokio, T> {
-    pub fn with_dns(self) -> OtherTransportBuilder<libp2p_dns::TokioDnsConfig<T>> {
-        OtherTransportBuilder {
+    pub fn with_dns(self) -> Builder<libp2p_dns::TokioDnsConfig<T>> {
+        Builder {
             transport: libp2p_dns::TokioDnsConfig::system(self.transport).expect("TODO: Handle"),
         }
     }
 }
 
 impl<P, T> DnsBuilder<P, T> {
-    pub fn without_dns(self) -> OtherTransportBuilder<T> {
-        OtherTransportBuilder {
-            transport: self.transport,
-        }
-    }
-}
-
-pub struct OtherTransportBuilder<T> {
-    transport: T,
-}
-
-impl<T: BuildableTransport> OtherTransportBuilder<T> {
-    pub fn with_other_transport(
-        self,
-        transport: impl BuildableTransport,
-    ) -> OtherTransportBuilder<impl BuildableTransport> {
-        OtherTransportBuilder {
-            transport: self
-                .transport
-                .or_transport(transport)
-                .map(|either, _| either.into_inner()),
-        }
-    }
-
-    pub fn build(self) -> libp2p_core::transport::Boxed<<T as Transport>::Output> {
+    pub fn without_dns(self) -> Builder<T> {
         Builder {
             transport: self.transport,
         }
-        .build()
     }
 }
 
@@ -220,6 +227,7 @@ mod tests {
                 .with_tokio()
                 .with_tcp()
                 .without_relay()
+                .no_more_other_transports()
                 .without_dns()
                 .build();
     }
@@ -235,6 +243,7 @@ mod tests {
                 .with_tokio()
                 .with_tcp()
                 .with_relay(relay_transport)
+                .no_more_other_transports()
                 .without_dns()
                 .build();
     }
@@ -248,6 +257,7 @@ mod tests {
                 .with_tokio()
                 .with_tcp()
                 .without_relay()
+                .no_more_other_transports()
                 .with_dns()
                 .build();
     }
@@ -262,10 +272,11 @@ mod tests {
                 .with_tokio()
                 .with_tcp()
                 .without_relay()
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+                .no_more_other_transports()
                 .without_dns()
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
                 .build();
     }
 }
