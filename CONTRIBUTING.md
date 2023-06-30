@@ -40,7 +40,7 @@ Mergify automates merging actions and helps us manage pull requests more efficie
 The "send-it" label indicates that a pull request is ready to be merged.
 Please refrain from making further commits after the "send-it" label has been applied otherwise your PR will be dequeued from merging automatically.
 
-### Self-service CI
+### Treat CI as a self-service platform
 
 We have a lot of automated CI checks for common errors.
 Please treat our CI as a self-service platform and try to fix any issues before requesting a review.
