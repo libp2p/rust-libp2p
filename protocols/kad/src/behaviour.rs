@@ -3312,23 +3312,6 @@ impl fmt::Display for Mode {
     }
 }
 
-#[derive(PartialEq, Copy, Clone, Debug)]
-pub enum ExplicitMode {
-    Auto,
-    Client,
-    Server,
-}
-
-impl fmt::Display for ExplicitMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExplicitMode::Auto => write!(f, "auto"),
-            ExplicitMode::Client => write!(f, "client"),
-            ExplicitMode::Server => write!(f, "server"),
-        }
-    }
-}
-
 fn to_comma_separated_list<T>(confirmed_external_addresses: &[T]) -> String
 where
     T: ToString,
