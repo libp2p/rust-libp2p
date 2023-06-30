@@ -33,7 +33,7 @@ For detailed instructions on how to write changelog entries, please refer to the
 To maintain consistency and clarity in our releases, it's important to correctly update the version of the relevant crate when making changes that require changelog entries.
 Detailed instructions on how to update versions can be found in the documentation available at [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
-#### Mergify and the Send-it Label
+#### Merging of PRs is automated
 
 To streamline our workflow, we utilize Mergify and the "send-it" label.
 Mergify automates merging actions and helps us manage pull requests more efficiently.
