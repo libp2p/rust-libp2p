@@ -25,7 +25,7 @@ The PR title, which will become the commit message after the squashing process, 
 
 #### Writing Changelog Entries
 
-When making significant changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
+When making user-facing changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
 For detailed instructions on how to write changelog entries, please refer to the documentation in `docs/release.md`.
 
 #### Bumping Versions
