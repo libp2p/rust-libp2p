@@ -39,4 +39,4 @@ Accurate versioning is crucial to ensure proper tracking of changes.
 To streamline our workflow, we utilize Mergify and the "send-it" label.
 Mergify automates merging actions and helps us manage pull requests more efficiently.
 The "send-it" label indicates that a pull request is ready to be merged.
-Please refrain from making further commits after the "send-it" label has been applied.
+Please refrain from making further commits after the "send-it" label has been applied otherwise your PR will be dequeued from merging automatically.
