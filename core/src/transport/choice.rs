@@ -77,7 +77,7 @@ where
         let addr = match self.1.listen_on(id, addr) {
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 debug!(
-                    "Failing to dial {} using {}",
+                    "Failed to dial {} using {}",
                     addr,
                     std::any::type_name::<B>()
                 );
