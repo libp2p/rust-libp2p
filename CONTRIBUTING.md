@@ -15,7 +15,7 @@ There are several ways you can contribute to rust-libp2p:
 
 ### Code and Conventions
 
-#### Pull Requests
+#### We squash-merge pull Requests
 
 We always squash merge submitted pull requests.
 This means that we discourage force pushes, in order to make the diff between pushes easier for us to review.
