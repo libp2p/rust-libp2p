@@ -114,9 +114,7 @@ pub struct Kademlia<TStore> {
     local_peer_id: PeerId,
 
     mode: Mode,
-
     auto_mode: bool,
-
     waker: Option<Waker>,
 
     /// The record storage.
