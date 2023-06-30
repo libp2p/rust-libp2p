@@ -6676,9 +6676,8 @@ dependencies = [
 
 [[package]]
 name = "yamux"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0875ad26dfbf0e7126d4a200747c78496aa3f0225d094a8c867b0e98bb19f9d7"
+version = "0.12.0"
+source = "git+https://github.com/thomaseizinger/rust-yamux?branch=feat/256-backlog#ab1666070b67bb047b738a1262e28ca0a2352e7b"
 dependencies = [
  "futures",
  "log",
