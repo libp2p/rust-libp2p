@@ -28,10 +28,6 @@ The PR title, which will become the commit message after the squashing process, 
 When making user-facing changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
 For detailed instructions on how to write changelog entries, please refer to the documentation in [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
-#### Bumping Versions
-
-To maintain consistency and clarity in our releases, it's important to correctly update the version of the relevant crate when making changes that require changelog entries.
-Detailed instructions on how to update versions can be found in the documentation available at [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
 #### Merging of PRs is automated
 
