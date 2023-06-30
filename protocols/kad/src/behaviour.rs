@@ -52,7 +52,7 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
 use thiserror::Error;
@@ -115,7 +115,9 @@ pub struct Kademlia<TStore> {
 
     mode: Mode,
 
-    explicit_mode: ExplicitMode,
+    auto_mode: bool,
+
+    waker: Option<Waker>,
 
     /// The record storage.
     store: TStore,
@@ -458,7 +460,8 @@ where
             local_peer_id: id,
             connections: Default::default(),
             mode: Mode::Client,
-            explicit_mode: ExplicitMode::Auto,
+            auto_mode: true,
+            waker: None,
         }
     }
 
@@ -993,30 +996,32 @@ where
         id
     }
 
-    pub fn set_explicit_mode(&mut self, mode: ExplicitMode) {
-        self.explicit_mode = mode;
+    pub fn set_explicit_mode(&mut self, mode: Option<Mode>) {
+        match mode {
+            Some(mode) => {
+                self.mode = mode;
+                self.auto_mode = false;
 
-        match self.explicit_mode {
-            ExplicitMode::Client => self.mode = Mode::Client,
-            ExplicitMode::Server => self.mode = Mode::Server,
-            ExplicitMode::Auto => {
-                return;
+                if !self.connections.is_empty() {
+                    self.queued_events
+                        .extend(self.connections.iter().map(|(conn_id, peer_id)| {
+                            ToSwarm::NotifyHandler {
+                                peer_id: *peer_id,
+                                handler: NotifyHandler::One(*conn_id),
+                                event: KademliaHandlerIn::ReconfigureMode {
+                                    new_mode: self.mode,
+                                },
+                            }
+                        }));
+                }
+            }
+            None => {
+                self.auto_mode = true;
             }
         }
 
-        if !self.connections.is_empty() {
-            self.queued_events
-                .extend(
-                    self.connections
-                        .iter()
-                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*conn_id),
-                            event: KademliaHandlerIn::ReconfigureMode {
-                                new_mode: self.mode,
-                            },
-                        }),
-                );
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
         }
     }
 
@@ -2454,6 +2459,8 @@ where
                 }
             }
 
+            self.waker = Some(cx.waker().clone());
+
             // No immediate event was produced as a result of a finished query.
             // If no new events have been queued either, signal `NotReady` to
             // be polled again later.
@@ -2467,7 +2474,7 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        if matches!(self.explicit_mode, ExplicitMode::Auto) {
+        if self.auto_mode {
             self.mode = match (self.external_addresses.as_slice(), self.mode) {
                 ([], Mode::Server) => {
                     log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
