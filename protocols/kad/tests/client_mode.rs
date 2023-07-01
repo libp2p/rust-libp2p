@@ -131,9 +131,13 @@ async fn set_client_to_server_mode() {
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
             [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_), MyBehaviourEvent::Kad(KademliaEvent::RoutingUpdated { peer, .. })],
-            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(_)],
+            [MyBehaviourEvent::Identify(_), MyBehaviourEvent::Identify(identify::Event::Received { info, .. })],
         ) => {
-            assert_eq!(peer, server_peer_id)
+            assert_eq!(peer, server_peer_id);
+            assert!(info
+                .protocols
+                .iter()
+                .any(|proto| libp2p_kad::PROTOCOL_NAME.ne(proto)))
         }
         other => panic!("Unexpected events: {other:?}"),
     }
