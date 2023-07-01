@@ -1,15 +1,28 @@
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
+use libp2p_swarm::NetworkBehaviour;
 use std::marker::PhantomData;
 
-pub struct TransportBuilder {
+pub struct SwarmBuilder {}
+
+impl SwarmBuilder {
+    pub fn new() -> SwarmBuilder {
+        Self {}
+    }
+
+    pub fn with_new_identity(self) -> ProviderBuilder {
+        self.with_existing_identity(libp2p_identity::Keypair::generate_ed25519())
+    }
+
+    pub fn with_existing_identity(self, keypair: libp2p_identity::Keypair) -> ProviderBuilder {
+        ProviderBuilder { keypair }
+    }
+}
+
+pub struct ProviderBuilder {
     keypair: libp2p_identity::Keypair,
 }
 
-impl TransportBuilder {
-    pub fn new(keypair: libp2p_identity::Keypair) -> Self {
-        Self { keypair }
-    }
-
+impl ProviderBuilder {
     #[cfg(feature = "async-std")]
     pub fn with_async_std(self) -> TcpBuilder<AsyncStd> {
         TcpBuilder {
@@ -34,12 +47,12 @@ pub struct TcpBuilder<P> {
 
 #[cfg(all(feature = "async-std", feature = "tcp"))]
 impl TcpBuilder<AsyncStd> {
-    pub fn with_tcp(self) -> RelayBuilder<AsyncStd, impl BuildableTransport> {
+    pub fn with_tcp(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
             transport: libp2p_tcp::async_io::Transport::new(
                 libp2p_tcp::Config::new().nodelay(true),
             )
-            .upgrade(libp2p_core::upgrade::Version::V1)
+            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
             .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
             .multiplex(libp2p_yamux::Config::default())
             .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
@@ -51,10 +64,10 @@ impl TcpBuilder<AsyncStd> {
 
 #[cfg(all(feature = "tokio", feature = "tcp"))]
 impl TcpBuilder<Tokio> {
-    pub fn with_tcp(self) -> RelayBuilder<Tokio, impl BuildableTransport> {
+    pub fn with_tcp(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
             transport: libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::new().nodelay(true))
-                .upgrade(libp2p_core::upgrade::Version::V1)
+                .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
                 .multiplex(libp2p_yamux::Config::default())
                 .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
@@ -73,111 +86,207 @@ pub struct RelayBuilder<P, T> {
 }
 
 #[cfg(feature = "relay")]
-impl<P, T: BuildableTransport> RelayBuilder<P, T> {
+impl<P, T: AuthenticatedMultiplexedTransport> RelayBuilder<P, T> {
+    // TODO: This should be with_relay_client.
+    // TODO: Ideally one can configure it.
     pub fn with_relay(
         self,
-        relay_transport: libp2p_relay::client::Transport,
-    ) -> OtherTransportBuilder<P, impl BuildableTransport> {
+    ) -> OtherTransportBuilder<
+        P,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_relay::client::Behaviour,
+    > {
+        let (relay_transport, relay_behaviour) =
+            libp2p_relay::client::new(self.keypair.public().to_peer_id());
+
         OtherTransportBuilder {
             transport: self
                 .transport
                 .or_transport(
                     relay_transport
-                        .upgrade(libp2p_core::upgrade::Version::V1)
+                        .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                         .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
                         .multiplex(libp2p_yamux::Config::default())
                         .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
                 )
                 .map(|either, _| either.into_inner()),
             keypair: self.keypair,
+            relay_behaviour,
             phantom: PhantomData,
         }
     }
 }
 
+pub struct NoRelayBehaviour;
+
 impl<P, T> RelayBuilder<P, T> {
-    pub fn without_relay(self) -> OtherTransportBuilder<P, T> {
+    pub fn without_relay(self) -> OtherTransportBuilder<P, T, NoRelayBehaviour> {
         OtherTransportBuilder {
             transport: self.transport,
+            relay_behaviour: NoRelayBehaviour,
             keypair: self.keypair,
             phantom: PhantomData,
         }
     }
 }
 
-pub struct OtherTransportBuilder<P, T> {
+pub struct OtherTransportBuilder<P, T, R> {
     transport: T,
+    relay_behaviour: R,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<P>,
 }
 
-impl<P, T: BuildableTransport> OtherTransportBuilder<P, T> {
+impl<P, T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<P, T, R> {
     pub fn with_other_transport(
         self,
         // TODO: could as well be a closure that takes keypair and maybe provider?
-        transport: impl BuildableTransport,
-    ) -> OtherTransportBuilder<P, impl BuildableTransport> {
+        transport: impl AuthenticatedMultiplexedTransport,
+    ) -> OtherTransportBuilder<P, impl AuthenticatedMultiplexedTransport, R> {
         OtherTransportBuilder {
             transport: self
                 .transport
                 .or_transport(transport)
                 .map(|either, _| either.into_inner()),
+            relay_behaviour: self.relay_behaviour,
             keypair: self.keypair,
             phantom: PhantomData,
         }
     }
 
     // TODO: Not the ideal name.
-    pub fn no_more_other_transports(self) -> DnsBuilder<P, impl BuildableTransport> {
+    pub fn no_more_other_transports(
+        self,
+    ) -> DnsBuilder<P, impl AuthenticatedMultiplexedTransport, R> {
         DnsBuilder {
             transport: self.transport,
+            relay_behaviour: self.relay_behaviour,
             keypair: self.keypair,
             phantom: PhantomData,
         }
     }
 }
 
-pub struct DnsBuilder<P, T> {
+pub struct DnsBuilder<P, T, R> {
     transport: T,
+    relay_behaviour: R,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<P>,
 }
 
 #[cfg(all(feature = "async-std", feature = "dns"))]
-impl<T> DnsBuilder<AsyncStd, T> {
-    pub async fn with_dns(self) -> Builder<libp2p_dns::DnsConfig<T>> {
-        Builder {
+impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<AsyncStd, T, R> {
+    pub async fn with_dns(self) -> BehaviourBuilder<AsyncStd, R> {
+        BehaviourBuilder {
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            // TODO: Timeout needed?
             transport: libp2p_dns::DnsConfig::system(self.transport)
                 .await
-                .expect("TODO: Handle"),
+                .expect("TODO: Handle")
+                .boxed(),
+            phantom: PhantomData,
         }
     }
 }
 
 #[cfg(all(feature = "tokio", feature = "dns"))]
-impl<T> DnsBuilder<Tokio, T> {
-    pub fn with_dns(self) -> Builder<libp2p_dns::TokioDnsConfig<T>> {
-        Builder {
-            transport: libp2p_dns::TokioDnsConfig::system(self.transport).expect("TODO: Handle"),
+impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<Tokio, T, R> {
+    pub fn with_dns(self) -> BehaviourBuilder<Tokio, R> {
+        BehaviourBuilder {
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            // TODO: Timeout needed?
+            transport: libp2p_dns::TokioDnsConfig::system(self.transport)
+                .expect("TODO: Handle")
+                .boxed(),
+            phantom: PhantomData,
         }
     }
 }
 
-impl<P, T> DnsBuilder<P, T> {
-    pub fn without_dns(self) -> Builder<T> {
+impl<P, T: AuthenticatedMultiplexedTransport, R> DnsBuilder<P, T, R> {
+    pub fn without_dns(self) -> BehaviourBuilder<P, R> {
+        BehaviourBuilder {
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            // TODO: Timeout needed?
+            transport: self.transport.boxed(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct BehaviourBuilder<P, R> {
+    keypair: libp2p_identity::Keypair,
+    relay_behaviour: R,
+    transport: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)>,
+    phantom: PhantomData<P>,
+}
+
+#[cfg(feature = "relay")]
+impl<P> BehaviourBuilder<P, libp2p_relay::client::Behaviour> {
+    // TODO: The close should provide the relay transport in case the user used with_relay.
+    pub fn with_behaviour<B>(
+        self,
+        mut constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
+    ) -> Builder<P, B> {
         Builder {
+            behaviour: constructor(&self.keypair, self.relay_behaviour),
+            keypair: self.keypair,
             transport: self.transport,
+            phantom: PhantomData,
         }
     }
 }
 
-pub struct Builder<T> {
-    transport: T,
+impl<P> BehaviourBuilder<P, NoRelayBehaviour> {
+    // TODO: The close should provide the relay transport in case the user used with_relay.
+    pub fn with_behaviour<B>(
+        self,
+        mut constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
+    ) -> Builder<P, B> {
+        Builder {
+            behaviour: constructor(&self.keypair),
+            keypair: self.keypair,
+            transport: self.transport,
+            phantom: PhantomData,
+        }
+    }
 }
 
-impl<T: BuildableTransport> Builder<T> {
-    pub fn build(self) -> libp2p_core::transport::Boxed<<T as Transport>::Output> {
-        self.transport.boxed()
+pub struct Builder<P, B> {
+    keypair: libp2p_identity::Keypair,
+    behaviour: B,
+    transport: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)>,
+    phantom: PhantomData<P>,
+}
+
+#[cfg(feature = "async-std")]
+impl<B: NetworkBehaviour> Builder<AsyncStd, B> {
+    // TODO: The close should provide the relay transport in case the user used with_relay.
+    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+        // TODO: Generic over the runtime!
+        libp2p_swarm::SwarmBuilder::with_async_std_executor(
+            self.transport,
+            self.behaviour,
+            self.keypair.public().to_peer_id(),
+        )
+        .build()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<B: NetworkBehaviour> Builder<Tokio, B> {
+    // TODO: The close should provide the relay transport in case the user used with_relay.
+    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+        // TODO: Generic over the runtime!
+        libp2p_swarm::SwarmBuilder::with_tokio_executor(
+            self.transport,
+            self.behaviour,
+            self.keypair.public().to_peer_id(),
+        )
+        .build()
     }
 }
 
@@ -187,7 +296,7 @@ pub enum AsyncStd {}
 #[cfg(feature = "tokio")]
 pub enum Tokio {}
 
-pub trait BuildableTransport:
+pub trait AuthenticatedMultiplexedTransport:
     Transport<
         Error = Self::E,
         Dial = Self::D,
@@ -202,7 +311,7 @@ pub trait BuildableTransport:
     type U: Send;
 }
 
-impl<T> BuildableTransport for T
+impl<T> AuthenticatedMultiplexedTransport for T
 where
     T: Transport<Output = (libp2p_identity::PeerId, StreamMuxerBox)> + Send + Unpin + 'static,
     <T as Transport>::Error: Send + Sync + 'static,
@@ -221,62 +330,70 @@ mod tests {
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp"))]
     fn tcp() {
-        let key = libp2p_identity::Keypair::generate_ed25519();
-        let _: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)> =
-            TransportBuilder::new(key)
-                .with_tokio()
-                .with_tcp()
-                .without_relay()
-                .no_more_other_transports()
-                .without_dns()
-                .build();
+        let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .without_relay()
+            .no_more_other_transports()
+            .without_dns()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .build();
     }
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp", feature = "relay"))]
     fn tcp_relay() {
-        let key = libp2p_identity::Keypair::generate_ed25519();
-        let (relay_transport, _) = libp2p_relay::client::new(key.public().to_peer_id());
+        #[derive(NetworkBehaviour)]
+        #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+        struct Behaviour {
+            dummy: libp2p_swarm::dummy::Behaviour,
+            relay: libp2p_relay::client::Behaviour,
+        }
 
-        let _: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)> =
-            TransportBuilder::new(key)
-                .with_tokio()
-                .with_tcp()
-                .with_relay(relay_transport)
-                .no_more_other_transports()
-                .without_dns()
-                .build();
+        let _: libp2p_swarm::Swarm<Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .with_relay()
+            .no_more_other_transports()
+            .without_dns()
+            .with_behaviour(|_, relay| Behaviour {
+                dummy: libp2p_swarm::dummy::Behaviour,
+                relay,
+            })
+            .build();
     }
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp", feature = "dns"))]
     fn tcp_dns() {
-        let key = libp2p_identity::Keypair::generate_ed25519();
-        let _: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)> =
-            TransportBuilder::new(key)
-                .with_tokio()
-                .with_tcp()
-                .without_relay()
-                .no_more_other_transports()
-                .with_dns()
-                .build();
+        let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .without_relay()
+            .no_more_other_transports()
+            .with_dns()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .build();
     }
 
     /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. QUIC or WebRTC.
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp"))]
     fn tcp_other_transport_other_transport() {
-        let key = libp2p_identity::Keypair::generate_ed25519();
-        let _: libp2p_core::transport::Boxed<(libp2p_identity::PeerId, StreamMuxerBox)> =
-            TransportBuilder::new(key)
-                .with_tokio()
-                .with_tcp()
-                .without_relay()
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-                .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-                .no_more_other_transports()
-                .without_dns()
-                .build();
+        let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .without_relay()
+            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+            .no_more_other_transports()
+            .without_dns()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .build();
     }
 }
