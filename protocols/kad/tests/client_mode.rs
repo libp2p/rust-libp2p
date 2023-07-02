@@ -119,7 +119,7 @@ async fn set_client_to_server_mode() {
     client
         .behaviour_mut()
         .kad
-        .set_explicit_mode(Some(Mode::Client));
+        .set_mode(Some(Mode::Client));
 
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 
@@ -145,7 +145,7 @@ async fn set_client_to_server_mode() {
     client
         .behaviour_mut()
         .kad
-        .set_explicit_mode(Some(Mode::Server));
+        .set_mode(Some(Mode::Server));
 
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
