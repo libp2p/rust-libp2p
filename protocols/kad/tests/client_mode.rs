@@ -116,10 +116,7 @@ async fn set_client_to_server_mode() {
     let _ = env_logger::try_init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
-    client
-        .behaviour_mut()
-        .kad
-        .set_mode(Some(Mode::Client));
+    client.behaviour_mut().kad.set_mode(Some(Mode::Client));
 
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
 
@@ -142,10 +139,7 @@ async fn set_client_to_server_mode() {
         other => panic!("Unexpected events: {other:?}"),
     }
 
-    client
-        .behaviour_mut()
-        .kad
-        .set_mode(Some(Mode::Server));
+    client.behaviour_mut().kad.set_mode(Some(Mode::Server));
 
     match libp2p_swarm_test::drive(&mut client, &mut server).await {
         (
