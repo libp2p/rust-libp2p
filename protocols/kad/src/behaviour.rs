@@ -994,7 +994,8 @@ where
         id
     }
 
-    pub fn set_explicit_mode(&mut self, mode: Option<Mode>) {
+    /// Either set Kademlia [`Mode`] explicitly via `Some(_)` or enable automatic configuration of the Kademlia [`Mode`] based on the external addresses available via `None`.
+    pub fn set_mode(&mut self, mode: Option<Mode>) {
         match mode {
             Some(mode) => {
                 self.mode = mode;
