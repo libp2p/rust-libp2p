@@ -1005,6 +1005,7 @@ where
             }
             None => {
                 self.auto_mode = true;
+                self.determine_mode();
             }
         }
 
@@ -1026,6 +1027,45 @@ where
                         },
                     }),
             );
+    }
+
+    fn determine_mode(&mut self) {
+        self.mode = match (self.external_addresses.as_slice(), self.mode) {
+            ([], Mode::Server) => {
+                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+
+                Mode::Client
+            }
+            ([], Mode::Client) => {
+                // Previously client-mode, now also client-mode because no external addresses.
+
+                Mode::Client
+            }
+            (confirmed_external_addresses, Mode::Client) => {
+                if log::log_enabled!(log::Level::Debug) {
+                    let confirmed_external_addresses =
+                        to_comma_separated_list(confirmed_external_addresses);
+
+                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                }
+
+                Mode::Server
+            }
+            (confirmed_external_addresses, Mode::Server) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                Mode::Server
+            }
+        };
+
+        if !self.connections.is_empty() {
+            self.reconfigure_mode();
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -2477,51 +2517,16 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        if self.auto_mode {
-            self.mode = match (self.external_addresses.as_slice(), self.mode) {
-                ([], Mode::Server) => {
-                    log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+        if self.auto_mode && external_addresses_changed {
+            let num_connections = self.connections.len();
 
-                    Mode::Client
-                }
-                ([], Mode::Client) => {
-                    // Previously client-mode, now also client-mode because no external addresses.
+            log::debug!(
+                "External addresses changed, re-configuring {} established connection{}",
+                num_connections,
+                if num_connections > 1 { "s" } else { "" }
+            );
 
-                    Mode::Client
-                }
-                (confirmed_external_addresses, Mode::Client) => {
-                    if log::log_enabled!(log::Level::Debug) {
-                        let confirmed_external_addresses =
-                            to_comma_separated_list(confirmed_external_addresses);
-
-                        log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
-                    }
-
-                    Mode::Server
-                }
-                (confirmed_external_addresses, Mode::Server) => {
-                    debug_assert!(
-                        !confirmed_external_addresses.is_empty(),
-                        "Previous match arm handled empty list"
-                    );
-
-                    // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
-                    Mode::Server
-                }
-            };
-
-            if external_addresses_changed && !self.connections.is_empty() {
-                let num_connections = self.connections.len();
-
-                log::debug!(
-                    "External addresses changed, re-configuring {} established connection{}",
-                    num_connections,
-                    if num_connections > 1 { "s" } else { "" }
-                );
-
-                self.reconfigure_mode();
-            }
+            self.determine_mode();
         }
 
         match event {
