@@ -137,7 +137,7 @@ async fn set_client_to_server_mode() {
             assert!(info
                 .protocols
                 .iter()
-                .any(|proto| libp2p_kad::PROTOCOL_NAME.ne(proto)))
+                .all(|proto| libp2p_kad::PROTOCOL_NAME.ne(proto)))
         }
         other => panic!("Unexpected events: {other:?}"),
     }
