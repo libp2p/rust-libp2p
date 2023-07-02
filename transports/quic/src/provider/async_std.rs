@@ -22,6 +22,7 @@ use async_std::task::spawn;
 use futures::{future::BoxFuture, Future, FutureExt};
 use std::{
     io,
+    net::UdpSocket,
     task::{Context, Poll},
     time::Duration,
 };
@@ -36,7 +37,6 @@ pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
-    type UdpSocket = async_std::net::UdpSocket;
 
     fn runtime() -> super::Runtime {
         super::Runtime::AsyncStd
@@ -61,15 +61,15 @@ impl super::Provider for Provider {
         async_std::task::sleep(duration).boxed()
     }
 
-    fn from_std_udp_socket(socket: std::net::UdpSocket) -> io::Result<Self::UdpSocket> {
-        Ok(socket.into())
-    }
-
     fn send_to<'a>(
-        udp_socket: &'a Self::UdpSocket,
+        udp_socket: &'a UdpSocket,
         buf: &'a [u8],
         target: std::net::SocketAddr,
     ) -> BoxFuture<'a, io::Result<usize>> {
-        udp_socket.send_to(buf, target).boxed()
+        Box::pin(async move {
+            async_std::net::UdpSocket::from(udp_socket.try_clone()?)
+                .send_to(buf, target)
+                .await
+        })
     }
 }

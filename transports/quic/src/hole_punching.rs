@@ -23,11 +23,6 @@ pub(crate) async fn hole_puncher<P: Provider>(
 }
 
 async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) -> Error {
-    let socket = match P::from_std_udp_socket(socket) {
-        Ok(s) => s,
-        Err(e) => return Error::Io(e),
-    };
-
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
         P::sleep(sleep_duration).await;
