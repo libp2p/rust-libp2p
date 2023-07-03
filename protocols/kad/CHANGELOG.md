@@ -1,6 +1,6 @@
 ## 0.44.2 - unreleased
 
-- feat(kad): allow to explicitly set Mode::{Client,Server}
+- Allow to explicitly set `Mode::{Client,Server}`.
   See [PR 4132]
 
 [PR 4132]: https://github.com/libp2p/rust-libp2p/pull/4132
