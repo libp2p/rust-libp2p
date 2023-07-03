@@ -115,7 +115,7 @@ pub struct Kademlia<TStore> {
 
     mode: Mode,
     auto_mode: bool,
-    waker: Option<Waker>,
+    no_events_waker: Option<Waker>,
 
     /// The record storage.
     store: TStore,
@@ -459,7 +459,7 @@ where
             connections: Default::default(),
             mode: Mode::Client,
             auto_mode: true,
-            waker: None,
+            no_events_waker: None,
         }
     }
 
@@ -1008,34 +1008,36 @@ where
             }
         }
 
-        if let Some(waker) = self.waker.take() {
+        if let Some(waker) = self.no_events_waker.take() {
             waker.wake();
         }
     }
 
     fn reconfigure_mode(&mut self) {
-        if !self.connections.is_empty() {
-            let num_connections = self.connections.len();
-
-            log::debug!(
-                "Re-configuring {} established connection{}",
-                num_connections,
-                if num_connections > 1 { "s" } else { "" }
-            );
-
-            self.queued_events
-                .extend(
-                    self.connections
-                        .iter()
-                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*conn_id),
-                            event: KademliaHandlerIn::ReconfigureMode {
-                                new_mode: self.mode,
-                            },
-                        }),
-                );
+        if self.connections.is_empty() {
+            return;
         }
+
+        let num_connections = self.connections.len();
+
+        log::debug!(
+            "Re-configuring {} established connection{}",
+            num_connections,
+            if num_connections > 1 { "s" } else { "" }
+        );
+
+        self.queued_events
+            .extend(
+                self.connections
+                    .iter()
+                    .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*conn_id),
+                        event: KademliaHandlerIn::ReconfigureMode {
+                            new_mode: self.mode,
+                        },
+                    }),
+            );
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
@@ -2509,12 +2511,12 @@ where
                 }
             }
 
-            self.waker = Some(cx.waker().clone());
-
             // No immediate event was produced as a result of a finished query.
             // If no new events have been queued either, signal `NotReady` to
             // be polled again later.
             if self.queued_events.is_empty() {
+                self.no_events_waker = Some(cx.waker().clone());
+
                 return Poll::Pending;
             }
         }
