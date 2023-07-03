@@ -29,8 +29,9 @@ This repository is the central place for Rust development of the [libp2p](https:
 - For **discussions and questions related to multiple libp2p implementations**
   please use the libp2p _Discourse_ forum https://discuss.libp2p.io.
 
-- For general project updates and discussions join the [biweekly libp2p Community
-  Calls](https://discuss.libp2p.io/t/libp2p-community-calls/1157).
+- For synchronous discussions join the [open rust-libp2p maintainer
+  calls](https://github.com/libp2p/rust-libp2p/discussions?discussions_q=open+maintainers+call+)
+  or the [biweekly libp2p community calls](https://discuss.libp2p.io/t/libp2p-community-calls/1157).
 
 ## Repository Structure
 
