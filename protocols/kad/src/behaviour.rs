@@ -1038,7 +1038,7 @@ where
         }
     }
 
-    fn determine_mode(&mut self) {
+    fn determine_mode_from_external_addresses(&mut self) {
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
                 log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
