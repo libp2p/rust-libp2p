@@ -994,7 +994,12 @@ where
         id
     }
 
-    /// Either set Kademlia [`Mode`] explicitly via `Some(_)` or enable automatic configuration of the Kademlia [`Mode`] based on the external addresses available via `None`.
+    /// Set the [`Mode`] in which we should operate.
+    ///
+    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
+    ///
+    /// Setting a mode via this function disables this automatic behaviour and unconditionally operates in the specified mode.
+    /// To reactivate the automatic configuration, pass [`None`] instead.
     pub fn set_mode(&mut self, mode: Option<Mode>) {
         match mode {
             Some(mode) => {
