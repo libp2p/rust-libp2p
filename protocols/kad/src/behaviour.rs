@@ -1004,7 +1004,7 @@ where
             }
             None => {
                 self.auto_mode = true;
-                self.determine_mode();
+                self.determine_mode_from_external_addresses();
             }
         }
 
@@ -2525,7 +2525,7 @@ where
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
         if self.auto_mode && external_addresses_changed {
-            self.determine_mode();
+            self.determine_mode_from_external_addresses();
         }
 
         match event {
