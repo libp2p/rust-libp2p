@@ -120,6 +120,9 @@ pub use libp2p_tls as tls;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "upnp")]
+#[doc(inline)]
+pub use libp2p_upnp as upnp;
 #[cfg(feature = "wasm-ext")]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
