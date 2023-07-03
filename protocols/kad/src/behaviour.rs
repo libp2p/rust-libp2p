@@ -1015,6 +1015,14 @@ where
 
     fn reconfigure_mode(&mut self) {
         if !self.connections.is_empty() {
+            let num_connections = self.connections.len();
+
+            log::debug!(
+                "Re-configuring {} established connection{}",
+                num_connections,
+                if num_connections > 1 { "s" } else { "" }
+            );
+
             self.queued_events
                 .extend(
                     self.connections
@@ -2517,14 +2525,6 @@ where
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
         if self.auto_mode && external_addresses_changed {
-            let num_connections = self.connections.len();
-
-            log::debug!(
-                "External addresses changed, re-configuring {} established connection{}",
-                num_connections,
-                if num_connections > 1 { "s" } else { "" }
-            );
-
             self.determine_mode();
         }
 
