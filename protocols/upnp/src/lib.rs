@@ -44,13 +44,13 @@ pub use provider::tokio;
 #[derive(Clone, Copy, Debug)]
 pub struct Config {
     /// Bind address for UDP socket (defaults to all `0.0.0.0`).
-    pub bind_addr: SocketAddr,
+    bind_addr: SocketAddr,
     /// Broadcast address for discovery packets (defaults to `239.255.255.250:1900`).
-    pub broadcast_addr: SocketAddr,
+    broadcast_addr: SocketAddr,
     /// Timeout for a search iteration (defaults to 10s).
-    pub timeout: Option<Duration>,
+    timeout: Option<Duration>,
     /// Should the port mappings be temporary or permanent.
-    pub permanent: bool,
+    permanent: bool,
 }
 
 impl Config {
