@@ -65,8 +65,8 @@ fn map_port<P: Provider + 'static>(
         Duration::from_secs(duration),
     )
     .map(move |result| match result {
-        Ok(()) => Event::PortMapped(mapping.clone()),
-        Err(err) => Event::PortMapFailure(mapping, err.into()),
+        Ok(()) => Event::Mapped(mapping),
+        Err(err) => Event::MapFailure(mapping, err),
     })
     .boxed()
 }
@@ -78,8 +78,8 @@ fn remove_port_mapping<P: Provider + 'static>(
 ) -> BoxFuture<'static, Event> {
     P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port())
         .map(move |result| match result {
-            Ok(()) => Event::PortRemoved(mapping.clone()),
-            Err(err) => Event::PortRemovalFailure(mapping, err.into()),
+            Ok(()) => Event::Removed(mapping),
+            Err(err) => Event::RemovalFailure(mapping, err),
         })
         .boxed()
 }
@@ -88,13 +88,13 @@ fn remove_port_mapping<P: Provider + 'static>(
 #[derive(Debug)]
 enum Event {
     /// Port was successfully mapped.
-    PortMapped(Mapping),
+    Mapped(Mapping),
     /// There was a failure mapping port.
-    PortMapFailure(Mapping, Box<dyn Error>),
+    MapFailure(Mapping, Box<dyn Error>),
     /// Port was successfully removed.
-    PortRemoved(Mapping),
+    Removed(Mapping),
     /// There was a failure removing the mapping port.
-    PortRemovalFailure(Mapping, Box<dyn Error>),
+    RemovalFailure(Mapping, Box<dyn Error>),
 }
 
 /// Mapping of a Protocol and Port on the gateway.
@@ -335,7 +335,7 @@ where
                     // Check pending mappings.
                     if let Poll::Ready(Some(result)) = self.pending_events.poll_next_unpin(cx) {
                         match result {
-                            Event::PortMapped(mapping) => {
+                            Event::Mapped(mapping) => {
                                 let state = self
                                     .mappings
                                     .get_mut(&mapping)
@@ -381,7 +381,7 @@ where
                                     }
                                 }
                             }
-                            Event::PortMapFailure(mapping, err) => {
+                            Event::MapFailure(mapping, err) => {
                                 let state = self
                                     .mappings
                                     .get_mut(&mapping)
@@ -419,7 +419,7 @@ where
                                     }
                                 }
                             }
-                            Event::PortRemoved(mapping) => {
+                            Event::Removed(mapping) => {
                                 log::debug!(
                                     "succcessfuly removed UPnP mapping {} for {} protocol",
                                     mapping.internal_addr,
@@ -429,7 +429,7 @@ where
                                     .remove(&mapping)
                                     .expect("mapping should exist");
                             }
-                            Event::PortRemovalFailure(mapping, err) => {
+                            Event::RemovalFailure(mapping, err) => {
                                 log::debug!(
                                     "could not remove UPnP mapping {} for {} protocol: {err}",
                                     mapping.internal_addr,
@@ -489,7 +489,7 @@ fn multiaddr_to_socketaddr_protocol(mut addr: Multiaddr) -> Result<(SocketAddrV4
             }
             multiaddr::Protocol::Ip4(ipv4) if ipv4.is_private() => match (port, protocol) {
                 (Some(port), Some(protocol)) => {
-                    return Ok((SocketAddrV4::new(ipv4.into(), port), protocol));
+                    return Ok((SocketAddrV4::new(ipv4, port), protocol));
                 }
                 _ => return Err(()),
             },

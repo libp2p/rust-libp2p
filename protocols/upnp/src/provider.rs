@@ -26,7 +26,7 @@ use std::{
     time::Duration,
 };
 
-pub use crate::Config;
+use crate::Config;
 use async_trait::async_trait;
 
 #[cfg(feature = "async-std")]
