@@ -84,7 +84,7 @@ fn remove_port_mapping<P: Provider + 'static>(
         .boxed()
 }
 
-/// A [`Gateway`] event.
+/// A [`Provider::Gateway`] event.
 #[derive(Debug)]
 enum Event {
     /// Port was successfully mapped.
@@ -138,7 +138,7 @@ enum MappingState {
     Permanent,
 }
 
-/// Current state of the UPnP [`Transport`].
+/// Current state of the UPnP [`Provider::Gateway`].
 enum GatewayState<P: Provider> {
     Searching(BoxFuture<'static, Result<(P::Gateway, Ipv4Addr), Box<dyn std::error::Error>>>),
     Available((Arc<P::Gateway>, Ipv4Addr)),
