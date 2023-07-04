@@ -4,10 +4,12 @@ defaults:
       method: squash
       commit_message_template: |
         {{ title }}
-        
+
         {{ body | get_section("## Description", "") }}
-        
+
         Pull-Request: #{{ number }}.
+
+        {{ body | get_section("## Attributions", "") }}
 
 pull_request_rules:
   - name: Ask to resolve conflict

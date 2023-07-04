@@ -443,7 +443,7 @@ pub enum FromSwarm<'a, Handler> {
     ListenerClosed(ListenerClosed<'a>),
     /// Informs the behaviour that we have discovered a new candidate for an external address for us.
     NewExternalAddrCandidate(NewExternalAddrCandidate<'a>),
-    /// Informs the behaviour that an external address of the local node was removed.
+    /// Informs the behaviour that an external address of the local node was confirmed.
     ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
     /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired(ExternalAddrExpired<'a>),
@@ -541,14 +541,13 @@ pub struct ListenerClosed<'a> {
     pub reason: Result<(), &'a std::io::Error>,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour
-/// that we have discovered a new candidate for an external address for us.
+/// [`FromSwarm`] variant that informs the behaviour about a new candidate for an external address for us.
 #[derive(Clone, Copy)]
 pub struct NewExternalAddrCandidate<'a> {
     pub addr: &'a Multiaddr,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
+/// [`FromSwarm`] variant that informs the behaviour that an external address was confirmed.
 #[derive(Clone, Copy)]
 pub struct ExternalAddrConfirmed<'a> {
     pub addr: &'a Multiaddr,

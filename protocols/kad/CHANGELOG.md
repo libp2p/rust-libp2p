@@ -1,4 +1,18 @@
-## 0.44.0 - unreleased
+## 0.44.2 - unreleased
+
+- Allow to explicitly set `Mode::{Client,Server}`.
+  See [PR 4132]
+
+[PR 4132]: https://github.com/libp2p/rust-libp2p/pull/4132
+
+## 0.44.1
+
+- Expose `KBucketDistance`.
+  See [PR 4109].
+
+[PR 4109]: https://github.com/libp2p/rust-libp2p/pull/4109
+
+## 0.44.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

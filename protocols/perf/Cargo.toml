@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-clap = { version = "4.3.1", features = ["derive"] }
+clap = { version = "4.3.10", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
 instant = "0.1.12"
@@ -35,7 +35,7 @@ void = "1"
 
 [dev-dependencies]
 rand = "0.8"
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
