@@ -5,7 +5,6 @@ use futures::future::Either;
 use rand::{distributions, Rng};
 
 use std::{
-    io,
     net::{SocketAddr, UdpSocket},
     time::Duration,
 };
@@ -33,10 +32,8 @@ async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) ->
             .take(64)
             .collect();
 
-        if let Err(e) = socket.send_to(&contents, remote_addr) {
-            if !matches!(e.kind(), io::ErrorKind::WouldBlock) {
-                return Error::Io(e);
-            }
+        if let Err(e) = P::send_to(&socket, &contents, remote_addr).await {
+            return Error::Io(e);
         }
     }
 }

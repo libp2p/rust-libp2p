@@ -21,6 +21,7 @@
 use futures::{future::BoxFuture, Future, FutureExt};
 use std::{
     io,
+    net::{SocketAddr, UdpSocket},
     task::{Context, Poll},
     time::Duration,
 };
@@ -57,5 +58,17 @@ impl super::Provider for Provider {
 
     fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         tokio::time::sleep(duration).boxed()
+    }
+
+    fn send_to<'a>(
+        udp_socket: &'a UdpSocket,
+        buf: &'a [u8],
+        target: SocketAddr,
+    ) -> BoxFuture<'a, io::Result<usize>> {
+        Box::pin(async move {
+            tokio::net::UdpSocket::from_std(udp_socket.try_clone()?)?
+                .send_to(buf, target)
+                .await
+        })
     }
 }

@@ -22,6 +22,7 @@ use async_std::task::spawn;
 use futures::{future::BoxFuture, Future, FutureExt};
 use std::{
     io,
+    net::UdpSocket,
     task::{Context, Poll},
     time::Duration,
 };
@@ -58,5 +59,17 @@ impl super::Provider for Provider {
 
     fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         async_std::task::sleep(duration).boxed()
+    }
+
+    fn send_to<'a>(
+        udp_socket: &'a UdpSocket,
+        buf: &'a [u8],
+        target: std::net::SocketAddr,
+    ) -> BoxFuture<'a, io::Result<usize>> {
+        Box::pin(async move {
+            async_std::net::UdpSocket::from(udp_socket.try_clone()?)
+                .send_to(buf, target)
+                .await
+        })
     }
 }
