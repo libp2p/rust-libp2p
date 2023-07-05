@@ -1,0 +1,18 @@
+{
+  "id": "native-rust-libp2p-head",
+  "containerImageID": "native-rust-libp2p-head",
+  "transports": [
+    "ws",
+    "tcp",
+    "quic-v1",
+    "webrtc-direct"
+  ],
+  "secureChannels": [
+    "tls",
+    "noise"
+  ],
+  "muxers": [
+    "mplex",
+    "yamux"
+  ]
+}

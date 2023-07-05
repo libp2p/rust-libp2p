@@ -78,8 +78,8 @@ where
     L: ConnectionHandler,
     R: ConnectionHandler,
 {
-    type InEvent = Either<L::InEvent, R::InEvent>;
-    type OutEvent = Either<L::OutEvent, R::OutEvent>;
+    type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
+    type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
     type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
@@ -100,7 +100,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match (self, event) {
             (Either::Left(handler), Either::Left(event)) => handler.on_behaviour_event(event),
             (Either::Right(handler), Either::Right(event)) => handler.on_behaviour_event(event),
@@ -122,7 +122,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

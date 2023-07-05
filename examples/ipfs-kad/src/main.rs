@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Demonstrates how to perform Kademlia queries on the IPFS network.
-//!
-//! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
-//! peer ID will be generated randomly.
+#![doc = include_str!("../README.md")]
 
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
@@ -48,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
+    // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
     let transport = development_transport(local_key).await?;
 
     // Create a swarm to manage peers and events.

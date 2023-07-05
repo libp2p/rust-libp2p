@@ -1,4 +1,7 @@
-## 0.43.0 - unreleased
+## 0.43.0 
+
+- Allow `NetworkBehaviours` to create and remove listeners.
+  See [PR 3292].
 
 - Raise MSRV to 1.65.
   See [PR 3715].
@@ -39,22 +42,48 @@
   - `ConnectionHandlerEvent::ReportRemoteProtocols`
   - `ConnectionEvent::LocalProtocolsChange`
   - `ConnectionEvent::RemoteProtocolsChange`
-  
+
   See [PR 3651].
 
 - Deprecate the `NegotiatedSubstream` type and replace it with `Stream`.
   See [PR 3912].
 
+- Rename `NetworkBehaviour::OutEvent` to `NetworkBehaviour::ToSwarm`, `ConnectionHandler::InEvent` to `ConnectionHandler::FromBehaviour`, `ConnectionHandler::OutEvent` to `ConnectionHandler::ToBehaviour`. See [PR 3848].
+
+- Remove deprecated `NetworkBehaviourAction` type.
+  See [PR 3919].
+
+- Expose `ConnectionId` on `SwarmEvent::{ConnectionEstablished,ConnectionClosed,IncomingConnection,IncomingConnectionError,OutgoingConnectionError,Dialing}`.
+  Also emit `SwarmEvent::Dialing` for dials with unknown `PeerId`.
+  See [PR 3927].
+
+- Rename `ConnectionHandlerEvent::Custom` to `ConnectionHandlerEvent::NotifyBehaviour`. See [PR 3955].
+
+- Remove `DialError::InvalidPeerId` variant. With the move to `multiaddr` `v0.18.0` peer IDs in `/p2p` are type safe and thus usage of the contained peer ID can not result in a parsing error.
+  See [PR 4037].
+
+- Remove deprecated items. See [PR 3956].
+
+- Add ability to `downcast_ref` ConnectionDenied errors. See [PR 4020].
+
+[PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3746]: https://github.com/libp2p/rust-libp2p/pull/3746
+[PR 3848]: https://github.com/libp2p/rust-libp2p/pull/3848
 [PR 3865]: https://github.com/libp2p/rust-libp2p/pull/3865
 [PR 3882]: https://github.com/libp2p/rust-libp2p/pull/3882
 [PR 3884]: https://github.com/libp2p/rust-libp2p/pull/3884
 [PR 3885]: https://github.com/libp2p/rust-libp2p/pull/3885
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
+[PR 3919]: https://github.com/libp2p/rust-libp2p/pull/3919
+[PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
+[PR 3955]: https://github.com/libp2p/rust-libp2p/pull/3955
+[PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
+[PR 4020]: https://github.com/libp2p/rust-libp2p/pull/4020
+[PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
 
 ## 0.42.2
 

@@ -18,12 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::Future;
+use futures::{future::BoxFuture, Future};
 use if_watch::IfEvent;
 use std::{
     io,
     net::SocketAddr,
     task::{Context, Poll},
+    time::Duration,
 };
 
 #[cfg(feature = "async-std")]
@@ -74,4 +75,7 @@ pub trait Provider: Unpin + Send + Sized + 'static {
         watcher: &mut Self::IfWatcher,
         cx: &mut Context<'_>,
     ) -> Poll<io::Result<IfEvent>>;
+
+    /// Sleep for specified amount of time.
+    fn sleep(duration: Duration) -> BoxFuture<'static, ()>;
 }

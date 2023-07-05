@@ -59,7 +59,7 @@ impl Transport {
     /// # Example
     ///
     /// ```
-    /// use libp2p_core::identity;
+    /// use libp2p_identity as identity;
     /// use rand::thread_rng;
     /// use libp2p_webrtc::tokio::{Transport, Certificate};
     ///
@@ -80,9 +80,11 @@ impl libp2p_core::Transport for Transport {
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let id = ListenerId::new();
-
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
         let socket_addr =
             parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
@@ -93,7 +95,7 @@ impl libp2p_core::Transport for Transport {
                 .map_err(|e| TransportError::Other(Error::Io(e)))?,
         );
 
-        Ok(id)
+        Ok(())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -391,7 +393,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, certhash: Option<Fingerprin
     let addr = Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::WebRTC);
+        .with(Protocol::WebRTCDirect);
 
     if let Some(fp) = certhash {
         return addr.with(Protocol::Certhash(fp.to_multihash()));
@@ -414,7 +416,7 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
     let webrtc = iter.next()?;
 
     let port = match (port, webrtc) {
-        (Protocol::Udp(port), Protocol::WebRTC) => port,
+        (Protocol::Udp(port), Protocol::WebRTCDirect) => port,
         _ => return None,
     };
 
@@ -440,7 +442,7 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)>
     let certhash = iter.next()?;
 
     let (port, fingerprint) = match (port, webrtc, certhash) {
-        (Protocol::Udp(port), Protocol::WebRTC, Protocol::Certhash(cert_hash)) => {
+        (Protocol::Udp(port), Protocol::WebRTCDirect, Protocol::Certhash(cert_hash)) => {
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
 
             (port, fingerprint)
@@ -596,8 +598,12 @@ mod tests {
         // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let listener = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap())
+            let listener = ListenerId::next();
+            transport
+                .listen_on(
+                    listener,
+                    "/ip4/0.0.0.0/udp/0/webrtc-direct".parse().unwrap(),
+                )
                 .unwrap();
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {
@@ -611,7 +617,10 @@ mod tests {
                     assert!(
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
-                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::WebRTC)));
+                    assert!(matches!(
+                        listen_addr.iter().nth(2),
+                        Some(Protocol::WebRTCDirect)
+                    ));
                 }
                 e => panic!("Unexpected event: {e:?}"),
             }

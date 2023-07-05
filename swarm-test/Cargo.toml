@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.68"
+async-trait = "0.1.69"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-plaintext = { workspace = true }
@@ -20,6 +20,6 @@ libp2p-swarm = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 futures = "0.3.28"
-log = "0.4.17"
+log = "0.4.19"
 rand = "0.8.5"
 futures-timer = "3.0.2"

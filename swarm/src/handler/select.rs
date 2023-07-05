@@ -179,8 +179,8 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = Either<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
+    type FromBehaviour = Either<TProto1::FromBehaviour, TProto2::FromBehaviour>;
+    type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -201,7 +201,7 @@ where
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             Either::Left(event) => self.proto1.on_behaviour_event(event),
             Either::Right(event) => self.proto2.on_behaviour_event(event),
@@ -222,13 +222,13 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
         match self.proto1.poll(cx) {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Left(event)));
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
@@ -247,8 +247,10 @@ where
         };
 
         match self.proto2.poll(cx) {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Right(event)));
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
+                    event,
+                )));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));

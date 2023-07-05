@@ -110,8 +110,8 @@ where
     H::InboundProtocol: InboundUpgradeSend,
     H::OutboundProtocol: OutboundUpgradeSend,
 {
-    type InEvent = (K, <H as ConnectionHandler>::InEvent);
-    type OutEvent = (K, <H as ConnectionHandler>::OutEvent);
+    type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
+    type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
     type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
@@ -222,7 +222,7 @@ where
         }
     }
 
-    fn on_behaviour_event(&mut self, (key, event): Self::InEvent) {
+    fn on_behaviour_event(&mut self, (key, event): Self::FromBehaviour) {
         if let Some(h) = self.handlers.get_mut(&key) {
             h.on_behaviour_event(event)
         } else {
@@ -245,7 +245,7 @@ where
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {

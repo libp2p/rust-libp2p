@@ -39,7 +39,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::{
     collections::VecDeque,
-    fmt, io,
+    fmt,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -65,8 +65,6 @@ where
     substream_timeout: Duration,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
-    /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<StreamUpgradeError<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -107,7 +105,6 @@ where
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
-            pending_error: None,
             inbound_request_id,
         }
     }
@@ -151,21 +148,22 @@ where
                 self.pending_events
                     .push_back(Event::OutboundUnsupportedProtocols(info));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
+            StreamUpgradeError::Apply(e) => {
+                log::debug!("outbound stream {info} failed: {e}");
+            }
+            StreamUpgradeError::Io(e) => {
+                log::debug!("outbound stream {info} failed: {e}");
             }
         }
     }
     fn on_listen_upgrade_error(
         &mut self,
-        ListenUpgradeError { error, .. }: ListenUpgradeError<
+        ListenUpgradeError { error, info }: ListenUpgradeError<
             <Self as ConnectionHandler>::InboundOpenInfo,
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        self.pending_error = Some(StreamUpgradeError::Apply(error));
+        log::debug!("inbound stream {info} failed: {error}");
     }
 }
 
@@ -239,9 +237,9 @@ impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: Codec + Send + Clone + 'static,
 {
-    type InEvent = RequestProtocol<TCodec>;
-    type OutEvent = Event<TCodec>;
-    type Error = StreamUpgradeError<io::Error>;
+    type FromBehaviour = RequestProtocol<TCodec>;
+    type ToBehaviour = Event<TCodec>;
+    type Error = void::Void;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
@@ -281,7 +279,7 @@ where
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
-    fn on_behaviour_event(&mut self, request: Self::InEvent) {
+    fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
         self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
     }
@@ -293,17 +291,12 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::OutEvent, Self::Error>>
-    {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
+    ) -> Poll<
+        ConnectionHandlerEvent<RequestProtocol<TCodec>, RequestId, Self::ToBehaviour, Self::Error>,
+    > {
         // Drain pending events.
         if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.pending_events.shrink_to_fit();
         }
@@ -314,7 +307,7 @@ where
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Request {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
                         request_id: id,
                         request: rq,
                         sender: rs_sender,

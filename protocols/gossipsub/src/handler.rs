@@ -225,16 +225,16 @@ impl EnabledHandler {
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
             <Handler as ConnectionHandler>::OutboundOpenInfo,
-            <Handler as ConnectionHandler>::OutEvent,
+            <Handler as ConnectionHandler>::ToBehaviour,
             <Handler as ConnectionHandler>::Error,
         >,
     > {
         if !self.peer_kind_sent {
             if let Some(peer_kind) = self.peer_kind.as_ref() {
                 self.peer_kind_sent = true;
-                return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
-                    peer_kind.clone(),
-                )));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    HandlerEvent::PeerKind(peer_kind.clone()),
+                ));
             }
         }
 
@@ -261,7 +261,7 @@ impl EnabledHandler {
                             self.last_io_activity = Instant::now();
                             self.inbound_substream =
                                 Some(InboundSubstreamState::WaitingInput(substream));
-                            return Poll::Ready(ConnectionHandlerEvent::Custom(message));
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
                             log::debug!("Failed to read from inbound stream: {error}");
@@ -393,8 +393,8 @@ impl EnabledHandler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = HandlerIn;
-    type OutEvent = HandlerEvent;
+    type FromBehaviour = HandlerIn;
+    type ToBehaviour = HandlerEvent;
     type Error = Void;
     type InboundOpenInfo = ();
     type InboundProtocol = either::Either<ProtocolConfig, DeniedUpgrade>;
@@ -457,7 +457,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -466,9 +466,9 @@ impl ConnectionHandler for Handler {
             Handler::Disabled(DisabledHandler::ProtocolUnsupported { peer_kind_sent }) => {
                 if !*peer_kind_sent {
                     *peer_kind_sent = true;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::PeerKind(
-                        PeerKind::NotSupported,
-                    )));
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        HandlerEvent::PeerKind(PeerKind::NotSupported),
+                    ));
                 }
 
                 Poll::Pending

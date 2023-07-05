@@ -191,7 +191,7 @@ where
     S: Enforce,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -243,8 +243,9 @@ where
             FromSwarm::ExpiredListenAddr(_) => {}
             FromSwarm::ListenerError(_) => {}
             FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::NewExternalAddrCandidate(_) => {}
+            FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -261,7 +262,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(peer) = self.close_connections.pop_front() {
             return Poll::Ready(ToSwarm::CloseConnection {
                 peer_id: peer,
@@ -410,20 +411,14 @@ mod tests {
         dialer
             .dial(
                 DialOpts::unknown_peer_id()
-                    .address(
-                        listener
-                            .external_addresses()
-                            .map(|a| a.addr.clone())
-                            .next()
-                            .unwrap(),
-                    )
+                    .address(listener.external_addresses().next().cloned().unwrap())
                     .build(),
             )
             .unwrap();
 
         let (
             [SwarmEvent::OutgoingConnectionError { error: DialError::Denied { cause: outgoing_cause }, .. }],
-            [_, _, _, SwarmEvent::IncomingConnectionError { error: ListenError::Denied { cause: incoming_cause }, .. }],
+            [_, SwarmEvent::IncomingConnectionError { error: ListenError::Denied { cause: incoming_cause }, .. }],
         ) = libp2p_swarm_test::drive(&mut dialer, &mut listener).await else {
             panic!("unexpected events")
         };
@@ -470,12 +465,7 @@ mod tests {
     {
         dialer.dial(
             DialOpts::peer_id(*listener.local_peer_id())
-                .addresses(
-                    listener
-                        .external_addresses()
-                        .map(|a| a.addr.clone())
-                        .collect(),
-                )
+                .addresses(listener.external_addresses().cloned().collect())
                 .build(),
         )
     }

@@ -18,6 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use crate::error::OtherVariantError;
 use crate::error::{DecodingError, SigningError};
 #[cfg(any(
@@ -27,7 +33,19 @@ use crate::error::{DecodingError, SigningError};
     feature = "rsa"
 ))]
 use crate::proto;
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use quick_protobuf::{BytesReader, Writer};
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use std::convert::TryFrom;
 
 #[cfg(feature = "ed25519")]
@@ -41,6 +59,7 @@ use crate::secp256k1;
 
 #[cfg(feature = "ecdsa")]
 use crate::ecdsa;
+use crate::KeyType;
 
 /// Identity keypair of a node.
 ///
@@ -107,24 +126,8 @@ impl Keypair {
     }
 
     #[cfg(feature = "ed25519")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ed25519` instead."
-    )]
-    pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::Keypair, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "secp256k1")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_secp256k1` instead."
-    )]
-    pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -133,24 +136,8 @@ impl Keypair {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_rsa` instead."
-    )]
-    pub fn into_rsa(self) -> Option<rsa::Keypair> {
-        self.try_into().ok()
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::Keypair, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "ecdsa")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `Keypair::try_into_ecdsa` instead."
-    )]
-    pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "ecdsa")]
@@ -191,6 +178,7 @@ impl Keypair {
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
+    #[allow(unused_variables)]
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         match self.keypair {
             #[cfg(feature = "ed25519")]
@@ -331,6 +319,20 @@ impl Keypair {
             feature = "rsa"
         )))]
         unreachable!()
+    }
+
+    /// Return a [`KeyType`] of the [`Keypair`].
+    pub fn key_type(&self) -> KeyType {
+        match self.keypair {
+            #[cfg(feature = "ed25519")]
+            KeyPairInner::Ed25519(_) => KeyType::Ed25519,
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            KeyPairInner::Rsa(_) => KeyType::RSA,
+            #[cfg(feature = "secp256k1")]
+            KeyPairInner::Secp256k1(_) => KeyType::Secp256k1,
+            #[cfg(feature = "ecdsa")]
+            KeyPairInner::Ecdsa(_) => KeyType::Ecdsa,
+        }
     }
 }
 
@@ -481,24 +483,8 @@ impl PublicKey {
     }
 
     #[cfg(feature = "ed25519")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ed25519` instead."
-    )]
-    pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ed25519")]
     pub fn try_into_ed25519(self) -> Result<ed25519::PublicKey, OtherVariantError> {
         self.try_into()
-    }
-
-    #[cfg(feature = "secp256k1")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_secp256k1` instead."
-    )]
-    pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
-        self.try_into().ok()
     }
 
     #[cfg(feature = "secp256k1")]
@@ -507,36 +493,13 @@ impl PublicKey {
     }
 
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_rsa` instead."
-    )]
-    pub fn into_rsa(self) -> Option<rsa::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn try_into_rsa(self) -> Result<rsa::PublicKey, OtherVariantError> {
         self.try_into()
     }
 
     #[cfg(feature = "ecdsa")]
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_into_ecdsa` instead."
-    )]
-    pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
-        self.try_into().ok()
-    }
-
-    #[cfg(feature = "ecdsa")]
     pub fn try_into_ecdsa(self) -> Result<ecdsa::PublicKey, OtherVariantError> {
         self.try_into()
-    }
-
-    /// Encode the public key into a protobuf structure for storage or
-    /// exchange with other nodes.
-    #[deprecated(note = "Renamed to `PublicKey::encode_protobuf`.")]
-    pub fn to_protobuf_encoding(&self) -> Vec<u8> {
-        Self::encode_protobuf(self)
     }
 
     /// Encode the public key into a protobuf structure for storage or
@@ -572,15 +535,6 @@ impl PublicKey {
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
     /// or received from another node.
-    #[deprecated(
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_protobuf` instead."
-    )]
-    pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_protobuf(bytes)
-    }
-
-    /// Decode a public key from a protobuf structure, e.g. read from storage
-    /// or received from another node.
     #[allow(unused_variables)]
     pub fn try_decode_protobuf(bytes: &[u8]) -> Result<PublicKey, DecodingError> {
         #[cfg(any(
@@ -612,6 +566,20 @@ impl PublicKey {
     #[cfg(feature = "peerid")]
     pub fn to_peer_id(&self) -> crate::PeerId {
         self.into()
+    }
+
+    /// Return a [`KeyType`] of the [`PublicKey`].
+    pub fn key_type(&self) -> KeyType {
+        match self.publickey {
+            #[cfg(feature = "ed25519")]
+            PublicKeyInner::Ed25519(_) => KeyType::Ed25519,
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            PublicKeyInner::Rsa(_) => KeyType::RSA,
+            #[cfg(feature = "secp256k1")]
+            PublicKeyInner::Secp256k1(_) => KeyType::Secp256k1,
+            #[cfg(feature = "ecdsa")]
+            PublicKeyInner::Ecdsa(_) => KeyType::Ecdsa,
+        }
     }
 }
 
@@ -811,7 +779,7 @@ mod tests {
         .unwrap();
         let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!("0803125b3059301306072a8648ce3d020106082a8648ce3d03010703420004de3d300fa36ae0e8f5d530899d83abab44abf3161f162a4bc901d8e6ecda020e8b6d5f8da30525e71d6851510c098e5c47c646a597fb4dcec034e9f77c409e62")).unwrap();
 
-        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Ecdsa);
     }
 
     #[test]
@@ -826,11 +794,11 @@ mod tests {
         ))
         .unwrap();
 
-        roundtrip_protobuf_encoding(&priv_key, &pub_key);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Secp256k1);
     }
 
     #[cfg(feature = "peerid")]
-    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey) {
+    fn roundtrip_protobuf_encoding(private_key: &Keypair, public_key: &PublicKey, tpe: KeyType) {
         assert_eq!(&private_key.public(), public_key);
 
         let encoded_priv = private_key.to_protobuf_encoding().unwrap();
@@ -850,6 +818,7 @@ mod tests {
             decoded_public.to_peer_id(),
             "PeerId from roundtripped public key should be the same"
         );
+        assert_eq!(private_key.key_type(), tpe)
     }
 
     #[test]
@@ -906,6 +875,7 @@ mod tests {
         let converted_pubkey = PublicKey::from(ed25519_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Ed25519)
     }
 
     #[test]
@@ -919,6 +889,7 @@ mod tests {
         let converted_pubkey = PublicKey::from(secp256k1_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Secp256k1)
     }
 
     #[test]
@@ -929,5 +900,6 @@ mod tests {
         let converted_pubkey = PublicKey::from(ecdsa_pubkey);
 
         assert_eq!(converted_pubkey, pubkey);
+        assert_eq!(converted_pubkey.key_type(), KeyType::Ecdsa)
     }
 }
