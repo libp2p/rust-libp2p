@@ -22,6 +22,7 @@ use crate::either::EitherFuture;
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use either::Either;
 use futures::future;
+use log::{debug, trace};
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 
@@ -51,13 +52,37 @@ where
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
+        trace!(
+            "Attempting to dial {} using {}",
+            addr,
+            std::any::type_name::<A>()
+        );
         let addr = match self.0.listen_on(id, addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                debug!(
+                    "Failed to dial {} using {}",
+                    addr,
+                    std::any::type_name::<A>()
+                );
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Left)),
         };
 
+        trace!(
+            "Attempting to dial {} using {}",
+            addr,
+            std::any::type_name::<B>()
+        );
         let addr = match self.1.listen_on(id, addr) {
-            Err(TransportError::MultiaddrNotSupported(addr)) => addr,
+            Err(TransportError::MultiaddrNotSupported(addr)) => {
+                debug!(
+                    "Failed to dial {} using {}",
+                    addr,
+                    std::any::type_name::<B>()
+                );
+                addr
+            }
             res => return res.map_err(|err| err.map(Either::Right)),
         };
 
