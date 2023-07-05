@@ -2059,6 +2059,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hole-punching-tests"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "libp2p",
+ "libp2p-quic",
+ "log",
+]
+
+[[package]]
 name = "hostname"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

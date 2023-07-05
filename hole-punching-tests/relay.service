@@ -1,0 +1,11 @@
+[Unit]
+Description=Relay
+After=setup-network.service
+
+[Service]
+ExecStart=ip netns exec relay_ns relay --secret-key-seed 1 --port 8080
+RemainAfterExit=yes
+FailureAction=exit
+
+[Install]
+WantedBy=multi-user.target
