@@ -51,37 +51,35 @@ const MAPPING_DURATION: u64 = 3600;
 const MAPPING_TIMEOUT: u64 = MAPPING_DURATION / 2;
 
 /// Map a port on the gateway.
-fn map_port<P: Provider + 'static>(
+async fn map_port<P: Provider + 'static>(
     gateway: Arc<P::Gateway>,
     mapping: Mapping,
     permanent: bool,
-) -> BoxFuture<'static, Event> {
+) -> Event {
     let duration = if permanent { 0 } else { MAPPING_DURATION };
 
-    P::add_port(
+    match P::add_port(
         gateway,
         mapping.protocol,
         mapping.internal_addr,
         Duration::from_secs(duration),
     )
-    .map(move |result| match result {
+    .await
+    {
         Ok(()) => Event::Mapped(mapping),
         Err(err) => Event::MapFailure(mapping, err),
-    })
-    .boxed()
+    }
 }
 
 /// Remove a port mapping on the gateway.
-fn remove_port_mapping<P: Provider + 'static>(
+async fn remove_port_mapping<P: Provider + 'static>(
     gateway: Arc<P::Gateway>,
     mapping: Mapping,
-) -> BoxFuture<'static, Event> {
-    P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port())
-        .map(move |result| match result {
-            Ok(()) => Event::Removed(mapping),
-            Err(err) => Event::RemovalFailure(mapping, err),
-        })
-        .boxed()
+) -> Event {
+    match P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port()).await {
+        Ok(()) => Event::Removed(mapping),
+        Err(err) => Event::RemovalFailure(mapping, err),
+    }
 }
 
 /// A [`Provider::Gateway`] event.
@@ -260,11 +258,10 @@ where
                             multiaddr: multiaddr.clone(),
                         };
 
-                        self.pending_events.push(map_port::<P>(
-                            gateway.clone(),
-                            mapping.clone(),
-                            self.config.permanent,
-                        ));
+                        self.pending_events.push(
+                            map_port::<P>(gateway.clone(), mapping.clone(), self.config.permanent)
+                                .boxed(),
+                        );
 
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
@@ -281,8 +278,9 @@ where
             }) => {
                 if let GatewayState::Available((gateway, _external_addr)) = &self.state {
                     if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
-                        self.pending_events
-                            .push(remove_port_mapping::<P>(gateway.clone(), mapping.clone()));
+                        self.pending_events.push(
+                            remove_port_mapping::<P>(gateway.clone(), mapping.clone()).boxed(),
+                        );
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
                 }
@@ -435,8 +433,9 @@ where
                                     mapping.internal_addr,
                                     mapping.protocol
                                 );
-                                self.pending_events
-                                    .push(remove_port_mapping::<P>(gateway.clone(), mapping));
+                                self.pending_events.push(
+                                    remove_port_mapping::<P>(gateway.clone(), mapping).boxed(),
+                                );
                             }
                         }
                     }
@@ -445,20 +444,22 @@ where
                     for (mapping, state) in self.mappings.iter_mut() {
                         match state {
                             MappingState::Inactive => {
-                                self.pending_events.push(map_port::<P>(
-                                    gateway.clone(),
-                                    mapping.clone(),
-                                    self.config.permanent,
-                                ));
+                                self.pending_events.push(
+                                    map_port::<P>(
+                                        gateway.clone(),
+                                        mapping.clone(),
+                                        self.config.permanent,
+                                    )
+                                    .boxed(),
+                                );
                                 *state = MappingState::Pending;
                             }
                             MappingState::Active(timeout) => {
                                 if Pin::new(timeout).poll(cx).is_ready() {
-                                    self.pending_events.push(map_port::<P>(
-                                        gateway.clone(),
-                                        mapping.clone(),
-                                        false,
-                                    ));
+                                    self.pending_events.push(
+                                        map_port::<P>(gateway.clone(), mapping.clone(), false)
+                                            .boxed(),
+                                    );
                                 }
                             }
                             MappingState::Pending | MappingState::Permanent => {}

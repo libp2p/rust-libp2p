@@ -55,7 +55,7 @@ impl fmt::Display for Protocol {
 #[async_trait]
 pub trait Provider {
     /// The gateway of  obtained from [`Provider::search_gateway`].
-    type Gateway;
+    type Gateway: Send + Sync;
 
     /// Search for the gateway endpoint on the local network.
     async fn search_gateway(config: Config) -> Result<(Self::Gateway, Ipv4Addr), Box<dyn Error>>;
