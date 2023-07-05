@@ -1,3 +1,10 @@
+## 0.44.2 - unreleased
+
+- Allow to explicitly set `Mode::{Client,Server}`.
+  See [PR 4132]
+
+[PR 4132]: https://github.com/libp2p/rust-libp2p/pull/4132
+
 ## 0.44.1
 
 - Expose `KBucketDistance`.
