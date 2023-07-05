@@ -3,7 +3,7 @@ Description=Relay
 After=setup-network.service
 
 [Service]
-ExecStart=ip netns exec relay_ns relay --secret-key-seed 1 --port 8080
+ExecStart=ip netns exec relay_ns relay --secret-key-seed 1 --port 8080 --listen-addr=192.168.254.1
 RemainAfterExit=yes
 FailureAction=exit
 

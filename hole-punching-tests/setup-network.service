@@ -6,7 +6,7 @@ After=network.target
 ExecStart=/usr/local/bin/setup-network.sh
 Type=oneshot
 RemainAfterExit=yes
-# FailureAction=exit
+FailureAction=exit
 
 [Install]
 WantedBy=multi-user.target

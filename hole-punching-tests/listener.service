@@ -4,9 +4,9 @@ After=setup-network.service
 After=relay.service
 
 [Service]
-ExecStart=ip netns exec listening_ns client --mode=listen --secret-key-seed 2 --relay-address=/ip4/192.168.1.2/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+ExecStart=ip netns exec listener_ns client --mode=listen --secret-key-seed 2 --relay-address=/ip4/10.0.0.1/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 RemainAfterExit=yes
-FailureAction=exit
+# FailureAction=exit
 
 [Install]
 WantedBy=multi-user.target

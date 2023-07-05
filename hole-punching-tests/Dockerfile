@@ -11,7 +11,7 @@
 FROM rockylinux:9
 
 RUN --mount=type=cache,target=/var/cache/dnf dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
-RUN --mount=type=cache,target=/var/cache/dnf dnf -y install iproute bridge-utils systemd firewalld iputils
+RUN --mount=type=cache,target=/var/cache/dnf dnf -y install iproute bridge-utils systemd firewalld mtr iputils
 
 #COPY --from=builder /usr/local/bin/client /usr/local/bin/
 #COPY --from=builder /usr/local/bin/relay /usr/local/bin/
@@ -25,10 +25,10 @@ COPY ./hole-punching-tests/relay.service /etc/systemd/system/
 COPY ./hole-punching-tests/setup-network.service /etc/systemd/system/
 COPY ./hole-punching-tests/listener.service /etc/systemd/system/
 
-# RUN systemctl enable setup-network.service
-#RUN systemctl enable relay.service
-#RUN systemctl enable listener.service
+RUN systemctl enable setup-network.service
+RUN systemctl enable relay.service
+RUN systemctl enable listener.service
 
-RUN chmod +x /usr/local/bin/setup-network.sh
+RUN #chmod +x /usr/local/bin/setup-network.sh
 
 CMD ["/usr/lib/systemd/systemd"]

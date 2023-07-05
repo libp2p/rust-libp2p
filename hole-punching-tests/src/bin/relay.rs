@@ -36,7 +36,7 @@ use libp2p::{
 };
 use libp2p_quic as quic;
 use std::error::Error;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::IpAddr;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
@@ -81,18 +81,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Listen on all interfaces
     let listen_addr_tcp = Multiaddr::empty()
-        .with(match opt.use_ipv6 {
-            Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
-            _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
-        })
+        .with(opt.listen_addr.into())
         .with(Protocol::Tcp(opt.port));
     swarm.listen_on(listen_addr_tcp)?;
 
     let listen_addr_quic = Multiaddr::empty()
-        .with(match opt.use_ipv6 {
-            Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
-            _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
-        })
+        .with(opt.listen_addr.into())
         .with(Protocol::Udp(opt.port))
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
@@ -137,9 +131,9 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p relay")]
 struct Opt {
-    /// Determine if the relay listen on ipv6 or ipv4 loopback address. the default is ipv4
+    /// Which local address to listen on
     #[clap(long)]
-    use_ipv6: Option<bool>,
+    listen_addr: IpAddr,
 
     /// Fixed value to generate deterministic peer id
     #[clap(long)]
