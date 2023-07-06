@@ -28,6 +28,7 @@ use std::{
 
 use crate::Config;
 use async_trait::async_trait;
+use futures::Future;
 
 #[cfg(feature = "async-std")]
 pub mod async_std;
@@ -63,9 +64,14 @@ pub trait Gateway: Sized + Send + Sync {
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
-    ) -> Result<(), Box<dyn Error>>;
+    ) -> Result<(), String>;
 
     /// Remove port mapping on the gateway.
-    async fn remove_port(_: Arc<Self>, protocol: Protocol, port: u16)
-        -> Result<(), Box<dyn Error>>;
+    async fn remove_port(_: Arc<Self>, protocol: Protocol, port: u16) -> Result<(), String>;
+
+    // /// Spawn a future on the executor.
+    fn spawn<F>(f: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static;
 }

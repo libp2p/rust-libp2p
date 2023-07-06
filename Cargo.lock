@@ -3530,6 +3530,7 @@ dependencies = [
 name = "libp2p-upnp"
 version = "0.1.0"
 dependencies = [
+ "async-std",
  "async-trait",
  "futures",
  "futures-timer",
@@ -3538,6 +3539,7 @@ dependencies = [
  "libp2p-core",
  "libp2p-swarm",
  "log",
+ "tokio",
  "void",
 ]
 

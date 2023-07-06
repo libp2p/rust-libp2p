@@ -23,7 +23,6 @@
 use std::{
     borrow::Borrow,
     collections::HashMap,
-    error::Error,
     hash::{Hash, Hasher},
     net::{Ipv4Addr, SocketAddrV4},
     pin::Pin,
@@ -36,7 +35,13 @@ use crate::{
     gateway::{Gateway, Protocol},
     Config,
 };
-use futures::{future::BoxFuture, stream::FuturesUnordered, Future, FutureExt, StreamExt};
+use futures::{
+    channel::mpsc::{self, Receiver, UnboundedSender},
+    future::BoxFuture,
+    select,
+    stream::FuturesUnordered,
+    Future, FutureExt, SinkExt, StreamExt,
+};
 use futures_timer::Delay;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_swarm::{
@@ -85,11 +90,11 @@ enum Event {
     /// Port was successfully mapped.
     Mapped(Mapping),
     /// There was a failure mapping port.
-    MapFailure(Mapping, Box<dyn Error>),
+    MapFailure(Mapping, String),
     /// Port was successfully removed.
     Removed(Mapping),
     /// There was a failure removing the mapping port.
-    RemovalFailure(Mapping, Box<dyn Error>),
+    RemovalFailure(Mapping, String),
 }
 
 /// Mapping of a Protocol and Port on the gateway.
@@ -155,7 +160,10 @@ where
     mappings: HashMap<Mapping, MappingState>,
 
     /// Pending gateway events.
-    pending_events: FuturesUnordered<BoxFuture<'static, Event>>,
+    events_queue: Receiver<Event>,
+
+    /// Events sender.
+    events_sender: UnboundedSender<BoxFuture<'static, Event>>,
 }
 
 impl<P> Default for Behaviour<P>
@@ -173,11 +181,29 @@ where
 {
     /// Builds a new `UPnP` behaviour.
     pub fn new(config: Config) -> Self {
+        let (events_sender, mut task_receiver) = mpsc::unbounded();
+        let (mut task_sender, events_queue) = mpsc::channel(0);
+        P::spawn(async move {
+            let mut futs = FuturesUnordered::new();
+            loop {
+                select! {
+                    fut = task_receiver.select_next_some() => {
+                        futs.push(fut);
+                    },
+                    event = futs.select_next_some() => {
+                        task_sender.send(event).await.expect("receiver should be available");
+                    }
+                    complete => break,
+                }
+            }
+        });
+
         Self {
             config,
             state: GatewayState::Searching(P::search(config).boxed()),
             mappings: Default::default(),
-            pending_events: Default::default(),
+            events_queue,
+            events_sender,
         }
     }
 }
@@ -255,10 +281,16 @@ where
                             multiaddr: multiaddr.clone(),
                         };
 
-                        self.pending_events.push(
-                            map_port::<P>(gateway.clone(), mapping.clone(), self.config.permanent)
+                        self.events_sender
+                            .unbounded_send(
+                                map_port::<P>(
+                                    gateway.clone(),
+                                    mapping.clone(),
+                                    self.config.permanent,
+                                )
                                 .boxed(),
-                        );
+                            )
+                            .expect("receiver should be available");
 
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
@@ -275,9 +307,11 @@ where
             }) => {
                 if let GatewayState::Available((gateway, _external_addr)) = &self.state {
                     if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
-                        self.pending_events.push(
-                            remove_port_mapping::<P>(gateway.clone(), mapping.clone()).boxed(),
-                        );
+                        self.events_sender
+                            .unbounded_send(
+                                remove_port_mapping::<P>(gateway.clone(), mapping.clone()).boxed(),
+                            )
+                            .expect("receiver should be available");
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
                 }
@@ -328,7 +362,7 @@ where
                 },
                 GatewayState::Available((ref gateway, external_addr)) => {
                     // Check pending mappings.
-                    if let Poll::Ready(Some(result)) = self.pending_events.poll_next_unpin(cx) {
+                    if let Poll::Ready(Some(result)) = self.events_queue.poll_next_unpin(cx) {
                         match result {
                             Event::Mapped(mapping) => {
                                 let state = self
@@ -430,9 +464,12 @@ where
                                     mapping.internal_addr,
                                     mapping.protocol
                                 );
-                                self.pending_events.push(
-                                    remove_port_mapping::<P>(gateway.clone(), mapping).boxed(),
-                                );
+                                self.events_sender
+                                    .unbounded_send(
+                                        remove_port_mapping::<P>(gateway.clone(), mapping.clone())
+                                            .boxed(),
+                                    )
+                                    .expect("receiver should be available");
                             }
                         }
                     }
@@ -441,22 +478,30 @@ where
                     for (mapping, state) in self.mappings.iter_mut() {
                         match state {
                             MappingState::Inactive => {
-                                self.pending_events.push(
-                                    map_port::<P>(
-                                        gateway.clone(),
-                                        mapping.clone(),
-                                        self.config.permanent,
+                                self.events_sender
+                                    .unbounded_send(
+                                        map_port::<P>(
+                                            gateway.clone(),
+                                            mapping.clone(),
+                                            self.config.permanent,
+                                        )
+                                        .boxed(),
                                     )
-                                    .boxed(),
-                                );
+                                    .expect("receiver should be available");
                                 *state = MappingState::Pending;
                             }
                             MappingState::Active(timeout) => {
                                 if Pin::new(timeout).poll(cx).is_ready() {
-                                    self.pending_events.push(
-                                        map_port::<P>(gateway.clone(), mapping.clone(), false)
+                                    self.events_sender
+                                        .unbounded_send(
+                                            map_port::<P>(
+                                                gateway.clone(),
+                                                mapping.clone(),
+                                                self.config.permanent,
+                                            )
                                             .boxed(),
-                                    );
+                                        )
+                                        .expect("receiver should be available");
                                 }
                             }
                             MappingState::Pending | MappingState::Permanent => {}

@@ -29,6 +29,7 @@ use super::Protocol;
 use crate::Config;
 
 use async_trait::async_trait;
+use futures::Future;
 use igd::{
     aio::{self, Gateway},
     PortMappingProtocol, SearchOptions,
@@ -52,7 +53,7 @@ impl super::Gateway for Gateway {
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), String> {
         let protocol = match protocol {
             Protocol::Tcp => PortMappingProtocol::TCP,
             Protocol::Udp => PortMappingProtocol::UDP,
@@ -66,14 +67,10 @@ impl super::Gateway for Gateway {
                 "rust-libp2p mapping",
             )
             .await
-            .map_err(|err| err.into())
+            .map_err(|err| err.to_string())
     }
 
-    async fn remove_port(
-        gateway: Arc<Self>,
-        protocol: Protocol,
-        port: u16,
-    ) -> Result<(), Box<dyn Error>> {
+    async fn remove_port(gateway: Arc<Self>, protocol: Protocol, port: u16) -> Result<(), String> {
         let protocol = match protocol {
             Protocol::Tcp => PortMappingProtocol::TCP,
             Protocol::Udp => PortMappingProtocol::UDP,
@@ -81,7 +78,15 @@ impl super::Gateway for Gateway {
         gateway
             .remove_port(protocol, port)
             .await
-            .map_err(|err| err.into())
+            .map_err(|err| err.to_string())
+    }
+
+    fn spawn<F>(f: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        tokio::spawn(f);
     }
 }
 
