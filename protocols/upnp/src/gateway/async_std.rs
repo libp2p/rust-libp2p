@@ -34,14 +34,9 @@ use igd_async_std::{
     PortMappingProtocol, SearchOptions,
 };
 
-#[doc(hidden)]
-pub struct Provider;
-
 #[async_trait]
-impl super::Provider for Provider {
-    type Gateway = Gateway;
-
-    async fn search_gateway(config: Config) -> Result<(Self::Gateway, Ipv4Addr), Box<dyn Error>> {
+impl super::Gateway for Gateway {
+    async fn search(config: Config) -> Result<(Self, Ipv4Addr), Box<dyn Error>> {
         let options = SearchOptions {
             bind_addr: config.bind_addr,
             broadcast_address: config.broadcast_addr,
@@ -53,7 +48,7 @@ impl super::Provider for Provider {
     }
 
     async fn add_port(
-        gateway: Arc<Self::Gateway>,
+        gateway: Arc<Self>,
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
@@ -75,7 +70,7 @@ impl super::Provider for Provider {
     }
 
     async fn remove_port(
-        gateway: Arc<Self::Gateway>,
+        gateway: Arc<Self>,
         protocol: Protocol,
         port: u16,
     ) -> Result<(), Box<dyn Error>> {
@@ -91,4 +86,4 @@ impl super::Provider for Provider {
 }
 
 /// The type of a [`Behaviour`] using the `async-io` implementation.
-pub type Behaviour = crate::behaviour::Behaviour<Provider>;
+pub type Behaviour = crate::behaviour::Behaviour<Gateway>;

@@ -53,25 +53,19 @@ impl fmt::Display for Protocol {
 
 /// The interface for non-blocking UPnP I/O providers.
 #[async_trait]
-pub trait Provider {
-    /// The gateway of  obtained from [`Provider::search_gateway`].
-    type Gateway: Send + Sync;
-
+pub trait Gateway: Sized + Send + Sync {
     /// Search for the gateway endpoint on the local network.
-    async fn search_gateway(config: Config) -> Result<(Self::Gateway, Ipv4Addr), Box<dyn Error>>;
+    async fn search(config: Config) -> Result<(Self, Ipv4Addr), Box<dyn Error>>;
 
     /// Add the input port mapping on the gateway so that traffic is forwarded to the input address.
     async fn add_port(
-        _: Arc<Self::Gateway>,
+        _: Arc<Self>,
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
     ) -> Result<(), Box<dyn Error>>;
 
     /// Remove port mapping on the gateway.
-    async fn remove_port(
-        _: Arc<Self::Gateway>,
-        protocol: Protocol,
-        port: u16,
-    ) -> Result<(), Box<dyn Error>>;
+    async fn remove_port(_: Arc<Self>, protocol: Protocol, port: u16)
+        -> Result<(), Box<dyn Error>>;
 }

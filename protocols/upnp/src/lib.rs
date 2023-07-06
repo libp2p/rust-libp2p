@@ -28,7 +28,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod behaviour;
-mod provider;
+mod gateway;
 
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
@@ -36,9 +36,9 @@ use std::{
 };
 
 #[cfg(feature = "async-std")]
-pub use provider::async_std;
+pub use gateway::async_std;
 #[cfg(feature = "tokio")]
-pub use provider::tokio;
+pub use gateway::tokio;
 
 /// The configuration for UPnP capabilities for libp2p.
 #[derive(Clone, Copy, Debug)]

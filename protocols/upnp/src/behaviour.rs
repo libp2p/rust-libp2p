@@ -33,7 +33,7 @@ use std::{
 };
 
 use crate::{
-    provider::{Protocol, Provider},
+    gateway::{Gateway, Protocol},
     Config,
 };
 use futures::{future::BoxFuture, stream::FuturesUnordered, Future, FutureExt, StreamExt};
@@ -51,8 +51,8 @@ const MAPPING_DURATION: u64 = 3600;
 const MAPPING_TIMEOUT: u64 = MAPPING_DURATION / 2;
 
 /// Map a port on the gateway.
-async fn map_port<P: Provider + 'static>(
-    gateway: Arc<P::Gateway>,
+async fn map_port<P: Gateway + 'static>(
+    gateway: Arc<P>,
     mapping: Mapping,
     permanent: bool,
 ) -> Event {
@@ -72,17 +72,14 @@ async fn map_port<P: Provider + 'static>(
 }
 
 /// Remove a port mapping on the gateway.
-async fn remove_port_mapping<P: Provider + 'static>(
-    gateway: Arc<P::Gateway>,
-    mapping: Mapping,
-) -> Event {
+async fn remove_port_mapping<P: Gateway + 'static>(gateway: Arc<P>, mapping: Mapping) -> Event {
     match P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port()).await {
         Ok(()) => Event::Removed(mapping),
         Err(err) => Event::RemovalFailure(mapping, err),
     }
 }
 
-/// A [`Provider::Gateway`] event.
+/// A [`Gateway`] event.
 #[derive(Debug)]
 enum Event {
     /// Port was successfully mapped.
@@ -136,10 +133,10 @@ enum MappingState {
     Permanent,
 }
 
-/// Current state of the UPnP [`Provider::Gateway`].
-enum GatewayState<P: Provider> {
-    Searching(BoxFuture<'static, Result<(P::Gateway, Ipv4Addr), Box<dyn std::error::Error>>>),
-    Available((Arc<P::Gateway>, Ipv4Addr)),
+/// Current state of the UPnP [`Gateway`].
+enum GatewayState<P: Gateway> {
+    Searching(BoxFuture<'static, Result<(P, Ipv4Addr), Box<dyn std::error::Error>>>),
+    Available((Arc<P>, Ipv4Addr)),
     GatewayNotFound,
 }
 
@@ -147,7 +144,7 @@ enum GatewayState<P: Provider> {
 /// to an internal address on the gateway on a `FromSwarm::NewListenAddr`.
 pub struct Behaviour<P>
 where
-    P: Provider,
+    P: Gateway,
 {
     /// Gateway config.
     config: Config,
@@ -163,7 +160,7 @@ where
 
 impl<P> Default for Behaviour<P>
 where
-    P: Provider + 'static,
+    P: Gateway + 'static,
 {
     fn default() -> Self {
         Self::new(Config::default())
@@ -172,13 +169,13 @@ where
 
 impl<P> Behaviour<P>
 where
-    P: Provider + 'static,
+    P: Gateway + 'static,
 {
     /// Builds a new `UPnP` behaviour.
     pub fn new(config: Config) -> Self {
         Self {
             config,
-            state: GatewayState::Searching(P::search_gateway(config).boxed()),
+            state: GatewayState::Searching(P::search(config).boxed()),
             mappings: Default::default(),
             pending_events: Default::default(),
         }
@@ -187,7 +184,7 @@ where
 
 impl<P> NetworkBehaviour for Behaviour<P>
 where
-    P: Provider + 'static,
+    P: Gateway + 'static,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
 
