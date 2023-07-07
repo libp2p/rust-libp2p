@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::task::spawn;
-use futures::{future::BoxFuture, Future, FutureExt};
+use futures::{future::BoxFuture, FutureExt};
 use std::{
     io,
     net::UdpSocket,
@@ -40,10 +39,6 @@ impl super::Provider for Provider {
 
     fn runtime() -> super::Runtime {
         super::Runtime::AsyncStd
-    }
-
-    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-        spawn(future);
     }
 
     fn new_if_watcher() -> io::Result<Self::IfWatcher> {

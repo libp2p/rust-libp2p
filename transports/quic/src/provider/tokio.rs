@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::BoxFuture, Future, FutureExt};
+use futures::{future::BoxFuture, FutureExt};
 use std::{
     io,
     net::{SocketAddr, UdpSocket},
@@ -39,10 +39,6 @@ impl super::Provider for Provider {
 
     fn runtime() -> super::Runtime {
         super::Runtime::Tokio
-    }
-
-    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-        tokio::spawn(future);
     }
 
     fn new_if_watcher() -> io::Result<Self::IfWatcher> {

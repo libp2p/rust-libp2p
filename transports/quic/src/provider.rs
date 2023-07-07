@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{future::BoxFuture, Future};
+use futures::future::BoxFuture;
 use if_watch::IfEvent;
 use std::{
     io,
@@ -46,11 +46,6 @@ pub trait Provider: Unpin + Send + Sized + 'static {
 
     /// Run the corresponding runtime
     fn runtime() -> Runtime;
-
-    /// Run the given future in the background until it ends.
-    ///
-    /// This is used to spawn the task that is driving the endpoint.
-    fn spawn(future: impl Future<Output = ()> + Send + 'static);
 
     /// Create a new [`if_watch`] watcher that reports [`IfEvent`]s for network interface changes.
     fn new_if_watcher() -> io::Result<Self::IfWatcher>;
