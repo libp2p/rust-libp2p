@@ -536,7 +536,7 @@ where
         &self.local_peer_id
     }
 
-    /// TODO
+    /// List all **confirmed** external address for the local node.
     pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
         self.confirmed_external_addr.iter()
     }
