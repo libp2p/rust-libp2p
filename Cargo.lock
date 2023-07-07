@@ -4266,7 +4266,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.1",
+ "rustls 0.21.2",
  "thiserror",
  "tokio",
  "tracing",
@@ -4299,7 +4299,7 @@ dependencies = [
  "libc",
  "socket2 0.5.3",
  "tracing",
- "windows-sys",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
