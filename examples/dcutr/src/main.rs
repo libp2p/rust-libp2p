@@ -21,23 +21,16 @@
 #![doc = include_str!("../README.md")]
 
 use clap::Parser;
-use futures::{
-    executor::{block_on, ThreadPool},
-    future::{Either, FutureExt},
-    stream::StreamExt,
-};
+use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
         muxing::StreamMuxerBox,
         transport::Transport,
-        upgrade,
     },
-    dcutr,
-    dns::DnsConfig,
-    identify, identity, noise, ping, relay,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId,
+    dcutr, identify, identity, ping, relay,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, PeerId,
 };
 use libp2p_quic as quic;
 use log::info;
@@ -81,37 +74,11 @@ impl FromStr for Mode {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opts = Opts::parse();
-
-    let local_key = generate_ed25519(opts.secret_key_seed);
-    let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
-
-    let (relay_transport, client) = relay::client::new(local_peer_id);
-
-    let transport = {
-        let relay_tcp_quic_transport = relay_transport
-            .or_transport(tcp::async_io::Transport::new(
-                tcp::Config::default().port_reuse(true),
-            ))
-            .upgrade(upgrade::Version::V1)
-            .authenticate(noise::Config::new(&local_key).unwrap())
-            .multiplex(yamux::Config::default())
-            .or_transport(quic::async_std::Transport::new(quic::Config::new(
-                &local_key,
-            )));
-
-        block_on(DnsConfig::system(relay_tcp_quic_transport))
-            .unwrap()
-            .map(|either_output, _| match either_output {
-                Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-                Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            })
-            .boxed()
-    };
 
     #[derive(NetworkBehaviour)]
     #[behaviour(to_swarm = "Event")]
@@ -155,21 +122,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let behaviour = Behaviour {
-        relay_client: client,
-        ping: ping::Behaviour::new(ping::Config::new()),
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/TODO/0.0.1".to_string(),
-            local_key.public(),
-        )),
-        dcutr: dcutr::Behaviour::new(local_peer_id),
-    };
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_existing_identity(generate_ed25519(opts.secret_key_seed))
+        .with_async_std()
+        .with_custom_tcp(tcp::Config::default().port_reuse(true).nodelay(true))
+        .with_relay()
+        .with_other_transport(|keypair| {
+            quic::async_std::Transport::new(quic::Config::new(&keypair))
+                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
+        })
+        .no_more_other_transports()
+        .with_dns()
+        .await
+        .with_behaviour(|keypair, relay_behaviour| Behaviour {
+            relay_client: relay_behaviour,
+            ping: ping::Behaviour::new(ping::Config::new()),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/TODO/0.0.1".to_string(),
+                keypair.public(),
+            )),
+            dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
+        })
+        .build();
 
-    let mut swarm = match ThreadPool::new() {
-        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
-        Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
-    }
-    .build();
+    info!("Local peer id: {:?}", swarm.local_peer_id());
 
     swarm
         .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
