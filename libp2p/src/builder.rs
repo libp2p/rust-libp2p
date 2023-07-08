@@ -1,5 +1,4 @@
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
-use libp2p_swarm::NetworkBehaviour;
 use std::marker::PhantomData;
 
 pub struct SwarmBuilder {}
@@ -276,7 +275,7 @@ pub struct Builder<P, B> {
 }
 
 #[cfg(feature = "async-std")]
-impl<B: NetworkBehaviour> Builder<AsyncStd, B> {
+impl<B: libp2p_swarm::NetworkBehaviour> Builder<AsyncStd, B> {
     // TODO: The close should provide the relay transport in case the user used with_relay.
     pub fn build(self) -> libp2p_swarm::Swarm<B> {
         // TODO: Generic over the runtime!
@@ -290,7 +289,7 @@ impl<B: NetworkBehaviour> Builder<AsyncStd, B> {
 }
 
 #[cfg(feature = "tokio")]
-impl<B: NetworkBehaviour> Builder<Tokio, B> {
+impl<B: libp2p_swarm::NetworkBehaviour> Builder<Tokio, B> {
     // TODO: The close should provide the relay transport in case the user used with_relay.
     pub fn build(self) -> libp2p_swarm::Swarm<B> {
         // TODO: Generic over the runtime!
@@ -357,7 +356,7 @@ mod tests {
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp", feature = "relay"))]
     fn tcp_relay() {
-        #[derive(NetworkBehaviour)]
+        #[derive(libp2p_swarm::NetworkBehaviour)]
         #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
         struct Behaviour {
             dummy: libp2p_swarm::dummy::Behaviour,
