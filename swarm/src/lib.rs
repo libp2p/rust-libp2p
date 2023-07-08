@@ -736,7 +736,7 @@ where
                 .expect("n + 1 is always non-zero; qed");
 
                 self.pool
-                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
+                    .spawn_connection(id, peer_id, &endpoint, connection, handler, None);
 
                 log::debug!(
                     "Connection established: {:?} {:?}; Total (peer): {}.",

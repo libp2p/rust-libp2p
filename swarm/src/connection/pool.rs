@@ -37,7 +37,7 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use instant::Instant;
+use instant::{Duration, Instant};
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::task::Waker;
@@ -492,6 +492,7 @@ where
         endpoint: &ConnectedPoint,
         connection: NewConnection,
         handler: THandler,
+        idle_timeout: Option<Duration>,
     ) {
         let connection = connection.extract();
 
@@ -518,6 +519,7 @@ where
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
+            idle_timeout,
         );
 
         self.executor.spawn(task::new_for_established_connection(

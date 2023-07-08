@@ -149,6 +149,7 @@ where
 
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    idle_timeout: Duration,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -176,15 +177,16 @@ where
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
+        idle_timeout: Option<Duration>,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
-
         if !initial_protocols.is_empty() {
             handler.on_connection_event(ConnectionEvent::LocalProtocolsChange(
                 ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
             ));
         }
 
+        let timeout = idle_timeout.unwrap_or_else(|| Duration::new(0, 0));
         Connection {
             muxing: muxer,
             handler,
@@ -196,6 +198,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
+            idle_timeout: timeout,
         }
     }
 
@@ -227,6 +230,7 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            idle_timeout,
         } = self.get_mut();
 
         loop {
@@ -351,7 +355,16 @@ where
                         *shutdown = Shutdown::Later(Delay::new(dur), t)
                     }
                 }
-                (_, KeepAlive::No) => *shutdown = Shutdown::Asap,
+                (_, KeepAlive::No) => {
+                    // handle idle_timeout
+                    let duration = *idle_timeout; // Default timeout is 0 seconds
+                    if duration > Duration::new(0, 0) {
+                        let deadline = Instant::now() + duration;
+                        *shutdown = Shutdown::Later(Delay::new(duration), deadline);
+                    } else {
+                        *shutdown = Shutdown::Asap;
+                    }
+                }
                 (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
             };
 
@@ -713,6 +726,7 @@ mod tests {
                 keep_alive::ConnectionHandler,
                 None,
                 max_negotiating_inbound_streams,
+                None,
             );
 
             let result = connection.poll_noop_waker();
@@ -736,6 +750,7 @@ mod tests {
             MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
+            None,
         );
 
         connection.handler.open_new_outbound();
@@ -750,6 +765,27 @@ mod tests {
             StreamUpgradeError::Timeout
         ))
     }
+    
+    #[test]
+    fn test_idle_timeout() {
+        // Create a custom idle timeout
+        let idle_timeout = Duration::from_secs(5);
+
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            ConfigurableProtocolConnectionHandler::default(),
+            None,
+            0,
+            Some(idle_timeout),
+        );
+
+        // Create a mock context and pin the connection
+        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
+        let connection = Pin::new(&mut connection);
+
+        let poll_result = connection.poll(&mut cx);
+        assert!(poll_result.is_pending());
+    }
 
     #[test]
     fn propagates_changes_to_supported_inbound_protocols() {
@@ -758,6 +794,7 @@ mod tests {
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
+            None,
         );
 
         // First, start listening on a single protocol.
@@ -796,6 +833,7 @@ mod tests {
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
+            None,
         );
 
         // First, remote supports a single protocol.
