@@ -114,3 +114,4 @@ multihash = "0.19.0"
 # we import via `rust-multiaddr`.
 # This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
+prometheus-client = { git = 'https://github.com/mxinden/client_rust.git', branch = "refactor-collector" }

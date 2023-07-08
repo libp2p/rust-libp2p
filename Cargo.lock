@@ -2839,7 +2839,6 @@ dependencies = [
  "libp2p-ping",
  "libp2p-relay",
  "libp2p-swarm",
- "once_cell",
  "prometheus-client",
 ]
 
@@ -4176,8 +4175,7 @@ dependencies = [
 [[package]]
 name = "prometheus-client"
 version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78c2f43e8969d51935d2a7284878ae053ba30034cd563f673cde37ba5205685e"
+source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#f566b35a4f8107ab3483bb5c90a9507937724025"
 dependencies = [
  "dtoa",
  "itoa",
@@ -4188,8 +4186,7 @@ dependencies = [
 [[package]]
 name = "prometheus-client-derive-encode"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b6a5217beb0ad503ee7fa752d451c905113d70721b937126158f3106a48cc1"
+source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#f566b35a4f8107ab3483bb5c90a9507937724025"
 dependencies = [
  "proc-macro2",
  "quote",
