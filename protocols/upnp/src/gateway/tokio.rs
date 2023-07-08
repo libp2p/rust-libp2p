@@ -53,7 +53,7 @@ impl super::Gateway for Gateway {
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
-    ) -> Result<(), String> {
+    ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         let protocol = match protocol {
             Protocol::Tcp => PortMappingProtocol::TCP,
             Protocol::Udp => PortMappingProtocol::UDP,
@@ -67,10 +67,14 @@ impl super::Gateway for Gateway {
                 "rust-libp2p mapping",
             )
             .await
-            .map_err(|err| err.to_string())
+            .map_err(|err| err.into())
     }
 
-    async fn remove_port(gateway: Arc<Self>, protocol: Protocol, port: u16) -> Result<(), String> {
+    async fn remove_port(
+        gateway: Arc<Self>,
+        protocol: Protocol,
+        port: u16,
+    ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         let protocol = match protocol {
             Protocol::Tcp => PortMappingProtocol::TCP,
             Protocol::Udp => PortMappingProtocol::UDP,
@@ -78,7 +82,7 @@ impl super::Gateway for Gateway {
         gateway
             .remove_port(protocol, port)
             .await
-            .map_err(|err| err.to_string())
+            .map_err(|err| err.into())
     }
 
     fn spawn<F>(f: F)

@@ -64,10 +64,14 @@ pub trait Gateway: Sized + Send + Sync {
         protocol: Protocol,
         addr: SocketAddrV4,
         duration: Duration,
-    ) -> Result<(), String>;
+    ) -> Result<(), Box<dyn Error + Send + Sync + 'static>>;
 
     /// Remove port mapping on the gateway.
-    async fn remove_port(_: Arc<Self>, protocol: Protocol, port: u16) -> Result<(), String>;
+    async fn remove_port(
+        _: Arc<Self>,
+        protocol: Protocol,
+        port: u16,
+    ) -> Result<(), Box<dyn Error + Send + Sync + 'static>>;
 
     // /// Spawn a future on the executor.
     fn spawn<F>(f: F)

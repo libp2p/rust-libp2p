@@ -23,6 +23,7 @@
 use std::{
     borrow::Borrow,
     collections::HashMap,
+    error::Error,
     hash::{Hash, Hasher},
     net::{Ipv4Addr, SocketAddrV4},
     pin::Pin,
@@ -90,11 +91,11 @@ enum Event {
     /// Port was successfully mapped.
     Mapped(Mapping),
     /// There was a failure mapping port.
-    MapFailure(Mapping, String),
+    MapFailure(Mapping, Box<dyn Error + Send + Sync + 'static>),
     /// Port was successfully removed.
     Removed(Mapping),
     /// There was a failure removing the mapping port.
-    RemovalFailure(Mapping, String),
+    RemovalFailure(Mapping, Box<dyn Error + Send + Sync + 'static>),
 }
 
 /// Mapping of a Protocol and Port on the gateway.
