@@ -182,6 +182,7 @@ where
 {
     /// Builds a new `UPnP` behaviour.
     pub fn new(config: Config) -> Self {
+        #![allow(clippy::disallowed_methods)]
         let (events_sender, mut task_receiver) = mpsc::unbounded();
         let (mut task_sender, events_queue) = mpsc::channel(0);
         P::spawn(async move {
@@ -467,8 +468,7 @@ where
                                 );
                                 self.events_sender
                                     .unbounded_send(
-                                        remove_port_mapping::<P>(gateway.clone(), mapping.clone())
-                                            .boxed(),
+                                        remove_port_mapping::<P>(gateway.clone(), mapping).boxed(),
                                     )
                                     .expect("receiver should be available");
                             }
