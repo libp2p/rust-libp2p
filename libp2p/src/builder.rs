@@ -152,15 +152,14 @@ pub struct OtherTransportBuilder<P, T, R> {
 }
 
 impl<P, T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<P, T, R> {
-    pub fn with_other_transport(
+    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
         self,
-        // TODO: could as well be a closure that takes keypair and maybe provider?
-        transport: impl AuthenticatedMultiplexedTransport,
+        mut constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
     ) -> OtherTransportBuilder<P, impl AuthenticatedMultiplexedTransport, R> {
         OtherTransportBuilder {
             transport: self
                 .transport
-                .or_transport(transport)
+                .or_transport(constructor(&self.keypair))
                 .map(|either, _| either.into_inner()),
             relay_behaviour: self.relay_behaviour,
             keypair: self.keypair,
@@ -402,9 +401,9 @@ mod tests {
             .with_tokio()
             .with_default_tcp()
             .without_relay()
-            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
-            .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
+            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
+            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
+            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .no_more_other_transports()
             .without_dns()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
