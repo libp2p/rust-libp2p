@@ -47,15 +47,22 @@ pub struct TcpBuilder<P> {
 
 #[cfg(all(feature = "async-std", feature = "tcp"))]
 impl TcpBuilder<AsyncStd> {
-    pub fn with_tcp(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
+    pub fn with_default_tcp(
+        self,
+    ) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
+        self.with_custom_tcp(libp2p_tcp::Config::default())
+    }
+
+    pub fn with_custom_tcp(
+        self,
+        config: libp2p_tcp::Config,
+    ) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
-            transport: libp2p_tcp::async_io::Transport::new(
-                libp2p_tcp::Config::new().nodelay(true),
-            )
-            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
-            .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
-            .multiplex(libp2p_yamux::Config::default())
-            .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
+            transport: libp2p_tcp::async_io::Transport::new(config)
+                .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
+                .multiplex(libp2p_yamux::Config::default())
+                .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
             keypair: self.keypair,
             phantom: PhantomData,
         }
@@ -64,9 +71,16 @@ impl TcpBuilder<AsyncStd> {
 
 #[cfg(all(feature = "tokio", feature = "tcp"))]
 impl TcpBuilder<Tokio> {
-    pub fn with_tcp(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
+    pub fn with_default_tcp(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
+        self.with_custom_tcp(libp2p_tcp::Config::default())
+    }
+
+    pub fn with_custom_tcp(
+        self,
+        config: libp2p_tcp::Config,
+    ) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
-            transport: libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::new().nodelay(true))
+            transport: libp2p_tcp::tokio::Transport::new(config)
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
                 .multiplex(libp2p_yamux::Config::default())
@@ -333,7 +347,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_tcp()
+            .with_default_tcp()
             .without_relay()
             .no_more_other_transports()
             .without_dns()
@@ -354,7 +368,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_tcp()
+            .with_default_tcp()
             .with_relay()
             .no_more_other_transports()
             .without_dns()
@@ -371,7 +385,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_tcp()
+            .with_default_tcp()
             .without_relay()
             .no_more_other_transports()
             .with_dns()
@@ -386,7 +400,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_tcp()
+            .with_default_tcp()
             .without_relay()
             .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(libp2p_core::transport::dummy::DummyTransport::new())
