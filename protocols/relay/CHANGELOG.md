@@ -1,8 +1,8 @@
 ## 0.16.1 - unreleased
 - Adds functions to access data within `Limit`.
-  See [PR XXXX]
+  See [PR 4162]
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XX
+[PR 4162]: https://github.com/libp2p/rust-libp2p/pull/4162
 
 ## 0.16.0 
 
