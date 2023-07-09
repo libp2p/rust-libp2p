@@ -1,3 +1,9 @@
+## 0.16.1 - unreleased
+- Adds functions to access data within `Limit`.
+  See [PR XXXX]
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XX
+
 ## 0.16.0 
 
 - Raise MSRV to 1.65.
