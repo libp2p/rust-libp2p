@@ -1,3 +1,15 @@
+## 0.40.0 
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+- Remove `Plaintext1Config`.
+  Use `Plaintext2Config` instead.
+  See [PR 3915].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3915]: https://github.com/libp2p/rust-libp2p/pull/3915
+
 ## 0.39.1
 
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].

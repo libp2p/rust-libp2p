@@ -22,15 +22,13 @@ use async_trait::async_trait;
 use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
-    Multiaddr, Transport,
+    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
-    THandlerErr,
+    dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
 };
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
@@ -54,7 +52,7 @@ pub trait SwarmExt {
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
-        <T as NetworkBehaviour>::OutEvent: Debug;
+        <T as NetworkBehaviour>::ToSwarm: Debug;
 
     /// Dial the provided address and wait until a connection has been established.
     ///
@@ -68,7 +66,7 @@ pub trait SwarmExt {
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
         P: Fn(
-            SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>,
+            SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>,
         ) -> Option<E>,
         P: Send;
 
@@ -82,12 +80,12 @@ pub trait SwarmExt {
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
     async fn next_swarm_event(
         &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>;
 
     /// Returns the next behaviour event or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent;
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm;
 
     async fn loop_on_next(self);
 }
@@ -108,7 +106,7 @@ pub trait SwarmExt {
 /// This function utilizes the [`TryIntoOutput`] trait.
 /// Similar as to the number of expected events, the type of event is inferred based on your usage.
 /// If you match against a [`SwarmEvent`], the first [`SwarmEvent`] will be returned.
-/// If you match against your [`NetworkBehaviour::OutEvent`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
+/// If you match against your [`NetworkBehaviour::ToSwarm`] type, [`SwarmEvent`]s which are not [`SwarmEvent::Behaviour`] will be skipped until the [`Swarm`] returns a behaviour event.
 ///
 /// You can implement the [`TryIntoOutput`] for any other type to further customize this behaviour.
 ///
@@ -136,11 +134,11 @@ pub async fn drive<
 ) -> ([Out1; NUM_EVENTS_SWARM_1], [Out2; NUM_EVENTS_SWARM_2])
 where
     TBehaviour2: NetworkBehaviour + Send,
-    TBehaviour2::OutEvent: Debug,
+    TBehaviour2::ToSwarm: Debug,
     TBehaviour1: NetworkBehaviour + Send,
-    TBehaviour1::OutEvent: Debug,
-    SwarmEvent<TBehaviour2::OutEvent, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
-    SwarmEvent<TBehaviour1::OutEvent, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
+    TBehaviour1::ToSwarm: Debug,
+    SwarmEvent<TBehaviour2::ToSwarm, THandlerErr<TBehaviour2>>: TryIntoOutput<Out1>,
+    SwarmEvent<TBehaviour1::ToSwarm, THandlerErr<TBehaviour1>>: TryIntoOutput<Out2>,
     Out1: Debug,
     Out2: Debug,
 {
@@ -199,7 +197,7 @@ impl<TBehaviourOutEvent, THandlerErr> TryIntoOutput<SwarmEvent<TBehaviourOutEven
 impl<B> SwarmExt for Swarm<B>
 where
     B: NetworkBehaviour + Send,
-    <B as NetworkBehaviour>::OutEvent: Debug,
+    <B as NetworkBehaviour>::ToSwarm: Debug,
 {
     type NB = B;
 
@@ -226,13 +224,9 @@ where
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
-        <T as NetworkBehaviour>::OutEvent: Debug,
+        <T as NetworkBehaviour>::ToSwarm: Debug,
     {
-        let external_addresses = other
-            .external_addresses()
-            .cloned()
-            .map(|r| r.addr)
-            .collect();
+        let external_addresses = other.external_addresses().cloned().collect();
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
@@ -283,7 +277,7 @@ where
 
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
-        P: Fn(SwarmEvent<<B as NetworkBehaviour>::OutEvent, THandlerErr<B>>) -> Option<E>,
+        P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm, THandlerErr<B>>) -> Option<E>,
         P: Send,
     {
         loop {
@@ -315,10 +309,10 @@ where
             .await;
 
         // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(memory_multiaddr.clone(), AddressScore::Infinite);
+        self.add_external_address(memory_multiaddr.clone());
 
         let tcp_addr_listener_id = self
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let tcp_multiaddr = self
@@ -345,7 +339,7 @@ where
 
     async fn next_swarm_event(
         &mut self,
-    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>> {
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>> {
         match futures::future::select(
             futures_timer::Delay::new(Duration::from_secs(10)),
             self.select_next_some(),
@@ -361,7 +355,7 @@ where
         }
     }
 
-    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent {
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::ToSwarm {
         loop {
             if let Ok(event) = self.next_swarm_event().await.try_into_behaviour_event() {
                 return event;

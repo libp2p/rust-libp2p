@@ -201,7 +201,7 @@ impl ConnectionLimits {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type OutEvent = Void;
+    type ToSwarm = Void;
 
     fn handle_pending_inbound_connection(
         &mut self,
@@ -337,8 +337,9 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ExpiredListenAddr(_) => {}
             FromSwarm::ListenerError(_) => {}
             FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::NewExternalAddrCandidate(_) => {}
+            FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
@@ -355,7 +356,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, THandlerInEvent<Self>>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }
@@ -365,7 +366,7 @@ mod tests {
     use super::*;
     use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
     use libp2p_swarm_test::SwarmExt;
-    use quickcheck_ext::*;
+    use quickcheck::*;
 
     #[test]
     fn max_outgoing() {

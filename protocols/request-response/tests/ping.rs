@@ -20,31 +20,32 @@
 
 //! Integration tests for the `Behaviour`.
 
-use async_trait::async_trait;
-use futures::{prelude::*, AsyncWriteExt};
-use libp2p_core::{
-    upgrade::{read_length_prefixed, write_length_prefixed},
-    ProtocolName,
-};
+use futures::prelude::*;
 use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_request_response::ProtocolSupport;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{StreamProtocol, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use rand::{self, Rng};
-use std::{io, iter};
+use serde::{Deserialize, Serialize};
+use std::iter;
 
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn is_response_outbound() {
     let _ = env_logger::try_init();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 
-    let protocols = iter::once((PingProtocol(), request_response::ProtocolSupport::Full));
-    let cfg = request_response::Config::default();
-
-    let mut swarm1 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm1 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(
+            [(
+                StreamProtocol::new("/ping/1"),
+                request_response::ProtocolSupport::Full,
+            )],
+            request_response::Config::default(),
+        )
+    });
 
     let request_id1 = swarm1
         .behaviour_mut()
@@ -79,19 +80,21 @@ async fn is_response_outbound() {
 
 /// Exercises a simple ping protocol.
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -171,18 +174,20 @@ async fn ping_protocol() {
 }
 
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -234,18 +239,20 @@ async fn emits_inbound_connection_closed_failure() {
 /// If the substream were not properly closed when dropped, the sender would instead
 /// run into a timeout waiting for the response.
 #[async_std::test]
+#[cfg(feature = "cbor")]
 async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let protocols = iter::once((StreamProtocol::new("/ping/1"), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
 
     let mut swarm1 = Swarm::new_ephemeral(|_| {
-        request_response::Behaviour::new(PingCodec(), protocols.clone(), cfg.clone())
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols.clone(), cfg.clone())
     });
     let peer1_id = *swarm1.local_peer_id();
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| request_response::Behaviour::new(PingCodec(), protocols, cfg));
+    let mut swarm2 = Swarm::new_ephemeral(|_| {
+        request_response::cbor::Behaviour::<Ping, Pong>::new(protocols, cfg)
+    });
     let peer2_id = *swarm2.local_peer_id();
 
     swarm1.listen().await;
@@ -285,81 +292,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
 }
 
 // Simple Ping-Pong Protocol
-
-#[derive(Debug, Clone)]
-struct PingProtocol();
-#[derive(Clone)]
-struct PingCodec();
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Ping(Vec<u8>);
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Pong(Vec<u8>);
-
-impl ProtocolName for PingProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/ping/1".as_bytes()
-    }
-}
-
-#[async_trait]
-impl libp2p_request_response::Codec for PingCodec {
-    type Protocol = PingProtocol;
-    type Request = Ping;
-    type Response = Pong;
-
-    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, 1024).await?;
-
-        if vec.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        Ok(Ping(vec))
-    }
-
-    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        let vec = read_length_prefixed(io, 1024).await?;
-
-        if vec.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
-
-        Ok(Pong(vec))
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Ping(data): Ping,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Pong(data): Pong,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        write_length_prefixed(io, data).await?;
-        io.close().await?;
-
-        Ok(())
-    }
-}

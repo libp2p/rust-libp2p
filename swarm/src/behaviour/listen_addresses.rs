@@ -1,6 +1,4 @@
 use crate::behaviour::{ExpiredListenAddr, FromSwarm, NewListenAddr};
-#[allow(deprecated)]
-use crate::IntoConnectionHandler;
 use libp2p_core::Multiaddr;
 use std::collections::HashSet;
 
@@ -17,19 +15,65 @@ impl ListenAddresses {
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
-    #[allow(deprecated)]
-    pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>)
-    where
-        THandler: IntoConnectionHandler,
-    {
+    ///
+    /// Returns whether the event changed our set of listen addresses.
+    pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>) -> bool {
         match event {
             FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
-                self.addresses.insert((*addr).clone());
+                self.addresses.insert((*addr).clone())
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
-                self.addresses.remove(addr);
+                self.addresses.remove(addr)
             }
-            _ => {}
+            _ => false,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dummy;
+    use libp2p_core::{multiaddr::Protocol, transport::ListenerId};
+    use once_cell::sync::Lazy;
+
+    #[test]
+    fn new_listen_addr_returns_correct_changed_value() {
+        let mut addresses = ListenAddresses::default();
+
+        let changed = addresses.on_swarm_event(&new_listen_addr());
+        assert!(changed);
+
+        let changed = addresses.on_swarm_event(&new_listen_addr());
+        assert!(!changed)
+    }
+
+    #[test]
+    fn expired_listen_addr_returns_correct_changed_value() {
+        let mut addresses = ListenAddresses::default();
+        addresses.on_swarm_event(&new_listen_addr());
+
+        let changed = addresses.on_swarm_event(&expired_listen_addr());
+        assert!(changed);
+
+        let changed = addresses.on_swarm_event(&expired_listen_addr());
+        assert!(!changed)
+    }
+
+    fn new_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
+        FromSwarm::NewListenAddr(NewListenAddr {
+            listener_id: ListenerId::next(),
+            addr: &MEMORY_ADDR,
+        })
+    }
+
+    fn expired_listen_addr() -> FromSwarm<'static, dummy::ConnectionHandler> {
+        FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+            listener_id: ListenerId::next(),
+            addr: &MEMORY_ADDR,
+        })
+    }
+
+    static MEMORY_ADDR: Lazy<Multiaddr> =
+        Lazy::new(|| Multiaddr::empty().with(Protocol::Memory(1000)));
 }

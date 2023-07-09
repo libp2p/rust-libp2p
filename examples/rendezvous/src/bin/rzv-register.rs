@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identity, noise, ping, rendezvous,
-    swarm::{keep_alive, AddressScore, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -55,7 +55,7 @@ async fn main() {
     // In production the external address should be the publicly facing IP address of the rendezvous point.
     // This address is recorded in the registration entry by the rendezvous point.
     let external_address = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
-    swarm.add_external_address(external_address, AddressScore::Infinite);
+    swarm.add_external_address(external_address);
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
@@ -74,11 +74,14 @@ async fn main() {
                 log::error!("Lost connection to rendezvous point {}", error);
             }
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                swarm.behaviour_mut().rendezvous.register(
+                if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
-                );
+                ) {
+                    log::error!("Failed to register: {error}");
+                    return;
+                }
                 log::info!("Connection established with rendezvous point {}", peer_id);
             }
             // once `/identify` did its job, we know our external address and can register
@@ -97,14 +100,24 @@ async fn main() {
                 );
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
-                rendezvous::client::Event::RegisterFailed(error),
+                rendezvous::client::Event::RegisterFailed {
+                    rendezvous_node,
+                    namespace,
+                    error,
+                },
             )) => {
-                log::error!("Failed to register {}", error);
+                log::error!(
+                    "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
+                    rendezvous_node,
+                    namespace,
+                    error
+                );
                 return;
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
                 peer,
-                result: Ok(ping::Success::Ping { rtt }),
+                result: Ok(rtt),
+                ..
             })) if peer != rendezvous_point => {
                 log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
             }

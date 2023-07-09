@@ -25,7 +25,7 @@
 //! post](https://blog.ipfs.io/2022-01-20-libp2p-hole-punching/) to familiarize yourself with libp2p's hole
 //! punching mechanism on a conceptual level.
 //!
-//! We will be using the [Circuit Relay v2](crate::relay::v2) and the [Direct Connection
+//! We will be using the [Circuit Relay](crate::relay) and the [Direct Connection
 //! Upgrade through Relay (DCUtR)](crate::dcutr) protocol.
 //!
 //! You will need 3 machines for this tutorial:
@@ -168,7 +168,7 @@
 //!
 //! 2. The listening client initiating a direct connection upgrade for the new relayed connection.
 //!    Reported by [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade).
+//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::RemoteInitiatedDirectConnectionUpgrade).
 //!
 //!    ``` ignore
 //!    [2022-01-30T12:54:11Z INFO  client] RemoteInitiatedDirectConnectionUpgrade { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X"), remote_relayed_addr: "/ip4/$RELAY_PEER_ID/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN/p2p-circuit/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X" }
@@ -176,7 +176,7 @@
 //!
 //! 3. The direct connection upgrade, also known as hole punch, succeeding. Reported by
 //!    [`dcutr`](crate::dcutr) through
-//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::behaviour::Event::DirectConnectionUpgradeSucceeded).
+//!    [`Event::RemoteInitiatedDirectConnectionUpgrade`](crate::dcutr::Event::DirectConnectionUpgradeSucceeded).
 //!
 //!    ``` ignore
 //!    [2022-01-30T12:54:11Z INFO  client] DirectConnectionUpgradeSucceeded { remote_peer_id: PeerId("12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X") }

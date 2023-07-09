@@ -115,9 +115,10 @@ async fn wrapped_with_delay() {
 
         fn listen_on(
             &mut self,
+            id: ListenerId,
             addr: Multiaddr,
-        ) -> Result<ListenerId, TransportError<Self::Error>> {
-            self.0.lock().unwrap().listen_on(addr)
+        ) -> Result<(), TransportError<Self::Error>> {
+            self.0.lock().unwrap().listen_on(id, addr)
         }
 
         fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -214,7 +215,7 @@ async fn wrong_peerid() {
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
-    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
+    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random()));
 
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, a_addr_random_peer).await;
@@ -327,7 +328,10 @@ async fn draft_29_support() {
     let (_, mut d_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
     assert!(matches!(
-        d_transport.listen_on("/ip4/127.0.0.1/udp/0/quic".parse().unwrap()),
+        d_transport.listen_on(
+            ListenerId::next(),
+            "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()
+        ),
         Err(TransportError::MultiaddrNotSupported(_))
     ));
     let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
@@ -509,7 +513,9 @@ fn create_transport<P: Provider>(
 }
 
 async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
-    transport.listen_on(addr.parse().unwrap()).unwrap();
+    transport
+        .listen_on(ListenerId::next(), addr.parse().unwrap())
+        .unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
         e => panic!("{e:?}"),

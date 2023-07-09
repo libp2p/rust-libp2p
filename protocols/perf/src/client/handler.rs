@@ -31,7 +31,7 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
 use void::Void;
@@ -47,7 +47,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, ConnectionHandlerUpgrErr<Void>>,
+    pub(crate) result: Result<RunStats, StreamUpgradeError<Void>>,
 }
 
 pub struct Handler {
@@ -56,7 +56,7 @@ pub struct Handler {
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::ToBehaviour,
             <Self as ConnectionHandler>::Error,
         >,
     >,
@@ -86,11 +86,11 @@ impl Default for Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Command;
-    type OutEvent = Event;
+    type FromBehaviour = Command;
+    type ToBehaviour = Event;
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -98,7 +98,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, command: Self::InEvent) {
+    fn on_behaviour_event(&mut self, command: Self::FromBehaviour) {
         self.requested_streams.push_back(command);
         self.queued_events
             .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -137,27 +137,22 @@ impl ConnectionHandler for Handler {
                 );
             }
 
-            ConnectionEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::LocalProtocolsChange(_)
+            | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: (), error }) => {
                 let Command { id, .. } = self
                     .requested_streams
                     .pop_front()
                     .expect("requested stream without pending command");
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::Custom(Event {
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(Event {
                         id,
                         result: Err(error),
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
-                match error {
-                    ConnectionHandlerUpgrErr::Timeout => {}
-                    ConnectionHandlerUpgrErr::Timer => {}
-                    ConnectionHandlerUpgrErr::Upgrade(error) => match error {
-                        libp2p_core::UpgradeError::Select(_) => {}
-                        libp2p_core::UpgradeError::Apply(v) => void::unreachable(v),
-                    },
-                }
+                void::unreachable(error)
             }
         }
     }
@@ -173,7 +168,7 @@ impl ConnectionHandler for Handler {
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
-            Self::OutEvent,
+            Self::ToBehaviour,
             Self::Error,
         >,
     > {
@@ -184,7 +179,7 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::Custom(event)),
+                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
                 Err(e) => {
                     panic!("{e:?}")
                 }

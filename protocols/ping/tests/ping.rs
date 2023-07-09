@@ -20,7 +20,6 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
-use futures::prelude::*;
 use libp2p_ping as ping;
 use libp2p_swarm::keep_alive;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
@@ -59,63 +58,9 @@ fn ping_pong() {
 }
 
 fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
-    let success = e.result.expect("a ping success");
+    let rtt = e.result.expect("a ping success");
 
-    if let ping::Success::Ping { rtt } = success {
-        assert!(rtt < Duration::from_millis(50))
-    }
-}
-
-/// Tests that the connection is closed upon a configurable
-/// number of consecutive ping failures.
-#[test]
-fn max_failures() {
-    fn prop(max_failures: NonZeroU8) {
-        let cfg = ping::Config::new()
-            .with_interval(Duration::from_millis(10))
-            .with_timeout(Duration::from_millis(0))
-            .with_max_failures(max_failures.into());
-
-        let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
-
-        let (count1, count2) = async_std::task::block_on(async {
-            swarm1.listen().await;
-            swarm2.connect(&mut swarm1).await;
-
-            future::join(
-                count_ping_failures_until_connection_closed(swarm1),
-                count_ping_failures_until_connection_closed(swarm2),
-            )
-            .await
-        });
-
-        assert_eq!(u8::max(count1, count2), max_failures.get() - 1);
-    }
-
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_))
-}
-
-async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<Behaviour>) -> u8 {
-    let mut failure_count = 0;
-
-    loop {
-        match swarm.next_swarm_event().await {
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                result: Ok(ping::Success::Ping { .. }),
-                ..
-            })) => {
-                failure_count = 0; // there may be an occasional success
-            }
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(_), .. })) => {
-                failure_count += 1;
-            }
-            SwarmEvent::ConnectionClosed { .. } => {
-                return failure_count;
-            }
-            _ => {}
-        }
-    }
+    assert!(rtt < Duration::from_millis(50))
 }
 
 #[test]

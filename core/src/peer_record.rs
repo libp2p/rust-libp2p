@@ -36,8 +36,7 @@ impl PeerRecord {
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let mut reader = BytesReader::from_bytes(payload);
-        let record =
-            proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError::from)?;
+        let record = proto::PeerRecord::from_reader(&mut reader, payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -139,7 +138,7 @@ pub enum FromEnvelopeError {
     InvalidPeerRecord(#[from] DecodeError),
     /// Failed to decode the peer ID.
     #[error("Failed to decode bytes as PeerId")]
-    InvalidPeerId(#[from] multihash::Error),
+    InvalidPeerId(#[from] libp2p_identity::ParseError),
     /// The signer of the envelope is different than the peer id in the record.
     #[error("The signer of the envelope is different than the peer id in the record")]
     MismatchedSignature,

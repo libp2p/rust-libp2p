@@ -21,7 +21,8 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::subscription_filter_priv::WhitelistSubscriptionFilter;
+use crate::protocol::ProtocolConfig;
+use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
 use crate::ValidationError;
@@ -271,8 +272,7 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
-            let dummy_handler =
-                Handler::new(ProtocolConfig::new(&Config::default()), Duration::ZERO);
+            let dummy_handler = Handler::new(ProtocolConfig::default(), Duration::ZERO);
 
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,
@@ -5099,7 +5099,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
     }
 
     let message_id_fn = |m: &Message| -> MessageId {
-        let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
+        let (mut id, counters_pointer): (MessageId, *mut Pointers) =
             get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).slow_counter += 1;
@@ -5108,7 +5108,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         id
     };
     let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
-        let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
+        let (id, counters_pointer) = get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).fast_counter += 1;
         }

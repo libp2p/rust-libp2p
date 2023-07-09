@@ -43,7 +43,7 @@ where
 
 /// A `Boxed` transport is a `Transport` whose `Dial`, `Listener`
 /// and `ListenerUpgrade` futures are `Box`ed and only the `Output`
-/// and `Error` types are captured in type variables.
+/// type is captured in a type variable.
 pub struct Boxed<O> {
     inner: Box<dyn Abstract<O> + Send + Unpin>,
 }
@@ -52,7 +52,11 @@ type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
 
 trait Abstract<O> {
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>>;
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<io::Error>>;
     fn remove_listener(&mut self, id: ListenerId) -> bool;
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
@@ -70,8 +74,12 @@ where
     T::Dial: Send + 'static,
     T::ListenerUpgrade: Send + 'static,
 {
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        Transport::listen_on(self, addr).map_err(|e| e.map(box_err))
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<io::Error>> {
+        Transport::listen_on(self, id, addr).map_err(|e| e.map(box_err))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -123,8 +131,12 @@ impl<O> Transport for Boxed<O> {
     type ListenerUpgrade = ListenerUpgrade<O>;
     type Dial = Dial<O>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.inner.listen_on(addr)
+    fn listen_on(
+        &mut self,
+        id: ListenerId,
+        addr: Multiaddr,
+    ) -> Result<(), TransportError<Self::Error>> {
+        self.inner.listen_on(id, addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {

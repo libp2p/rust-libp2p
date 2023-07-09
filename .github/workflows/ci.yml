@@ -28,67 +28,88 @@ jobs:
       fail-fast: false
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
+    env:
+      CRATE: ${{ matrix.crate }}
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install -y protobuf-compiler
-
-      - uses: dtolnay/rust-toolchain@stable
-
       - uses: actions/checkout@v3
-
-      - name: Get MSRV for ${{ matrix.crate }}
-        id: parse-msrv
-        run: |
-          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
-          echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ steps.parse-msrv.outputs.version }}
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
-        with:
-          shared-key: msrv-cache
-          save-if: false
-
-      - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
-        run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
-
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           shared-key: stable-cache
           save-if: false
 
       - name: Run all tests
-        run: cargo test --package ${{ matrix.crate }} --all-features
+        run: cargo test --package "$CRATE" --all-features
 
       - name: Check if we compile without any features activated
-        run: cargo build --package ${{ matrix.crate }} --no-default-features
+        run: cargo build --package "$CRATE" --no-default-features
 
       - run: cargo clean
 
       - name: Check if crate has been released
         id: check-released
         run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
+          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          crate: ${{ matrix.crate }}
+          crate: env.CRATE
 
       - name: Enforce no dependency on meta crate
         run: |
           cargo metadata --format-version=1 --no-deps | \
-          jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
+          jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
+
+      - uses: taiki-e/cache-cargo-install-action@924d49e0af41f449f0ad549559bc608ee4653562 # v1
+        with:
+          tool: tomlq
+
+      - name: Enforce version in `workspace.dependencies` matches latest version
+        if: env.CRATE != 'libp2p'
+        run: |
+          PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
+          SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
+
+          echo "Package version: $PACKAGE_VERSION";
+          echo "Specified version: $SPECIFIED_VERSION";
+
+          test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
+  wasm_tests:
+    name: Run all WASM tests
+    runs-on: ubuntu-latest
+    env:
+      CHROMEDRIVER_VERSION: '114.0.5735.90'
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.12.0
+
+      - name: Install Google Chrome
+        run: |
+          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
+          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
+
+      - name: Install chromedriver
+        uses: nanasess/setup-chromedriver@v2
+        with:
+          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
+
+      - name: Run all tests
+        run: ./wasm-tests/run-all.sh
 
   cross:
     name: Compile on ${{ matrix.target }}
@@ -115,12 +136,36 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
+
+  msrv:
+    name: Compile with MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Extract MSRV from workspace manifest
+        shell: bash
+        run: |
+          MSRV=$(grep -oP 'rust-version\s*=\s*"\K[^"]+' Cargo.toml)
+          echo "MSRV=$MSRV" >> $GITHUB_ENV
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.MSRV }}
+
+      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+
+      - run: cargo +$MSRV check --workspace --all-features
 
   feature_matrix: # Test various feature combinations work correctly
     name: Compile with select features (${{ matrix.features }})
@@ -137,7 +182,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -154,7 +199,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -167,7 +212,7 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.69.0, # current stable
+          1.70.0, # current stable
           beta
         ]
     steps:
@@ -180,7 +225,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -197,7 +242,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -213,7 +258,7 @@ jobs:
 
       - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
         with:
           shared-key: stable-cache
           save-if: false
@@ -268,6 +313,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - id: cargo-metadata
         run: |
           WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(select(.publish == null) | .name)')
@@ -279,7 +326,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -305,5 +352,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@6fd3edff6979b79f87531400ad694fb7f2c84b1f # v2.2.1
+      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
       - run: cargo metadata --locked --format-version=1 > /dev/null

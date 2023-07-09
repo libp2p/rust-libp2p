@@ -34,7 +34,7 @@ use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -47,11 +47,11 @@ fn reservation() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
@@ -64,9 +64,7 @@ fn reservation() {
     // Wait for initial reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr
-            .clone()
-            .with(Protocol::P2p(client_peer_id.into())),
+        client_addr.clone().with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -74,7 +72,7 @@ fn reservation() {
     // Wait for renewal.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         true, // Renewal.
     ));
@@ -90,17 +88,15 @@ fn new_reservation_to_same_relay_replaces_old() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
-    let client_addr_with_peer_id = client_addr
-        .clone()
-        .with(Protocol::P2p(client_peer_id.into()));
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
 
     let old_listener = client.listen_on(client_addr.clone()).unwrap();
 
@@ -183,15 +179,15 @@ fn connect() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let mut dst = build_client();
     let dst_peer_id = *dst.local_peer_id();
     let dst_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id));
 
     dst.listen_on(dst_addr.clone()).unwrap();
 
@@ -222,7 +218,10 @@ async fn connection_established_to(
 ) {
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
             SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. })) if peer == other => {
                 break
@@ -239,8 +238,13 @@ async fn connection_established_to(
                 if peer == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == other => break,
             SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                let peer_id_from_addr =
-                    PeerId::try_from_multiaddr(&send_back_addr).expect("to have /p2p");
+                let peer_id_from_addr = send_back_addr
+                    .iter()
+                    .find_map(|protocol| match protocol {
+                        Protocol::P2p(peer_id) => Some(peer_id),
+                        _ => None,
+                    })
+                    .expect("to have /p2p");
 
                 assert_eq!(peer_id_from_addr, other)
             }
@@ -260,9 +264,9 @@ fn handle_dial_failure() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(client_peer_id.into()));
+        .with(Protocol::P2p(client_peer_id));
 
     client.listen_on(client_addr).unwrap();
     assert!(!pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
@@ -278,12 +282,12 @@ fn reuse_connection() {
     let relay_peer_id = *relay.local_peer_id();
 
     relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
+    relay.add_external_address(relay_addr.clone());
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
         .clone()
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
@@ -295,7 +299,7 @@ fn reuse_connection() {
 
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -419,7 +423,10 @@ async fn wait_for_reservation(
 async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Dialing(peer_id) if peer_id == remote => {}
+            SwarmEvent::Dialing {
+                peer_id: Some(peer_id),
+                ..
+            } if peer_id == remote => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == remote => return true,
             SwarmEvent::OutgoingConnectionError { peer_id, .. } if peer_id == Some(remote) => {
                 return false

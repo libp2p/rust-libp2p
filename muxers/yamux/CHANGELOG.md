@@ -1,3 +1,18 @@
+## 0.44.0 
+
+- Raise MSRV to 1.65.
+  See [PR 3715].
+
+- Remove deprecated items.
+  See [PR 3897].
+
+- Remove `Incoming`, `LocalIncoming` and `LocalConfig` as well as anything from the underlying `yamux` crate from the public API.
+  See [PR 3908].
+
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3897]: https://github.com/libp2p/rust-libp2p/pull/3897
+[PR 3908]: https://github.com/libp2p/rust-libp2p/pull/3908
+
 ## 0.43.1
 
 - Drop `Yamux` prefix from all types.
