@@ -1,4 +1,11 @@
-## 0.43.0 
+## 0.43.1 - unreleased
+
+- Do not announce external address candidate before address translation, unless translation does not apply.
+  This will prevent ephemeral TCP addresses being announced as external address candidates.
+  See [PR 4158].
+
+
+## 0.43.0
 
 - Allow `NetworkBehaviours` to create and remove listeners.
   See [PR 3292].
