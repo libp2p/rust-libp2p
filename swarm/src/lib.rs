@@ -1062,14 +1062,8 @@ where
                 self.pending_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr: &addr },
-                    ));
-
-                // Generate more candidates based on address translation.
+                // Apply address translation to the candidate address.
                 // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
-
                 let translated_addresses = {
                     let mut addrs: Vec<_> = self
                         .listened_addrs
@@ -1083,11 +1077,20 @@ where
                     addrs.dedup();
                     addrs
                 };
-                for addr in translated_addresses {
+
+                // If address translation yielded nothing, broacast the original candidate address.
+                if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                             NewExternalAddrCandidate { addr: &addr },
                         ));
+                } else {
+                    for addr in translated_addresses {
+                        self.behaviour
+                            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                                NewExternalAddrCandidate { addr: &addr },
+                            ));
+                    }
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
