@@ -314,7 +314,7 @@ mod tests {
         let ws_config = new_ws_config();
         let dns_config = DnsConfig::system(ws_config).await.unwrap();
         let mut outbound  = dns_config.boxed().dial(
-            "/dns/some_domain.com/tcp/80/ws/p2p/12D3KooWSbsCigJ2SB3zbQUVWoSp6sek1bekp86UEJ9KicvEf2Xo".parse().unwrap())
+            "/dns/somedomain.com/tcp/80/ws/p2p/12D3KooWSbsCigJ2SB3zbQUVWoSp6sek1bekp86UEJ9KicvEf2Xo".parse().unwrap())
             .unwrap().await.unwrap();
         let _ = outbound.write(b"blabla").await;
         let mut data = [0u8; 1024];
