@@ -307,6 +307,7 @@ where
         tls_config: tls::Config,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
+        // Socket connection based on IP.
         trace!("Dialing websocket address: {:?}", addr);
 
         let dial = match role_override {
@@ -342,6 +343,9 @@ where
             // continue with plain stream
             future::Either::Right(stream)
         };
+
+        // TODO: needs to write some message to let nginx route connection
+        // to the right backend?
 
         trace!("Sending websocket handshake to {}", addr.host_port);
 

@@ -294,6 +294,7 @@ mod tests {
     use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Multiaddr, Transport};
     use libp2p_identity::PeerId;
     use libp2p_tcp as tcp;
+    use libp2p_dns::DnsConfig;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
@@ -305,6 +306,20 @@ mod tests {
     fn dialer_connects_to_listener_ipv6() {
         let a = "/ip6/::1/tcp/0/ws".parse().unwrap();
         futures::executor::block_on(connect(a))
+    }
+
+
+    #[actix_rt::test]
+    async fn dialer_dns() {
+        let ws_config = new_ws_config();
+        let dns_config = DnsConfig::system(ws_config).await.unwrap();
+        let mut outbound  = dns_config.boxed().dial(
+            "/dns/some_domain.com/tcp/80/ws/p2p/12D3KooWSbsCigJ2SB3zbQUVWoSp6sek1bekp86UEJ9KicvEf2Xo".parse().unwrap())
+            .unwrap().await.unwrap();
+        let _ = outbound.write(b"blabla").await;
+        let mut data = [0u8; 1024];
+        let _ = outbound.read(&mut data).await;
+        println!("data is {:?}", data)
     }
 
     fn new_ws_config() -> WsConfig<tcp::async_io::Transport> {
