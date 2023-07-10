@@ -22,7 +22,7 @@
 
 use std::{
     borrow::Borrow,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     error::Error,
     hash::{Hash, Hasher},
     net::{Ipv4Addr, SocketAddrV4},
@@ -61,7 +61,7 @@ async fn map_port<P: Gateway + 'static>(
     gateway: Arc<P>,
     mapping: Mapping,
     permanent: bool,
-) -> Event {
+) -> GatewayEvent {
     let duration = if permanent { 0 } else { MAPPING_DURATION };
 
     match P::add_port(
@@ -72,22 +72,25 @@ async fn map_port<P: Gateway + 'static>(
     )
     .await
     {
-        Ok(()) => Event::Mapped(mapping),
-        Err(err) => Event::MapFailure(mapping, err),
+        Ok(()) => GatewayEvent::Mapped(mapping),
+        Err(err) => GatewayEvent::MapFailure(mapping, err),
     }
 }
 
 /// Remove a port mapping on the gateway.
-async fn remove_port_mapping<P: Gateway + 'static>(gateway: Arc<P>, mapping: Mapping) -> Event {
+async fn remove_port_mapping<P: Gateway + 'static>(
+    gateway: Arc<P>,
+    mapping: Mapping,
+) -> GatewayEvent {
     match P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port()).await {
-        Ok(()) => Event::Removed(mapping),
-        Err(err) => Event::RemovalFailure(mapping, err),
+        Ok(()) => GatewayEvent::Removed(mapping),
+        Err(err) => GatewayEvent::RemovalFailure(mapping, err),
     }
 }
 
 /// A [`Gateway`] event.
 #[derive(Debug)]
-enum Event {
+enum GatewayEvent {
     /// Port was successfully mapped.
     Mapped(Mapping),
     /// There was a failure mapping port.
@@ -135,6 +138,8 @@ enum MappingState {
     Pending,
     /// Port mapping is active with the inner timeout.
     Active(Delay),
+    /// Port mapping failed, we will try again.
+    Failed,
     /// Port mapping is permanent on the Gateway.
     Permanent,
 }
@@ -143,6 +148,16 @@ enum MappingState {
 enum GatewayState<P: Gateway> {
     Searching(BoxFuture<'static, Result<(P, Ipv4Addr), Box<dyn std::error::Error>>>),
     Available((Arc<P>, Ipv4Addr)),
+    GatewayNotFound,
+}
+
+/// The event produced by `Behaviour`.
+pub enum Event {
+    /// The multiaddress is reachable externally.
+    NewExternalAddr(Multiaddr),
+    /// The renewal of the multiaddress on the gateway failed.
+    ExpiredExternalAddr(Multiaddr),
+    /// The IGD gateway was not found.
     GatewayNotFound,
 }
 
@@ -160,11 +175,14 @@ where
     /// List of port mappings.
     mappings: HashMap<Mapping, MappingState>,
 
-    /// Pending gateway events.
-    events_queue: Receiver<Event>,
+    /// Pending behaviour events to be emitted.
+    pending_events: VecDeque<Event>,
+
+    /// Pending gateway events to be polled.
+    gateway_events_queue: Receiver<GatewayEvent>,
 
     /// Events sender.
-    events_sender: UnboundedSender<BoxFuture<'static, Event>>,
+    events_sender: UnboundedSender<BoxFuture<'static, GatewayEvent>>,
 }
 
 impl<P> Default for Behaviour<P>
@@ -204,7 +222,8 @@ where
             config,
             state: GatewayState::Searching(P::search(config).boxed()),
             mappings: Default::default(),
-            events_queue,
+            pending_events: VecDeque::new(),
+            gateway_events_queue: events_queue,
             events_sender,
         }
     }
@@ -216,7 +235,7 @@ where
 {
     type ConnectionHandler = dummy::ConnectionHandler;
 
-    type ToSwarm = ();
+    type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
@@ -347,6 +366,12 @@ where
         _params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, libp2p_swarm::THandlerInEvent<Self>>> {
         loop {
+            // If there are pending addresses to be emitted we emit them first.
+            if let Some(event) = self.pending_events.pop_front() {
+                return Poll::Ready(ToSwarm::GenerateEvent(event));
+            }
+
+            // We then check the `Gateway` current state.
             match self.state {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(result) => match result {
@@ -357,16 +382,17 @@ where
                         Err(err) => {
                             log::debug!("could not find gateway: {err}");
                             self.state = GatewayState::GatewayNotFound;
-                            return Poll::Ready(ToSwarm::GenerateEvent(()));
+                            return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
                         }
                     },
                     Poll::Pending => return Poll::Pending,
                 },
                 GatewayState::Available((ref gateway, external_addr)) => {
                     // Check pending mappings.
-                    if let Poll::Ready(Some(result)) = self.events_queue.poll_next_unpin(cx) {
+                    if let Poll::Ready(Some(result)) = self.gateway_events_queue.poll_next_unpin(cx)
+                    {
                         match result {
-                            Event::Mapped(mapping) => {
+                            GatewayEvent::Mapped(mapping) => {
                                 let state = self
                                     .mappings
                                     .get_mut(&mapping)
@@ -392,6 +418,9 @@ where
                                             )))
                                         };
 
+                                        self.pending_events.push_back(Event::NewExternalAddr(
+                                            external_multiaddr.clone(),
+                                        ));
                                         return Poll::Ready(ToSwarm::ExternalAddrConfirmed(
                                             external_multiaddr,
                                         ));
@@ -407,12 +436,14 @@ where
                                             mapping.protocol
                                         );
                                     }
-                                    MappingState::Inactive | MappingState::Permanent => {
+                                    MappingState::Inactive
+                                    | MappingState::Permanent
+                                    | MappingState::Failed => {
                                         unreachable!()
                                     }
                                 }
                             }
-                            Event::MapFailure(mapping, err) => {
+                            GatewayEvent::MapFailure(mapping, err) => {
                                 let state = self
                                     .mappings
                                     .get_mut(&mapping)
@@ -425,7 +456,7 @@ where
                                             mapping.internal_addr,
                                             mapping.protocol
                                         );
-                                        *state = MappingState::Inactive;
+                                        *state = MappingState::Failed;
                                         let external_multiaddr = mapping
                                             .multiaddr
                                             .replace(0, |_| {
@@ -433,6 +464,9 @@ where
                                             })
                                             .expect("multiaddr should be valid");
 
+                                        self.pending_events.push_back(Event::ExpiredExternalAddr(
+                                            external_multiaddr.clone(),
+                                        ));
                                         return Poll::Ready(ToSwarm::ExternalAddrExpired(
                                             external_multiaddr,
                                         ));
@@ -443,14 +477,16 @@ where
                                             mapping.internal_addr,
                                             mapping.protocol
                                         );
-                                        *state = MappingState::Inactive;
+                                        *state = MappingState::Failed;
                                     }
-                                    MappingState::Inactive | MappingState::Permanent => {
+                                    MappingState::Inactive
+                                    | MappingState::Permanent
+                                    | MappingState::Failed => {
                                         unreachable!()
                                     }
                                 }
                             }
-                            Event::Removed(mapping) => {
+                            GatewayEvent::Removed(mapping) => {
                                 log::debug!(
                                     "succcessfuly removed UPnP mapping {} for {} protocol",
                                     mapping.internal_addr,
@@ -460,7 +496,7 @@ where
                                     .remove(&mapping)
                                     .expect("mapping should exist");
                             }
-                            Event::RemovalFailure(mapping, err) => {
+                            GatewayEvent::RemovalFailure(mapping, err) => {
                                 log::debug!(
                                     "could not remove UPnP mapping {} for {} protocol: {err}",
                                     mapping.internal_addr,
@@ -478,7 +514,7 @@ where
                     // Renew expired and request inactive mappings.
                     for (mapping, state) in self.mappings.iter_mut() {
                         match state {
-                            MappingState::Inactive => {
+                            MappingState::Inactive | MappingState::Failed => {
                                 self.events_sender
                                     .unbounded_send(
                                         map_port::<P>(
@@ -511,7 +547,7 @@ where
                     return Poll::Pending;
                 }
                 GatewayState::GatewayNotFound => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(()));
+                    return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
                 }
             }
         }

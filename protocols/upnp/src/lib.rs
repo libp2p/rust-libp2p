@@ -70,24 +70,6 @@ impl Config {
         }
     }
 
-    /// Configures the Bind address for UDP socket.
-    pub fn bind_addr(self, bind_addr: SocketAddr) -> Self {
-        Self { bind_addr, ..self }
-    }
-
-    /// Configures the Broadcast address for discovery packets.
-    pub fn broadcast_address(self, broadcast_addr: SocketAddr) -> Self {
-        Self {
-            broadcast_addr,
-            ..self
-        }
-    }
-
-    /// Configures the timeout for search iteration.
-    pub fn timeout(self, timeout: Option<Duration>) -> Self {
-        Self { timeout, ..self }
-    }
-
     /// Configures if the port mappings should be temporary or permanent.
     pub fn permanent(self, permanent: bool) -> Self {
         Self { permanent, ..self }
