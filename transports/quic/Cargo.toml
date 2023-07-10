@@ -23,7 +23,7 @@ quinn-proto = { version = "0.10.1", default-features = false, features = ["tls-r
 rand = "0.8.5"
 rustls = { version = "0.21.2", default-features = false }
 thiserror = "1.0.40"
-tokio = { version = "1.28.2", default-features = false, features = ["net", "rt", "time"], optional = true }
+tokio = { version = "1.29.1", default-features = false, features = ["net", "rt", "time"], optional = true }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio"]
@@ -44,7 +44,7 @@ libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
-tokio = { version = "1.28.2", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread", "time"] }
 
 [[test]]
 name = "stream_compliance"
