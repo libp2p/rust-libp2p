@@ -4,6 +4,7 @@
   This will prevent ephemeral TCP addresses being announced as external address candidates.
   See [PR 4158].
 
+[PR 4158]: https://github.com/libp2p/rust-libp2p/pull/4158
 
 ## 0.43.0
 
