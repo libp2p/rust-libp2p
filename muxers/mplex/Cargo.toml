@@ -20,7 +20,7 @@ log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.6.1"
+smallvec = "1.11.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]

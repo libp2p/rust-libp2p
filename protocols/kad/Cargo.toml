@@ -24,7 +24,7 @@ quick-protobuf = "0.8"
 libp2p-identity = { workspace = true }
 rand = "0.8"
 sha2 = "0.10.7"
-smallvec = "1.6.1"
+smallvec = "1.11.0"
 uint = "0.9"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1.0"
