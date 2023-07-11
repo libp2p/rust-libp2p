@@ -25,24 +25,18 @@ use std::{
     collections::{HashMap, VecDeque},
     error::Error,
     hash::{Hash, Hasher},
-    net::{Ipv4Addr, SocketAddrV4},
+    marker::PhantomData,
+    net::SocketAddrV4,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 
 use crate::{
-    gateway::{Gateway, Protocol},
+    provider::{Gateway, Protocol, Provider},
     Config,
 };
-use futures::{
-    channel::mpsc::{self, Receiver, UnboundedSender},
-    future::BoxFuture,
-    select,
-    stream::FuturesUnordered,
-    Future, FutureExt, SinkExt, StreamExt,
-};
+use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_swarm::{
@@ -51,46 +45,21 @@ use libp2p_swarm::{
 };
 
 /// The duration in seconds of a port mapping on the gateway.
-const MAPPING_DURATION: u64 = 3600;
+const MAPPING_DURATION: u32 = 3600;
 
 /// Renew the Mapping every half of `MAPPING_DURATION` to avoid the port being unmapped.
-const MAPPING_TIMEOUT: u64 = MAPPING_DURATION / 2;
+const MAPPING_TIMEOUT: u64 = MAPPING_DURATION as u64 / 2;
 
-/// Map a port on the gateway.
-async fn map_port<P: Gateway + 'static>(
-    gateway: Arc<P>,
-    mapping: Mapping,
-    permanent: bool,
-) -> GatewayEvent {
-    let duration = if permanent { 0 } else { MAPPING_DURATION };
-
-    match P::add_port(
-        gateway,
-        mapping.protocol,
-        mapping.internal_addr,
-        Duration::from_secs(duration),
-    )
-    .await
-    {
-        Ok(()) => GatewayEvent::Mapped(mapping),
-        Err(err) => GatewayEvent::MapFailure(mapping, err),
-    }
-}
-
-/// Remove a port mapping on the gateway.
-async fn remove_port_mapping<P: Gateway + 'static>(
-    gateway: Arc<P>,
-    mapping: Mapping,
-) -> GatewayEvent {
-    match P::remove_port(gateway, mapping.protocol, mapping.internal_addr.port()).await {
-        Ok(()) => GatewayEvent::Removed(mapping),
-        Err(err) => GatewayEvent::RemovalFailure(mapping, err),
-    }
+/// A [`Gateway`] Request.
+#[derive(Debug)]
+pub(crate) enum GatewayRequest {
+    AddMapping(Mapping, Option<u32>),
+    RemoveMapping(Mapping),
 }
 
 /// A [`Gateway`] event.
 #[derive(Debug)]
-enum GatewayEvent {
+pub(crate) enum GatewayEvent {
     /// Port was successfully mapped.
     Mapped(Mapping),
     /// There was a failure mapping port.
@@ -103,11 +72,11 @@ enum GatewayEvent {
 
 /// Mapping of a Protocol and Port on the gateway.
 #[derive(Debug, Clone)]
-struct Mapping {
-    listener_id: ListenerId,
-    protocol: Protocol,
-    multiaddr: Multiaddr,
-    internal_addr: SocketAddrV4,
+pub(crate) struct Mapping {
+    pub(crate) listener_id: ListenerId,
+    pub(crate) protocol: Protocol,
+    pub(crate) multiaddr: Multiaddr,
+    pub(crate) internal_addr: SocketAddrV4,
 }
 
 impl Hash for Mapping {
@@ -145,13 +114,14 @@ enum MappingState {
 }
 
 /// Current state of the UPnP [`Gateway`].
-enum GatewayState<P: Gateway> {
-    Searching(BoxFuture<'static, Result<(P, Ipv4Addr), Box<dyn std::error::Error>>>),
-    Available((Arc<P>, Ipv4Addr)),
+enum GatewayState {
+    Searching(BoxFuture<'static, Result<Gateway, Box<dyn std::error::Error>>>),
+    Available(Gateway),
     GatewayNotFound,
 }
 
 /// The event produced by `Behaviour`.
+#[derive(Debug)]
 pub enum Event {
     /// The multiaddress is reachable externally.
     NewExternalAddr(Multiaddr),
@@ -165,12 +135,12 @@ pub enum Event {
 /// to an internal address on the gateway on a `FromSwarm::NewListenAddr`.
 pub struct Behaviour<P>
 where
-    P: Gateway,
+    P: Provider,
 {
     /// Gateway config.
     config: Config,
     /// UPnP interface state.
-    state: GatewayState<P>,
+    state: GatewayState,
 
     /// List of port mappings.
     mappings: HashMap<Mapping, MappingState>,
@@ -178,16 +148,13 @@ where
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<Event>,
 
-    /// Pending gateway events to be polled.
-    gateway_events_queue: Receiver<GatewayEvent>,
-
-    /// Events sender.
-    events_sender: UnboundedSender<BoxFuture<'static, GatewayEvent>>,
+    /// Provider.
+    provider: PhantomData<P>,
 }
 
 impl<P> Default for Behaviour<P>
 where
-    P: Gateway + 'static,
+    P: Provider + 'static,
 {
     fn default() -> Self {
         Self::new(Config::default())
@@ -196,42 +163,23 @@ where
 
 impl<P> Behaviour<P>
 where
-    P: Gateway + 'static,
+    P: Provider + 'static,
 {
     /// Builds a new `UPnP` behaviour.
     pub fn new(config: Config) -> Self {
-        #![allow(clippy::disallowed_methods)]
-        let (events_sender, mut task_receiver) = mpsc::unbounded();
-        let (mut task_sender, events_queue) = mpsc::channel(0);
-        P::spawn(async move {
-            let mut futs = FuturesUnordered::new();
-            loop {
-                select! {
-                    fut = task_receiver.select_next_some() => {
-                        futs.push(fut);
-                    },
-                    event = futs.select_next_some() => {
-                        task_sender.send(event).await.expect("receiver should be available");
-                    }
-                    complete => break,
-                }
-            }
-        });
-
         Self {
             config,
-            state: GatewayState::Searching(P::search(config).boxed()),
+            state: GatewayState::Searching(P::search_gateway(config).boxed()),
             mappings: Default::default(),
             pending_events: VecDeque::new(),
-            gateway_events_queue: events_queue,
-            events_sender,
+            provider: PhantomData,
         }
     }
 }
 
 impl<P> NetworkBehaviour for Behaviour<P>
 where
-    P: Gateway + 'static,
+    P: Provider + 'static,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
 
@@ -280,7 +228,7 @@ where
                     return;
                 }
 
-                match &self.state {
+                match &mut self.state {
                     GatewayState::Searching(_) => {
                         // As the gateway is not yet available we add the mapping with `MappingState::Inactive`
                         // so that when and if it becomes available we map it.
@@ -294,7 +242,7 @@ where
                             MappingState::Inactive,
                         );
                     }
-                    GatewayState::Available((gateway, _external_addr)) => {
+                    GatewayState::Available(ref mut gateway) => {
                         let mapping = Mapping {
                             listener_id,
                             protocol,
@@ -302,16 +250,17 @@ where
                             multiaddr: multiaddr.clone(),
                         };
 
-                        self.events_sender
-                            .unbounded_send(
-                                map_port::<P>(
-                                    gateway.clone(),
-                                    mapping.clone(),
-                                    self.config.permanent,
-                                )
-                                .boxed(),
-                            )
-                            .expect("receiver should be available");
+                        let duration = self.config.temporary.then_some(MAPPING_DURATION);
+                        if let Err(err) = gateway
+                            .sender
+                            .try_send(GatewayRequest::AddMapping(mapping.clone(), duration))
+                        {
+                            log::debug!(
+                                "could not request port mapping for {} on the gateway: {}",
+                                mapping.multiaddr,
+                                err
+                            );
+                        }
 
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
@@ -326,13 +275,18 @@ where
                 listener_id,
                 addr: _addr,
             }) => {
-                if let GatewayState::Available((gateway, _external_addr)) = &self.state {
+                if let GatewayState::Available(ref mut gateway) = &mut self.state {
                     if let Some((mapping, _state)) = self.mappings.remove_entry(&listener_id) {
-                        self.events_sender
-                            .unbounded_send(
-                                remove_port_mapping::<P>(gateway.clone(), mapping.clone()).boxed(),
-                            )
-                            .expect("receiver should be available");
+                        if let Err(err) = gateway
+                            .sender
+                            .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
+                        {
+                            log::debug!(
+                                "could not request port removal for {} on the gateway: {}",
+                                mapping.multiaddr,
+                                err
+                            );
+                        }
                         self.mappings.insert(mapping, MappingState::Pending);
                     }
                 }
@@ -375,9 +329,8 @@ where
             match self.state {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(result) => match result {
-                        Ok((gateway, external_addr)) => {
-                            self.state =
-                                GatewayState::Available((Arc::new(gateway), external_addr));
+                        Ok(gateway) => {
+                            self.state = GatewayState::Available(gateway);
                         }
                         Err(err) => {
                             log::debug!("could not find gateway: {err}");
@@ -387,10 +340,9 @@ where
                     },
                     Poll::Pending => return Poll::Pending,
                 },
-                GatewayState::Available((ref gateway, external_addr)) => {
+                GatewayState::Available(ref mut gateway) => {
                     // Check pending mappings.
-                    if let Poll::Ready(Some(result)) = self.gateway_events_queue.poll_next_unpin(cx)
-                    {
+                    if let Poll::Ready(Some(result)) = gateway.receiver.poll_next_unpin(cx) {
                         match result {
                             GatewayEvent::Mapped(mapping) => {
                                 let state = self
@@ -407,10 +359,10 @@ where
                                         let external_multiaddr = mapping
                                             .multiaddr
                                             .replace(0, |_| {
-                                                Some(multiaddr::Protocol::Ip4(external_addr))
+                                                Some(multiaddr::Protocol::Ip4(gateway.addr))
                                             })
                                             .expect("multiaddr should be valid");
-                                        *state = if self.config.permanent {
+                                        *state = if self.config.temporary {
                                             MappingState::Permanent
                                         } else {
                                             MappingState::Active(Delay::new(Duration::from_secs(
@@ -460,7 +412,7 @@ where
                                         let external_multiaddr = mapping
                                             .multiaddr
                                             .replace(0, |_| {
-                                                Some(multiaddr::Protocol::Ip4(external_addr))
+                                                Some(multiaddr::Protocol::Ip4(gateway.addr))
                                             })
                                             .expect("multiaddr should be valid");
 
@@ -502,11 +454,16 @@ where
                                     mapping.internal_addr,
                                     mapping.protocol
                                 );
-                                self.events_sender
-                                    .unbounded_send(
-                                        remove_port_mapping::<P>(gateway.clone(), mapping).boxed(),
-                                    )
-                                    .expect("receiver should be available");
+                                if let Err(err) = gateway
+                                    .sender
+                                    .try_send(GatewayRequest::RemoveMapping(mapping.clone()))
+                                {
+                                    log::debug!(
+                                        "could not request port removal for {} on the gateway: {}",
+                                        mapping.multiaddr,
+                                        err
+                                    );
+                                }
                             }
                         }
                     }
@@ -515,30 +472,32 @@ where
                     for (mapping, state) in self.mappings.iter_mut() {
                         match state {
                             MappingState::Inactive | MappingState::Failed => {
-                                self.events_sender
-                                    .unbounded_send(
-                                        map_port::<P>(
-                                            gateway.clone(),
-                                            mapping.clone(),
-                                            self.config.permanent,
-                                        )
-                                        .boxed(),
-                                    )
-                                    .expect("receiver should be available");
+                                let duration = self.config.temporary.then_some(MAPPING_DURATION);
+                                if let Err(err) = gateway
+                                    .sender
+                                    .try_send(GatewayRequest::AddMapping(mapping.clone(), duration))
+                                {
+                                    log::debug!(
+                                        "could not request port mapping for {} on the gateway: {}",
+                                        mapping.multiaddr,
+                                        err
+                                    );
+                                }
                                 *state = MappingState::Pending;
                             }
                             MappingState::Active(timeout) => {
                                 if Pin::new(timeout).poll(cx).is_ready() {
-                                    self.events_sender
-                                        .unbounded_send(
-                                            map_port::<P>(
-                                                gateway.clone(),
-                                                mapping.clone(),
-                                                self.config.permanent,
-                                            )
-                                            .boxed(),
-                                        )
-                                        .expect("receiver should be available");
+                                    let duration =
+                                        self.config.temporary.then_some(MAPPING_DURATION);
+                                    if let Err(err) = gateway.sender.try_send(
+                                        GatewayRequest::AddMapping(mapping.clone(), duration),
+                                    ) {
+                                        log::debug!(
+                                        "could not request port mapping for {} on the gateway: {}",
+                                        mapping.multiaddr,
+                                        err
+                                    );
+                                    }
                                 }
                             }
                             MappingState::Pending | MappingState::Permanent => {}

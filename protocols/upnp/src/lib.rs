@@ -28,7 +28,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod behaviour;
-mod gateway;
+mod provider;
 
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
@@ -36,9 +36,9 @@ use std::{
 };
 
 #[cfg(feature = "async-std")]
-pub use gateway::async_std;
+pub use provider::async_std;
 #[cfg(feature = "tokio")]
-pub use gateway::tokio;
+pub use provider::tokio;
 
 /// The configuration for UPnP capabilities for libp2p.
 #[derive(Clone, Copy, Debug)]
@@ -49,30 +49,24 @@ pub struct Config {
     broadcast_addr: SocketAddr,
     /// Timeout for a search iteration (defaults to 10s).
     timeout: Option<Duration>,
-    /// Should the port mappings be temporary or permanent.
-    permanent: bool,
+    /// Should the port mappings be temporary (1 hour) or permanent.
+    temporary: bool,
 }
 
 impl Config {
     /// Creates a new configuration for a UPnP transport:
-    /// * Bind address for UDP socket is `0.0.0.0`.
-    /// See [`Config::bind_addr`].
-    /// * Broadcast address for discovery packets is `239.255.255.250:1900`.
-    /// See [`Config::broadcast_address`].
-    /// * Timeout for a search iteration is 10s.
-    /// See [`Config::timeout`].
     pub fn new() -> Self {
         Self {
             bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)),
             broadcast_addr: "239.255.255.250:1900".parse().unwrap(),
             timeout: Some(Duration::from_secs(10)),
-            permanent: false,
+            temporary: true,
         }
     }
 
-    /// Configures if the port mappings should be temporary or permanent.
-    pub fn permanent(self, permanent: bool) -> Self {
-        Self { permanent, ..self }
+    /// Configures if the port mappings be temporary (1 hour) or permanent.
+    pub fn temporary(self, temporary: bool) -> Self {
+        Self { temporary, ..self }
     }
 }
 
