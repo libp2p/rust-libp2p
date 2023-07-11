@@ -1,5 +1,10 @@
 ## 0.43.1 - unreleased
 
+- Change the default `PeerCondition` to `NotDialing`. This will prevent multiple simultaneous dials to the same peer, by default.
+  See [PR 4185].
+
+[PR 4185]: https://github.com/libp2p/rust-libp2p/pull/4185
+
 - Do not announce external address candidate before address translation, unless translation does not apply.
   This will prevent ephemeral TCP addresses being announced as external address candidates.
   See [PR 4158].
