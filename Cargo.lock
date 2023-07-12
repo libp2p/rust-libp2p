@@ -4174,8 +4174,8 @@ dependencies = [
 
 [[package]]
 name = "prometheus-client"
-version = "0.21.1"
-source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#f566b35a4f8107ab3483bb5c90a9507937724025"
+version = "0.21.2"
+source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#9207512a47b8952055e00aac497eb230ba2fdd7c"
 dependencies = [
  "dtoa",
  "itoa",
@@ -4186,7 +4186,7 @@ dependencies = [
 [[package]]
 name = "prometheus-client-derive-encode"
 version = "0.4.1"
-source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#f566b35a4f8107ab3483bb5c90a9507937724025"
+source = "git+https://github.com/mxinden/client_rust.git?branch=refactor-collector#9207512a47b8952055e00aac497eb230ba2fdd7c"
 dependencies = [
  "proc-macro2",
  "quote",
