@@ -39,7 +39,8 @@ use std::num::NonZeroU8;
 #[derive(Debug)]
 pub struct DialOpts {
     peer_id: Option<PeerId>,
-    condition: PeerCondition,
+    condition: Option<PeerCondition>,
+    dial_conditions: DialConditions,
     addresses: Vec<Multiaddr>,
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
@@ -63,6 +64,7 @@ impl DialOpts {
         WithPeerId {
             peer_id,
             condition: Default::default(),
+            dial_conditions: Default::default(),
             role_override: Endpoint::Dialer,
             dial_concurrency_factor_override: Default::default(),
         }
@@ -113,8 +115,12 @@ impl DialOpts {
         self.extend_addresses_through_behaviour
     }
 
-    pub(crate) fn peer_condition(&self) -> PeerCondition {
+    pub(crate) fn peer_condition(&self) -> Option<PeerCondition> {
         self.condition
+    }
+
+    pub(crate) fn dial_conditions(&self) -> DialConditions {
+        self.dial_conditions
     }
 
     pub(crate) fn dial_concurrency_override(&self) -> Option<NonZeroU8> {
@@ -141,15 +147,23 @@ impl From<PeerId> for DialOpts {
 #[derive(Debug)]
 pub struct WithPeerId {
     peer_id: PeerId,
-    condition: PeerCondition,
+    condition: Option<PeerCondition>,
+    dial_conditions: DialConditions,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
+    #[deprecated]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
-        self.condition = condition;
+        self.condition = Some(condition);
+        self
+    }
+
+    /// Specify zero, one, or more [`DialConditions`]s for the dial.
+    pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
+        self.dial_conditions = condition;
         self
     }
 
@@ -165,6 +179,7 @@ impl WithPeerId {
         WithPeerIdWithAddresses {
             peer_id: self.peer_id,
             condition: self.condition,
+            dial_condition: self.dial_conditions,
             addresses,
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
@@ -188,6 +203,7 @@ impl WithPeerId {
         DialOpts {
             peer_id: Some(self.peer_id),
             condition: self.condition,
+            dial_conditions: self.dial_conditions,
             addresses: vec![],
             extend_addresses_through_behaviour: true,
             role_override: self.role_override,
@@ -200,7 +216,8 @@ impl WithPeerId {
 #[derive(Debug)]
 pub struct WithPeerIdWithAddresses {
     peer_id: PeerId,
-    condition: PeerCondition,
+    condition: Option<PeerCondition>,
+    dial_condition: DialConditions,
     addresses: Vec<Multiaddr>,
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
@@ -209,8 +226,15 @@ pub struct WithPeerIdWithAddresses {
 
 impl WithPeerIdWithAddresses {
     /// Specify a [`PeerCondition`] for the dial.
+    #[deprecated]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
-        self.condition = condition;
+        self.condition = Some(condition);
+        self
+    }
+
+    /// Specify zero, one, or more [`DialConditions`]s for the dial.
+    pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
+        self.dial_condition = condition;
         self
     }
 
@@ -244,6 +268,7 @@ impl WithPeerIdWithAddresses {
         DialOpts {
             peer_id: Some(self.peer_id),
             condition: self.condition,
+            dial_conditions: self.dial_condition,
             addresses: self.addresses,
             extend_addresses_through_behaviour: self.extend_addresses_through_behaviour,
             role_override: self.role_override,
@@ -287,7 +312,9 @@ impl WithoutPeerIdWithAddress {
     pub fn build(self) -> DialOpts {
         DialOpts {
             peer_id: None,
-            condition: PeerCondition::Always,
+            condition: None,
+            // Always make a dial attempt to the peer
+            dial_conditions: DialConditions::empty(),
             addresses: vec![self.address],
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
@@ -322,4 +349,33 @@ pub enum PeerCondition {
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
     Always,
+}
+
+bitflags::bitflags! {
+    /// The available conditions under which a new dialing attempt to
+    /// a known peer is initiated. These conditions can be combined.
+    ///
+    /// ```
+    /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
+    /// # use libp2p_identity::PeerId;
+    /// #
+    /// DialOpts::peer_id(PeerId::random())
+    ///    .dial_conditions(DialCondition::Disconnected | DialCondition::NotDialing)
+    ///    .build();
+    /// ```
+    #[derive(Debug, Copy, Clone)]
+    pub struct DialConditions: u32 {
+        /// Under this condition, there will be no dial attempt if an
+        /// established connection already exists to the peer.
+        const Disconnected = 0b0001;
+        /// No new dial attempt will be initiated if there is a dial
+        /// attempt going on already.
+        const NotDialing = 0b0010;
+    }
+}
+
+impl Default for DialConditions {
+    fn default() -> Self {
+        DialConditions::all()
+    }
 }

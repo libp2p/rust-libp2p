@@ -3137,6 +3137,7 @@ name = "libp2p-swarm"
 version = "0.43.1"
 dependencies = [
  "async-std",
+ "bitflags 2.3.3",
  "either",
  "env_logger 0.10.0",
  "fnv",

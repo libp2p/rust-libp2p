@@ -42,10 +42,9 @@ use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    dial_opts::DialOpts, ConnectionDenied, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -2014,14 +2013,9 @@ where
                     query.on_failure(&peer_id);
                 }
             }
-            DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
-            ) => {
+            DialError::DialPeerConditionFalse(..) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
-            }
-            DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
-                unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
         }
     }
