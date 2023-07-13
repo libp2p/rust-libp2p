@@ -59,6 +59,8 @@ pub mod ffi {
         pub type ListenEvent;
         /// Type of the object that represents an event containing a new connection with a remote.
         pub type ConnectionEvent;
+        /// Type of the object that represents an opened active listener with the finalizer to close the listener.
+        pub type Listener;
 
         /// Start attempting to dial the given multiaddress.
         ///
@@ -75,12 +77,25 @@ pub mod ffi {
 
         /// Start listening on the given multiaddress.
         ///
-        /// The returned `Iterator` must yield `Promise`s to [`ListenEvent`] events.
+        /// The returned `Listener` contains all functionality required by the `ExtTransport`.
         ///
         /// If the multiaddress is not supported, you should return an instance of `Error` whose
         /// `name` property has been set to the string `"NotSupportedError"`.
         #[wasm_bindgen(method, catch)]
-        pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<js_sys::Iterator, JsValue>;
+        pub fn listen_on(this: &Transport, multiaddr: &str) -> Result<Listener, JsValue>;
+
+        /// Returns the iterator that yields `Promise`s to [`ListenEvent`] events.
+        ///
+        /// The [`ListenEvents`] correspond only to the single `Listener`.
+        #[wasm_bindgen(method, getter)]
+        pub fn events(this: &Listener) -> js_sys::Iterator;
+
+        /// Returns a `Function` that finalizes the `Listener`
+        ///
+        /// Once the `Listener` is finalized by calling the function, it ceases the `listen_on`
+        /// operation. The finalizer can only be **called once**.
+        #[wasm_bindgen(method, getter)]
+        pub fn finalizer(this: &Listener) -> js_sys::Function;
 
         /// Returns an iterator of JavaScript `Promise`s that resolve to `ArrayBuffer` objects
         /// (or resolve to null, see below). These `ArrayBuffer` objects contain the data that the
@@ -144,6 +159,13 @@ pub mod ffi {
         /// Returns a `Transport` implemented using websockets.
         pub fn websocket_transport() -> Transport;
     }
+
+    #[cfg(feature = "tcp")]
+    #[wasm_bindgen(module = "/src/tcp.js")]
+    extern "C" {
+        /// Returns a `Transport` implemented using the TCP connection.
+        pub fn tcp_transport() -> Transport;
+    }
 }
 
 /// Implementation of `Transport` whose implementation is handled by some FFI.
@@ -166,6 +188,7 @@ impl ExtTransport {
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+
         let promise = self
             .inner
             .dial(
@@ -203,7 +226,7 @@ impl Transport for ExtTransport {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
+        let listener = self.inner.listen_on(&addr.to_string()).map_err(|err| {
             if is_not_supported_error(&err) {
                 TransportError::MultiaddrNotSupported(addr)
             } else {
@@ -212,10 +235,11 @@ impl Transport for ExtTransport {
         })?;
         let listen = Listen {
             listener_id,
-            iterator: SendWrapper::new(iter),
+            iterator: SendWrapper::new(listener.events()),
             next_event: None,
             pending_events: VecDeque::new(),
             is_closed: false,
+            finalizer: SendWrapper::new(listener.finalizer()),
         };
         self.listeners.push(listen);
         Ok(())
@@ -294,6 +318,7 @@ pub struct Listen {
     pending_events: VecDeque<<Self as Stream>::Item>,
     /// If the iterator is done close the listener.
     is_closed: bool,
+    finalizer: SendWrapper<js_sys::Function>
 }
 
 impl Listen {
@@ -304,7 +329,9 @@ impl Listen {
                 listener_id: self.listener_id,
                 reason,
             });
-        self.is_closed = true;
+        if let Ok(_) = self.finalizer.apply(&JsValue::null(), &js_sys::Array::new()) {
+            self.is_closed = true;
+        }
     }
 }
 
@@ -356,7 +383,7 @@ impl Stream for Listen {
             };
 
             let listener_id = self.listener_id;
-
+            
             if let Some(addrs) = event.new_addrs() {
                 for addr in addrs.iter() {
                     match js_value_to_addr(addr) {

@@ -20,6 +20,7 @@ wasm-bindgen-futures = "0.4.37"
 
 [features]
 websocket = []
+tcp = []
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

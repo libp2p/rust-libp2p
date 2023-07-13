@@ -1,4 +1,10 @@
-## 0.40.0 
+
+- Add TCP transport to wasm-ext. Update the underlying wasm-ext `ffi` module's API.
+  See [PR 4253]
+
+[PR 4253]: https://github.com/libp2p/rust-libp2p/pull/4253
+
+## 0.40.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

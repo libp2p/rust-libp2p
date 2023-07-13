@@ -5449,6 +5449,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tcptransport-tests"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "getrandom 0.2.10",
+ "gloo-timers",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-wasm-ext",
+ "multiaddr",
+ "multihash",
+ "rand 0.8.5",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
