@@ -1,4 +1,4 @@
-## 0.44.2 - unreleased
+## 0.44.2
 
 - Allow to explicitly set `Mode::{Client,Server}`.
   See [PR 4132]
