@@ -1,4 +1,4 @@
-## 0.43.1 - unreleased
+## 0.43.1
 
 - Do not announce external address candidate before address translation, unless translation does not apply.
   This will prevent ephemeral TCP addresses being announced as external address candidates.
