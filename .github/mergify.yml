@@ -64,8 +64,8 @@ pull_request_rules:
     conditions:
       - author=dependabot[bot]
       - or:
-          - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major > 1 versions, only approve updates with the same major version.
-          - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major = 0 versions, only approve updates with the same major version.
+          - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major >= 1 versions, only approve updates with the same major version.
+          - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
     actions:
       review:
 
