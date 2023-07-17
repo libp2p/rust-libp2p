@@ -28,13 +28,13 @@ ip netns exec dialer_ns ip link set up dev dialer_veth
 ip netns exec relay_ns ip link set up dev relay_veth
 
 # Assign IP addresses to veths in namespaces and enable NAT via iptables
-ip addr add 10.0.0.1/24 dev relay_pub_veth
+ip addr add 10.0.0.1 dev relay_pub_veth
 ip netns exec relay_ns ip addr add 192.168.254.1/24 dev relay_veth
 
-ip addr add 10.0.0.2/24 dev listen_pub_veth
+ip addr add 10.0.0.2 dev listen_pub_veth
 ip netns exec listener_ns ip addr add 192.168.1.1/24 dev listener_veth
 
-ip addr add 10.0.0.3/24 dev dialer_pub_veth
+ip addr add 10.0.0.3 dev dialer_pub_veth
 ip netns exec dialer_ns ip addr add 172.16.0.1/24 dev dialer_veth
 
 # Set routes correctly for traffic to be able to leave the network namespaces
