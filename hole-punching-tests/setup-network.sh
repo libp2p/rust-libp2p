@@ -52,8 +52,8 @@ ip netns exec dialer_ns nft add chain ip nat postrouting { type nat hook postrou
 ip netns exec listener_ns nft add chain ip nat postrouting { type nat hook postrouting priority srcnat \; meta nftrace set 1 \; }
 
 ip netns exec relay_ns nft add rule ip nat postrouting oifname "relay_veth" snat 10.0.0.1
-ip netns exec dialer_ns nft add rule ip nat postrouting oifname "dialer_veth" snat 10.0.0.2
-ip netns exec listener_ns nft add rule ip nat postrouting oifname "listener_veth" snat 10.0.0.3
+ip netns exec listener_ns nft add rule ip nat postrouting oifname "listener_veth" snat 10.0.0.2
+ip netns exec dialer_ns nft add rule ip nat postrouting oifname "dialer_veth" snat 10.0.0.3
 
 # Enable IP forwarding
 echo 1 > /proc/sys/net/ipv4/ip_forward
