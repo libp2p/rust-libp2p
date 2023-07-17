@@ -38,9 +38,9 @@ ip addr add 10.0.0.3 dev dialer_pub_veth
 ip netns exec dialer_ns ip addr add 172.16.0.1/24 dev dialer_veth
 
 # Set routes correctly for traffic to be able to leave the network namespaces
-ip netns exec relay_ns ip route add 10.0.0.0/24 via 192.168.254.1 dev relay_veth
-ip netns exec listener_ns ip route add 10.0.0.0/24 via 192.168.1.1 dev listener_veth
-ip netns exec dialer_ns ip route add 10.0.0.0/24 via 172.16.0.1 dev dialer_veth
+ip netns exec relay_ns ip route add default via 192.168.254.1 dev relay_veth
+ip netns exec listener_ns ip route add default via 192.168.1.1 dev listener_veth
+ip netns exec dialer_ns ip route add default via 172.16.0.1 dev dialer_veth
 
 # Enable NAT
 ip netns exec relay_ns nft add table ip nat
