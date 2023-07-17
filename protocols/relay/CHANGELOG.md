@@ -1,6 +1,7 @@
 ## 0.16.1 - unreleased
-- Adds functions to access data within `Limit`.
-  See [PR 4162]
+
+- Add functions to access data within `Limit`.
+  See [PR 4162].
 
 [PR 4162]: https://github.com/libp2p/rust-libp2p/pull/4162
 
