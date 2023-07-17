@@ -57,6 +57,3 @@ ip netns exec dialer_ns nft add rule ip nat postrouting oifname "dialer_veth" sn
 
 # Enable IP forwarding
 echo 1 > /proc/sys/net/ipv4/ip_forward
-ip netns exec dialer_ns bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
-ip netns exec relay_ns bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
-ip netns exec listener_ns bash -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
