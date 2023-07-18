@@ -29,7 +29,7 @@ use libp2p_request_response::{
     self as request_response, InboundFailure, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
-    dial_opts::{DialOpts, PeerCondition},
+    dial_opts::{DialConditions, DialOpts},
     ConnectionId, DialError, PollParameters, ToSwarm,
 };
 use std::{
@@ -131,7 +131,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             )),
                             ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer)
-                                    .condition(PeerCondition::Always)
+                                    .dial_conditions(DialConditions::empty())
                                     .override_dial_concurrency_factor(
                                         NonZeroU8::new(1).expect("1 > 0"),
                                     )

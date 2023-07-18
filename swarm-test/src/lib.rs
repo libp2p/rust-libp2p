@@ -26,7 +26,7 @@ use libp2p_core::{
 };
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::dial_opts::PeerCondition;
+use libp2p_swarm::dial_opts::DialConditions;
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
 };
@@ -230,7 +230,7 @@ where
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
-            .condition(PeerCondition::Always)
+            .dial_conditions(DialConditions::empty())
             .build();
 
         self.dial(dial_opts).unwrap();

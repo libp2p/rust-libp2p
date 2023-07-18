@@ -307,7 +307,7 @@ impl NetworkBehaviour for Behaviour {
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
-                    .condition(dial_opts::PeerCondition::Always)
+                    .dial_conditions(dial_opts::DialConditions::empty())
                     .build();
 
                 let maybe_direct_connection_id = opts.connection_id();
@@ -326,7 +326,7 @@ impl NetworkBehaviour for Behaviour {
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
                 let opts = DialOpts::peer_id(event_source)
-                    .condition(dial_opts::PeerCondition::Always)
+                    .dial_conditions(dial_opts::DialConditions::empty())
                     .addresses(remote_addrs)
                     .override_role()
                     .build();

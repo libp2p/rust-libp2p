@@ -365,7 +365,7 @@ impl NetworkBehaviour for Behaviour {
 mod tests {
     use super::*;
     use libp2p_swarm::{
-        dial_opts::{DialOpts, PeerCondition},
+        dial_opts::{DialConditions, DialOpts},
         DialError, ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
@@ -390,7 +390,7 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
-                        .condition(PeerCondition::Always)
+                        .dial_conditions(DialConditions::empty())
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -400,7 +400,7 @@ mod tests {
         match network
             .dial(
                 DialOpts::peer_id(target)
-                    .condition(PeerCondition::Always)
+                    .dial_conditions(DialConditions::empty())
                     .addresses(vec![addr])
                     .build(),
             )
