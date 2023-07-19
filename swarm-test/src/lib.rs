@@ -230,7 +230,7 @@ where
 
         let dial_opts = DialOpts::peer_id(*other.local_peer_id())
             .addresses(external_addresses)
-            .dial_conditions(DialConditions::empty())
+            .only_dial_if(DialConditions::always())
             .build();
 
         self.dial(dial_opts).unwrap();

@@ -155,7 +155,7 @@ pub struct WithPeerId {
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated(note = "Use `dial_conditions` instead")]
+    #[deprecated(note = "Use `dial_only_if` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
@@ -163,7 +163,7 @@ impl WithPeerId {
 
     /// Specify zero, one, or more conditions under which a dial attempt is initiated.
     /// See [`DialConditions`] for more details and examples.
-    pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
+    pub fn only_dial_if(mut self, condition: DialConditions) -> Self {
         self.dial_conditions = condition;
         self
     }
@@ -227,7 +227,7 @@ pub struct WithPeerIdWithAddresses {
 
 impl WithPeerIdWithAddresses {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated(note = "Use `dial_conditions` instead")]
+    #[deprecated(note = "Use `dial_only_if` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
@@ -235,7 +235,7 @@ impl WithPeerIdWithAddresses {
 
     /// Specify zero, one, or more conditions under which a dial attempt is initiated.
     /// See [`DialConditions`] for more details and examples.
-    pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
+    pub fn only_dial_if(mut self, condition: DialConditions) -> Self {
         self.dial_condition = condition;
         self
     }
@@ -316,7 +316,7 @@ impl WithoutPeerIdWithAddress {
             peer_id: None,
             condition: None,
             // Always make a dial attempt to the peer
-            dial_conditions: DialConditions::empty(),
+            dial_conditions: DialConditions::always(),
             addresses: vec![self.address],
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
@@ -374,16 +374,15 @@ bitflags::bitflags! {
     ///
     /// # Examples
     ///
-    /// We can have zero conditions by using [`empty()`](DialConditions::empty()).
-    /// With an empty bitflag, meaning zero/no conditions, a dialing attempt will
-    /// always be initiated:
+    /// We can have zero conditions by using [`always()`](DialConditions::always()).
+    /// Without conditions, a dialing attempt will always be initiated:
     ///
     /// ```
     /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
     /// # use libp2p_identity::PeerId;
     /// #
     /// DialOpts::peer_id(PeerId::random())
-    ///    .dial_conditions(DialCondition::empty())
+    ///    .dial_conditions(DialConditions::always())
     ///    .build();
     /// ```
     ///
@@ -396,7 +395,7 @@ bitflags::bitflags! {
     /// # use libp2p_identity::PeerId;
     /// #
     /// DialOpts::peer_id(PeerId::random())
-    ///    .dial_conditions(DialCondition::Disconnected | DialCondition::NotDialing)
+    ///    .dial_conditions(DialConditions::Disconnected | DialConditions::NotDialing)
     ///    .build();
     /// ```
     #[derive(Debug, Copy, Clone)]
@@ -410,12 +409,20 @@ bitflags::bitflags! {
     }
 }
 
+impl DialConditions {
+    /// Create an empty bitflag, meaning zero/no conditions. This means a dial
+    /// attempt will always be initiated.
+    pub fn always() -> Self {
+        DialConditions::empty()
+    }
+}
+
 impl Default for DialConditions {
     /// Default to using all conditions available. Currently being both
     /// [`Disconected`](DialConditions::Disconnected) and [`NotDialing`](DialConditions::NotDialing).
     ///
     /// This is equivalent to calling [`all()`](DialConditions::all())
     fn default() -> Self {
-        DialConditions::all()
+        DialConditions::always()
     }
 }

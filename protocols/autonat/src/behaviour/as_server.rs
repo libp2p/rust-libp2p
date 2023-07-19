@@ -131,7 +131,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             )),
                             ToSwarm::Dial {
                                 opts: DialOpts::peer_id(peer)
-                                    .dial_conditions(DialConditions::empty())
+                                    .only_dial_if(DialConditions::always())
                                     .override_dial_concurrency_factor(
                                         NonZeroU8::new(1).expect("1 > 0"),
                                     )

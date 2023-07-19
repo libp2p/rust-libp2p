@@ -390,7 +390,7 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
-                        .dial_conditions(DialConditions::empty())
+                        .only_dial_if(DialConditions::always())
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -400,7 +400,7 @@ mod tests {
         match network
             .dial(
                 DialOpts::peer_id(target)
-                    .dial_conditions(DialConditions::empty())
+                    .only_dial_if(DialConditions::always())
                     .addresses(vec![addr])
                     .build(),
             )
