@@ -57,7 +57,10 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, Protocol<'static>>,
 }
 
-impl<T> WsConfig<T> {
+impl<T> WsConfig<T>
+where
+    T: Send,
+{
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
         WsConfig {
