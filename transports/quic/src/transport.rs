@@ -747,7 +747,7 @@ fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
             matches!(third, QuicV1)
         }
         && matches!(fourth, Some(P2p(_)) | None)
-        && matches!(fifth, None)
+        && fifth.is_none()
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
