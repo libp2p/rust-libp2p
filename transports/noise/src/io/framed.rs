@@ -75,9 +75,9 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
             session: state,
             read_state: ReadState::Ready,
             write_state: WriteState::Ready,
-            read_buffer: Vec::new(),
-            write_buffer: Vec::new(),
-            decrypt_buffer: BytesMut::new(),
+            read_buffer: vec![0u8; MAX_NOISE_MSG_LEN],
+            write_buffer: vec![0u8; MAX_NOISE_MSG_LEN],
+            decrypt_buffer: BytesMut::with_capacity(MAX_FRAME_LEN),
         }
     }
 
@@ -204,15 +204,14 @@ where
                         this.read_state = ReadState::Ready;
                         continue;
                     }
-                    this.read_buffer.resize(usize::from(n), 0u8);
                     this.read_state = ReadState::ReadData {
                         len: usize::from(n),
                         off: 0,
                     }
                 }
                 ReadState::ReadData { len, ref mut off } => {
-                    let n = {
-                        let f =
+                    let n: usize = {
+                        let f: Poll<Result<usize, io::Error>> =
                             Pin::new(&mut this.io).poll_read(cx, &mut this.read_buffer[*off..len]);
                         match ready!(f) {
                             Ok(n) => n,
@@ -231,7 +230,7 @@ where
                         this.decrypt_buffer.resize(len, 0);
                         if let Ok(n) = this
                             .session
-                            .read_message(&this.read_buffer, &mut this.decrypt_buffer)
+                            .read_message(&this.read_buffer[..len], &mut this.decrypt_buffer)
                         {
                             this.decrypt_buffer.truncate(n);
                             trace!("read: payload len = {} bytes", n);
@@ -265,7 +264,7 @@ where
     }
 }
 
-impl<T, S> futures::sink::Sink<&Vec<u8>> for NoiseFramed<T, S>
+impl<T, S> futures::sink::Sink<&[u8]> for NoiseFramed<T, S>
 where
     T: AsyncWrite + Unpin,
     S: SessionState + Unpin,
@@ -327,20 +326,17 @@ where
         }
     }
 
-    fn start_send(self: Pin<&mut Self>, frame: &Vec<u8>) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, frame: &[u8]) -> Result<(), Self::Error> {
         assert!(frame.len() <= MAX_FRAME_LEN);
         let this = Pin::into_inner(self);
         assert!(this.write_state.is_ready());
 
-        this.write_buffer
-            .resize(frame.len() + EXTRA_ENCRYPT_SPACE, 0u8);
         match this
             .session
             .write_message(frame, &mut this.write_buffer[..])
         {
             Ok(n) => {
                 trace!("write: cipher text len = {} bytes", n);
-                this.write_buffer.truncate(n);
                 this.write_state = WriteState::WriteLen {
                     len: n,
                     buf: u16::to_be_bytes(n as u16),

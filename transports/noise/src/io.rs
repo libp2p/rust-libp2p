@@ -57,7 +57,7 @@ impl<T> Output<T> {
             io,
             recv_buffer: Bytes::new(),
             recv_offset: 0,
-            send_buffer: Vec::new(),
+            send_buffer: vec![0u8; MAX_FRAME_LEN],
             send_offset: 0,
         }
     }
@@ -113,13 +113,11 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
         if this.send_offset == MAX_FRAME_LEN {
             trace!("write: sending {} bytes", MAX_FRAME_LEN);
             ready!(io.as_mut().poll_ready(cx))?;
-            io.as_mut().start_send(frame_buf)?;
+            io.as_mut().start_send(&frame_buf[..this.send_offset])?;
             this.send_offset = 0;
         }
 
         let off = this.send_offset;
-        let n = min(MAX_FRAME_LEN, off.saturating_add(buf.len()));
-        this.send_buffer.resize(n, 0u8);
         let n = min(MAX_FRAME_LEN - off, buf.len());
         this.send_buffer[off..off + n].copy_from_slice(&buf[..n]);
         this.send_offset += n;
@@ -137,7 +135,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
         if this.send_offset > 0 {
             ready!(io.as_mut().poll_ready(cx))?;
             trace!("flush: sending {} bytes", this.send_offset);
-            io.as_mut().start_send(frame_buf)?;
+            io.as_mut().start_send(&frame_buf[..this.send_offset])?;
             this.send_offset = 0;
         }
 
