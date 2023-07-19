@@ -155,13 +155,14 @@ pub struct WithPeerId {
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated]
+    #[deprecated(note = "Use `dial_conditions` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
     }
 
-    /// Specify zero, one, or more [`DialConditions`]s for the dial.
+    /// Specify zero, one, or more conditions under which a dial attempt is initiated.
+    /// See [`DialConditions`] for more details and examples.
     pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
         self.dial_conditions = condition;
         self
@@ -226,13 +227,14 @@ pub struct WithPeerIdWithAddresses {
 
 impl WithPeerIdWithAddresses {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated]
+    #[deprecated(note = "Use `dial_conditions` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
     }
 
-    /// Specify zero, one, or more [`DialConditions`]s for the dial.
+    /// Specify zero, one, or more conditions under which a dial attempt is initiated.
+    /// See [`DialConditions`] for more details and examples.
     pub fn dial_conditions(mut self, condition: DialConditions) -> Self {
         self.dial_condition = condition;
         self
@@ -353,7 +355,41 @@ pub enum PeerCondition {
 
 bitflags::bitflags! {
     /// The available conditions under which a new dialing attempt to
-    /// a known peer is initiated. These conditions can be combined.
+    /// a known peer is initiated.
+    ///
+    /// # Bitflag
+    ///
+    /// The [`DialConditions`] is a bitflag, meaning conditions can be enabled
+    /// separately from each other. This way can have zero conditions, one condition,
+    /// or even combine multiple conditions.
+    ///
+    /// [`bitflags`] can be operated on by bitwise `|` (OR), `&` (AND), `-` (SUB) and `^` (XOR) operators.
+    /// See the [`bitflags`] crate for more details.
+    ///
+    /// # Combination of conditions
+    ///
+    /// When [`Disconected`](DialConditions::Disconnected) and [`NotDialing`](DialConditions::NotDialing)
+    /// are combined, this means a dial attempt will only be initiated if the peer is
+    /// *both* considered disconnected and there is no ongoing dialing attempt.
+    ///
+    /// # Examples
+    ///
+    /// We can have zero conditions by using [`empty()`](DialConditions::empty()).
+    /// With an empty bitflag, meaning zero/no conditions, a dialing attempt will
+    /// always be initiated:
+    ///
+    /// ```
+    /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
+    /// # use libp2p_identity::PeerId;
+    /// #
+    /// DialOpts::peer_id(PeerId::random())
+    ///    .dial_conditions(DialCondition::empty())
+    ///    .build();
+    /// ```
+    ///
+    /// We can also have one condition by using e.g. [`DialConditions::Disconnected`].
+    /// But it's also possible to combine both [`Disconected`](DialConditions::Disconnected) and
+    /// [`NotDialing`](DialConditions::NotDialing) by using the bitwise `|` (OR) operator:
     ///
     /// ```
     /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
@@ -375,6 +411,10 @@ bitflags::bitflags! {
 }
 
 impl Default for DialConditions {
+    /// Default to using all conditions available. Currently being both
+    /// [`Disconected`](DialConditions::Disconnected) and [`NotDialing`](DialConditions::NotDialing).
+    ///
+    /// This is equivalent to calling [`all()`](DialConditions::all())
     fn default() -> Self {
         DialConditions::all()
     }
