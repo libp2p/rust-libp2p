@@ -28,7 +28,7 @@ libp2p-ping = { workspace = true, optional = true }
 libp2p-relay =  { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-prometheus-client = { version = "0.21.1"}
+prometheus-client = { version = "0.21.2"}
 once_cell = "1.18.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
