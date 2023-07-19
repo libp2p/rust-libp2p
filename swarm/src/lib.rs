@@ -418,79 +418,40 @@ where
         let dial_conditions = dial_opts.dial_conditions();
         let connection_id = dial_opts.connection_id();
 
-        enum DialOrPeerCondition {
-            PeerCondition(PeerCondition),
-            DialCondition(DialConditions),
-        }
-
-        // Either check the deprecated `peer_condition` or the new `dial_conditions`.
-        let failed_conditions = match condition {
-            Some(condition) => match (condition, peer_id) {
-                (PeerCondition::Always, _) => None,
-                (PeerCondition::Disconnected, None) => None,
-                (PeerCondition::NotDialing, None) => None,
-                (PeerCondition::Disconnected, Some(peer_id)) => {
-                    if !self.pool.is_connected(peer_id) {
-                        Some(DialOrPeerCondition::PeerCondition(
-                            PeerCondition::Disconnected,
-                        ))
-                    } else {
-                        None
+        let dial_failure = if let Some(peer_id) = peer_id {
+            match condition {
+                // Only use deprecated `peer_condition` when the `Option` was explicitly set.
+                Some(condition) => match condition {
+                    PeerCondition::Disconnected if !self.pool.is_connected(peer_id) => Some(
+                        DialError::DialPeerConditionFalse(PeerCondition::Disconnected),
+                    ),
+                    PeerCondition::NotDialing if !self.pool.is_dialing(peer_id) => {
+                        Some(DialError::DialPeerConditionFalse(PeerCondition::NotDialing))
                     }
-                }
-                (PeerCondition::NotDialing, Some(peer_id)) => {
-                    if !self.pool.is_dialing(peer_id) {
-                        Some(DialOrPeerCondition::PeerCondition(
-                            PeerCondition::NotDialing,
-                        ))
-                    } else {
-                        None
-                    }
-                }
-            },
-            None => match peer_id {
-                None => None,
-                Some(peer_id) => {
-                    let mut fails = DialConditions::empty();
-
+                    _ => None,
+                },
+                None => {
                     if dial_conditions.contains(DialConditions::Disconnected)
                         && self.pool.is_connected(peer_id)
                     {
-                        fails |= DialConditions::Disconnected;
-                    }
-                    if dial_conditions.contains(DialConditions::NotDialing)
+                        Some(DialError::DialPeerConditionFalse(
+                            PeerCondition::Disconnected,
+                        ))
+                    } else if dial_conditions.contains(DialConditions::NotDialing)
                         && self.pool.is_dialing(peer_id)
                     {
-                        fails |= DialConditions::NotDialing;
-                    }
-
-                    if fails.is_empty() {
-                        None
+                        Some(DialError::DialPeerConditionFalse(PeerCondition::NotDialing))
                     } else {
-                        Some(DialOrPeerCondition::DialCondition(fails))
+                        None
                     }
                 }
-            },
+            }
+        // Conditions are not used without a `PeerId`.
+        } else {
+            None
         };
 
-        if let Some(condition) = failed_conditions {
-            let e = match condition {
-                DialOrPeerCondition::PeerCondition(condition) => {
-                    DialError::DialPeerConditionFalse(condition)
-                }
-                DialOrPeerCondition::DialCondition(condition) => {
-                    // TODO: Change error to contain `DialCondition` error instead, which can hold multiple conditions.
-                    // That will constitute a breaking change as it adds an error variant.
-                    if condition.contains(DialConditions::Disconnected) {
-                        DialError::DialPeerConditionFalse(PeerCondition::Disconnected)
-                    } else if condition.contains(DialConditions::NotDialing) {
-                        DialError::DialPeerConditionFalse(PeerCondition::NotDialing)
-                    } else {
-                        unreachable!()
-                    }
-                }
-            };
-
+        if let Some(e) = dial_failure {
             self.behaviour
                 .on_swarm_event(FromSwarm::DialFailure(DialFailure {
                     peer_id,
