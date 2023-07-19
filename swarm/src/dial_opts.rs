@@ -155,7 +155,7 @@ pub struct WithPeerId {
 
 impl WithPeerId {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated(note = "Use `dial_only_if` instead")]
+    #[deprecated(note = "Use `only_dial_if` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
@@ -180,7 +180,7 @@ impl WithPeerId {
         WithPeerIdWithAddresses {
             peer_id: self.peer_id,
             condition: self.condition,
-            dial_condition: self.dial_conditions,
+            dial_conditions: self.dial_conditions,
             addresses,
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
@@ -218,7 +218,7 @@ impl WithPeerId {
 pub struct WithPeerIdWithAddresses {
     peer_id: PeerId,
     condition: Option<PeerCondition>,
-    dial_condition: DialConditions,
+    dial_conditions: DialConditions,
     addresses: Vec<Multiaddr>,
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
@@ -227,7 +227,7 @@ pub struct WithPeerIdWithAddresses {
 
 impl WithPeerIdWithAddresses {
     /// Specify a [`PeerCondition`] for the dial.
-    #[deprecated(note = "Use `dial_only_if` instead")]
+    #[deprecated(note = "Use `only_dial_if` instead")]
     pub fn condition(mut self, condition: PeerCondition) -> Self {
         self.condition = Some(condition);
         self
@@ -236,7 +236,7 @@ impl WithPeerIdWithAddresses {
     /// Specify zero, one, or more conditions under which a dial attempt is initiated.
     /// See [`DialConditions`] for more details and examples.
     pub fn only_dial_if(mut self, condition: DialConditions) -> Self {
-        self.dial_condition = condition;
+        self.dial_conditions = condition;
         self
     }
 
@@ -270,7 +270,7 @@ impl WithPeerIdWithAddresses {
         DialOpts {
             peer_id: Some(self.peer_id),
             condition: self.condition,
-            dial_conditions: self.dial_condition,
+            dial_conditions: self.dial_conditions,
             addresses: self.addresses,
             extend_addresses_through_behaviour: self.extend_addresses_through_behaviour,
             role_override: self.role_override,
@@ -378,11 +378,11 @@ bitflags::bitflags! {
     /// Without conditions, a dialing attempt will always be initiated:
     ///
     /// ```
-    /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
+    /// # use libp2p_swarm::dial_opts::{DialOpts, DialConditions};
     /// # use libp2p_identity::PeerId;
     /// #
     /// DialOpts::peer_id(PeerId::random())
-    ///    .dial_conditions(DialConditions::always())
+    ///    .only_dial_if(DialConditions::always())
     ///    .build();
     /// ```
     ///
@@ -391,11 +391,11 @@ bitflags::bitflags! {
     /// [`NotDialing`](DialConditions::NotDialing) by using the bitwise `|` (OR) operator:
     ///
     /// ```
-    /// # use libp2p_swarm::dial_opts::{DialOpts, DialCondition};
+    /// # use libp2p_swarm::dial_opts::{DialOpts, DialConditions};
     /// # use libp2p_identity::PeerId;
     /// #
     /// DialOpts::peer_id(PeerId::random())
-    ///    .dial_conditions(DialConditions::Disconnected | DialConditions::NotDialing)
+    ///    .only_dial_if(DialConditions::Disconnected | DialConditions::NotDialing)
     ///    .build();
     /// ```
     #[derive(Debug, Copy, Clone)]
