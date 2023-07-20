@@ -3,6 +3,10 @@
 - Include gossipsub when compiling for wasm.
   See [PR 4217].
 
+- Add `json` feature which exposes `request_response::json`.
+  See [PR 4188].
+
+[PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
 [PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
 
 ## 0.52.1
