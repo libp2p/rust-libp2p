@@ -1,3 +1,10 @@
+## 0.52.2 - unreleased
+
+- Include gossipsub when compiling for wasm.
+  See [PR 4217].
+
+[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+
 ## 0.52.1
 
 - Add `libp2p-webtransport-websys` providing WebTransport for WASM environments.

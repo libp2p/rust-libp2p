@@ -2498,7 +2498,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.52.1"
+version = "0.52.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2858,7 +2858,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-metrics"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "instant",
  "libp2p-core",
