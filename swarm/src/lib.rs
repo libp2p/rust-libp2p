@@ -422,11 +422,13 @@ where
         let connection_id = dial_opts.connection_id();
 
         let should_dial = match (condition, peer_id) {
+            (_, None) => true,
             (PeerCondition::Always, _) => true,
-            (PeerCondition::Disconnected, None) => true,
-            (PeerCondition::NotDialing, None) => true,
             (PeerCondition::Disconnected, Some(peer_id)) => !self.pool.is_connected(peer_id),
             (PeerCondition::NotDialing, Some(peer_id)) => !self.pool.is_dialing(peer_id),
+            (PeerCondition::DisconnectedAndNotDialing, Some(peer_id)) => {
+                !self.pool.is_dialing(peer_id) && !self.pool.is_connected(peer_id)
+            }
         };
 
         if !should_dial {
