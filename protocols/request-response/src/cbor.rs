@@ -147,18 +147,13 @@ mod codec {
             cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
                 io::Error::new(io::ErrorKind::Other, e)
             }
-            cbor4ii::serde::DecodeError::Core(DecodeError::Unsupported { .. }) => {
-                io::Error::new(io::ErrorKind::Unsupported, err.to_string())
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Unsupported { .. }) => {
+                io::Error::new(io::ErrorKind::Unsupported, e)
             }
-
-            cbor4ii::serde::DecodeError::Core(DecodeError::Eof { .. }) => {
-                io::Error::new(io::ErrorKind::UnexpectedEof, err.to_string())
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Eof { .. }) => {
+                io::Error::new(io::ErrorKind::UnexpectedEof, e)
             }
-
-            cbor4ii::serde::DecodeError::Core(e) => {
-                io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-            }
-
+            cbor4ii::serde::DecodeError::Core(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             cbor4ii::serde::DecodeError::Custom(e) => {
                 io::Error::new(io::ErrorKind::Other, e.to_string())
             }
