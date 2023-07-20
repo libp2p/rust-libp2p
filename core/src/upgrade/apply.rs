@@ -55,7 +55,7 @@ where
 {
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future: multistream_select::listener_select_proto(conn, up.protocol_info().into_iter()),
+            future: multistream_select::listener_select_proto(conn, up.protocol_info()),
             upgrade: up,
         },
     }

@@ -129,7 +129,10 @@ where
 }
 
 #[cfg(feature = "async-std")]
-impl<T> DnsConfig<T> {
+impl<T> DnsConfig<T>
+where
+    T: Send,
+{
     /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
     pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
         let (cfg, opts) = system_conf::read_system_conf()?;
@@ -150,7 +153,10 @@ impl<T> DnsConfig<T> {
 }
 
 #[cfg(feature = "tokio")]
-impl<T> TokioDnsConfig<T> {
+impl<T> TokioDnsConfig<T>
+where
+    T: Send,
+{
     /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
     pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {
         let (cfg, opts) = system_conf::read_system_conf()?;
