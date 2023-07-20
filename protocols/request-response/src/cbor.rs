@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// A request-response behaviour using [`serde_cbor`] for serializing and deserializing the messages.
+/// A request-response behaviour using [`cbor4ii::serde`] for serializing and
+/// deserializing the messages.
 ///
 /// # Example
 ///
@@ -44,11 +45,12 @@ pub type Behaviour<Req, Resp> = crate::Behaviour<codec::Codec<Req, Resp>>;
 
 mod codec {
     use async_trait::async_trait;
+    use cbor4ii::core::error::DecodeError;
     use futures::prelude::*;
     use futures::{AsyncRead, AsyncWrite};
     use libp2p_swarm::StreamProtocol;
     use serde::{de::DeserializeOwned, Serialize};
-    use std::{io, marker::PhantomData};
+    use std::{collections::TryReserveError, convert::Infallible, io, marker::PhantomData};
 
     /// Max request size in bytes
     const REQUEST_SIZE_MAXIMUM: u64 = 1024 * 1024;
@@ -91,7 +93,7 @@ mod codec {
 
             io.take(REQUEST_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
-            serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
+            cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
         }
 
         async fn read_response<T>(&mut self, _: &Self::Protocol, io: &mut T) -> io::Result<Resp>
@@ -102,7 +104,7 @@ mod codec {
 
             io.take(RESPONSE_SIZE_MAXIMUM).read_to_end(&mut vec).await?;
 
-            serde_cbor::from_slice(vec.as_slice()).map_err(into_io_error)
+            cbor4ii::serde::from_slice(vec.as_slice()).map_err(decode_into_io_error)
         }
 
         async fn write_request<T>(
@@ -114,7 +116,8 @@ mod codec {
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data: Vec<u8> = serde_cbor::to_vec(&req).map_err(into_io_error)?;
+            let data: Vec<u8> =
+                cbor4ii::serde::to_vec(Vec::new(), &req).map_err(encode_into_io_error)?;
 
             io.write_all(data.as_ref()).await?;
 
@@ -130,7 +133,8 @@ mod codec {
         where
             T: AsyncWrite + Unpin + Send,
         {
-            let data: Vec<u8> = serde_cbor::to_vec(&resp).map_err(into_io_error).unwrap();
+            let data: Vec<u8> =
+                cbor4ii::serde::to_vec(Vec::new(), &resp).map_err(encode_into_io_error)?;
 
             io.write_all(data.as_ref()).await?;
 
@@ -138,15 +142,25 @@ mod codec {
         }
     }
 
-    fn into_io_error(err: serde_cbor::Error) -> io::Error {
-        if err.is_syntax() || err.is_data() {
-            return io::Error::new(io::ErrorKind::InvalidData, err);
+    fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
+        match err {
+            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
+                io::Error::new(io::ErrorKind::Other, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Unsupported { .. }) => {
+                io::Error::new(io::ErrorKind::Unsupported, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Eof { .. }) => {
+                io::Error::new(io::ErrorKind::UnexpectedEof, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e) => io::Error::new(io::ErrorKind::InvalidData, e),
+            cbor4ii::serde::DecodeError::Custom(e) => {
+                io::Error::new(io::ErrorKind::Other, e.to_string())
+            }
         }
+    }
 
-        if err.is_eof() {
-            return io::Error::new(io::ErrorKind::UnexpectedEof, err);
-        }
-
+    fn encode_into_io_error(err: cbor4ii::serde::EncodeError<TryReserveError>) -> io::Error {
         io::Error::new(io::ErrorKind::Other, err)
     }
 }

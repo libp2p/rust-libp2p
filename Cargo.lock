@@ -760,6 +760,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
+name = "cbor4ii"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13e8c816014cad3f58c2f0607677e8d2c6f76754dd8e735461a440b27b95199c"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3109,10 +3118,11 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "async-std",
  "async-trait",
+ "cbor4ii",
  "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
@@ -3127,7 +3137,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "serde",
- "serde_cbor",
  "serde_json",
  "smallvec",
  "void",
@@ -5016,16 +5025,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30e27d1e4fd7659406c492fd6cfaf2066ba8773de45ca75e855590f856dc34a9"
 dependencies = [
  "serde_derive",
-]
-
-[[package]]
-name = "serde_cbor"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2bef2ebfde456fb76bbcf9f59315333decc4fda0b2b44b420243c11e0f5ec1f5"
-dependencies = [
- "half",
- "serde",
 ]
 
 [[package]]
