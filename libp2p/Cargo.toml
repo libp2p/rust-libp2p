@@ -44,6 +44,7 @@ full = [
     "wasm-bindgen",
     "wasm-ext",
     "wasm-ext-websocket",
+    "wasm-ext-webrtc",
     "websocket",
     "webtransport-websys",
     "yamux",
@@ -81,6 +82,7 @@ uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
+wasm-ext-webrtc = ["wasm-ext", "libp2p-wasm-ext?/webrtc"]
 websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]

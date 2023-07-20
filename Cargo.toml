@@ -13,6 +13,7 @@ members = [
     "examples/ping-example",
     "examples/relay-server",
     "examples/rendezvous",
+    "examples/wasm-ext-webrtc",
     "identity",
     "interop-tests",
     "misc/allow-block-list",
@@ -108,7 +109,7 @@ multihash = "0.19.0"
 
 [patch.crates-io]
 
-# Patch away `libp2p-idnentity` in our dependency tree with the workspace version.
+# Patch away `libp2p-identity` in our dependency tree with the workspace version.
 # `libp2p-identity` is a leaf dependency and used within `rust-multiaddr` which is **not** part of the workspace.
 # As a result, we cannot just reference the workspace version in our crates because the types would mismatch with what
 # we import via `rust-multiaddr`.
