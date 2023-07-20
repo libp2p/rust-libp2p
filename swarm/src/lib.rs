@@ -418,48 +418,62 @@ where
         let dial_conditions = dial_opts.dial_conditions();
         let connection_id = dial_opts.connection_id();
 
-        let dial_failure = if let Some(peer_id) = peer_id {
-            match condition {
-                // Only use deprecated `peer_condition` when the `Option` was explicitly set.
-                Some(condition) => match condition {
-                    PeerCondition::Disconnected if !self.pool.is_connected(peer_id) => Some(
-                        DialError::DialPeerConditionFalse(PeerCondition::Disconnected),
-                    ),
-                    PeerCondition::NotDialing if !self.pool.is_dialing(peer_id) => {
-                        Some(DialError::DialPeerConditionFalse(PeerCondition::NotDialing))
-                    }
-                    _ => None,
-                },
-                None => {
-                    if dial_conditions.contains(DialConditions::Disconnected)
-                        && self.pool.is_connected(peer_id)
-                    {
-                        Some(DialError::DialPeerConditionFalse(
-                            PeerCondition::Disconnected,
-                        ))
-                    } else if dial_conditions.contains(DialConditions::NotDialing)
-                        && self.pool.is_dialing(peer_id)
-                    {
-                        Some(DialError::DialPeerConditionFalse(PeerCondition::NotDialing))
-                    } else {
-                        None
-                    }
+        // `peer_condition` is deprecated; only use if explicitly set (`Some`).
+        // Block to be removed once `peer_condition` is removed.
+        if let Some(condition) = condition {
+            let false_condition = match (condition, peer_id) {
+                (PeerCondition::Disconnected, Some(peer_id))
+                    if !self.pool.is_connected(peer_id) =>
+                {
+                    Some(PeerCondition::Disconnected)
                 }
+                (PeerCondition::NotDialing, Some(peer_id)) if !self.pool.is_dialing(peer_id) => {
+                    Some(PeerCondition::NotDialing)
+                }
+                _ => None,
+            };
+
+            if let Some(condition) = false_condition {
+                let e = DialError::DialPeerConditionFalse(condition);
+
+                self.behaviour
+                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                        peer_id,
+                        error: &e,
+                        connection_id,
+                    }));
+
+                return Err(e);
             }
-        // Conditions are not used without a `PeerId`.
         } else {
-            None
-        };
+            let false_condition = if let Some(peer_id) = peer_id {
+                if dial_conditions.contains(DialConditions::Disconnected)
+                    && self.pool.is_connected(peer_id)
+                {
+                    Some(PeerCondition::Disconnected)
+                } else if dial_conditions.contains(DialConditions::NotDialing)
+                    && self.pool.is_dialing(peer_id)
+                {
+                    Some(PeerCondition::NotDialing)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
 
-        if let Some(e) = dial_failure {
-            self.behaviour
-                .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                    peer_id,
-                    error: &e,
-                    connection_id,
-                }));
+            if let Some(condition) = false_condition {
+                let e = DialError::DialPeerConditionFalse(condition);
 
-            return Err(e);
+                self.behaviour
+                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                        peer_id,
+                        error: &e,
+                        connection_id,
+                    }));
+
+                return Err(e);
+            }
         }
 
         let addresses = {
