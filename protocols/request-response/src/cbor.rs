@@ -144,16 +144,16 @@ mod codec {
 
     fn decode_into_io_error(err: cbor4ii::serde::DecodeError<Infallible>) -> io::Error {
         match err {
-            cbor4ii::serde::DecodeError::Core(e) => match e {
-                DecodeError::Read(e) => io::Error::new(io::ErrorKind::Other, e),
-                DecodeError::Unsupported { .. } => {
-                    io::Error::new(io::ErrorKind::Unsupported, e.to_string())
-                }
-                DecodeError::Eof { .. } => {
-                    io::Error::new(io::ErrorKind::UnexpectedEof, e.to_string())
-                }
-                e => io::Error::new(io::ErrorKind::InvalidData, e.to_string()),
-            },
+            cbor4ii::serde::DecodeError::Core(DecodeError::Read(e)) => {
+                io::Error::new(io::ErrorKind::Other, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Unsupported { .. }) => {
+                io::Error::new(io::ErrorKind::Unsupported, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e @ DecodeError::Eof { .. }) => {
+                io::Error::new(io::ErrorKind::UnexpectedEof, e)
+            }
+            cbor4ii::serde::DecodeError::Core(e) => io::Error::new(io::ErrorKind::InvalidData, e),
             cbor4ii::serde::DecodeError::Custom(e) => {
                 io::Error::new(io::ErrorKind::Other, e.to_string())
             }
