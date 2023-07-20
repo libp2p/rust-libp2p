@@ -419,7 +419,7 @@ where
         let connection_id = dial_opts.connection_id();
 
         // `peer_condition` is deprecated; only use if explicitly set (`Some`).
-        // Block to be removed once `peer_condition` is removed.
+        // Code block to be removed once `peer_condition` is removed.
         if let Some(condition) = condition {
             let false_condition = match (condition, peer_id) {
                 (PeerCondition::Disconnected, Some(peer_id))
@@ -445,35 +445,35 @@ where
 
                 return Err(e);
             }
-        } else {
-            let false_condition = if let Some(peer_id) = peer_id {
-                if dial_conditions.contains(DialConditions::Disconnected)
-                    && self.pool.is_connected(peer_id)
-                {
-                    Some(PeerCondition::Disconnected)
-                } else if dial_conditions.contains(DialConditions::NotDialing)
-                    && self.pool.is_dialing(peer_id)
-                {
-                    Some(PeerCondition::NotDialing)
-                } else {
-                    None
-                }
+        }
+
+        let false_condition = if let Some(peer_id) = peer_id {
+            if dial_conditions.contains(DialConditions::Disconnected)
+                && self.pool.is_connected(peer_id)
+            {
+                Some(PeerCondition::Disconnected)
+            } else if dial_conditions.contains(DialConditions::NotDialing)
+                && self.pool.is_dialing(peer_id)
+            {
+                Some(PeerCondition::NotDialing)
             } else {
                 None
-            };
-
-            if let Some(condition) = false_condition {
-                let e = DialError::DialPeerConditionFalse(condition);
-
-                self.behaviour
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                        peer_id,
-                        error: &e,
-                        connection_id,
-                    }));
-
-                return Err(e);
             }
+        } else {
+            None
+        };
+
+        if let Some(condition) = false_condition {
+            let e = DialError::DialPeerConditionFalse(condition);
+
+            self.behaviour
+                .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                    peer_id,
+                    error: &e,
+                    connection_id,
+                }));
+
+            return Err(e);
         }
 
         let addresses = {
