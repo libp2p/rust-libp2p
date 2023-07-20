@@ -34,9 +34,10 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use futures::{future::Ready, prelude::*, ready, stream::SelectAll};
+use futures::{future::Ready, prelude::*, ready, stream::SelectAll, Stream, StreamExt};
 use libp2p_core::{
     connection::Endpoint,
+    muxing::{StreamMuxer, StreamMuxerEvent, SubstreamBox},
     transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
@@ -143,6 +144,25 @@ pub mod ffi {
     extern "C" {
         /// Returns a `Transport` implemented using websockets.
         pub fn websocket_transport() -> Transport;
+    }
+
+    #[cfg(feature = "webrtc")]
+    #[wasm_bindgen(module = "/src/webrtc.js")]
+    extern "C" {
+        /// Returns a `Transport` implemented using webrtc.
+        ///
+        /// # Arguments
+        /// - `protobuf_key`: Vec<u8> - The private key is a protobuf encoded private key.
+        /// ```
+        /// use libp2p::identity::Keypair;
+        /// use libp2p::identity::ed25519::Keypair;
+        ///
+        /// let keypair = Keypair::generate_ed25519();
+        /// let encoded = keypair.to_protobuf_encoding().unwrap();
+        /// let transport = webrtc_transport(encoded);
+        /// ```
+        pub fn webrtc_transport(protobuf_key: Vec<u8>) -> Transport;
+        pub fn webrtc_direct_transport(protobuf_key: Vec<u8>) -> Transport;
     }
 }
 
@@ -653,3 +673,51 @@ impl fmt::Display for JsErr {
 }
 
 impl error::Error for JsErr {}
+
+impl libp2p_core::StreamMuxer for Connection {
+    type Substream = Connection;
+    type Error = JsErr;
+
+    fn poll_inbound(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        // Read the next incoming stream from the JS channel
+        let val = ready!(self
+            .inner
+            .read()
+            .next()
+            .map_err(|err| JsErr::from(err))?
+            .ok_or_else(|| JsErr::from(io::ErrorKind::UnexpectedEof))?);
+
+        // Convert the JS value into a `Connection`
+        let conn = Connection::new(val.into());
+
+        // Return the connection
+        Poll::Ready(Ok(conn))
+    }
+
+    fn poll_outbound(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.inner
+            .poll_write(cx)
+            .map_ok(|_| Stream::new(self.read_iterator.clone()))
+    }
+
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        self.inner.close();
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        Poll::Pending
+    }
+}
