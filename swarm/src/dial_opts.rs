@@ -311,14 +311,18 @@ impl WithoutPeerIdWithAddress {
 #[derive(Debug, Copy, Clone, Default)]
 pub enum PeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
-    /// considered disconnected, i.e. there is no established connection
-    /// and no ongoing dialing attempt.
-    #[default]
+    /// considered disconnected, i.e. there is no established connection.
     Disconnected,
     /// A new dialing attempt is initiated _only if_ there is currently
     /// no ongoing dialing attempt, i.e. the peer is either considered
     /// disconnected or connected but without an ongoing dialing attempt.
     NotDialing,
+    /// A combination of [`Disconnected`](PeerCondition::Disconnected) and
+    /// [`NotDialing`](PeerCondition::NotDialing). A new dialing attempt is
+    /// iniated _only if_ the peer is both considered disconnected and there
+    /// is currently no ongoing dialing attempt.
+    #[default]
+    DisconnectedAndNotDialing,
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
     Always,
