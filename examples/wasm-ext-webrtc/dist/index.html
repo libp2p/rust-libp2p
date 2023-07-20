@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head>
+        <meta charset="utf-8">
+        <script type="module">import init from '/webrtc-wasm-ext-71fb1022796ddb00.js';init('/webrtc-wasm-ext-71fb1022796ddb00_bg.wasm');</script>
+        <link rel="icon" href="/favicon-3ea73b99388d740a.ico">
+        <link rel="stylesheet" href="/output-1faacb244d56cc6a.css">
+        <title>Rust Libp2p in Leptos with WebRTC</title>
+    
+<link rel="preload" href="/webrtc-wasm-ext-71fb1022796ddb00_bg.wasm" as="fetch" type="application/wasm" crossorigin="">
+<link rel="modulepreload" href="/webrtc-wasm-ext-71fb1022796ddb00.js"></head>
+
+    <body>
+
+<script>(function () {
+    var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var url = protocol + '//' + window.location.host + '/_trunk/ws';
+    var poll_interval = 5000;
+    var reload_upon_connect = () => {
+        window.setTimeout(
+            () => {
+                // when we successfully reconnect, we'll force a
+                // reload (since we presumably lost connection to
+                // trunk due to it being killed, so it will have
+                // rebuilt on restart)
+                var ws = new WebSocket(url);
+                ws.onopen = () => window.location.reload();
+                ws.onclose = reload_upon_connect;
+            },
+            poll_interval);
+    };
+
+    var ws = new WebSocket(url);
+    ws.onmessage = (ev) => {
+        const msg = JSON.parse(ev.data);
+        if (msg.reload) {
+            window.location.reload();
+        }
+    };
+    ws.onclose = reload_upon_connect;
+})()
+</script></body></html>
