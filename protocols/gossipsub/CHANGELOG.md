@@ -1,4 +1,10 @@
-## 0.45.0 
+## 0.45.1 - unreleased
+
+- Add getter function to obtain `TopicScoreParams`.
+
+[PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231
+
+## 0.45.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
