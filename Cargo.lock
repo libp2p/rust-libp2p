@@ -754,6 +754,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "callback-future"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b76a63a41df0ba9490dd817a3d98511c6d3d9e530eff9bcf5f3de2a6723d1c3f"
+dependencies = [
+ "futures",
+]
+
+[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3306,6 +3315,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-webrtc-websys"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "callback-future",
+ "futures",
+ "getrandom 0.2.10",
+ "hex",
+ "hex-literal",
+ "js-sys",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "log",
+ "multiaddr",
+ "multihash",
+ "regex",
+ "send_wrapper 0.6.0",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "thiserror",
+ "tinytemplate",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "libp2p-websocket"
 version = "0.42.0"
 dependencies = [
@@ -5040,9 +5078,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.100"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1e14e89be7aa4c4b78bdbdc9eb5bf8517829a600ae8eaa39a6e1d960b5185c"
+checksum = "d03b412469450d4404fe8499a268edd7f8b79fecb074b0d812ad64ca21f4031b"
 dependencies = [
  "indexmap 2.0.0",
  "itoa",
@@ -5616,6 +5654,17 @@ dependencies = [
  "rustls 0.20.8",
  "tokio",
  "webpki 0.22.0",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
+dependencies = [
+ "futures-core",
+ "pin-project-lite 0.2.9",
+ "tokio",
 ]
 
 [[package]]
@@ -6423,6 +6472,41 @@ dependencies = [
  "thiserror",
  "tokio",
  "winapi",
+]
+
+[[package]]
+name = "webrtc-websys-test-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "futures",
+ "libp2p",
+ "libp2p-identity",
+ "libp2p-webrtc",
+ "rand 0.8.5",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower-http",
+ "void",
+ "webrtc-websys-tests",
+]
+
+[[package]]
+name = "webrtc-websys-tests"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "getrandom 0.2.10",
+ "libp2p",
+ "libp2p-identity",
+ "multiaddr",
+ "multihash",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]
