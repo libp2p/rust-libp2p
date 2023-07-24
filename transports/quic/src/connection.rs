@@ -45,6 +45,8 @@ pub struct Connection {
     outgoing: Option<
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
     >,
+    /// Future to wait for the connection to be closed.
+    closing: Option<BoxFuture<'static, quinn::ConnectionError>>,
 }
 
 impl Connection {
@@ -57,6 +59,7 @@ impl Connection {
             connection,
             incoming: None,
             outgoing: None,
+            closing: None,
         }
     }
 }
@@ -108,8 +111,21 @@ impl StreamMuxer for Connection {
         Poll::Pending
     }
 
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.connection.close(From::from(0u32), &[]);
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.get_mut();
+
+        let closing = this.closing.get_or_insert_with(|| {
+            this.connection.close(From::from(0u32), &[]);
+            let connection = this.connection.clone();
+            async move { connection.closed().await }.boxed()
+        });
+
+        match futures::ready!(closing.poll_unpin(cx)) {
+            // Expected error given that `connection.close` was called above.
+            quinn::ConnectionError::LocallyClosed => {}
+            error => return Poll::Ready(Err(Error::Connection(ConnectionError(error)))),
+        };
+
         Poll::Ready(Ok(()))
     }
 }
