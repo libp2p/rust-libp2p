@@ -1,4 +1,4 @@
-## unreleased
+## 0.43.2 - unreleased
 - Display the cause of a `ListenError::Denied`.
   See [PR 4232]
 
