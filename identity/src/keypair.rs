@@ -769,7 +769,7 @@ mod tests {
         ))
         .unwrap();
 
-        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Secp256k1);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Ed25519);
     }
 
     #[test]
