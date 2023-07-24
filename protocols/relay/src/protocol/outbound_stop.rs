@@ -18,112 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::protocol::{MAX_MESSAGE_SIZE, STOP_PROTOCOL_NAME};
-use asynchronous_codec::{Framed, FramedParts};
-use bytes::Bytes;
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade;
-use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
-use std::convert::TryInto;
-use std::iter;
-use std::time::Duration;
 use thiserror::Error;
 
-pub struct Upgrade {
-    pub src_peer_id: PeerId,
-    pub max_circuit_duration: Duration,
-    pub max_circuit_bytes: u64,
-}
-
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(STOP_PROTOCOL_NAME)
-    }
-}
-
-impl upgrade::OutboundUpgrade<Stream> for Upgrade {
-    type Output = (Stream, Bytes);
-    type Error = UpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, substream: Stream, _: Self::Info) -> Self::Future {
-        let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::CONNECT,
-            peer: Some(proto::Peer {
-                id: self.src_peer_id.to_bytes(),
-                addrs: vec![],
-            }),
-            limit: Some(proto::Limit {
-                duration: Some(
-                    self.max_circuit_duration
-                        .as_secs()
-                        .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
-                ),
-                data: Some(self.max_circuit_bytes),
-            }),
-            status: None,
-        };
-
-        let mut substream = Framed::new(
-            substream,
-            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
-        );
-
-        async move {
-            substream.send(msg).await?;
-            let proto::StopMessage {
-                type_pb,
-                peer: _,
-                limit: _,
-                status,
-            } = substream
-                .next()
-                .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
-
-            match type_pb {
-                proto::StopMessageType::CONNECT => {
-                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
-                }
-                proto::StopMessageType::STATUS => {}
-            }
-
-            match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
-                proto::Status::OK => {}
-                proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                    return Err(CircuitFailedReason::ResourceLimitExceeded.into())
-                }
-                proto::Status::PERMISSION_DENIED => {
-                    return Err(CircuitFailedReason::PermissionDenied.into())
-                }
-                s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
-            }
-
-            let FramedParts {
-                io,
-                read_buffer,
-                write_buffer,
-                ..
-            } = substream.into_parts();
-            assert!(
-                write_buffer.is_empty(),
-                "Expect a flushed Framed to have an empty write buffer."
-            );
-
-            Ok((io, read_buffer.freeze()))
-        }
-        .boxed()
-    }
-}
+use crate::proto;
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub(crate) enum UpgradeError {
     #[error("Circuit failed")]
     CircuitFailed(#[from] CircuitFailedReason),
     #[error("Fatal")]

@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::priv_client::transport;
-use crate::proto;
-use crate::protocol::{self, inbound_stop, outbound_hop};
+use std::collections::{HashMap, VecDeque};
+use std::fmt;
+use std::task::{Context, Poll};
+use std::time::Duration;
+
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
@@ -28,21 +30,24 @@ use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
+use log::debug;
+
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
-use log::debug;
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
-use std::task::{Context, Poll};
-use std::time::Duration;
+
+use crate::priv_client::transport;
+use crate::protocol::inbound_stop::{open_circuit, Circuit};
+use crate::protocol::{self, inbound_stop, outbound_hop};
+use crate::{proto, STOP_PROTOCOL_NAME};
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -140,8 +145,10 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs:
-        HashMap<PeerId, BoxFuture<'static, Result<(), protocol::inbound_stop::UpgradeError>>>,
+    open_circuit_futs:
+        FuturesUnordered<BoxFuture<'static, Result<Circuit, inbound_stop::FatalUpgradeError>>>,
+
+    circuit_deny_futs: HashMap<PeerId, BoxFuture<'static, Result<(), inbound_stop::UpgradeError>>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -160,69 +167,10 @@ impl Handler {
             pending_error: Default::default(),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
+            open_circuit_futs: Default::default(),
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
-        }
-    }
-
-    fn on_fully_negotiated_inbound(
-        &mut self,
-        FullyNegotiatedInbound {
-            protocol: inbound_circuit,
-            ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
-    ) {
-        match &mut self.reservation {
-            Reservation::Accepted { pending_msgs, .. }
-            | Reservation::Renewing { pending_msgs, .. } => {
-                let src_peer_id = inbound_circuit.src_peer_id();
-                let limit = inbound_circuit.limit();
-
-                let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-                let connection = super::ConnectionState::new_inbound(inbound_circuit, tx);
-
-                pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
-                    // stream: connection,
-                    stream: super::Connection { state: connection },
-                    src_peer_id,
-                    relay_peer_id: self.remote_peer_id,
-                    relay_addr: self.remote_addr.clone(),
-                });
-
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundCircuitEstablished { src_peer_id, limit },
-                    ));
-            }
-            Reservation::None => {
-                let src_peer_id = inbound_circuit.src_peer_id();
-
-                if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
-                    && !self.circuit_deny_futs.contains_key(&src_peer_id)
-                {
-                    log::warn!(
-                        "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
-                        src_peer_id,
-                    );
-                } else if self
-                    .circuit_deny_futs
-                    .insert(
-                        src_peer_id,
-                        inbound_circuit.deny(proto::Status::NO_RESERVATION).boxed(),
-                    )
-                    .is_some()
-                {
-                    log::warn!(
-                            "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
-                            src_peer_id
-                        )
-                }
-            }
         }
     }
 
@@ -288,19 +236,6 @@ impl Handler {
 
             _ => unreachable!(),
         }
-    }
-
-    fn on_listen_upgrade_error(
-        &mut self,
-        ListenUpgradeError {
-            error: inbound_stop::UpgradeError::Fatal(error),
-            ..
-        }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
-        >,
-    ) {
-        self.pending_error = Some(StreamUpgradeError::Apply(Either::Left(error)));
     }
 
     fn on_dial_upgrade_error(
@@ -394,6 +329,28 @@ impl Handler {
             }
         }
     }
+
+    fn insert_to_deny_futs(&mut self, circuit: Circuit) {
+        let src_peer_id = circuit.src_peer_id();
+
+        if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
+            && !self.circuit_deny_futs.contains_key(&src_peer_id)
+        {
+            log::warn!(
+                "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
+                src_peer_id
+            );
+        } else if self
+            .circuit_deny_futs
+            .insert(
+                src_peer_id,
+                circuit.deny(proto::Status::NO_RESERVATION).boxed(),
+            )
+            .is_some()
+        {
+            log::warn!("Dropping existing inbound circuit request to be denied from {:?} in favor of new one.", src_peer_id);
+        }
+    }
 }
 
 impl ConnectionHandler for Handler {
@@ -402,13 +359,13 @@ impl ConnectionHandler for Handler {
     type Error = StreamUpgradeError<
         Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
-    type InboundProtocol = inbound_stop::Upgrade;
+    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type InboundOpenInfo = ();
     type OutboundProtocol = outbound_hop::Upgrade;
     type OutboundOpenInfo = OutboundOpenInfo;
-    type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
+        SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ())
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
@@ -461,6 +418,42 @@ impl ConnectionHandler for Handler {
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
+        }
+
+        if let Poll::Ready(Some(circuit_res)) = self.open_circuit_futs.poll_next_unpin(cx) {
+            match circuit_res {
+                Ok(circuit) => match &mut self.reservation {
+                    Reservation::Accepted { pending_msgs, .. }
+                    | Reservation::Renewing { pending_msgs, .. } => {
+                        let src_peer_id = circuit.src_peer_id();
+                        let limit = circuit.limit();
+
+                        let (tx, rx) = oneshot::channel();
+                        self.alive_lend_out_substreams.push(rx);
+                        let connection = super::ConnectionState::new_inbound(circuit, tx);
+
+                        pending_msgs.push_back(
+                            transport::ToListenerMsg::IncomingRelayedConnection {
+                                stream: super::Connection { state: connection },
+                                src_peer_id,
+                                relay_peer_id: self.remote_peer_id,
+                                relay_addr: self.remote_addr.clone(),
+                            },
+                        );
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::InboundCircuitEstablished { src_peer_id, limit },
+                        ));
+                    }
+                    Reservation::None => {
+                        self.insert_to_deny_futs(circuit);
+                    }
+                },
+                Err(e) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                        Either::Left(e),
+                    )));
+                }
+            }
         }
 
         if let Poll::Ready(Some(protocol)) = self.reservation.poll(cx) {
@@ -533,19 +526,20 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
-                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: stream,
+                ..
+            }) => {
+                self.open_circuit_futs.push(open_circuit(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
-            }
-            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
-                self.on_listen_upgrade_error(listen_upgrade_error)
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
             ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
