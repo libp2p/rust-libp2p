@@ -67,22 +67,6 @@ impl Fingerprint {
         self.0.map(|byte| format!("{byte:02X}")).join(":")
     }
 
-    /// From SDP format
-    /// fingerprintRegex = /^a=fingerprint:(?:\w+-[0-9]+)\s(?<fingerprint>(:?[0-9a-fA-F]{2})+)$/m
-    pub fn from_sdp_format(sdp_format: &str) -> Option<Self> {
-        let mut bytes = [0u8; 32];
-        let mut i = 0;
-        for byte in sdp_format.split(':') {
-            if byte.len() != 2 {
-                return None;
-            }
-            let byte = u8::from_str_radix(byte, 16).ok()?;
-            bytes[i] = byte;
-            i += 1;
-        }
-        Some(Self(bytes))
-    }
-
     /// Returns the algorithm used (e.g. "sha-256").
     /// See <https://datatracker.ietf.org/doc/html/rfc8122#section-5>
     pub fn algorithm(&self) -> String {
