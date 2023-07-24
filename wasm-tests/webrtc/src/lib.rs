@@ -1,16 +1,7 @@
-use futures::channel::oneshot;
-use futures::{AsyncReadExt, AsyncWriteExt};
-use getrandom::getrandom;
-use libp2p::core::{StreamMuxer, Transport as _};
-use libp2p::noise;
-use libp2p_identity::{Keypair, PeerId};
-// use libp2p_webtransport_websys::{Config, Connection, Error, Stream, Transport};
-use multiaddr::{Multiaddr, Protocol};
-use multihash::Multihash;
-use std::future::poll_fn;
-use std::pin::Pin;
+use libp2p_identity::Keypair;
+use multiaddr::Multiaddr;
 use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 use web_sys::{window, Response};
 
@@ -20,8 +11,8 @@ pub const PORT: u16 = 4455;
 
 #[wasm_bindgen_test]
 async fn connect_without_peer_id() {
-    let mut addr = fetch_server_addr().await;
-    let keypair = Keypair::generate_ed25519();
+    let addr = fetch_server_addr().await;
+    let _keypair = Keypair::generate_ed25519();
 
     // eprintln
     eprintln!("addr: {:?}", addr);

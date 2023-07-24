@@ -13,14 +13,14 @@ futures = "0.3.28"
 rand = "0.8"
 void = "1"
 libp2p-identity = { workspace = true }
+libp2p-core = { workspace = true, features = [] }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
+multiaddr = { workspace = true }
+libp2p-ping = { workspace = true }
+libp2p-relay = { workspace = true }
 tokio = { version = "1.29", features = ["rt", "macros", "signal", "net"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tokio-stream = "0.1"
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 webrtc-websys-tests = { path = "../" }                                     # for PORT
 tower-http = { version = "0.4.0", features = ["cors"] }                    # axum middleware
-
-[dependencies.libp2p]
-path = "../../../libp2p"
-version = "0.52.1"
-features = ["tokio", "noise", "relay", "ping", "macros"]
