@@ -57,11 +57,7 @@ impl AsyncRead for Stream {
                 return Poll::Ready(Ok(0));
             }
         }
-        let read_result = futures::ready!(Pin::new(&mut self.recv).poll_read(cx, buf));
-        if read_result.is_err() {
-            return Poll::Ready(Ok(0));
-        }
-        Poll::Ready(read_result)
+        Pin::new(&mut self.recv).poll_read(cx, buf)
     }
 }
 
