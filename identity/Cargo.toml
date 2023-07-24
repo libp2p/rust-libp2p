@@ -42,7 +42,7 @@ peerid = [ "dep:multihash", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" 
 quickcheck = { workspace = true }
 base64 = "0.21.2"
 serde_json = "1.0"
-rmp-serde = "1.0"
+rmp-serde = "1.1"
 criterion = "0.5"
 hex-literal = "0.4.1"
 
