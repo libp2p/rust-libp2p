@@ -1,3 +1,10 @@
+## 0.2.2 - unreleased
+
+- Implement `from_protobuf_encoding` for RSA `Keypair`.
+  See [PR 4193].
+
+[PR 4193]: https://github.com/libp2p/rust-libp2p/pull/4193
+
 ## 0.2.1
 
 - Expose `KeyType` for `PublicKey` and `Keypair`.
