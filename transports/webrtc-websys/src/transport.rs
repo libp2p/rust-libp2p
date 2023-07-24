@@ -76,7 +76,7 @@ impl libp2p_core::Transport for Transport {
         }
 
         let config = self.config.clone();
-        let connection = Connection::new(sock_addr, server_fingerprint, config.keypair.clone());
+        let mut connection = Connection::new(sock_addr, server_fingerprint, config.keypair.clone());
 
         Ok(async move {
             let peer_id = connection.connect().await?;
