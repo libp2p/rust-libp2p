@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-asynchronous-codec = "0.6.1"
+asynchronous-codec = "0.6.2"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
