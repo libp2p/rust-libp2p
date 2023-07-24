@@ -42,6 +42,17 @@ impl std::fmt::Debug for Keypair {
 }
 
 impl Keypair {
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#1 RSAPrivateKey
+    /// format (i.e. unencrypted) as defined in [RFC3447].
+    ///
+    /// [RFC3447]: https://tools.ietf.org/html/rfc3447#appendix-A.1.2
+    pub fn try_decode_pkcs1(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        let kp = RsaKeyPair::from_der(der)
+            .map_err(|e| DecodingError::failed_to_parse("RSA DER PKCS#1 RSAPrivateKey", e))?;
+        der.zeroize();
+        Ok(Keypair(Arc::new(kp)))
+    }
+
     /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
