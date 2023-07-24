@@ -24,7 +24,7 @@ quick-protobuf = "0.8"
 smallvec = "1.11.0"
 thiserror = "1.0"
 void = "1.0"
-either = "1.8.0"
+either = "1.9.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
