@@ -21,7 +21,7 @@
 //! Implementation of UPnP port mapping for libp2p.
 //!
 //! This crate provides a `tokio::Behaviour` and `async_std::Behaviour`, depending on the enabled features, which
-//! implements the `NetworkBehaviour` trait. This struct will automatically try to map the ports externally to internal
+//! implements the [`NetworkBehaviour`] trait. This struct will automatically try to map the ports externally to internal
 //! addresses on the gateway.
 //!
 
@@ -64,7 +64,7 @@ impl Config {
         }
     }
 
-    /// Configures if the port mappings be temporary (1 hour) or permanent.
+    /// Configures the port mappings to be temporary (1 hour) or permanent.
     pub fn temporary(self, temporary: bool) -> Self {
         Self { temporary, ..self }
     }

@@ -95,7 +95,7 @@ macro_rules! impl_provider {
                         select! {
                             req = task_receiver.select_next_some() => {
                                 let fut = match req {
-                                    GatewayRequest::AddMapping(mapping, duration) => {
+                                    GatewayRequest::AddMapping{ mapping, duration } => {
                                         let duration = duration.unwrap_or(0);
                                         let gateway = gateway.clone();
                                         async move {
