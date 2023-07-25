@@ -210,10 +210,6 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        // NOTE: This function can be denied by other network behaviours and therefore is not a true
-        // representation of an established connection.
-        // These cases are corrected in the swarm event.
-
         self.check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
