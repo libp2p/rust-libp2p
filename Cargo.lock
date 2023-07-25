@@ -6509,6 +6509,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-ping",
  "libp2p-relay",
+ "libp2p-swarm",
  "libp2p-webrtc",
  "multiaddr",
  "rand 0.8.5",
