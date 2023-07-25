@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
@@ -209,6 +210,10 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
+        // NOTE: This function can be denied by other network behaviours and therefore is not a true
+        // representation of an established connection.
+        // These cases are corrected in the swarm event.
+
         self.check_limit(
             self.limits.max_pending_incoming,
             self.pending_inbound_connections.len(),
@@ -249,11 +254,10 @@ impl NetworkBehaviour for Behaviour {
             Kind::EstablishedTotal,
         )?;
 
-        self.established_inbound_connections.insert(connection_id);
-        self.established_per_peer
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
+        // NOTE: This function can be denied by other network behaviours and therefore is not a true
+        // representation of an established connection.
+        // Therefore it cannot be used to indicate an established connection. FromSwarm
+        // events must be used.
 
         Ok(dummy::ConnectionHandler)
     }
@@ -284,7 +288,6 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
-
         self.check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
@@ -305,11 +308,10 @@ impl NetworkBehaviour for Behaviour {
             Kind::EstablishedTotal,
         )?;
 
-        self.established_outbound_connections.insert(connection_id);
-        self.established_per_peer
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
+        // NOTE: This function can be denied by other network behaviours and therefore is not a true
+        // representation of an established connection.
+        // Therefore it cannot be used to indicate an established connection. FromSwarm
+        // events must be used.
 
         Ok(dummy::ConnectionHandler)
     }
@@ -327,11 +329,43 @@ impl NetworkBehaviour for Behaviour {
                     .entry(peer_id)
                     .or_default()
                     .remove(&connection_id);
+
+                self.pending_inbound_connections.remove(&connection_id);
+                self.pending_outbound_connections.remove(&connection_id);
             }
-            FromSwarm::ConnectionEstablished(_) => {}
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                endpoint: ConnectedPoint::Dialer { .. },
+                connection_id,
+                ..
+            }) => {
+                // This is an outbound connection
+
+                self.established_outbound_connections.insert(connection_id);
+                self.established_per_peer
+                    .entry(peer_id)
+                    .or_default()
+                    .insert(connection_id);
+            }
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                endpoint: ConnectedPoint::Listener { .. },
+                connection_id,
+                ..
+            }) => {
+                self.established_inbound_connections.insert(connection_id);
+                self.established_per_peer
+                    .entry(peer_id)
+                    .or_default()
+                    .insert(connection_id);
+            }
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.pending_outbound_connections.remove(&connection_id);
+            }
             FromSwarm::AddressChange(_) => {}
-            FromSwarm::DialFailure(_) => {}
-            FromSwarm::ListenFailure(_) => {}
+            FromSwarm::ListenFailure(ListenFailure { connection_id, .. }) => {
+                self.pending_inbound_connections.remove(&connection_id);
+            }
             FromSwarm::NewListener(_) => {}
             FromSwarm::NewListenAddr(_) => {}
             FromSwarm::ExpiredListenAddr(_) => {}
