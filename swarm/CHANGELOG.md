@@ -1,3 +1,9 @@
+## 0.43.2 - unreleased
+- Display the cause of a `ListenError::Denied`.
+  See [PR 4232]
+
+[PR 4232]: https://github.com/libp2p/rust-libp2p/pull/4158
+
 ## 0.43.1
 
 - Do not announce external address candidate before address translation, unless translation does not apply.
