@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{RtcConfiguration, RtcDataChannel, RtcDataChannelInit, RtcPeerConnection};
+use web_sys::{RtcConfiguration, RtcDataChannel, RtcPeerConnection};
 
 pub const SHA2_256: u64 = 0x12;
 pub const SHA2_512: u64 = 0x13;
@@ -160,12 +160,9 @@ impl ConnectionInner {
     /// This closes the data channels also and they will return an error
     /// if they are used.
     fn close_connection(&mut self) {
-        match (&self.peer_connection, self.closed) {
-            (Some(conn), false) => {
-                conn.close();
-                self.closed = true;
-            }
-            _ => (),
+        if let (Some(conn), false) = (&self.peer_connection, self.closed) {
+            conn.close();
+            self.closed = true;
         }
     }
 }

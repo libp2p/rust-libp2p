@@ -1,6 +1,5 @@
-use js_sys::{Promise, Reflect};
+use js_sys::Promise;
 use send_wrapper::SendWrapper;
-use std::io;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::Error;
@@ -55,7 +54,7 @@ where
     }
 }
 
-pub fn gen_ufrag(len: usize) -> String {
+pub(crate) fn gen_ufrag(len: usize) -> String {
     let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     let mut ufrag = String::new();

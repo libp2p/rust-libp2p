@@ -1,4 +1,3 @@
-use libp2p_core::transport::TransportError;
 use wasm_bindgen::{JsCast, JsValue};
 
 /// Errors that may happen on the [`Transport`](crate::Transport) or the

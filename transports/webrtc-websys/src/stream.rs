@@ -1,6 +1,5 @@
 //! The Substream over the Connection
 use crate::cbfutures::CbFuture;
-use futures::future::poll_fn;
 use futures::{AsyncRead, AsyncWrite, FutureExt};
 use send_wrapper::SendWrapper;
 use std::io;
@@ -14,9 +13,6 @@ use web_sys::{
 
 macro_rules! console_log {
     ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
-macro_rules! console_warn {
-    ($($t:tt)*) => (warn(&format_args!($($t)*).to_string()))
 }
 
 #[wasm_bindgen]
@@ -85,7 +81,7 @@ impl DataChannelConfig {
     pub fn open(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
         const LABEL: &str = "";
 
-        let mut dc = match self.negotiated {
+        let dc = match self.negotiated {
             true => {
                 let mut data_channel_dict = RtcDataChannelInit::new();
                 data_channel_dict.negotiated(true).id(self.id);
@@ -127,7 +123,7 @@ impl StreamInner {
         let onclose_fut = CbFuture::new();
         let cback_clone = onclose_fut.clone();
 
-        let onclose_callback = Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
+        let onclose_callback = Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
             console_log!("Data Channel closed. onclose_callback");
             cback_clone.publish(());
         });
@@ -170,7 +166,7 @@ pub fn create_data_channel(
 
     conn.set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
 
-    let dc = config.open(&conn);
+    let _dc = config.open(conn);
 
     ondatachannel_fut
 }
@@ -236,7 +232,7 @@ impl AsyncWrite for WebRTCStream {
             RtcDataChannelState::Open => {
                 console_log!("DataChannel is Open");
                 // let data = js_sys::Uint8Array::from(buf);
-                self.inner.channel.send_with_u8_array(&buf);
+                let _ = self.inner.channel.send_with_u8_array(&buf);
                 Poll::Ready(Ok(buf.len()))
             }
             RtcDataChannelState::Closing => {
