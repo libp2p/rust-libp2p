@@ -31,29 +31,15 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::proto::{Flag, Message};
-use crate::tokio::{
-    substream::drop_listener::GracefullyClosed,
-    substream::framed_dc::FramedDc,
-    substream::state::{Closing, State},
+use crate::common::substream::{
+    state::{Closing, State},
+    MAX_DATA_LEN,
 };
+use crate::proto::{Flag, Message};
+use crate::tokio::{substream::drop_listener::GracefullyClosed, substream::framed_dc::FramedDc};
 
 mod drop_listener;
 mod framed_dc;
-mod state;
-
-/// Maximum length of a message.
-///
-/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
-/// size to 16 KB to avoid monopolization."
-/// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
-const MAX_MSG_LEN: usize = 16384; // 16kiB
-/// Length of varint, in bytes.
-const VARINT_LEN: usize = 2;
-/// Overhead of the protobuf encoding, in bytes.
-const PROTO_OVERHEAD: usize = 5;
-/// Maximum length of data, in bytes.
-const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
 pub(crate) use drop_listener::DropListener;
 /// A substream on top of a WebRTC data channel.
@@ -251,6 +237,8 @@ fn io_poll_next(
 
 #[cfg(test)]
 mod tests {
+    use crate::common::substream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
+
     use super::*;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
