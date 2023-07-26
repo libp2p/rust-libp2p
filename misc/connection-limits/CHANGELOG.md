@@ -1,4 +1,4 @@
-## 0.2.1 (unreleased)
+## 0.2.1 - unreleased
 
 - Fix bugs that lead to incorrect connection limit states.
   See [PR 4250].
