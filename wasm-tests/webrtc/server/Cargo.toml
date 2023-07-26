@@ -22,5 +22,5 @@ tokio = { version = "1.29", features = ["rt", "macros", "signal", "net"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tokio-stream = "0.1"
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
-webrtc-websys-tests = { path = "../" }                                     # for PORT
+webrtc-websys-tests = { path = "../" }                                     # for PORT import
 tower-http = { version = "0.4.0", features = ["cors"] }                    # axum middleware

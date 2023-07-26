@@ -1,5 +1,5 @@
 //! The Substream over the Connection
-use crate::cbfutures::CbFuture;
+use super::cbfutures::CbFuture;
 use futures::{AsyncRead, AsyncWrite, FutureExt};
 use send_wrapper::SendWrapper;
 use std::io;
@@ -120,15 +120,65 @@ struct StreamInner {
 
 impl StreamInner {
     pub fn new(channel: RtcDataChannel) -> Self {
+        // On Open
+        let onopen_fut = CbFuture::new();
+        let onopen_cback_clone = onopen_fut.clone();
+
+        channel.set_onopen(Some(
+            Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
+                // TODO: Send any queued messages
+                console_log!("Data Channel opened. onopen_callback");
+                onopen_cback_clone.publish(());
+            })
+            .as_ref()
+            .unchecked_ref(),
+        ));
+
+        // On Close
         let onclose_fut = CbFuture::new();
-        let cback_clone = onclose_fut.clone();
+        let onclose_cback_clone = onclose_fut.clone();
 
-        let onclose_callback = Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
-            console_log!("Data Channel closed. onclose_callback");
-            cback_clone.publish(());
+        channel.set_onclose(Some(
+            Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
+                // TODO: Set state to closed?
+                // TODO: Set futures::Stream Poll::Ready(None)?
+                console_log!("Data Channel closed. onclose_callback");
+                onclose_cback_clone.publish(());
+            })
+            .as_ref()
+            .unchecked_ref(),
+        ));
+
+        /*
+         * On Error
+         */
+        let onerror_fut = CbFuture::new();
+        let onerror_cback_clone = onerror_fut.clone();
+
+        channel.set_onerror(Some(
+            Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
+                console_log!("Data Channel error. onerror_callback");
+                onerror_cback_clone.publish(());
+            })
+            .as_ref()
+            .unchecked_ref(),
+        ));
+
+        /*
+         * On Message
+         */
+        let onmessage_fut = CbFuture::new();
+        let onmessage_cback_clone = onmessage_fut.clone();
+
+        let onmessage_callback = Closure::<dyn FnMut(_)>::new(move |ev: MessageEvent| {
+            // TODO: Use Protobuf decoder?
+            let data = ev.data();
+            let data = js_sys::Uint8Array::from(data);
+            let data = data.to_vec();
+            console_log!("onmessage: {:?}", data);
+            // TODO: Howto? Should this feed a queue? futures::Stream?
+            onmessage_cback_clone.publish(data);
         });
-
-        channel.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
 
         Self {
             channel,

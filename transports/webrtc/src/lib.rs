@@ -88,3 +88,6 @@ mod proto {
 
 #[cfg(feature = "tokio")]
 pub mod tokio;
+
+#[cfg(feature = "wasm-bindgen")]
+pub mod websys;

@@ -1,17 +1,17 @@
 use futures::future::FutureExt;
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
 use libp2p_identity::{Keypair, PeerId};
-use multiaddr::{Multiaddr, Protocol};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 // use crate::endpoint::Endpoint;
-use crate::fingerprint::Fingerprint;
-use crate::Connection;
-use crate::Error;
+use super::fingerprint::Fingerprint;
+use super::Connection;
+use super::Error;
 
 const HANDSHAKE_TIMEOUT_MS: u64 = 10_000;
 

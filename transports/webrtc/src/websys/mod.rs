@@ -1,7 +1,7 @@
 mod cbfutures;
 mod connection;
 mod error;
-mod fingerprint;
+pub(crate) mod fingerprint;
 mod fused_js_promise;
 mod sdp;
 mod stream;

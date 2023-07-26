@@ -26,7 +26,7 @@ use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 use std::net::{IpAddr, SocketAddr};
 
-use crate::fingerprint::Fingerprint;
+use super::fingerprint::Fingerprint;
 
 /// Creates the SDP answer used by the client.
 pub(crate) fn answer(
@@ -269,12 +269,23 @@ fn render_description(
 
 /// Fingerprint from SDP
 pub fn fingerprint(sdp: &str) -> Result<Fingerprint, regex::Error> {
-    let fingerprint_regex = regex::Regex::new(
+    let fingerprint_regex = match regex::Regex::new(
         r"(?m)^a=fingerprint:(?:\w+-[0-9]+)\s(?P<fingerprint>(:?[0-9a-fA-F]{2})+)$",
-    )
-    .unwrap();
-    let captures = fingerprint_regex.captures(sdp).unwrap();
-    let fingerprint = captures.name("fingerprint").unwrap().as_str();
-    let fingerprint = hex::decode(fingerprint).unwrap();
-    Ok(Fingerprint::from_certificate(&fingerprint))
+    ) {
+        Ok(fingerprint_regex) => fingerprint_regex,
+        Err(e) => return Err(regex::Error::Syntax(format!("fingerprint: {}", e))),
+    };
+    let captures = match fingerprint_regex.captures(sdp) {
+        Some(captures) => captures,
+        None => return Err(regex::Error::Syntax("fingerprint not found".to_string())),
+    };
+    let fingerprint = match captures.name("fingerprint") {
+        Some(fingerprint) => fingerprint.as_str(),
+        None => return Err(regex::Error::Syntax("fingerprint not found".to_string())),
+    };
+    let decoded = match hex::decode(fingerprint) {
+        Ok(fingerprint) => fingerprint,
+        Err(e) => return Err(regex::Error::Syntax(format!("fingerprint: {}", e))),
+    };
+    Ok(Fingerprint::from_certificate(&decoded))
 }

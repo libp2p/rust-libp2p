@@ -29,12 +29,12 @@ impl<T> Default for CallbackFutureInner<T> {
 
 impl<T> CbFuture<T> {
     /// New Callback Future
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Rc::new(CallbackFutureInner::<T>::default()))
     }
 
     // call this from your callback
-    pub fn publish(&self, result: T) {
+    pub(crate) fn publish(&self, result: T) {
         self.0.result.set(Some(result));
         if let Some(w) = self.0.waker.take() {
             w.wake()

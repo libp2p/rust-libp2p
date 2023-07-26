@@ -15,8 +15,4 @@ wasm-bindgen-futures = "0.4.37"
 wasm-bindgen-test = "0.3.37"
 web-sys = { version = "0.3.64", features = ["Response", "Window"] }
 libp2p-identity = { workspace = true }
-
-[dependencies.libp2p]
-path = "../../libp2p"
-version = "0.52.1"
-features = ["tokio", "noise"]
+libp2p-webrtc = { workspace = true, features = ["wasm-bindgen"] }

@@ -24,8 +24,8 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 
-use crate::fingerprint::Fingerprint;
-use crate::Error;
+use super::Error;
+use super::Fingerprint;
 
 pub(crate) async fn inbound<T>(
     id_keys: identity::Keypair,

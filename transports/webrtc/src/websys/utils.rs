@@ -2,7 +2,7 @@ use js_sys::Promise;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::Error;
+use super::Error;
 
 /// Properly detach a promise.
 ///
