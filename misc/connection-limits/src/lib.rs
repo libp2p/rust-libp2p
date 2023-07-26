@@ -325,9 +325,6 @@ impl NetworkBehaviour for Behaviour {
                     .entry(peer_id)
                     .or_default()
                     .remove(&connection_id);
-
-                self.pending_inbound_connections.remove(&connection_id);
-                self.pending_outbound_connections.remove(&connection_id);
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
