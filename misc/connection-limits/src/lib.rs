@@ -250,11 +250,6 @@ impl NetworkBehaviour for Behaviour {
             Kind::EstablishedTotal,
         )?;
 
-        // NOTE: This function can be denied by other network behaviours and therefore is not a true
-        // representation of an established connection.
-        // Therefore it cannot be used to indicate an established connection. FromSwarm
-        // events must be used.
-
         Ok(dummy::ConnectionHandler)
     }
 
@@ -303,11 +298,6 @@ impl NetworkBehaviour for Behaviour {
                 + self.established_outbound_connections.len(),
             Kind::EstablishedTotal,
         )?;
-
-        // NOTE: This function can be denied by other network behaviours and therefore is not a true
-        // representation of an established connection.
-        // Therefore it cannot be used to indicate an established connection. FromSwarm
-        // events must be used.
 
         Ok(dummy::ConnectionHandler)
     }
