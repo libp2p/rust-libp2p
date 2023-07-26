@@ -13,8 +13,7 @@ categories = ["network-programming", "asynchronous"]
 async-trait = "0.1.68"
 futures = "0.3.28"
 futures-timer = "3.0.2"
-igd = { version = "0.12.1", optional = true, features = ["aio"] }
-igd_async_std = { version = "0.12.4", optional = true, features = ["aio"] }
+igd-next = { git = "https://github.com/jxs/rust-igd.git" }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 log = "0.4.19"
@@ -23,6 +22,6 @@ tokio = { version = "1.29", default-features = false, features = ["rt", "rt-mult
 async-std = { version = "1.12.0"}
 
 [features]
-tokio = ["dep:igd", "dep:tokio"]
-async-std = ["dep:igd_async_std"]
+tokio = ["igd-next/aio_tokio", "dep:tokio"]
+async-std = ["igd-next/aio_async_std"]
 

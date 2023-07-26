@@ -26,7 +26,7 @@ use std::{
     error::Error,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    net::{Ipv4Addr, SocketAddrV4},
+    net::{IpAddr, SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -34,11 +34,12 @@ use std::{
 };
 
 use crate::{
-    provider::{Gateway, Protocol, Provider},
+    provider::{Gateway, Provider},
     Config,
 };
 use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
+use igd_next::PortMappingProtocol;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
 use libp2p_swarm::{
     derive_prelude::PeerId, dummy, ConnectionDenied, ConnectionId, ExpiredListenAddr, FromSwarm,
@@ -78,17 +79,21 @@ pub(crate) enum GatewayEvent {
 #[derive(Debug, Clone)]
 pub(crate) struct Mapping {
     pub(crate) listener_id: ListenerId,
-    pub(crate) protocol: Protocol,
+    pub(crate) protocol: PortMappingProtocol,
     pub(crate) multiaddr: Multiaddr,
-    pub(crate) internal_addr: SocketAddrV4,
+    pub(crate) internal_addr: SocketAddr,
 }
 
 impl Mapping {
     /// Given the input gateway address, calculate the
     /// open external `Multiaddr`.
-    fn external_addr(&self, gateway_addr: Ipv4Addr) -> Multiaddr {
+    fn external_addr(&self, gateway_addr: IpAddr) -> Multiaddr {
+        let addr = match gateway_addr {
+            IpAddr::V4(ip) => multiaddr::Protocol::Ip4(ip),
+            IpAddr::V6(ip) => multiaddr::Protocol::Ip6(ip),
+        };
         self.multiaddr
-            .replace(0, |_| Some(multiaddr::Protocol::Ip4(gateway_addr)))
+            .replace(0, |_| Some(addr))
             .expect("multiaddr should be valid")
     }
 }
@@ -537,7 +542,9 @@ where
 ///
 /// Fails if the given [`Multiaddr`] does not begin with an IP
 /// protocol encapsulating a TCP or UDP port.
-fn multiaddr_to_socketaddr_protocol(mut addr: Multiaddr) -> Result<(SocketAddrV4, Protocol), ()> {
+fn multiaddr_to_socketaddr_protocol(
+    mut addr: Multiaddr,
+) -> Result<(SocketAddr, PortMappingProtocol), ()> {
     let mut port = None;
     let mut protocol = None;
     while let Some(proto) = addr.pop() {
@@ -548,21 +555,21 @@ fn multiaddr_to_socketaddr_protocol(mut addr: Multiaddr) -> Result<(SocketAddrV4
             }
             multiaddr::Protocol::Ip4(ipv4) if ipv4.is_private() => match (port, protocol) {
                 (Some(port), Some(protocol)) => {
-                    return Ok((SocketAddrV4::new(ipv4, port), protocol));
+                    return Ok((SocketAddr::V4(SocketAddrV4::new(ipv4, port)), protocol));
                 }
                 _ => return Err(()),
             },
             multiaddr::Protocol::Tcp(portnum) => match (port, protocol) {
                 (None, None) => {
                     port = Some(portnum);
-                    protocol = Some(Protocol::Tcp);
+                    protocol = Some(PortMappingProtocol::TCP);
                 }
                 _ => return Err(()),
             },
             multiaddr::Protocol::Udp(portnum) => match (port, protocol) {
                 (None, None) => {
                     port = Some(portnum);
-                    protocol = Some(Protocol::Udp);
+                    protocol = Some(PortMappingProtocol::UDP);
                 }
                 _ => return Err(()),
             },

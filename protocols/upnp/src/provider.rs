@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, fmt, net::Ipv4Addr};
+use std::{error::Error, net::IpAddr};
 
 use crate::{
     behaviour::{GatewayEvent, GatewayRequest},
@@ -27,28 +27,12 @@ use crate::{
 use async_trait::async_trait;
 use futures::channel::mpsc::{Receiver, Sender};
 
-/// Protocols available for port mapping.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub(crate) enum Protocol {
-    Tcp,
-    Udp,
-}
-
-impl fmt::Display for Protocol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Protocol::Tcp => f.write_str("tcp"),
-            Protocol::Udp => f.write_str("udp"),
-        }
-    }
-}
-
 /// Interface that interacts with the inner gateway by messages,
 /// `GatewayRequest`s and `GatewayEvent`s.
 pub struct Gateway {
     pub(crate) sender: Sender<GatewayRequest>,
     pub(crate) receiver: Receiver<GatewayEvent>,
-    pub(crate) addr: Ipv4Addr,
+    pub(crate) addr: IpAddr,
 }
 
 /// Abstraction to allow for compatibility with various async runtimes.
@@ -58,27 +42,19 @@ pub trait Provider {
 }
 
 macro_rules! impl_provider {
-    ($impl:ident, $executor: ident, $gateway:ident, $protocol: ident, $options: ident) => {
-        use super::{Config, Gateway, Protocol};
+    ($impl:ident, $executor: ident, $gateway:ident, $protocol: ident) => {
+        use super::{Config, Gateway};
         use crate::behaviour::{GatewayEvent, GatewayRequest};
 
         use async_trait::async_trait;
         use futures::{channel::mpsc, SinkExt, StreamExt};
+        use igd_next::SearchOptions;
         use std::error::Error;
-
-        impl From<Protocol> for $protocol {
-            fn from(protocol: Protocol) -> Self {
-                match protocol {
-                    Protocol::Tcp => $protocol::TCP,
-                    Protocol::Udp => $protocol::UDP,
-                }
-            }
-        }
 
         #[async_trait]
         impl super::Provider for $impl {
             async fn search_gateway(config: Config) -> Result<super::Gateway, Box<dyn Error>> {
-                let options = $options {
+                let options = SearchOptions {
                     bind_addr: config.bind_addr,
                     broadcast_address: config.broadcast_addr,
                     timeout: config.timeout,
@@ -144,11 +120,11 @@ macro_rules! impl_provider {
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
-    use igd::{aio, PortMappingProtocol, SearchOptions};
+    use igd_next::aio::tokio as aio_tokio;
 
     #[doc(hidden)]
     pub struct Tokio;
-    impl_provider! {Tokio, tokio, aio, PortMappingProtocol, SearchOptions}
+    impl_provider! {Tokio, tokio, aio_tokio, PortMappingProtocol}
 
     /// The type of a [`Behaviour`] using the `tokio` implementation.
     pub type Behaviour = crate::behaviour::Behaviour<Tokio>;
@@ -157,11 +133,11 @@ pub mod tokio {
 #[cfg(feature = "async-std")]
 pub mod async_std {
     use async_std::task;
-    use igd_async_std::{aio, PortMappingProtocol, SearchOptions};
+    use igd_next::aio::async_std as aio_async_std;
 
     #[doc(hidden)]
     pub struct AsyncStd;
-    impl_provider! {AsyncStd, task, aio, PortMappingProtocol, SearchOptions}
+    impl_provider! {AsyncStd, task, aio_async_std, PortMappingProtocol}
 
     /// The type of a [`Behaviour`] using the `async-std` implementation.
     pub type Behaviour = crate::behaviour::Behaviour<AsyncStd>;
