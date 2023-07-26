@@ -17,28 +17,74 @@ bytes = "1"
 futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.0"
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4"
 sha2 = "0.10.7"
-multihash = { workspace = true  }
+multihash = { workspace = true }
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rand = "0.8"
 rcgen = "0.10.0"
 serde = { version = "1.0", features = ["derive"] }
-stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
-tokio = { version = "1.29", features = ["net"], optional = true}
+
+# tokio optional deps
+tokio = { version = "1.29", features = ["net"], optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 webrtc = { version = "0.8.0", optional = true }
+stun = { version = "0.4", optional = true }
+rand = { version = "0.8", optional = true }
+if-watch = { version = "3.0", optional = true }
+
+# wasm-bindgen optional deps
+js-sys = { version = "0.3", optional = true }
+getrandom = { version = "0.2.9", features = ["js"], optional = true }
+regex = { version = "1.9", optional = true }
+send_wrapper = { version = "0.6.0", features = ["futures"], optional = true }
+wasm-bindgen = { version = "0.2.87", optional = true }
+wasm-bindgen-futures = { version = "0.4.37", optional = true }
+web-sys = { version = "0.3.64", optional = true, features = [
+    "MessageEvent",
+    "RtcPeerConnection",
+    "RtcSignalingState",
+    "RtcSdpType",
+    "RtcSessionDescription",
+    "RtcSessionDescriptionInit",
+    "RtcPeerConnectionIceEvent",
+    "RtcIceCandidate",
+    "RtcDataChannel",
+    "RtcDataChannelEvent",
+    "RtcCertificate",
+    "RtcConfiguration",
+    "RtcDataChannelInit",
+    "RtcDataChannelType",
+    "RtcDataChannelState",
+] }
 
 [features]
-tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
+tokio = [
+    "dep:tokio",
+    "dep:tokio-util",
+    "dep:webrtc",
+    "dep:if-watch",
+    "if-watch/tokio",
+    "dep:rand",
+    "dep:stun",
+]
 pem = ["webrtc?/pem"]
+wasm-bindgen = [
+    "dep:js-sys",
+    "dep:getrandom",
+    "dep:regex",
+    "dep:send_wrapper",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:web-sys",
+    "futures-timer/wasm-bindgen",
+]
+
 
 [dev-dependencies]
 anyhow = "1.0"
