@@ -4,17 +4,12 @@ defaults:
       method: squash
       commit_message_template: |
         {{ title }}
-        
+
         {{ body | get_section("## Description", "") }}
-        
+
         Pull-Request: #{{ number }}.
-        {# Here comes some fancy Jinja2 stuff for correctly attributing co-authorship: #}
-        {% for commit in (commits | unique(False, 'email_author')) | rejectattr("author", "==", author) %}
-          {% if commit.parents|length == 1 %}
-        Co-Authored-By: {{ commit.author }} <{{ commit.email_author }}>
-          {% endif %}
-        {% endfor %}
-        {# GitHub requires that the `Co-authored-by` lines are AT THE VERY END of a commit, hence nothing must come after this. #}
+
+        {{ body | get_section("## Attributions", "") }}
 
 pull_request_rules:
   - name: Ask to resolve conflict
@@ -38,6 +33,14 @@ pull_request_rules:
     actions:
       queue:
 
+  - name: Add approved dependabot PRs to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - author=dependabot[bot]
+      - base=master
+    actions:
+      queue:
+
   - name: Remove reviews on updates after PR is queued for merging
     conditions:
       - base=master
@@ -54,6 +57,15 @@ pull_request_rules:
       - base=master
       - label=trivial
       - author=@libp2p/rust-libp2p-maintainers
+    actions:
+      review:
+
+  - name: Approve dependabot PRs of semver-compatible updates
+    conditions:
+      - author=dependabot[bot]
+      - or:
+          - title~=bump [^\s]+ from ([1-9]+)\..+ to \1\.      # For major >= 1 versions, only approve updates with the same major version.
+          - title~=bump [^\s]+ from 0\.([\d]+)\..+ to 0\.\1\. # For major == 0 versions, only approve updates with the same minor version.
     actions:
       review:
 

@@ -65,7 +65,6 @@ pub use libp2p_dns as dns;
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
 #[cfg(feature = "gossipsub")]
-#[cfg(not(target_os = "unknown"))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
 #[cfg(feature = "identify")]
@@ -127,6 +126,10 @@ pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
+#[cfg(feature = "webtransport-websys")]
+#[cfg_attr(docsrs, doc(cfg(feature = "webtransport-websys")))]
+#[doc(inline)]
+pub use libp2p_webtransport_websys as webtransport_websys;
 #[cfg(feature = "yamux")]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;

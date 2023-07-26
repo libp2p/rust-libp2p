@@ -1,4 +1,25 @@
-## 0.44.0 
+## 0.44.3 - unreleased
+
+- Prevent simultaneous dials to peers.
+  See [PR 4224].
+
+[PR 4224]: https://github.com/libp2p/rust-libp2p/pull/4224
+
+## 0.44.2
+
+- Allow to explicitly set `Mode::{Client,Server}`.
+  See [PR 4132]
+
+[PR 4132]: https://github.com/libp2p/rust-libp2p/pull/4132
+
+## 0.44.1
+
+- Expose `KBucketDistance`.
+  See [PR 4109].
+
+[PR 4109]: https://github.com/libp2p/rust-libp2p/pull/4109
+
+## 0.44.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

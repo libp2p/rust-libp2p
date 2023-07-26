@@ -16,15 +16,6 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
-## QUIC - implement hole punching
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
-
-Add hole punching support for QUIC. See also [DCUtR specification on usage with
-QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
-
 ## Attempt to switch from webrtc-rs to str0m
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
@@ -52,7 +43,7 @@ Implement the new AutoNAT v2 specification. See https://github.com/libp2p/specs/
 ## Optimize Hole punching
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
-|--------------+--------+-------------------+----------+--------------+------------|
+|--------------|--------|-------------------|----------|--------------|------------|
 | Optimization | todo   |                   |          |              |            |
 
 We released hole punching support with [rust-libp2p
@@ -67,7 +58,7 @@ hole punching stack.
 ## Improved Wasm support
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                   |
-|----------------------+--------+-------------------+---------------------------------------------------+--------------+----------------------------------------------|
+|----------------------|--------|-------------------|---------------------------------------------------|--------------|----------------------------------------------|
 | Developer ergonomics | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/2617 |              | [WebRTC](#webrtc-support-browser-to-browser) |
 
 The project supports Wasm already today, though the developer experience is cumbersome at best.
@@ -79,7 +70,7 @@ argue that that demand follows this roadmap item and not the other way round.)
 ## WebRTC in the browser via WASM
 
 | Category     | Status | Target Completion | Tracking                                   | Dependencies                                                                              | Dependents |
-|--------------+--------+-------------------+--------------------------------------------+-------------------------------------------------------------------------------------------+------------|
+|--------------|--------|-------------------|--------------------------------------------|-------------------------------------------------------------------------------------------|------------|
 | Connectivity | todo   |                   | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 |            |
 
 Use the browser's WebRTC stack to support
@@ -123,8 +114,8 @@ https://github.com/libp2p/rust-libp2p/pull/2289.
 
 ### WebRTC support (browser-to-server)
 
-| Category     | Status | Target Completion | Tracking                                 | Dependencies                                   | Dependents                                                        |
-|--------------|--------|-------------------|------------------------------------------|------------------------------------------------|-------------------------------------------------------------------|
+| Category     | Status | Target Completion | Tracking                                 | Dependencies                                  | Dependents                                                        |
+|--------------|--------|-------------------|------------------------------------------|-----------------------------------------------|-------------------------------------------------------------------|
 | Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/pull/100 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
 
 We are currently implementing WebRTC for **browser-to-server** connectivity in
@@ -147,9 +138,9 @@ work before that.
 
 ### Generic connection management
 
-| Category             | Status      | Target Completion | Tracking                                          | Dependencies | Dependents |
-|----------------------|-------------|-------------------|---------------------------------------------------|--------------|------------|
-| Developer Ergonomics | done | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
+| Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|----------------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Developer Ergonomics | done   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
 
 Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
 cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
@@ -172,11 +163,20 @@ protocols) between `NetworkBehaviour` implementations.
 Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
 would deserve its own roadmap item.
 
+## QUIC - implement hole punching
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | done   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
+
+Add hole punching support for QUIC. See also [DCUtR specification on usage with
+QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
+
 ## Kademlia client mode
 
-| Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
-|--------------|-------------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
-| Optimization | Done | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
+| Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
+| Optimization | Done   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2032 | [Cross behaviour communication](#cross-behaviour-communication) |            |
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
