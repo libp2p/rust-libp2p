@@ -519,8 +519,7 @@ mod tests {
                     .behaviour_mut()
                     .limits
                     .established_inbound_connections
-                    .len()
-                    ,
+                    .len(),
                 "swarm1 connection limit behaviour to not count denied established connection as established connection"
             )
         });

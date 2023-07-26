@@ -1,4 +1,4 @@
-## 0.2.1 - unreleased
+## 0.2.1
 
 - Do not count a connection as established when it is denied by another sibling `NetworkBehaviour`.
   In other words, do not increase established connection counter in `handle_established_outbound_connection` or `handle_established_inbound_connection`, but in `FromSwarm::ConnectionEstablished` instead.
