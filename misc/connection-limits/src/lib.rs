@@ -279,6 +279,7 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
+
         self.check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
