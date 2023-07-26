@@ -328,25 +328,19 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::ConnectionEstablished(ConnectionEstablished {
                 peer_id,
-                endpoint: ConnectedPoint::Dialer { .. },
+                endpoint,
                 connection_id,
                 ..
             }) => {
-                // This is an outbound connection
+                match endpoint {
+                    ConnectedPoint::Listener { .. } => {
+                        self.established_inbound_connections.insert(connection_id);
+                    }
+                    ConnectedPoint::Dialer { .. } => {
+                        self.established_outbound_connections.insert(connection_id);
+                    }
+                }
 
-                self.established_outbound_connections.insert(connection_id);
-                self.established_per_peer
-                    .entry(peer_id)
-                    .or_default()
-                    .insert(connection_id);
-            }
-            FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id,
-                endpoint: ConnectedPoint::Listener { .. },
-                connection_id,
-                ..
-            }) => {
-                self.established_inbound_connections.insert(connection_id);
                 self.established_per_peer
                     .entry(peer_id)
                     .or_default()
