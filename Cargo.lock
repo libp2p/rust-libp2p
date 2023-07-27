@@ -3024,7 +3024,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.8.0-alpha"
+version = "0.9.0-alpha"
 dependencies = [
  "async-std",
  "bytes",
