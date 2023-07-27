@@ -89,8 +89,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The task spawned in [`provider::Provider::spawn`] to drive
-    /// the quic endpoint has crashed.
+    /// The task to drive a quic endpoint has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
 
