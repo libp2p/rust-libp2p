@@ -16,3 +16,4 @@ wasm-bindgen-test = "0.3.37"
 web-sys = { version = "0.3.64", features = ["Response", "Window"] }
 libp2p-identity = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["wasm-bindgen"] }
+libp2p-core = { workspace = true }
