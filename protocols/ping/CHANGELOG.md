@@ -1,4 +1,11 @@
-## 0.43.0 
+## 0.43.1 - unreleased
+
+- Add support for the `wasm-bindgen` feature to Cargo.toml
+  See [PR 4258]
+
+[PR 4258]: https://github.com/libp2p/rust-libp2p/pull/4258
+
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

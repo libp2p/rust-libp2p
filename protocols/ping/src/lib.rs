@@ -44,6 +44,10 @@
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
+//! 
+//! # WASM support
+//! This module supports execution in a WASM environment. In order to build the module with WASM support, activate
+//! the **`wasm-bindgen` feature**.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
