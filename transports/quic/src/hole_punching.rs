@@ -1,4 +1,4 @@
-use crate::{Error, Provider};
+use crate::{provider::Provider, Error};
 
 use futures::future::Either;
 

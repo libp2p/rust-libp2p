@@ -72,7 +72,6 @@ pub use connection::{Connecting, Connection, Stream};
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
-pub use provider::Provider;
 pub use transport::GenTransport;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
@@ -90,7 +89,7 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The task spawned in [`Provider::spawn`] to drive
+    /// The task spawned in [`provider::Provider::spawn`] to drive
     /// the quic endpoint has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
