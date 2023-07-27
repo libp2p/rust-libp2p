@@ -1,5 +1,8 @@
+use libp2p_core::transport::Transport; // So we can use the Traits that come with it
 use libp2p_identity::Keypair;
+use libp2p_webrtc::websys::{Config, Connection, Transport as WebRTCTransport}; // So we can dial the server
 use multiaddr::Multiaddr;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
@@ -9,14 +12,32 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 pub const PORT: u16 = 4455;
 
-#[wasm_bindgen_test]
-async fn connect_without_peer_id() {
-    let addr = fetch_server_addr().await;
-    let _keypair = Keypair::generate_ed25519();
+macro_rules! console_log {
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
 
-    // eprintln
-    eprintln!("addr: {:?}", addr);
-    println!("addr: {:?}", addr);
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+    #[wasm_bindgen(js_namespace = console)]
+    fn warn(s: &str);
+}
+
+#[wasm_bindgen_test]
+async fn dial_webrtc_server() {
+    let addr = fetch_server_addr().await;
+    let keypair = Keypair::generate_ed25519();
+
+    console_log!("Got addr: {:?}", addr);
+
+    let mut transport = WebRTCTransport::new(Config::new(&keypair));
+    let connection = match transport.dial(addr) {
+        Ok(fut) => fut.await.expect("dial failed"),
+        Err(e) => panic!("dial failed: {:?}", e),
+    };
+
+    console_log!("Connection established");
 }
 
 /// Helper that returns the multiaddress of echo-server
