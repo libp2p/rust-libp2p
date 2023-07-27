@@ -1,4 +1,4 @@
-## 0.2.2 - unreleased
+## 0.2.2
 
 - Implement `from_protobuf_encoding` for RSA `Keypair`.
   See [PR 4193].
