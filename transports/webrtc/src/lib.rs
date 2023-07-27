@@ -91,3 +91,6 @@ pub mod tokio;
 
 #[cfg(feature = "wasm-bindgen")]
 pub mod websys;
+
+/// Crates common to all features
+mod common;
