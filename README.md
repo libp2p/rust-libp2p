@@ -96,6 +96,7 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [beetle](https://github.com/n0-computer/beetle) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
 - [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
