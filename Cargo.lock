@@ -4657,11 +4657,11 @@ dependencies = [
  "async-std",
  "bytes",
  "futures-io",
- "pin-project-lite 0.2.9",
+ "pin-project-lite 0.2.10",
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.2",
+ "rustls 0.21.5",
  "thiserror",
  "tokio",
  "tracing",
@@ -4694,7 +4694,7 @@ dependencies = [
  "libc",
  "socket2 0.5.3",
  "tracing",
- "windows-sys 0.48.0",
+ "windows-sys",
 ]
 
 [[package]]
@@ -4826,9 +4826,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.23.0"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ea8c51b5dc1d8e5fd3350ec8167f464ec0995e79f2e90a075b63371500d557f"
+checksum = "ff5d95dd18a4d76650f0c2607ed8ebdbf63baf9cb934e1c233cd220c694db1d7"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5249,9 +5249,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.1"
+version = "0.101.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f36a6828982f422756984e47912a7a51dcbc2a197aa791158f8ca61cd8204e"
+checksum = "513722fd73ad80a71f72b61009ea1b584bcfa1483ca93949c8f290298837fa59"
 dependencies = [
  "ring",
  "untrusted",
@@ -5439,18 +5439,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.175"
+version = "1.0.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d25439cd7397d044e2748a6fe2432b5e85db703d6d097bd014b3c0ad1ebff0b"
+checksum = "63ba2516aa6bf82e0b19ca8b50019d52df58455d3cf9bdaf6315225fdd0c560a"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.175"
+version = "1.0.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b23f7ade6f110613c0d63858ddb8b94c1041f550eab58a16b371bdf2c9c80ab4"
+checksum = "401797fe7833d72109fedec6bfcbe67c0eed9b99772f26eb8afd261f0abc6fd3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5459,9 +5459,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d03b412469450d4404fe8499a268edd7f8b79fecb074b0d812ad64ca21f4031b"
+checksum = "076066c5f1078eac5b722a31827a8832fe108bed65dfa75e233c89f8206e976c"
 dependencies = [
  "indexmap 2.0.0",
  "itoa",
@@ -5492,9 +5492,9 @@ dependencies = [
 
 [[package]]
 name = "serde_repr"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e168eaaf71e8f9bd6037feb05190485708e019f4fd87d161b3c0a0d37daf85e5"
+checksum = "8725e1dfadb3a50f7e5ce0b1a540466f6ed3fe7a0fca2ac2b8b831d31316bd00"
 dependencies = [
  "proc-macro2",
  "quote",
