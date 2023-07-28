@@ -72,6 +72,7 @@ pub use connection::{Connecting, Connection, Stream};
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
+pub use provider::Provider;
 pub use transport::GenTransport;
 
 /// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
