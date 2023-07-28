@@ -97,6 +97,7 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
+- [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation Rust.
 - [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
