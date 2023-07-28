@@ -1,3 +1,10 @@
+## 0.9.0-alpha - unreleased
+
+- Use `quinn` instead of `quinn-proto`.
+  See [PR 3454].
+
+[PR 3454]: https://github.com/libp2p/rust-libp2p/pull/3454
+
 ## 0.8.0-alpha
 
 - Raise MSRV to 1.65.

@@ -15,7 +15,7 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 rcgen = "0.10.0"
 ring = "0.16.20"
-thiserror = "1.0.43"
+thiserror = "1.0.44"
 webpki = { version = "0.22.0", features = ["std"] }
 x509-parser = "0.15.0"
 yasna = "0.5.2"
