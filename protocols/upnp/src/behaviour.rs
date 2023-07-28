@@ -538,7 +538,7 @@ where
     }
 }
 
-/// Extracts a [`SocketAddrV4`] and [`Protocol`] from a given [`Multiaddr`].
+/// Extracts a [`SocketAddrV4`] and [`PortMappingProtocol`] from a given [`Multiaddr`].
 ///
 /// Fails if the given [`Multiaddr`] does not begin with an IP
 /// protocol encapsulating a TCP or UDP port.
