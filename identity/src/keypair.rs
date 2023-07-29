@@ -766,16 +766,18 @@ mod tests {
     #[test]
     #[cfg(feature = "ed25519")]
     #[cfg(feature = "peerid")]
-    fn keypair_protobuf_roundtrip() {
-        let expected_keypair = Keypair::generate_ed25519();
-        let expected_peer_id = expected_keypair.public().to_peer_id();
+    fn keypair_protobuf_roundtrip_ed25519() {
+        let priv_key = Keypair::from_protobuf_encoding(&hex_literal::hex!(
+            "080112407e0830617c4a7de83925dfb2694556b12936c477a0e1feb2e148ec9da60fee7d1ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e"
+        ))
+            .unwrap();
 
-        let encoded = expected_keypair.to_protobuf_encoding().unwrap();
+        let pub_key = PublicKey::try_decode_protobuf(&hex_literal::hex!(
+            "080112201ed1e8fae2c4a144b8be8fd4b47bf3d3b34b871c3cacf6010f0e42d474fce27e"
+        ))
+        .unwrap();
 
-        let keypair = Keypair::from_protobuf_encoding(&encoded).unwrap();
-        let peer_id = keypair.public().to_peer_id();
-
-        assert_eq!(expected_peer_id, peer_id);
+        roundtrip_protobuf_encoding(&priv_key, &pub_key, KeyType::Ed25519);
     }
 
     #[test]
