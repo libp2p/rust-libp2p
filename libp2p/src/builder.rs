@@ -238,7 +238,6 @@ pub struct BehaviourBuilder<P, R> {
 
 #[cfg(feature = "relay")]
 impl<P> BehaviourBuilder<P, libp2p_relay::client::Behaviour> {
-    // TODO: The close should provide the relay transport in case the user used with_relay.
     pub fn with_behaviour<B>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
@@ -253,7 +252,6 @@ impl<P> BehaviourBuilder<P, libp2p_relay::client::Behaviour> {
 }
 
 impl<P> BehaviourBuilder<P, NoRelayBehaviour> {
-    // TODO: The close should provide the relay transport in case the user used with_relay.
     pub fn with_behaviour<B>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
