@@ -1,8 +1,12 @@
 ## 0.16.1 - unreleased
 
+- Export `rate-limiter` module. 
+  See [PR 3742].
+
 - Add functions to access data within `Limit`.
   See [PR 4162].
 
+[PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
 [PR 4162]: https://github.com/libp2p/rust-libp2p/pull/4162
 
 ## 0.16.0 
@@ -26,15 +30,12 @@
 
 ## 0.15.2
 
-- Export `rate-limiter` module. See [PR 3742].
-
 - Send correct `PeerId` in outbound STOP message to client.
   See [PR 3767].
 
 - As a relay, when forwarding data between relay-connection-source and -destination and vice versa, flush write side when read currently has no more data available.
   See [PR 3765].
 
-[PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
 [PR 3767]: https://github.com/libp2p/rust-libp2p/pull/3767
 [PR 3765]: https://github.com/libp2p/rust-libp2p/pull/3765
 
