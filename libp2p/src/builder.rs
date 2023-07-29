@@ -74,6 +74,20 @@ impl TcpBuilder<Tokio> {
     }
 }
 
+impl<P> TcpBuilder<P> {
+    // TODO: This would allow one to build a faulty transport.
+    pub fn without_tcp(self) -> RelayBuilder<P, impl AuthenticatedMultiplexedTransport> {
+        RelayBuilder {
+            // TODO: Is this a good idea in a production environment? Unfortunately I don't know a
+            // way around it. One can not define two `with_relay` methods, one with a real transport
+            // using OrTransport, one with a fake transport discarding it right away.
+            transport: libp2p_core::transport::dummy::DummyTransport::new(),
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
 // TODO: without_tcp
 
 pub struct RelayBuilder<P, T> {
