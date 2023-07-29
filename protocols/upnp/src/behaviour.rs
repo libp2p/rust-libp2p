@@ -543,39 +543,27 @@ where
 /// Fails if the given [`Multiaddr`] does not begin with an IP
 /// protocol encapsulating a TCP or UDP port.
 fn multiaddr_to_socketaddr_protocol(
-    mut addr: Multiaddr,
+    addr: Multiaddr,
 ) -> Result<(SocketAddr, PortMappingProtocol), ()> {
-    let mut port = None;
-    let mut protocol = None;
-    while let Some(proto) = addr.pop() {
-        match proto {
-            multiaddr::Protocol::Ip6(_) => {
-                // Idg only supports Ipv4.
-                return Err(());
+    let mut iter = addr.into_iter();
+    match iter.next() {
+        // Idg only supports Ipv4.
+        Some(multiaddr::Protocol::Ip4(ipv4)) if ipv4.is_private() => match iter.next() {
+            Some(multiaddr::Protocol::Tcp(port)) => {
+                return Ok((
+                    SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
+                    PortMappingProtocol::TCP,
+                ));
             }
-            multiaddr::Protocol::Ip4(ipv4) if ipv4.is_private() => match (port, protocol) {
-                (Some(port), Some(protocol)) => {
-                    return Ok((SocketAddr::V4(SocketAddrV4::new(ipv4, port)), protocol));
-                }
-                _ => return Err(()),
-            },
-            multiaddr::Protocol::Tcp(portnum) => match (port, protocol) {
-                (None, None) => {
-                    port = Some(portnum);
-                    protocol = Some(PortMappingProtocol::TCP);
-                }
-                _ => return Err(()),
-            },
-            multiaddr::Protocol::Udp(portnum) => match (port, protocol) {
-                (None, None) => {
-                    port = Some(portnum);
-                    protocol = Some(PortMappingProtocol::UDP);
-                }
-                _ => return Err(()),
-            },
-
+            Some(multiaddr::Protocol::Udp(port)) => {
+                return Ok((
+                    SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
+                    PortMappingProtocol::TCP,
+                ));
+            }
             _ => {}
-        }
+        },
+        _ => {}
     }
     Err(())
 }
