@@ -46,18 +46,9 @@ pub struct TcpBuilder<P> {
 
 #[cfg(all(feature = "async-std", feature = "tcp"))]
 impl TcpBuilder<AsyncStd> {
-    pub fn with_default_tcp(
-        self,
-    ) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
-        self.with_custom_tcp(libp2p_tcp::Config::default())
-    }
-
-    pub fn with_custom_tcp(
-        self,
-        config: libp2p_tcp::Config,
-    ) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
+    pub fn with_tcp(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
-            transport: libp2p_tcp::async_io::Transport::new(config)
+            transport: libp2p_tcp::async_io::Transport::new(Default::default())
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
                 .multiplex(libp2p_yamux::Config::default())
@@ -70,16 +61,9 @@ impl TcpBuilder<AsyncStd> {
 
 #[cfg(all(feature = "tokio", feature = "tcp"))]
 impl TcpBuilder<Tokio> {
-    pub fn with_default_tcp(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
-        self.with_custom_tcp(libp2p_tcp::Config::default())
-    }
-
-    pub fn with_custom_tcp(
-        self,
-        config: libp2p_tcp::Config,
-    ) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
+    pub fn with_tcp(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
-            transport: libp2p_tcp::tokio::Transport::new(config)
+            transport: libp2p_tcp::tokio::Transport::new(Default::default())
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
                 .multiplex(libp2p_yamux::Config::default())
@@ -101,7 +85,6 @@ pub struct RelayBuilder<P, T> {
 #[cfg(feature = "relay")]
 impl<P, T: AuthenticatedMultiplexedTransport> RelayBuilder<P, T> {
     // TODO: This should be with_relay_client.
-    // TODO: Ideally one can configure it.
     pub fn with_relay(
         self,
     ) -> OtherTransportBuilder<
@@ -343,7 +326,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_default_tcp()
+            .with_tcp()
             .without_relay()
             .no_more_other_transports()
             .without_dns()
@@ -364,7 +347,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_default_tcp()
+            .with_tcp()
             .with_relay()
             .no_more_other_transports()
             .without_dns()
@@ -381,7 +364,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_default_tcp()
+            .with_tcp()
             .without_relay()
             .no_more_other_transports()
             .with_dns()
@@ -396,7 +379,7 @@ mod tests {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()
             .with_tokio()
-            .with_default_tcp()
+            .with_tcp()
             .without_relay()
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
