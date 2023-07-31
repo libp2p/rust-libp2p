@@ -39,6 +39,16 @@ pub struct Limit {
     data_in_bytes: Option<u64>,
 }
 
+impl Limit {
+    pub fn duration(&self) -> Option<Duration> {
+        self.duration
+    }
+
+    pub fn data_in_bytes(&self) -> Option<u64> {
+        self.data_in_bytes
+    }
+}
+
 impl From<proto::Limit> for Limit {
     fn from(limit: proto::Limit) -> Self {
         Limit {
