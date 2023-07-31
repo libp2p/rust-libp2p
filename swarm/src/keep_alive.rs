@@ -18,8 +18,10 @@ use void::Void;
 /// they are not in use. Connections can also fail at any time so really, your application should be
 /// designed to establish them when necessary, making the use of this behaviour likely redundant.
 #[derive(Default)]
+#[deprecated(note = "Configure a very large idle timeout via `SwarmBuilder")]
 pub struct Behaviour;
 
+#[allow(deprecated)]
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type ToSwarm = Void;

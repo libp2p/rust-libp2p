@@ -21,8 +21,8 @@
 //! Integration tests for the `Ping` network behaviour.
 
 use libp2p_ping as ping;
-use libp2p_swarm::keep_alive;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_swarm::dummy;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
@@ -32,18 +32,16 @@ fn ping_pong() {
     fn prop(count: NonZeroU8) {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
-        let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
             swarm1.listen().await;
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
-                let (e1, e2) = match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-                    ([BehaviourEvent::Ping(e1)], [BehaviourEvent::Ping(e2)]) => (e1, e2),
-                    events => panic!("Unexpected events: {events:?}"),
-                };
+                let ([e1], [e2]): ([ping::Event; 1], [ping::Event; 1]) =
+                    libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await;
 
                 assert_eq!(&e1.peer, swarm2.local_peer_id());
                 assert_eq!(&e2.peer, swarm1.local_peer_id());
@@ -65,8 +63,8 @@ fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
 
 #[test]
 fn unsupported_doesnt_fail() {
-    let mut swarm1 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
-    let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ping::Config::new()));
+    let mut swarm1 = Swarm::new_ephemeral(|_| dummy::Behaviour);
+    let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new()));
 
     let result = async_std::task::block_on(async {
         swarm1.listen().await;
@@ -76,10 +74,10 @@ fn unsupported_doesnt_fail() {
 
         loop {
             match swarm2.next_swarm_event().await {
-                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                SwarmEvent::Behaviour(ping::Event {
                     result: Err(ping::Failure::Unsupported),
                     ..
-                })) => {
+                }) => {
                     swarm2.disconnect_peer_id(swarm1_peer_id).unwrap();
                 }
                 SwarmEvent::ConnectionClosed { cause: Some(e), .. } => {
@@ -94,20 +92,4 @@ fn unsupported_doesnt_fail() {
     });
 
     result.expect("node with ping should not fail connection due to unsupported protocol");
-}
-
-#[derive(NetworkBehaviour, Default)]
-#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
-}
-
-impl Behaviour {
-    fn new(config: ping::Config) -> Self {
-        Self {
-            keep_alive: keep_alive::Behaviour,
-            ping: ping::Behaviour::new(config),
-        }
-    }
 }
