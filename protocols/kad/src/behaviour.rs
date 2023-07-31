@@ -3289,6 +3289,7 @@ impl fmt::Display for NoKnownPeers {
 impl std::error::Error for NoKnownPeers {}
 
 /// The possible outcomes of [`Kademlia::add_address`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingUpdate {
     /// The given peer and address has been added to the routing
     /// table.
