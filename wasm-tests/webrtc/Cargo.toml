@@ -15,5 +15,9 @@ wasm-bindgen-futures = "0.4.37"
 wasm-bindgen-test = "0.3.37"
 web-sys = { version = "0.3.64", features = ["Response", "Window"] }
 libp2p-identity = { workspace = true }
-libp2p-webrtc = { workspace = true, features = ["wasm-bindgen"] }
+libp2p-webrtc-websys = { workspace = true }
 libp2p-core = { workspace = true }
+console_log = { version = "1.0.0", features = ["wasm-bindgen"] }
+log = "0.4.14"
+fern = { version = "0.6", features = ["colored"] }
+chrono = { version = "0.4.26", features = ["wasm-bindgen", "wasmbind"] }
