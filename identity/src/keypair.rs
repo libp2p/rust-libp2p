@@ -758,10 +758,6 @@ impl From<rsa::PublicKey> for PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "peerid")]
-    use crate::PeerId;
-    use base64::prelude::*;
-    use std::str::FromStr;
 
     #[test]
     #[cfg(feature = "ed25519")]
