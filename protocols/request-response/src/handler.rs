@@ -27,7 +27,7 @@ use crate::handler::protocol::Protocol;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
-use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
+use futures::{channel::oneshot, future::BoxFuture, pin_mut, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -38,7 +38,6 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
-use std::pin::pin;
 use std::{
     collections::VecDeque,
     fmt, io,
@@ -160,7 +159,9 @@ where
         };
 
         self.worker_streams.push(Box::pin(async move {
-            match future::select(pin!(recv), futures_timer::Delay::new(timeout)).await {
+            pin_mut!(recv);
+
+            match future::select(recv, futures_timer::Delay::new(timeout)).await {
                 future::Either::Left((recv, _)) => recv,
                 future::Either::Right(((), _)) => Err(io::ErrorKind::TimedOut.into()),
             }
@@ -200,7 +201,9 @@ where
         };
 
         self.worker_streams.push(Box::pin(async move {
-            match future::select(pin!(send), futures_timer::Delay::new(timeout)).await {
+            pin_mut!(send);
+
+            match future::select(send, futures_timer::Delay::new(timeout)).await {
                 future::Either::Left((recv, _)) => recv,
                 future::Either::Right(((), _)) => Ok(Event::OutboundTimeout(request_id)),
             }
