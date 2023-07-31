@@ -1,6 +1,6 @@
 ## 0.16.1 - unreleased
 
-- Export `rate-limiter` module. 
+- Export `RateLimiter` type. 
   See [PR 3742].
 
 - Add functions to access data within `Limit`.
