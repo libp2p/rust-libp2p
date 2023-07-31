@@ -70,7 +70,7 @@ pub use behaviour::{
     GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
     GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerRecord, PutRecordContext,
     PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
-    QueryResult, QueryStats, RoutingUpdate,
+    QueryResult, QueryStats, RoutingUpdateOk,
 };
 pub use behaviour::{
     Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
