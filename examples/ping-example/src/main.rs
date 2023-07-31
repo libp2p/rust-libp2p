@@ -21,29 +21,28 @@
 #![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
-use libp2p::core::upgrade::Version;
 use libp2p::{
-    identity, noise, ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    ping,
+    swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
+    Multiaddr,
 };
 use std::error::Error;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_async_std()
+        .with_tcp()
+        .without_tls()
+        .with_noise()
+        .without_relay()
+        .no_more_other_transports()
+        .without_dns()
+        .with_behaviour(|_| Behaviour::default())
+        .build();
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
-            .build();
+    println!("Local peer id: {:?}", swarm.local_peer_id());
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
