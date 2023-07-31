@@ -1,4 +1,4 @@
-## 0.9.0-alpha - unreleased
+## 0.9.0-alpha
 
 - Use `quinn` instead of `quinn-proto`.
   See [PR 3454].
