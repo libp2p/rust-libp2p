@@ -94,7 +94,7 @@ pub struct TcpNoiseBuilder<P, A> {
     phantom: PhantomData<(P, A)>,
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(all(feature = "async-std", feature = "tls"))]
 impl TcpNoiseBuilder<AsyncStd, Tls> {
     #[cfg(feature = "noise")]
     pub fn with_noise(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
@@ -247,12 +247,14 @@ impl<P, T> RelayBuilder<P, T> {
     }
 }
 
+#[cfg(feature = "relay")]
 pub struct RelayTlsBuilder<P, T> {
     transport: T,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<P>,
 }
 
+#[cfg(feature = "relay")]
 impl<P, T> RelayTlsBuilder<P, T> {
     #[cfg(feature = "tls")]
     pub fn with_tls(self) -> RelayNoiseBuilder<P, T, Tls> {
@@ -272,13 +274,14 @@ impl<P, T> RelayTlsBuilder<P, T> {
     }
 }
 
+#[cfg(feature = "relay")]
 pub struct RelayNoiseBuilder<P, T, A> {
     transport: T,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<(P, A)>,
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(all(feature = "relay", feature = "tls"))]
 impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, Tls> {
     #[cfg(feature = "noise")]
     pub fn with_noise(
@@ -350,7 +353,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, Tls> {
     }
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(feature = "relay")]
 impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, WithoutTls> {
     #[cfg(feature = "noise")]
     pub fn with_noise(
