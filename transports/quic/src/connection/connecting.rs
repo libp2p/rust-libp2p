@@ -20,9 +20,12 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{Connection, Error};
+use crate::{Connection, ConnectionError, Error};
 
-use futures::prelude::*;
+use futures::{
+    future::{select, Either, FutureExt, Select},
+    prelude::*,
+};
 use futures_timer::Delay;
 use libp2p_identity::PeerId;
 use std::{
@@ -34,16 +37,32 @@ use std::{
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
-    connection: Option<Connection>,
-    timeout: Delay,
+    connecting: Select<quinn::Connecting, Delay>,
 }
 
 impl Connecting {
-    pub(crate) fn new(connection: Connection, timeout: Duration) -> Self {
+    pub(crate) fn new(connection: quinn::Connecting, timeout: Duration) -> Self {
         Connecting {
-            connection: Some(connection),
-            timeout: Delay::new(timeout),
+            connecting: select(connection, Delay::new(timeout)),
         }
+    }
+}
+
+impl Connecting {
+    /// Returns the address of the node we're connected to.
+    /// Panics if the connection is still handshaking.
+    fn remote_peer_id(connection: &quinn::Connection) -> PeerId {
+        let identity = connection
+            .peer_identity()
+            .expect("connection got identity because it passed TLS handshake; qed");
+        let certificates: Box<Vec<rustls::Certificate>> =
+            identity.downcast().expect("we rely on rustls feature; qed");
+        let end_entity = certificates
+            .get(0)
+            .expect("there should be exactly one certificate; qed");
+        let p2p_cert = libp2p_tls::certificate::parse(end_entity)
+            .expect("the certificate was validated during TLS handshake; qed");
+        p2p_cert.peer_id()
     }
 }
 
@@ -51,47 +70,13 @@ impl Future for Connecting {
     type Output = Result<(PeerId, Connection), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let connection = self
-            .connection
-            .as_mut()
-            .expect("Future polled after it has completed");
+        let connection = match futures::ready!(self.connecting.poll_unpin(cx)) {
+            Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
+            Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
+        };
 
-        loop {
-            let event = match connection.poll_event(cx) {
-                Poll::Ready(Some(event)) => event,
-                Poll::Ready(None) => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
-                Poll::Pending => {
-                    return self
-                        .timeout
-                        .poll_unpin(cx)
-                        .map(|()| Err(Error::HandshakeTimedOut));
-                }
-            };
-            match event {
-                quinn_proto::Event::Connected => {
-                    // Parse the remote's Id identity from the certificate.
-                    let identity = connection
-                        .peer_identity()
-                        .expect("connection got identity because it passed TLS handshake; qed");
-                    let certificates: Box<Vec<rustls::Certificate>> =
-                        identity.downcast().expect("we rely on rustls feature; qed");
-                    let end_entity = certificates
-                        .get(0)
-                        .expect("there should be exactly one certificate; qed");
-                    let p2p_cert = libp2p_tls::certificate::parse(end_entity)
-                        .expect("the certificate was validated during TLS handshake; qed");
-                    let peer_id = p2p_cert.peer_id();
-
-                    return Poll::Ready(Ok((peer_id, self.connection.take().unwrap())));
-                }
-                quinn_proto::Event::ConnectionLost { reason } => {
-                    return Poll::Ready(Err(Error::Connection(reason.into())))
-                }
-                quinn_proto::Event::HandshakeDataReady | quinn_proto::Event::Stream(_) => {}
-                quinn_proto::Event::DatagramReceived => {
-                    debug_assert!(false, "Datagrams are not supported")
-                }
-            }
-        }
+        let peer_id = Self::remote_peer_id(&connection);
+        let muxer = Connection::new(connection);
+        Poll::Ready(Ok((peer_id, muxer)))
     }
 }
