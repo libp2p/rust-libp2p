@@ -12,7 +12,8 @@ anyhow = "1.0.72"
 futures = "0.3.28"
 rand = "0.8"
 void = "1"
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
+libp2p-identify = { workspace = true }
 libp2p-core = { workspace = true, features = [] }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 multiaddr = { workspace = true }
@@ -24,3 +25,4 @@ tokio-stream = "0.1"
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 webrtc-websys-tests = { path = "../" }                                     # for PORT import
 tower-http = { version = "0.4.0", features = ["cors"] }                    # axum middleware
+env_logger = "0.10"

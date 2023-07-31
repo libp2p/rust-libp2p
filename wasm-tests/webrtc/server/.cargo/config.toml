@@ -1,0 +1,3 @@
+# // RUST_LOG environment variable in .cargo/config.toml file
+[env]
+RUST_LOG = "debug,libp2p_webrtc"

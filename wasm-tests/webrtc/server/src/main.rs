@@ -14,19 +14,18 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tower_http::cors::{Any, CorsLayer};
 use void::Void;
 
-/// An example WebRTC server that will accept connections and run the ping protocol on them.
 #[tokio::main]
 async fn main() -> Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = id_keys.public().to_peer_id();
     let transport = webrtc::tokio::Transport::new(
         id_keys,
         webrtc::tokio::Certificate::generate(&mut thread_rng())?,
-    );
-
-    let transport = transport
-        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-        .boxed();
+    )
+    .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+    .boxed();
 
     let behaviour = Behaviour {
         relay: relay::Behaviour::new(local_peer_id, Default::default()),
@@ -42,11 +41,19 @@ async fn main() -> Result<()> {
 
     swarm.listen_on(address_webrtc.clone())?;
 
+    // Dial the peer identified by the multi-address given as the second
+    // command-line argument, if any.
+    if let Some(addr) = std::env::args().nth(1) {
+        let remote: Multiaddr = addr.parse()?;
+        swarm.dial(remote)?;
+        println!("Dialed {addr}")
+    }
+
     loop {
         tokio::select! {
-            evt = swarm.next() => {
+            evt = swarm.select_next_some() => {
                 match evt {
-                    Some(SwarmEvent::NewListenAddr { address, .. }) => {
+                    SwarmEvent::NewListenAddr { address, .. } => {
 
                         let addr = address
                                 .with(Protocol::P2p(*swarm.local_peer_id()))
@@ -70,9 +77,19 @@ async fn main() -> Result<()> {
                                 .await
                                 .unwrap();
                         });
+
+                        eprintln!("Server spawned");
                     }
-                    _ => {
-                        // do nothing
+                    SwarmEvent::Behaviour(Event::Ping(ping::Event {
+                        peer,
+                        result: Ok(rtt),
+                        ..
+                    })) => {
+                        let id = peer.to_string().to_owned();
+                        eprintln!("🏓 Pinged {id} ({rtt:?})")
+                    }
+                    evt => {
+                        eprintln!("SwarmEvent: {:?}", evt);
                     },
                 }
             },
