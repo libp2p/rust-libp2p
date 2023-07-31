@@ -16,13 +16,13 @@ either = "1.5.3"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.18"
+log = "0.4.19"
 parking_lot = "0.12.0"
 quicksink = "0.1"
 rw-stream-sink = { workspace = true }
 soketto = "0.7.0"
 url = "2.1"
-webpki-roots = "0.23"
+webpki-roots = "0.24"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["async-io"] }

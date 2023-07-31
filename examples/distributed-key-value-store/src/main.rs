@@ -18,32 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic key value store demonstrating libp2p and the mDNS and Kademlia protocols.
-//!
-//! 1. Using two terminal windows, start two instances. If you local network
-//!    allows mDNS, they will automatically connect.
-//!
-//! 2. Type `PUT my-key my-value` in terminal one and hit return.
-//!
-//! 3. Type `GET my-key` in terminal two and hit return.
-//!
-//! 4. Close with Ctrl-c.
-//!
-//! You can also store provider records instead of key value records.
-//!
-//! 1. Using two terminal windows, start two instances. If you local network
-//!    allows mDNS, they will automatically connect.
-//!
-//! 2. Type `PUT_PROVIDER my-key` in terminal one and hit return.
-//!
-//! 3. Type `GET_PROVIDERS my-key` in terminal two and hit return.
-//!
-//! 4. Close with Ctrl-c.
+#![doc = include_str!("../README.md")]
 
 use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::core::upgrade::Version;
 use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::Mode;
 use libp2p::kad::{
     record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
     PutRecordOk, QueryResult, Quorum, Record,
@@ -104,6 +85,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let behaviour = MyBehaviour { kademlia, mdns };
         SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
+
+    swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();

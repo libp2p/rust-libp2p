@@ -28,6 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
+use crate::listen_opts::ListenOpts;
 use crate::{
     ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
     THandlerOutEvent,
@@ -250,6 +251,12 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
     Dial { opts: DialOpts },
 
+    /// Instructs the [`Swarm`](crate::Swarm) to listen on the provided address.
+    ListenOn { opts: ListenOpts },
+
+    /// Instructs the [`Swarm`](crate::Swarm) to remove the listener.
+    RemoveListener { id: ListenerId },
+
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
@@ -324,6 +331,8 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -353,6 +362,8 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -432,7 +443,7 @@ pub enum FromSwarm<'a, Handler> {
     ListenerClosed(ListenerClosed<'a>),
     /// Informs the behaviour that we have discovered a new candidate for an external address for us.
     NewExternalAddrCandidate(NewExternalAddrCandidate<'a>),
-    /// Informs the behaviour that an external address of the local node was removed.
+    /// Informs the behaviour that an external address of the local node was confirmed.
     ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
     /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired(ExternalAddrExpired<'a>),
@@ -530,14 +541,13 @@ pub struct ListenerClosed<'a> {
     pub reason: Result<(), &'a std::io::Error>,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour
-/// that we have discovered a new candidate for an external address for us.
+/// [`FromSwarm`] variant that informs the behaviour about a new candidate for an external address for us.
 #[derive(Clone, Copy)]
 pub struct NewExternalAddrCandidate<'a> {
     pub addr: &'a Multiaddr,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
+/// [`FromSwarm`] variant that informs the behaviour that an external address was confirmed.
 #[derive(Clone, Copy)]
 pub struct ExternalAddrConfirmed<'a> {
     pub addr: &'a Multiaddr,

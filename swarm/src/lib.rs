@@ -68,6 +68,7 @@ pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
+mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
@@ -121,6 +122,7 @@ pub use handler::{
 };
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
+pub use listen_opts::ListenOpts;
 pub use stream::Stream;
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
@@ -136,7 +138,6 @@ use futures::{prelude::*, stream::FusedStream};
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
-    multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
     Endpoint, Multiaddr, Transport,
@@ -371,12 +372,9 @@ where
     /// Listeners report their new listening addresses as [`SwarmEvent::NewListenAddr`].
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
-        let id = ListenerId::next();
-        self.transport.listen_on(id, addr)?;
-        self.behaviour
-            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
-                listener_id: id,
-            }));
+        let opts = ListenOpts::new(addr);
+        let id = opts.listener_id();
+        self.add_listener(opts)?;
         Ok(id)
     }
 
@@ -395,9 +393,10 @@ where
     /// ```
     /// # use libp2p_swarm::SwarmBuilder;
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_core::{Multiaddr, PeerId, Transport};
+    /// # use libp2p_core::{Multiaddr, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
+    /// # use libp2p_identity::PeerId;
     /// #
     /// let mut swarm = SwarmBuilder::without_executor(
     ///     DummyTransport::new().boxed(),
@@ -414,9 +413,7 @@ where
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
         let dial_opts = opts.into();
 
-        let peer_id = dial_opts
-            .get_or_parse_peer_id()
-            .map_err(DialError::InvalidPeerId)?;
+        let peer_id = dial_opts.get_peer_id();
         let condition = dial_opts.peer_condition();
         let connection_id = dial_opts.connection_id();
 
@@ -539,9 +536,31 @@ where
         &self.local_peer_id
     }
 
-    /// TODO
+    /// List all **confirmed** external address for the local node.
     pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
         self.confirmed_external_addr.iter()
+    }
+
+    fn add_listener(&mut self, opts: ListenOpts) -> Result<(), TransportError<io::Error>> {
+        let addr = opts.address();
+        let listener_id = opts.listener_id();
+
+        if let Err(e) = self.transport.listen_on(listener_id, addr.clone()) {
+            self.behaviour
+                .on_swarm_event(FromSwarm::ListenerError(behaviour::ListenerError {
+                    listener_id,
+                    err: &e,
+                }));
+
+            return Err(e);
+        }
+
+        self.behaviour
+            .on_swarm_event(FromSwarm::NewListener(behaviour::NewListener {
+                listener_id,
+            }));
+
+        Ok(())
     }
 
     /// Add a **confirmed** external address for the local node.
@@ -1007,14 +1026,21 @@ where
         match event {
             ToSwarm::GenerateEvent(event) => return Some(SwarmEvent::Behaviour(event)),
             ToSwarm::Dial { opts } => {
-                let peer_id = opts.get_or_parse_peer_id();
+                let peer_id = opts.get_peer_id();
                 let connection_id = opts.connection_id();
                 if let Ok(()) = self.dial(opts) {
                     return Some(SwarmEvent::Dialing {
-                        peer_id: peer_id.ok().flatten(),
+                        peer_id,
                         connection_id,
                     });
                 }
+            }
+            ToSwarm::ListenOn { opts } => {
+                // Error is dispatched internally, safe to ignore.
+                let _ = self.add_listener(opts);
+            }
+            ToSwarm::RemoveListener { id } => {
+                self.remove_listener(id);
             }
             ToSwarm::NotifyHandler {
                 peer_id,
@@ -1036,14 +1062,8 @@ where
                 self.pending_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr: &addr },
-                    ));
-
-                // Generate more candidates based on address translation.
+                // Apply address translation to the candidate address.
                 // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
-
                 let translated_addresses = {
                     let mut addrs: Vec<_> = self
                         .listened_addrs
@@ -1057,11 +1077,20 @@ where
                     addrs.dedup();
                     addrs
                 };
-                for addr in translated_addresses {
+
+                // If address translation yielded nothing, broacast the original candidate address.
+                if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                             NewExternalAddrCandidate { addr: &addr },
                         ));
+                } else {
+                    for addr in translated_addresses {
+                        self.behaviour
+                            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                                NewExternalAddrCandidate { addr: &addr },
+                            ));
+                    }
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
@@ -1518,8 +1547,6 @@ pub enum DialError {
     DialPeerConditionFalse(dial_opts::PeerCondition),
     /// Pending connection attempt has been aborted.
     Aborted,
-    /// The provided peer identity is invalid.
-    InvalidPeerId(Multihash),
     /// The peer identity obtained on the connection did not match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
@@ -1560,9 +1587,6 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId(multihash) => {
-                write!(f, "Dial error: multihash {multihash:?} is not a PeerId")
-            }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
                 "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
@@ -1603,7 +1627,6 @@ impl error::Error for DialError {
             DialError::NoAddresses => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
-            DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
             DialError::Transport(_) => None,
             DialError::Denied { cause } => Some(cause),
@@ -1710,6 +1733,14 @@ impl ConnectionDenied {
 
         Ok(*inner)
     }
+
+    /// Attempt to downcast to a particular reason for why the connection was denied.
+    pub fn downcast_ref<E>(&self) -> Option<&E>
+    where
+        E: error::Error + Send + Sync + 'static,
+    {
+        self.inner.downcast_ref::<E>()
+    }
 }
 
 impl fmt::Display for ConnectionDenied {
@@ -1762,34 +1793,33 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
         None => return Ok(addr),
     };
 
-    if let Some(multiaddr::Protocol::P2p(hash)) = addr.iter().last() {
-        if &hash != peer.as_ref() {
+    if let Some(multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
+        if peer_id != peer {
             return Err(addr);
         }
-        Ok(addr)
-    } else {
-        Ok(addr.with(multiaddr::Protocol::P2p(peer.into())))
+
+        return Ok(addr);
     }
+
+    Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::{executor, future};
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
+    use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
-    use libp2p_core::{Endpoint, UpgradeError};
     use libp2p_identity as identity;
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;
-    use void::Void;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2174,7 +2204,7 @@ mod tests {
             }));
 
         let other_id = PeerId::random();
-        let other_addr = address.with(multiaddr::Protocol::P2p(other_id.into()));
+        let other_addr = address.with(multiaddr::Protocol::P2p(other_id));
 
         swarm2.dial(other_addr.clone()).unwrap();
 
@@ -2323,7 +2353,7 @@ mod tests {
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
                     .into_iter()
-                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target.into())))
+                    .map(|addr| addr.with(multiaddr::Protocol::P2p(target)))
                     .collect::<Vec<_>>();
 
                 assert_eq!(expected_addresses, failed_addresses);
@@ -2374,15 +2404,13 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
-                    MemoryTransportError::Unreachable,
-                ))),
+                MemoryTransportError::Unreachable,
             )),
         )]);
 
         let string = format!("{error}");
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : Handshake failed: No listener on the given port.)]", string)
+        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
     }
 }

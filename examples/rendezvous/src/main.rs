@@ -18,24 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// Examples for the rendezvous protocol:
-///
-/// 1. Run the rendezvous server:
-///     ```
-///     RUST_LOG=info cargo run --bin rendezvous-example
-///     ```
-/// 2. Register a peer:
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-register
-///     ```
-/// 3. Try to discover the peer from (2):
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-discover
-///     ```
-/// 4. Try to discover with identify:
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-identify
-///     ```
+#![doc = include_str!("../README.md")]
+
 use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
