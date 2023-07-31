@@ -67,6 +67,9 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
+#[deprecated(
+    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+)]
 pub mod keep_alive;
 mod listen_opts;
 
