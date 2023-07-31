@@ -527,7 +527,7 @@ where
                     }
 
                     // Renew expired and request inactive mappings.
-                    self.mappings.renew(&mut self.config, gateway, cx);
+                    self.mappings.renew(&self.config, gateway, cx);
                     return Poll::Pending;
                 }
                 GatewayState::GatewayNotFound => {
