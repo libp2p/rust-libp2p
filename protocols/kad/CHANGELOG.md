@@ -12,7 +12,8 @@
 
 [PR 4224]: https://github.com/libp2p/rust-libp2p/pull/4224
 
-- Rename missed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed` in documentation. See [PR 4257].
+- Rename missed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed` in documentation.
+  See [PR 4257].
 
 [PR 4257]: https://github.com/libp2p/rust-libp2p/pull/4257
 
