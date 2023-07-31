@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures-rustls = "0.22"
-either = "1.5.3"
+either = "1.9.0"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -22,7 +22,7 @@ quicksink = "0.1"
 rw-stream-sink = { workspace = true }
 soketto = "0.7.0"
 url = "2.1"
-webpki-roots = "0.24"
+webpki-roots = "0.25"
 
 [dev-dependencies]
 libp2p-tcp = { workspace = true, features = ["async-io"] }
