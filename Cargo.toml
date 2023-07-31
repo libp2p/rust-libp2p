@@ -97,7 +97,7 @@ libp2p-wasm-ext = { version = "0.40.0", path = "transports/wasm-ext" }
 libp2p-webrtc = { version = "0.6.0-alpha", path = "transports/webrtc" }
 libp2p-websocket = { version = "0.42.0", path = "transports/websocket" }
 libp2p-webtransport-websys = { version = "0.1.0", path = "transports/webtransport-websys" }
-libp2p-yamux = { version = "0.44.0", path = "muxers/yamux" }
+libp2p-yamux = { version = "0.44.1", path = "muxers/yamux" }
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
