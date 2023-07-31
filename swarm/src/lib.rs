@@ -146,6 +146,7 @@ use libp2p_identity::PeerId;
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
+use std::time::Duration;
 use std::{
     convert::TryFrom,
     error, fmt, io,
@@ -736,7 +737,7 @@ where
                 .expect("n + 1 is always non-zero; qed");
 
                 self.pool
-                    .spawn_connection(id, peer_id, &endpoint, connection, handler, None);
+                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
 
                 log::debug!(
                     "Connection established: {:?} {:?}; Total (peer): {}.",
@@ -1512,6 +1513,14 @@ where
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
+        self
+    }
+
+    /// How long to keep a connection alive once it is idling.
+    ///
+    /// Defaults to 0.
+    pub fn idle_connection_timeout(mut self, timeout: Duration) -> Self {
+        self.pool_config.idle_connection_timeout = timeout;
         self
     }
 

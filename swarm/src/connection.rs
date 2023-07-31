@@ -177,7 +177,7 @@ where
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
-        idle_timeout: Option<Duration>,
+        idle_timeout: Duration,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
         if !initial_protocols.is_empty() {
@@ -186,7 +186,6 @@ where
             ));
         }
 
-        let timeout = idle_timeout.unwrap_or_else(|| Duration::new(0, 0));
         Connection {
             muxing: muxer,
             handler,
@@ -198,7 +197,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
-            idle_timeout: timeout,
+            idle_timeout,
         }
     }
 
@@ -726,7 +725,7 @@ mod tests {
                 keep_alive::ConnectionHandler,
                 None,
                 max_negotiating_inbound_streams,
-                None,
+                Duration::ZERO,
             );
 
             let result = connection.poll_noop_waker();
@@ -750,7 +749,7 @@ mod tests {
             MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
-            None,
+            Duration::ZERO,
         );
 
         connection.handler.open_new_outbound();
@@ -765,18 +764,17 @@ mod tests {
             StreamUpgradeError::Timeout
         ))
     }
-    
+
     #[test]
     fn test_idle_timeout() {
         // Create a custom idle timeout
-        let idle_timeout = Duration::from_secs(5);
 
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
-            Some(idle_timeout),
+            Duration::from_secs(5),
         );
 
         // Create a mock context and pin the connection
@@ -794,7 +792,7 @@ mod tests {
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
-            None,
+            Duration::ZERO,
         );
 
         // First, start listening on a single protocol.
@@ -833,7 +831,7 @@ mod tests {
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
-            None,
+            Duration::ZERO,
         );
 
         // First, remote supports a single protocol.
