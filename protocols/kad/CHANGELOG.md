@@ -1,5 +1,6 @@
 ## 0.44.4 - unreleased
-- Add a bunch of derivable traits to `RoutingUpdate`
+
+- Implement common traits on `RoutingUpdate`.
   See [PR 4270].
 
 [PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
