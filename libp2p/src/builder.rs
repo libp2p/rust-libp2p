@@ -409,7 +409,7 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<P, T, R> 
     }
 
     // TODO: Not the ideal name.
-    pub fn no_more_other_transports(
+    pub fn without_any_other_transports(
         self,
     ) -> DnsBuilder<P, impl AuthenticatedMultiplexedTransport, R> {
         DnsBuilder {
@@ -589,7 +589,7 @@ mod tests {
             .with_tls()
             .with_noise()
             .without_relay()
-            .no_more_other_transports()
+            .without_any_other_transports()
             .without_dns()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
@@ -620,7 +620,7 @@ mod tests {
             .with_relay()
             .with_tls()
             .with_noise()
-            .no_more_other_transports()
+            .without_any_other_transports()
             .without_dns()
             .with_behaviour(|_, relay| Behaviour {
                 dummy: libp2p_swarm::dummy::Behaviour,
@@ -645,7 +645,7 @@ mod tests {
             .with_tls()
             .with_noise()
             .without_relay()
-            .no_more_other_transports()
+            .without_any_other_transports()
             .with_dns()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
@@ -665,7 +665,7 @@ mod tests {
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
-            .no_more_other_transports()
+            .without_any_other_transports()
             .without_dns()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
