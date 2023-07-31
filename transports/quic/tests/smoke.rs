@@ -428,7 +428,7 @@ async fn smoke<P: Provider>() {
     assert_eq!(b_connected, a_peer_id);
 }
 
-async fn build_streams<P: Provider>() -> (SubstreamBox, SubstreamBox) {
+async fn build_streams<P: Provider + Spawn>() -> (SubstreamBox, SubstreamBox) {
     let (_, mut a_transport) = create_default_transport::<P>();
     let (_, mut b_transport) = create_default_transport::<P>();
 
@@ -522,7 +522,7 @@ async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: 
     }
 }
 
-fn prop<P: Provider + BlockOn>(
+fn prop<P: Provider + BlockOn + Spawn>(
     number_listeners: NonZeroU8,
     number_streams: NonZeroU8,
 ) -> quickcheck::TestResult {
@@ -599,7 +599,7 @@ fn prop<P: Provider + BlockOn>(
     quickcheck::TestResult::passed()
 }
 
-async fn answer_inbound_streams<P: Provider, const BUFFER_SIZE: usize>(
+async fn answer_inbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
 ) {
     loop {
@@ -634,7 +634,7 @@ async fn answer_inbound_streams<P: Provider, const BUFFER_SIZE: usize>(
     }
 }
 
-async fn open_outbound_streams<P: Provider, const BUFFER_SIZE: usize>(
+async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
     mut connection: StreamMuxerBox,
     number_streams: usize,
     completed_streams_tx: mpsc::Sender<()>,
@@ -738,5 +738,24 @@ impl BlockOn for libp2p_quic::tokio::Provider {
         tokio::runtime::Handle::current()
             .block_on(tokio::time::timeout(timeout, future))
             .unwrap()
+    }
+}
+
+trait Spawn {
+    /// Run the given future in the background until it ends.
+    fn spawn(future: impl Future<Output = ()> + Send + 'static);
+}
+
+#[cfg(feature = "async-std")]
+impl Spawn for libp2p_quic::async_std::Provider {
+    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
+        async_std::task::spawn(future);
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl Spawn for libp2p_quic::tokio::Provider {
+    fn spawn(future: impl Future<Output = ()> + Send + 'static) {
+        tokio::spawn(future);
     }
 }
