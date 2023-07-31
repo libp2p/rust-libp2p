@@ -58,9 +58,9 @@ jobs:
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
       - uses: ./.github/actions/cargo-semver-checks
-        if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
+        if: steps.check-released.outputs.code == 200 && !contains(fromJSON('["libp2p-swarm-derive"]'), env.CRATE) # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          crate: env.CRATE
+          crate: ${{ env.CRATE }}
 
       - name: Enforce no dependency on meta crate
         run: |
