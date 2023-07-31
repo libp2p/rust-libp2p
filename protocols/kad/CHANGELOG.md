@@ -1,4 +1,11 @@
-## 0.44.3 - unreleased
+## 0.44.4 - unreleased
+
+- Implement common traits on `RoutingUpdate`.
+  See [PR 4270].
+
+[PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
+
+## 0.44.3
 
 - Prevent simultaneous dials to peers.
   See [PR 4224].
