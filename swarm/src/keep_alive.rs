@@ -18,7 +18,9 @@ use void::Void;
 /// they are not in use. Connections can also fail at any time so really, your application should be
 /// designed to establish them when necessary, making the use of this behaviour likely redundant.
 #[derive(Default)]
-#[deprecated(note = "Configure a very large idle timeout via `SwarmBuilder")]
+#[deprecated(
+    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+)]
 pub struct Behaviour;
 
 #[allow(deprecated)]
