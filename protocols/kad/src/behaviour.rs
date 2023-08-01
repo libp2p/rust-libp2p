@@ -2081,6 +2081,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
@@ -2103,6 +2104,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
