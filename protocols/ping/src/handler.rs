@@ -258,11 +258,11 @@ impl ConnectionHandler for Handler {
             match fut.poll_unpin(cx) {
                 Poll::Pending => {}
                 Poll::Ready(Err(e)) => {
-                    log::debug!("Inbound ping error: {:?}", e);
+                    tracing::debug!("Inbound ping error: {:?}", e);
                     self.inbound = None;
                 }
                 Poll::Ready(Ok(stream)) => {
-                    log::trace!("answered inbound ping from {}", self.peer);
+                    tracing::trace!("answered inbound ping from {}", self.peer);
 
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
@@ -273,7 +273,7 @@ impl ConnectionHandler for Handler {
         loop {
             // Check for outbound ping failures.
             if let Some(error) = self.pending_errors.pop_back() {
-                log::debug!("Ping failure: {:?}", error);
+                tracing::debug!("Ping failure: {:?}", error);
 
                 self.failures += 1;
 
@@ -295,7 +295,7 @@ impl ConnectionHandler for Handler {
                         break;
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
-                        log::debug!("latency to {} is {}ms", self.peer, rtt.as_millis());
+                        tracing::debug!("latency to {} is {}ms", self.peer, rtt.as_millis());
 
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
