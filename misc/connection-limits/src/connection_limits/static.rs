@@ -80,13 +80,14 @@ impl ConnectionLimitsChecker for StaticConnectionLimits {
         use ConnectionKind::*;
 
         let limit = match kind {
-            PendingIncoming => self.max_pending_incoming.unwrap_or(u32::MAX),
-            PendingOutgoing => self.max_pending_outgoing.unwrap_or(u32::MAX),
-            EstablishedIncoming => self.max_established_incoming.unwrap_or(u32::MAX),
-            EstablishedOutgoing => self.max_established_outgoing.unwrap_or(u32::MAX),
-            EstablishedPerPeer => self.max_established_per_peer.unwrap_or(u32::MAX),
-            EstablishedTotal => self.max_established_total.unwrap_or(u32::MAX),
-        };
+            PendingIncoming => self.max_pending_incoming,
+            PendingOutgoing => self.max_pending_outgoing,
+            EstablishedIncoming => self.max_established_incoming,
+            EstablishedOutgoing => self.max_established_outgoing,
+            EstablishedPerPeer => self.max_established_per_peer,
+            EstablishedTotal => self.max_established_total,
+        }
+        .unwrap_or(u32::MAX);
 
         if current as u32 >= limit {
             return Err(ConnectionDenied::new(StaticLimitExceeded { limit, kind }));
