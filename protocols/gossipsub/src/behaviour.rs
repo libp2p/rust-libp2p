@@ -932,11 +932,7 @@ where
 
     /// Returns a scoring parameters for a topic if existent.
     pub fn get_topic_params<H: Hasher>(&self, topic: &Topic<H>) -> Option<&TopicScoreParams> {
-        if let Some((peer_score, ..)) = &self.peer_score {
-            peer_score.get_topic_params(&topic.hash())
-        } else {
-            None
-        }
+        self.peer_score?.0.get_topic_params(&topic.hash())
     }
 
     /// Sets the application specific score for a peer. Returns true if scoring is active and
