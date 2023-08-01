@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // into the `transport` resolves the `dnsaddr` when Kademlia tries
         // to dial these nodes.
         for peer in &BOOTNODES {
-            behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
+            behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?)?;
         }
 
         SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()

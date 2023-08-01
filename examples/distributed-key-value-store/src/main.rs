@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             },
             SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
-                    swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
+                    swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr)?;
                 }
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryProgressed { result, ..})) => {
