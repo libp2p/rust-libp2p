@@ -16,6 +16,7 @@ libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true, features = ["peerid"] }
 log = "0.4"
 parking_lot = "0.12"
+sysinfo = "0.29"
 void = "1"
 
 [dev-dependencies]

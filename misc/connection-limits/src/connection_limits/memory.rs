@@ -36,24 +36,33 @@ pub struct MemoryUsageBasedConnectionLimits {
 
 impl MemoryUsageBasedConnectionLimits {
     pub fn new() -> Self {
+        use sysinfo::{RefreshKind, SystemExt};
+
+        let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
+
         MemoryUsageBasedConnectionLimits {
             max_process_memory_usage_bytes: None,
             max_process_memory_usage_percentage: None,
-            system_physical_memory_bytes: usize::MAX,
+            system_physical_memory_bytes: system_info.total_memory() as usize,
             mem_tracker: ProcessMemoryUsageTracker::new(),
         }
     }
+
+    /// Sets the process memory usage threshold in bytes,
+    /// all pending connections will be dropped when the threshold is exeeded
     pub fn with_max_bytes(mut self, bytes: usize) -> Self {
         self.max_process_memory_usage_bytes = Some(bytes);
         self
     }
 
+    /// Sets the process memory usage threshold in the percentage of the total physical memory,
+    /// all pending connections will be dropped when the threshold is exeeded
     pub fn with_max_percentage(mut self, percentage: f64) -> Self {
         self.max_process_memory_usage_percentage = Some(percentage);
         self
     }
 
-    pub fn max_allowed_bytes(&self) -> Option<usize> {
+    fn max_allowed_bytes(&self) -> Option<usize> {
         self.max_process_memory_usage_bytes.min(
             self.max_process_memory_usage_percentage
                 .map(|p| (self.system_physical_memory_bytes as f64 * p).round() as usize),
