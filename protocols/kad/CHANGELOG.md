@@ -2,8 +2,11 @@
 
 - Implement common traits on `RoutingUpdate`.
   See [PR 4270].
+- Reduce noise of "remote supports our protocol" log.
+  See [PR 4278].
 
 [PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
+[PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
 
 ## 0.44.3
 

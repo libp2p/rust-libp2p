@@ -95,7 +95,7 @@ pub struct KademliaHandler {
 
     remote_supported_protocols: SupportedProtocols,
 
-    /// The current connection ID from the behaviour.
+    /// The ID of this connection.
     connection_id: ConnectionId,
 }
 
