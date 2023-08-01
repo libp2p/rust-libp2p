@@ -35,6 +35,8 @@ use std::{
     time::Duration,
 };
 
+pub use behaviour::Event;
+
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]

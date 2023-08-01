@@ -440,7 +440,7 @@ where
                                 {
                                     MappingState::Pending => {
                                         let external_multiaddr =
-                                            mapping.external_addr(gateway.addr);
+                                            mapping.external_addr(gateway.external_addr);
                                         self.pending_events.push_back(Event::NewExternalAddr(
                                             external_multiaddr.clone(),
                                         ));
@@ -476,7 +476,7 @@ where
                                             mapping.protocol
                                         );
                                         let external_multiaddr =
-                                            mapping.external_addr(gateway.addr);
+                                            mapping.external_addr(gateway.external_addr);
                                         self.pending_events.push_back(Event::ExpiredExternalAddr(
                                             external_multiaddr.clone(),
                                         ));

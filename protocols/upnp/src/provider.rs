@@ -32,7 +32,7 @@ use futures::channel::mpsc::{Receiver, Sender};
 pub struct Gateway {
     pub(crate) sender: Sender<GatewayRequest>,
     pub(crate) receiver: Receiver<GatewayEvent>,
-    pub(crate) addr: IpAddr,
+    pub(crate) external_addr: IpAddr,
 }
 
 /// Abstraction to allow for compatibility with various async runtimes.
@@ -60,7 +60,7 @@ macro_rules! impl_provider {
                     timeout: config.timeout,
                 };
                 let gateway = $gateway::search_gateway(options).await?;
-                let addr = gateway.get_external_ip().await?;
+                let external_addr = gateway.get_external_ip().await?;
 
                 let (events_sender, mut task_receiver) = mpsc::channel(10);
                 let (mut task_sender, events_queue) = mpsc::channel(0);
@@ -111,7 +111,7 @@ macro_rules! impl_provider {
                 Ok(Gateway {
                     sender: events_sender,
                     receiver: events_queue,
-                    addr,
+                    external_addr,
                 })
             }
         }
