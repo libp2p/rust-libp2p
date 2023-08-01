@@ -4376,7 +4376,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
 ]
@@ -6513,6 +6512,16 @@ name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
+
+[[package]]
+name = "upnp-example"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "futures",
+ "libp2p",
+]
 
 [[package]]
 name = "url"
