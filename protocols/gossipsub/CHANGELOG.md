@@ -1,6 +1,7 @@
 ## 0.45.1 - unreleased
 
 - Add getter function to obtain `TopicScoreParams`.
+  See [PR 4231].
 
 [PR 4231]: https://github.com/libp2p/rust-libp2p/pull/4231
 
