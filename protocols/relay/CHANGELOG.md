@@ -6,7 +6,7 @@
 - Add functions to access data within `Limit`.
   See [PR 4162].
 
-- remove unconditional `async-std` dependency.
+- Remove unconditional `async-std` dependency.
   See [PR 4283].
 
 [PR 3742]: https://github.com/libp2p/rust-libp2p/pull/3742
