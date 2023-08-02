@@ -809,7 +809,7 @@ impl ConnectionHandler for KademliaHandler {
                         (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
                         (true, _) => {
                             log::debug!(
-                                "Remote {} now supports our kademlia protocol. {:?}",
+                                "Remote {} now supports our kademlia protocol on connection {}",
                                 self.remote_peer_id,
                                 self.connection_id,
                             );
@@ -818,7 +818,7 @@ impl ConnectionHandler for KademliaHandler {
                         }
                         (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
                             log::debug!(
-                                "Remote {} no longer supports our kademlia protocol. {:?}",
+                                "Remote {} no longer supports our kademlia protocol on connection {}",
                                 self.remote_peer_id,
                                 self.connection_id,
                             );
