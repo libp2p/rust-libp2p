@@ -1,7 +1,7 @@
 ## 0.44.1 - unreleased
 
 - Update to `yamux` `v0.12` which brings performance improvements and introduces an ACK backlog of 256 inbound streams.
-  When interacting with other libp2p nodes that are also running this or a newer version, inbound streams will be backpressured once the ACK backlog is hit.
+  When interacting with other libp2p nodes that are also running this or a newer version, the creation of inbound streams will be backpressured once the ACK backlog is hit.
   See [PR 3013].
 
 [PR 3013]: https://github.com/libp2p/rust-libp2p/pull/3013
