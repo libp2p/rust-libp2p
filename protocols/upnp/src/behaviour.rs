@@ -26,7 +26,7 @@ use std::{
     error::Error,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    net::{IpAddr, SocketAddr, SocketAddrV4},
+    net::{self, SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
@@ -34,7 +34,7 @@ use std::{
 };
 
 use crate::{
-    provider::{Gateway, Provider},
+    provider::{Gateway, IpAddr, Provider},
     Config,
 };
 use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
@@ -88,9 +88,9 @@ impl Mapping {
     /// Given the input gateway address, calculate the
     /// open external `Multiaddr`.
     fn external_addr(&self, gateway_addr: IpAddr) -> Multiaddr {
-        let addr = match gateway_addr {
-            IpAddr::V4(ip) => multiaddr::Protocol::Ip4(ip),
-            IpAddr::V6(ip) => multiaddr::Protocol::Ip6(ip),
+        let addr = match gateway_addr.0 {
+            net::IpAddr::V4(ip) => multiaddr::Protocol::Ip4(ip),
+            net::IpAddr::V6(ip) => multiaddr::Protocol::Ip6(ip),
         };
         self.multiaddr
             .replace(0, |_| Some(addr))
@@ -138,6 +138,7 @@ enum GatewayState {
     Searching(BoxFuture<'static, Result<Gateway, Box<dyn std::error::Error>>>),
     Available(Gateway),
     GatewayNotFound,
+    NonRoutableGateway(IpAddr),
 }
 
 /// The event produced by `Behaviour`.
@@ -149,6 +150,8 @@ pub enum Event {
     ExpiredExternalAddr(Multiaddr),
     /// The IGD gateway was not found.
     GatewayNotFound,
+    /// The Gateway is not exposed directly to the public network.
+    NonRoutableGateway,
 }
 
 /// A list of port mappings and its state.
@@ -348,6 +351,12 @@ where
                             "network gateway not found, UPnP port mapping of {multiaddr} discarded"
                         );
                     }
+                    GatewayState::NonRoutableGateway(addr) => {
+                        log::debug!(
+                            "the network gateway is not exposed to the public network, \
+                            it's ip is {addr}. UPnP port mapping of {multiaddr} discarded"
+                        );
+                    }
                 };
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
@@ -410,6 +419,17 @@ where
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(result) => match result {
                         Ok(gateway) => {
+                            if !gateway.external_addr.is_global() {
+                                self.state =
+                                    GatewayState::NonRoutableGateway(gateway.external_addr);
+                                log::debug!(
+                                    "the gateway is not routable, its address is {}",
+                                    gateway.external_addr
+                                );
+                                return Poll::Ready(ToSwarm::GenerateEvent(
+                                    Event::NonRoutableGateway,
+                                ));
+                            }
                             self.state = GatewayState::Available(gateway);
                         }
                         Err(err) => {
@@ -532,6 +552,9 @@ where
                 }
                 GatewayState::GatewayNotFound => {
                     return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
+                }
+                GatewayState::NonRoutableGateway(_) => {
+                    return Poll::Ready(ToSwarm::GenerateEvent(Event::NonRoutableGateway));
                 }
             }
         }

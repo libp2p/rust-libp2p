@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, net::IpAddr};
+use std::{error::Error, fmt, net};
 
 use crate::{
     behaviour::{GatewayEvent, GatewayRequest},
@@ -27,6 +27,68 @@ use crate::{
 use async_trait::async_trait;
 use futures::channel::mpsc::{Receiver, Sender};
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IpAddr(pub(crate) net::IpAddr);
+
+impl fmt::Display for IpAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl IpAddr {
+    //TODO: remove when `IpAddr::is_global` stabilizes.
+    pub(crate) fn is_global(&self) -> bool {
+        match self.0 {
+            net::IpAddr::V4(ip) => {
+                !(ip.octets()[0] == 0 // "This network"
+                                    || ip.is_private()
+                                    // code for Ipv4::is_shared()
+                                    || (ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000))
+                                    || ip.is_loopback()
+                                    || ip.is_link_local()
+                                    // addresses reserved for future protocols (`192.0.0.0/24`)
+                                    ||(ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0)
+                                    || ip.is_documentation()
+                                    // code for Ipv4::is_benchmarking()
+                                    || (ip.octets()[0] == 198 && (ip.octets()[1] & 0xfe) == 18)
+                                    // code for Ipv4::is_reserved()
+                                    || (ip.octets()[0] & 240 == 240 && !ip.is_broadcast())
+                                    || ip.is_broadcast())
+            }
+            net::IpAddr::V6(ip) => {
+                !(ip.is_unspecified()
+                                    || ip.is_loopback()
+                                    // IPv4-mapped Address (`::ffff:0:0/96`)
+                                    || matches!(ip.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
+                                    // IPv4-IPv6 Translat. (`64:ff9b:1::/48`)
+                                    || matches!(ip.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
+                                    // Discard-Only Address Block (`100::/64`)
+                                    || matches!(ip.segments(), [0x100, 0, 0, 0, _, _, _, _])
+                                    // IETF Protocol Assignments (`2001::/23`)
+                                    || (matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b < 0x200)
+                                    && !(
+                                    // Port Control Protocol Anycast (`2001:1::1`)
+                                    u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
+                                    // Traversal Using Relays around NAT Anycast (`2001:1::2`)
+                                    || u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
+                                    // AMT (`2001:3::/32`)
+                                    || matches!(ip.segments(), [0x2001, 3, _, _, _, _, _, _])
+                                    // AS112-v6 (`2001:4:112::/48`)
+                                    || matches!(ip.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
+                                    // ORCHIDv2 (`2001:20::/28`)
+                                    || matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x2F)
+                                ))
+                                    // code for Ipv4::is_documentation()
+                                    || (ip.segments()[0] == 0x2001) && (ip.segments()[1] == 0xdb8)
+                                    // code for Ipv4::is_unique_local()
+                                    || (ip.segments()[0] & 0xfe00) == 0xfc00
+                                    // code for Ipv4::is_unicast_link_local()
+                                    || (ip.segments()[0] & 0xffc0) == 0xfe80)
+            }
+        }
+    }
+}
 /// Interface that interacts with the inner gateway by messages,
 /// `GatewayRequest`s and `GatewayEvent`s.
 pub struct Gateway {
@@ -34,6 +96,8 @@ pub struct Gateway {
     pub(crate) receiver: Receiver<GatewayEvent>,
     pub(crate) external_addr: IpAddr,
 }
+
+impl Gateway {}
 
 /// Abstraction to allow for compatibility with various async runtimes.
 #[async_trait]
@@ -43,7 +107,7 @@ pub trait Provider {
 
 macro_rules! impl_provider {
     ($impl:ident, $executor: ident, $gateway:ident, $protocol: ident) => {
-        use super::{Config, Gateway};
+        use super::{Config, Gateway, IpAddr};
         use crate::behaviour::{GatewayEvent, GatewayRequest};
 
         use async_trait::async_trait;
@@ -111,7 +175,7 @@ macro_rules! impl_provider {
                 Ok(Gateway {
                     sender: events_sender,
                     receiver: events_queue,
-                    external_addr,
+                    external_addr: IpAddr(external_addr),
                 })
             }
         }
