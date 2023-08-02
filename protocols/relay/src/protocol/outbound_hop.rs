@@ -18,188 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
-use asynchronous_codec::{Framed, FramedParts};
-use bytes::Bytes;
-use futures::{future::BoxFuture, prelude::*};
+use futures::channel::mpsc;
 use futures_timer::Delay;
-use instant::{Duration, SystemTime};
-use libp2p_core::{upgrade, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
-use std::convert::TryFrom;
-use std::iter;
 use thiserror::Error;
 
-pub enum Upgrade {
-    Reserve,
-    Connect { dst_peer_id: PeerId },
-}
+use libp2p_core::Multiaddr;
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(HOP_PROTOCOL_NAME)
-    }
-}
-
-impl upgrade::OutboundUpgrade<Stream> for Upgrade {
-    type Output = Output;
-    type Error = UpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, substream: Stream, _: Self::Info) -> Self::Future {
-        let msg = match self {
-            Upgrade::Reserve => proto::HopMessage {
-                type_pb: proto::HopMessageType::RESERVE,
-                peer: None,
-                reservation: None,
-                limit: None,
-                status: None,
-            },
-            Upgrade::Connect { dst_peer_id } => proto::HopMessage {
-                type_pb: proto::HopMessageType::CONNECT,
-                peer: Some(proto::Peer {
-                    id: dst_peer_id.to_bytes(),
-                    addrs: vec![],
-                }),
-                reservation: None,
-                limit: None,
-                status: None,
-            },
-        };
-
-        let mut substream = Framed::new(
-            substream,
-            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
-        );
-
-        async move {
-            substream.send(msg).await?;
-            let proto::HopMessage {
-                type_pb,
-                peer: _,
-                reservation,
-                limit,
-                status,
-            } = substream
-                .next()
-                .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
-
-            match type_pb {
-                proto::HopMessageType::CONNECT => {
-                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
-                }
-                proto::HopMessageType::RESERVE => {
-                    return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
-                }
-                proto::HopMessageType::STATUS => {}
-            }
-
-            let limit = limit.map(Into::into);
-
-            let output = match self {
-                Upgrade::Reserve => {
-                    match status
-                        .ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))?
-                    {
-                        proto::Status::OK => {}
-                        proto::Status::RESERVATION_REFUSED => {
-                            return Err(ReservationFailedReason::Refused.into())
-                        }
-                        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                            return Err(ReservationFailedReason::ResourceLimitExceeded.into())
-                        }
-                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
-                    }
-
-                    let reservation =
-                        reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
-
-                    if reservation.addrs.is_empty() {
-                        return Err(FatalUpgradeError::NoAddressesInReservation.into());
-                    }
-
-                    let addrs = reservation
-                        .addrs
-                        .into_iter()
-                        .map(|b| Multiaddr::try_from(b.to_vec()))
-                        .collect::<Result<Vec<Multiaddr>, _>>()
-                        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
-
-                    let renewal_timeout = reservation
-                        .expire
-                        .checked_sub(
-                            SystemTime::now()
-                                .duration_since(SystemTime::UNIX_EPOCH)
-                                .unwrap()
-                                .as_secs(),
-                        )
-                        // Renew the reservation after 3/4 of the reservation expiration timestamp.
-                        .and_then(|duration| duration.checked_sub(duration / 4))
-                        .map(Duration::from_secs)
-                        .map(Delay::new)
-                        .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
-
-                    substream.close().await?;
-
-                    Output::Reservation {
-                        renewal_timeout,
-                        addrs,
-                        limit,
-                    }
-                }
-                Upgrade::Connect { .. } => {
-                    match status
-                        .ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))?
-                    {
-                        proto::Status::OK => {}
-                        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                            return Err(CircuitFailedReason::ResourceLimitExceeded.into())
-                        }
-                        proto::Status::CONNECTION_FAILED => {
-                            return Err(CircuitFailedReason::ConnectionFailed.into())
-                        }
-                        proto::Status::NO_RESERVATION => {
-                            return Err(CircuitFailedReason::NoReservation.into())
-                        }
-                        proto::Status::PERMISSION_DENIED => {
-                            return Err(CircuitFailedReason::PermissionDenied.into())
-                        }
-                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
-                    }
-
-                    let FramedParts {
-                        io,
-                        read_buffer,
-                        write_buffer,
-                        ..
-                    } = substream.into_parts();
-                    assert!(
-                        write_buffer.is_empty(),
-                        "Expect a flushed Framed to have empty write buffer."
-                    );
-
-                    Output::Circuit {
-                        substream: io,
-                        read_buffer: read_buffer.freeze(),
-                        limit,
-                    }
-                }
-            };
-
-            Ok(output)
-        }
-        .boxed()
-    }
-}
+use crate::priv_client::transport;
+use crate::proto;
+use crate::protocol::Limit;
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub(crate) enum UpgradeError {
     #[error("Reservation failed")]
     ReservationFailed(#[from] ReservationFailedReason),
     #[error("Circuit failed")]
@@ -262,15 +92,14 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
-pub enum Output {
+pub(crate) enum Output {
     Reservation {
         renewal_timeout: Delay,
         addrs: Vec<Multiaddr>,
         limit: Option<Limit>,
+        to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     Circuit {
-        substream: Stream,
-        read_buffer: Bytes,
         limit: Option<Limit>,
     },
 }

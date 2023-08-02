@@ -22,7 +22,7 @@
 
 mod handler;
 pub(crate) mod rate_limiter;
-use crate::behaviour::handler::Handler;
+use crate::behaviour::handler::{Handler, ReservationReq};
 use crate::multiaddr_ext::MultiaddrExt;
 use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
@@ -811,7 +811,7 @@ impl Add<u64> for CircuitId {
 enum Action {
     Done(ToSwarm<Event, Either<handler::In, Void>>),
     AcceptReservationPrototype {
-        inbound_reservation_req: inbound_hop::ReservationReq,
+        inbound_reservation_req: ReservationReq,
         handler: NotifyHandler,
         peer_id: PeerId,
     },
