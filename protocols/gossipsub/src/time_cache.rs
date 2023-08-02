@@ -159,10 +159,6 @@ where
     pub(crate) fn contains_key(&self, key: &Key) -> bool {
         self.map.contains_key(key)
     }
-
-    pub(crate) fn get(&self, key: &Key) -> Option<&Value> {
-        self.map.get(key).map(|e| &e.element)
-    }
 }
 
 pub(crate) struct DuplicateCache<Key>(TimeCache<Key, ()>);

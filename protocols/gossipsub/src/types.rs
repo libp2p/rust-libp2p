@@ -79,14 +79,6 @@ macro_rules! declare_message_id_type {
 // A type for gossipsub message ids.
 declare_message_id_type!(MessageId, "MessageId");
 
-// A type for gossipsub fast messsage ids, not to confuse with "real" message ids.
-//
-// A fast-message-id is an optional message_id that can be used to filter duplicates quickly. On
-// high intensive networks with lots of messages, where the message_id is based on the result of
-// decompressed traffic, it is beneficial to specify a `fast-message-id` that can identify and
-// filter duplicates quickly without performing the overhead of decompression.
-declare_message_id_type!(FastMessageId, "FastMessageId");
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PeerConnections {
     /// The kind of protocol the peer supports.
