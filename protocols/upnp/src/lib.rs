@@ -56,7 +56,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Creates a new configuration for a UPnP transport:
+    /// Creates a new configuration for a UPnP [`NetworkBehaviour`].
     pub fn new() -> Self {
         Self {
             bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)),

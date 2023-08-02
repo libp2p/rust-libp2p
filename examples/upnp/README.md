@@ -1,13 +1,13 @@
 ## Description
 
-The upnp example showcases how to use the upnp network behaviour to externally open ports on the
-network gateway.
+The upnp example showcases how to use the upnp network behaviour to externally open ports on the network gateway.
+
 
 ## Usage
 
 To run the example, follow these steps:
 
-1. In a first terminal window, run the following command:
+1. In a terminal window, run the following command:
 
    ```sh
    cargo run

@@ -6,7 +6,8 @@
 - Add `json` feature which exposes `request_response::json`.
   See [PR 4188].
 
-- Add initial version of `upnp` protocol see [PR 4156]
+- Add support for UPnP via the IGD protocol.
+  See [PR 4156].
 
 [PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
 [PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217

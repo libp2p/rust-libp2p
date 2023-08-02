@@ -19,9 +19,9 @@ libp2p-swarm = { workspace = true }
 log = "0.4.19"
 void = "1.0.2"
 tokio = { version = "1.29", default-features = false, features = ["rt", "rt-multi-thread"], optional = true }
-async-std = { version = "1.12.0"}
+async-std = { version = "1.12.0", optional = true }
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]
-async-std = ["igd-next/aio_async_std"]
+async-std = ["igd-next/aio_async_std", "dep:async-std"]
 

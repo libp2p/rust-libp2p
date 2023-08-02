@@ -13,7 +13,7 @@ members = [
     "examples/ping-example",
     "examples/relay-server",
     "examples/rendezvous",
-    "examples/upnp-example",
+    "examples/upnp",
     "identity",
     "interop-tests",
     "misc/allow-block-list",

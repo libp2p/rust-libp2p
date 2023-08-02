@@ -41,10 +41,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let config = upnp::Config::new().temporary(false);
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
-        upnp::async_std::Behaviour::new(config),
+        upnp::async_std::Behaviour::new(upnp::Config::new()),
         local_peer_id,
     )
     .build();
@@ -70,6 +69,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 upnp::Event::GatewayNotFound => {
                     println!("Gateway does not support UPnP");
+                    break;
+                }
+                upnp::Event::NonRoutableGateway => {
+                    println!("Gateway is not exposed directly to the public network.");
                     break;
                 }
                 _ => {}
