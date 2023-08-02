@@ -6,7 +6,6 @@ mod sdp;
 mod stream;
 mod transport;
 mod upgrade;
-mod utils;
 
 pub use self::connection::Connection;
 pub use self::error::Error;
