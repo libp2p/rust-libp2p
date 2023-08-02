@@ -31,12 +31,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::common::substream::{
+use crate::tokio::{substream::drop_listener::GracefullyClosed, substream::framed_dc::FramedDc};
+use crate::utils::proto::{Flag, Message};
+use crate::utils::substream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
-use crate::proto::{Flag, Message};
-use crate::tokio::{substream::drop_listener::GracefullyClosed, substream::framed_dc::FramedDc};
 
 mod drop_listener;
 mod framed_dc;
@@ -149,6 +149,7 @@ impl AsyncWrite for Substream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        // while ReadClosed
         while self.state.read_flags_in_async_write() {
             // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
             // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
@@ -237,7 +238,7 @@ fn io_poll_next(
 
 #[cfg(test)]
 mod tests {
-    use crate::common::substream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
+    use crate::utils::substream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
 
     use super::*;
     use asynchronous_codec::Encoder;
@@ -250,8 +251,8 @@ mod tests {
         // Largest possible message.
         let message = [0; MAX_DATA_LEN];
 
-        let protobuf = crate::proto::Message {
-            flag: Some(crate::proto::Flag::FIN),
+        let protobuf = crate::utils::proto::Message {
+            flag: Some(crate::utils::proto::Flag::FIN),
             message: Some(message.to_vec()),
         };
 

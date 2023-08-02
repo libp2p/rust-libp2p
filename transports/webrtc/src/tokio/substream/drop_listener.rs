@@ -27,8 +27,8 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::proto::{Flag, Message};
 use crate::tokio::substream::framed_dc::FramedDc;
+use crate::utils::proto::{Flag, Message};
 
 #[must_use]
 pub(crate) struct DropListener {
