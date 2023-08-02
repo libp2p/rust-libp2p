@@ -2,7 +2,6 @@ pub(crate) mod noise;
 
 pub(crate) use super::fingerprint::Fingerprint;
 use super::stream::{DataChannelConfig, WebRTCStream};
-use super::utils;
 use super::Error;
 use super::{sdp, Connection};
 use js_sys::{Object, Reflect};
