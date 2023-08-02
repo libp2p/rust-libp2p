@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
-use libp2p::{identity, ping, Multiaddr, PeerId};
+use libp2p::{identify, identity, ping, Multiaddr, PeerId};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -29,12 +29,17 @@ pub async fn run_test(
     let redis_client = RedisClient::new(redis_addr).context("Could not connect to redis")?;
 
     // Build the transport from the passed ENV var.
-    let (boxed_transport, local_addr) = build_transport(local_key, ip, transport)?;
+    let (boxed_transport, local_addr) = build_transport(local_key.clone(), ip, transport)?;
     let mut swarm = swarm_builder(
         boxed_transport,
         Behaviour {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
+            // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/interop-tests".to_owned(),
+                local_key.public(),
+            )),
         },
         local_peer_id,
     )
@@ -237,6 +242,7 @@ impl FromStr for SecProtocol {
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
+    identify: identify::Behaviour,
 }
 
 /// Helper function to get a ENV variable into an test parameter like `Transport`.
