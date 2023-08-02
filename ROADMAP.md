@@ -71,7 +71,7 @@ argue that that demand follows this roadmap item and not the other way round.)
 
 | Category     | Status | Target Completion | Tracking                                   | Dependencies                                                                              | Dependents |
 |--------------|--------|-------------------|--------------------------------------------|-------------------------------------------------------------------------------------------|------------|
-| Connectivity | todo   |                   | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 |            |
+| Connectivity | todo   |                   | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 | https://github.com/libp2p/rust-libp2p/pull/4248  |
 
 Use the browser's WebRTC stack to support
 [`/webrtc`](https://github.com/libp2p/specs/blob/master/webrtc/webrtc.md) and
