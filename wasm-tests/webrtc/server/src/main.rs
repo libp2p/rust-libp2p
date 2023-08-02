@@ -16,7 +16,9 @@ use void::Void;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format_timestamp_millis()
+        .init();
 
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = id_keys.public().to_peer_id();
