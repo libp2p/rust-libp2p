@@ -37,7 +37,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// A [`NetworkBehaviour`] that enforces a set of memory usage based [`ConnectionLimits`].
+/// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
 ///
 /// For these limits to take effect, this needs to be composed into the behaviour tree of your application.
 ///
