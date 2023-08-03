@@ -7,6 +7,7 @@ license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["futures", "async", "backpressure"]
 categories = ["data-structures", "asynchronous"]
+description = "Utilities for bounding futures in size and time."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
