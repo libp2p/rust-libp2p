@@ -30,7 +30,7 @@ pub(crate) struct MemoryUsageBasedConnectionLimits {
 }
 
 impl MemoryUsageBasedConnectionLimits {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         use sysinfo::{RefreshKind, SystemExt};
 
         let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
@@ -44,14 +44,14 @@ impl MemoryUsageBasedConnectionLimits {
 
     /// Sets the process memory usage threshold in bytes,
     /// all pending connections will be dropped when the threshold is exeeded
-    pub fn with_max_bytes(mut self, bytes: usize) -> Self {
+    pub(crate) fn with_max_bytes(mut self, bytes: usize) -> Self {
         self.max_process_memory_usage_bytes = Some(bytes);
         self
     }
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory,
     /// all pending connections will be dropped when the threshold is exeeded
-    pub fn with_max_percentage(mut self, percentage: f64) -> Self {
+    pub(crate) fn with_max_percentage(mut self, percentage: f64) -> Self {
         self.max_process_memory_usage_percentage = Some(percentage);
         self
     }

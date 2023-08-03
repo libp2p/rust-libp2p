@@ -30,13 +30,13 @@ use void::Void;
 
 #[derive(libp2p_swarm_derive::NetworkBehaviour)]
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-pub struct TestBehaviour {
-    pub connection_limits: libp2p_memory_connection_limits::Behaviour,
-    pub mem: ConsumeMemoryBehaviour,
+pub(crate) struct TestBehaviour {
+    pub(crate) connection_limits: libp2p_memory_connection_limits::Behaviour,
+    pub(crate) mem: ConsumeMemoryBehaviour,
 }
 
 #[derive(Default)]
-pub struct ConsumeMemoryBehaviour {
+pub(crate) struct ConsumeMemoryBehaviour {
     map: Vec<Vec<u8>>,
 }
 
@@ -95,11 +95,8 @@ impl NetworkBehaviour for ConsumeMemoryBehaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed { .. }) => {
-                self.map.pop();
-            }
-            _ => {}
+        if let FromSwarm::ConnectionClosed(ConnectionClosed { .. }) = event {
+            self.map.pop();
         }
     }
 
