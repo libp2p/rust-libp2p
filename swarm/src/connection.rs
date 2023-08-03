@@ -28,6 +28,7 @@ pub(crate) use error::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use supported_protocols::SupportedProtocols;
+use tracing::Span;
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
@@ -155,6 +156,7 @@ where
 
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
+    error_span: Span,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -182,6 +184,7 @@ where
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
+        error_span: Span,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
 
@@ -190,7 +193,6 @@ where
                 ProtocolsChange::Added(ProtocolsAdded::from_set(&initial_protocols)),
             ));
         }
-
         Connection {
             muxing: muxer,
             handler,
@@ -202,6 +204,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
+            error_span,
         }
     }
 
@@ -233,8 +236,10 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
+            error_span,
         } = self.get_mut();
 
+        let _guard = error_span.enter();
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
@@ -711,7 +716,7 @@ mod tests {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
             let alive_substream_counter = Arc::new(());
-
+            let span = tracing::error_span!("test");
             let mut connection = Connection::new(
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
@@ -719,6 +724,7 @@ mod tests {
                 keep_alive::ConnectionHandler,
                 None,
                 max_negotiating_inbound_streams,
+                span,
             );
 
             let result = connection.poll_noop_waker();
@@ -736,12 +742,14 @@ mod tests {
 
     #[test]
     fn outbound_stream_timeout_starts_on_request() {
+        let span = tracing::error_span!("test");
         let upgrade_timeout = Duration::from_secs(1);
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
+            span,
         );
 
         connection.handler.open_new_outbound();
@@ -759,11 +767,13 @@ mod tests {
 
     #[test]
     fn propagates_changes_to_supported_inbound_protocols() {
+        let span = tracing::error_span!("test");
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
+            span,
         );
 
         // First, start listening on a single protocol.
@@ -797,11 +807,13 @@ mod tests {
 
     #[test]
     fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
+        let span = tracing::error_span!("test");
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
+            span,
         );
 
         // First, remote supports a single protocol.

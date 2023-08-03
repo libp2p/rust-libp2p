@@ -172,10 +172,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build();
 
     swarm
-        .listen_on("/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap())
+        .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
         .unwrap();
     swarm
-        .listen_on("/ip6/::/udp/4001/quic-v1".parse().unwrap())
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
 
     // Wait to listen on all interfaces.

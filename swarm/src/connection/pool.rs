@@ -307,8 +307,6 @@ where
 {
     /// Creates a new empty `Pool`.
     pub(crate) fn new(local_id: PeerId, config: PoolConfig) -> Self {
-        let span = tracing::error_span!("peer id:", %local_id, connection_id = tracing::field::Empty);
-        let _guard = span.enter();
         let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
         let executor = match config.executor {
             Some(exec) => ExecSwitch::Executor(exec),
@@ -496,11 +494,6 @@ where
         handler: THandler,
     ) {
         let connection = connection.extract();
-
-        let span = tracing::error_span!("peer id:", %obtained_peer_id, connection_id = tracing::field::Empty);
-        let _guard = span.enter();
-        span.record("connection id", tracing::field::display(id));
-
         let conns = self.established.entry(obtained_peer_id).or_default();
         self.counters.inc_established(endpoint);
 
@@ -519,11 +512,13 @@ where
             waker.wake();
         }
 
-        let connection = Connection::new(
+        let span = tracing::error_span!("connection", connection_id = %id, peer_id = %obtained_peer_id, peer_address = ?endpoint);
+        let connection: Connection<THandler> = Connection::new(
             connection,
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
+            span,
         );
 
         self.executor.spawn(task::new_for_established_connection(
