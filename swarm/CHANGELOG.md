@@ -1,6 +1,6 @@
 ## 0.43.3 - unreleased
 
-- Implement `Display` for `ConnectionId`
+- Implement `Display` for `ConnectionId`.
   See [PR 4278].
 
 [PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
