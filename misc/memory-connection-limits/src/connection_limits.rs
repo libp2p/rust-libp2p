@@ -19,11 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::*;
-use parking_lot::RwLock;
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use libp2p_swarm::ConnectionDenied;
+use std::fmt;
 
 /// The configurable memory usage based connection limits.
 #[derive(Debug)]
@@ -31,7 +28,6 @@ pub struct MemoryUsageBasedConnectionLimits {
     max_process_memory_usage_bytes: Option<usize>,
     max_process_memory_usage_percentage: Option<f64>,
     system_physical_memory_bytes: usize,
-    mem_tracker: ProcessMemoryUsageTracker,
 }
 
 impl MemoryUsageBasedConnectionLimits {
@@ -44,7 +40,6 @@ impl MemoryUsageBasedConnectionLimits {
             max_process_memory_usage_bytes: None,
             max_process_memory_usage_percentage: None,
             system_physical_memory_bytes: system_info.total_memory() as usize,
-            mem_tracker: ProcessMemoryUsageTracker::new(),
         }
     }
 
@@ -62,6 +57,24 @@ impl MemoryUsageBasedConnectionLimits {
         self
     }
 
+    pub(crate) fn check_limit(
+        &self,
+        mem_tracker: &mut ProcessMemoryUsageTracker,
+    ) -> Result<(), ConnectionDenied> {
+        if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
+            mem_tracker.refresh_if_needed();
+            let process_memory_bytes = mem_tracker.total_bytes();
+            if process_memory_bytes > max_allowed_bytes {
+                return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
+                    process_memory_bytes,
+                    max_allowed_bytes,
+                }));
+            }
+        }
+
+        Ok(())
+    }
+
     fn max_allowed_bytes(&self) -> Option<usize> {
         self.max_process_memory_usage_bytes.min(
             self.max_process_memory_usage_percentage
@@ -73,30 +86,6 @@ impl MemoryUsageBasedConnectionLimits {
 impl Default for MemoryUsageBasedConnectionLimits {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl ConnectionLimitsChecker for MemoryUsageBasedConnectionLimits {
-    fn check_limit(&self, kind: ConnectionKind, _current: usize) -> Result<(), ConnectionDenied> {
-        use ConnectionKind::*;
-
-        match kind {
-            PendingIncoming | PendingOutgoing => {
-                if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
-                    self.mem_tracker.refresh_if_needed();
-                    let process_memory_bytes = self.mem_tracker.total_bytes();
-                    if process_memory_bytes > max_allowed_bytes {
-                        return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
-                            process_memory_bytes,
-                            max_allowed_bytes,
-                        }));
-                    }
-                }
-            }
-            EstablishedIncoming | EstablishedOutgoing | EstablishedPerPeer | EstablishedTotal => {}
-        };
-
-        Ok(())
     }
 }
 
@@ -117,65 +106,5 @@ impl fmt::Display for MemoryUsageLimitExceeded {
             self.process_memory_bytes,
             self.max_allowed_bytes,
         )
-    }
-}
-
-#[derive(Debug)]
-struct ProcessMemoryUsageTracker(Arc<RwLock<ProcessMemoryUsageTrackerInner>>);
-
-impl ProcessMemoryUsageTracker {
-    fn new() -> Self {
-        Self(Arc::new(RwLock::new(ProcessMemoryUsageTrackerInner::new())))
-    }
-
-    fn refresh_if_needed(&self) {
-        let need_refresh = self.0.read().need_refresh();
-        if need_refresh {
-            self.0.write().refresh();
-        }
-    }
-
-    fn total_bytes(&self) -> usize {
-        let guard = self.0.read();
-        guard.physical_bytes + guard.virtual_bytes
-    }
-}
-
-#[derive(Debug)]
-struct ProcessMemoryUsageTrackerInner {
-    last_checked: Instant,
-    physical_bytes: usize,
-    virtual_bytes: usize,
-}
-
-impl ProcessMemoryUsageTrackerInner {
-    fn new() -> Self {
-        let stats = memory_stats::memory_stats();
-        if stats.is_none() {
-            log::warn!("Failed to retrive process memory stats");
-        }
-        Self {
-            last_checked: Instant::now(),
-            physical_bytes: stats.map(|s| s.physical_mem).unwrap_or_default(),
-            virtual_bytes: stats
-                .map(|s: memory_stats::MemoryStats| s.virtual_mem)
-                .unwrap_or_default(),
-        }
-    }
-
-    fn need_refresh(&self) -> bool {
-        const PROCESS_MEMORY_USAGE_CHECK_INTERVAL: Duration = Duration::from_millis(1000);
-
-        self.last_checked + PROCESS_MEMORY_USAGE_CHECK_INTERVAL < Instant::now()
-    }
-
-    fn refresh(&mut self) {
-        if let Some(stats) = memory_stats::memory_stats() {
-            self.physical_bytes = stats.physical_mem;
-            self.virtual_bytes = stats.virtual_mem;
-        } else {
-            log::warn!("Failed to retrive process memory stats");
-        }
-        self.last_checked = Instant::now();
     }
 }

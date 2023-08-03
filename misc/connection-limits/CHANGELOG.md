@@ -1,18 +1,3 @@
-## 0.2.2
-- Rename `ConnectionLimits` to `StaticConnectionLimits`
-
-  See [PR XX]
-
-- Refactor `Behaviour` to take a generic `ConnectionLimitsChecker`
-
-  See [PR XX]
-
-- Add `MemoryBasedConnectionLimits`
-
-  See [PR XX]
-
-[PR XX]: https://github.com/libp2p/rust-libp2p/pull/XX
-
 ## 0.2.1
 
 - Do not count a connection as established when it is denied by another sibling `NetworkBehaviour`.
