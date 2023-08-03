@@ -25,12 +25,14 @@ use bytes::Bytes;
 use futures::prelude::*;
 use thiserror::Error;
 
-use libp2p_core::Multiaddr;
+use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
 
+use crate::behaviour::handler;
 use crate::proto;
-use crate::proto::Status;
+use crate::proto::message_v2::pb::mod_HopMessage::Type;
+use crate::protocol::MAX_MESSAGE_SIZE;
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
@@ -61,10 +63,10 @@ pub enum FatalUpgradeError {
 }
 
 pub struct ReservationReq {
-    pub(crate) substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
-    pub(crate) reservation_duration: Duration,
-    pub(crate) max_circuit_duration: Duration,
-    pub(crate) max_circuit_bytes: u64,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    reservation_duration: Duration,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
 }
 
 impl ReservationReq {
@@ -102,7 +104,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    pub async fn deny(self, status: Status) -> Result<(), UpgradeError> {
+    pub async fn deny(self, status: proto::Status) -> Result<(), UpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
@@ -124,8 +126,8 @@ impl ReservationReq {
 }
 
 pub struct CircuitReq {
-    pub(crate) dst: PeerId,
-    pub(crate) substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
+    dst: PeerId,
+    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
 }
 
 impl CircuitReq {
@@ -139,7 +141,7 @@ impl CircuitReq {
             peer: None,
             reservation: None,
             limit: None,
-            status: Some(Status::OK),
+            status: Some(proto::Status::OK),
         };
 
         self.send(msg).await?;
@@ -158,7 +160,7 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
+    pub async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
@@ -176,4 +178,56 @@ impl CircuitReq {
 
         Ok(())
     }
+}
+
+pub(crate) async fn process_inbound_request(
+    io: Stream,
+    reservation_duration: Duration,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
+    endpoint: ConnectedPoint,
+    renewed: bool,
+) -> Result<handler::Event, FatalUpgradeError> {
+    let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+
+    let proto::HopMessage {
+        type_pb,
+        peer,
+        reservation: _,
+        limit: _,
+        status: _,
+    } = substream
+        .next()
+        .await
+        .ok_or(FatalUpgradeError::StreamClosed)??;
+
+    let event = match type_pb {
+        Type::RESERVE => {
+            let req = ReservationReq {
+                substream,
+                reservation_duration,
+                max_circuit_duration,
+                max_circuit_bytes,
+            };
+
+            handler::Event::ReservationReqReceived {
+                inbound_reservation_req: req,
+                endpoint,
+                renewed,
+            }
+        }
+        Type::CONNECT => {
+            let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
+                .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+            let req = CircuitReq { dst, substream };
+
+            handler::Event::CircuitReqReceived {
+                inbound_circuit_req: req,
+                endpoint,
+            }
+        }
+        Type::STATUS => return Err(FatalUpgradeError::UnexpectedTypeStatus),
+    };
+
+    Ok(event)
 }

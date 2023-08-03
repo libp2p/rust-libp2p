@@ -45,7 +45,6 @@ use libp2p_swarm::{
 
 use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
-use crate::proto::message_v2::pb::mod_HopMessage::Type;
 use crate::proto::Status;
 use crate::protocol::outbound_stop::CircuitFailedReason;
 use crate::protocol::MAX_MESSAGE_SIZE;
@@ -413,65 +412,6 @@ impl Handler {
             stop_requested_streams: Default::default(),
             outbound_stop_futs: Default::default(),
         }
-    }
-
-    fn process_inbound_request(
-        &self,
-        io: Stream,
-    ) -> BoxFuture<'static, Result<Event, inbound_hop::FatalUpgradeError>> {
-        let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
-
-        let reservation_duration = self.config.reservation_duration;
-        let max_circuit_duration = self.config.max_circuit_duration;
-        let max_circuit_bytes = self.config.max_circuit_bytes;
-        let endpoint = self.endpoint.clone();
-        let renewed = self.active_reservation.is_some();
-
-        async move {
-            let proto::HopMessage {
-                type_pb,
-                peer,
-                reservation: _,
-                limit: _,
-                status: _,
-            } = substream
-                .next()
-                .await
-                .ok_or(inbound_hop::FatalUpgradeError::StreamClosed)??;
-
-            let event = match type_pb {
-                Type::RESERVE => {
-                    let req = inbound_hop::ReservationReq {
-                        substream,
-                        reservation_duration,
-                        max_circuit_duration,
-                        max_circuit_bytes,
-                    };
-
-                    Event::ReservationReqReceived {
-                        inbound_reservation_req: req,
-                        endpoint,
-                        renewed,
-                    }
-                }
-                Type::CONNECT => {
-                    let dst = PeerId::from_bytes(
-                        &peer.ok_or(inbound_hop::FatalUpgradeError::MissingPeer)?.id,
-                    )
-                    .map_err(|_| inbound_hop::FatalUpgradeError::ParsePeerId)?;
-                    let req = inbound_hop::CircuitReq { dst, substream };
-
-                    Event::CircuitReqReceived {
-                        inbound_circuit_req: req,
-                        endpoint,
-                    }
-                }
-                Type::STATUS => return Err(inbound_hop::FatalUpgradeError::UnexpectedTypeStatus),
-            };
-
-            Ok(event)
-        }
-        .boxed()
     }
 
     fn send_stop_message_and_process_result(
@@ -950,8 +890,17 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.inbound_requests_futs
-                    .push(self.process_inbound_request(stream));
+                self.inbound_requests_futs.push(
+                    inbound_hop::process_inbound_request(
+                        stream,
+                        self.config.reservation_duration,
+                        self.config.max_circuit_duration,
+                        self.config.max_circuit_bytes,
+                        self.endpoint.clone(),
+                        self.active_reservation.is_some(),
+                    )
+                    .boxed(),
+                );
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
