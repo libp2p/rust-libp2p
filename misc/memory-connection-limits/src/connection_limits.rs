@@ -20,11 +20,10 @@
 
 use super::*;
 use libp2p_swarm::ConnectionDenied;
-use std::fmt;
 
 /// The configurable memory usage based connection limits.
 #[derive(Debug)]
-pub struct MemoryUsageBasedConnectionLimits {
+pub(crate) struct MemoryUsageBasedConnectionLimits {
     max_process_memory_usage_bytes: Option<usize>,
     max_process_memory_usage_percentage: Option<f64>,
     system_physical_memory_bytes: usize,
@@ -93,25 +92,5 @@ impl MemoryUsageBasedConnectionLimits {
 impl Default for MemoryUsageBasedConnectionLimits {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// A connection limit has been exceeded.
-#[derive(Debug, Clone, Copy)]
-pub struct MemoryUsageLimitExceeded {
-    pub process_physical_memory_bytes: usize,
-    pub max_allowed_bytes: usize,
-}
-
-impl std::error::Error for MemoryUsageLimitExceeded {}
-
-impl fmt::Display for MemoryUsageLimitExceeded {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "pending connections are dropped, process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
-            self.process_physical_memory_bytes,
-            self.max_allowed_bytes,
-        )
     }
 }

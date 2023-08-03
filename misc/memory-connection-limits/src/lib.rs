@@ -19,7 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod connection_limits;
-pub use connection_limits::{MemoryUsageBasedConnectionLimits, MemoryUsageLimitExceeded};
+use connection_limits::MemoryUsageBasedConnectionLimits;
+
+mod error;
+pub use error::MemoryUsageLimitExceeded;
 
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -57,7 +60,7 @@ use std::{
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
 ///   identify: identify::Behaviour,
-///   limits: connection_limits::Behaviour
+///   limits: memory_connection_limits::Behaviour
 /// }
 /// ```
 pub struct Behaviour {
@@ -66,21 +69,38 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn new(limits: MemoryUsageBasedConnectionLimits) -> Self {
+    /// Sets the process memory usage threshold in bytes,
+    /// all pending connections will be dropped when the threshold is exeeded
+    pub fn new_with_max_bytes(bytes: usize) -> Self {
         Self {
-            limits,
+            limits: MemoryUsageBasedConnectionLimits::default().with_max_bytes(bytes),
             mem_tracker: ProcessMemoryUsageTracker::new(),
         }
     }
 
-    pub fn update_limits(&mut self, limits: MemoryUsageBasedConnectionLimits) {
-        self.limits = limits;
+    /// Sets the process memory usage threshold in the percentage of the total physical memory,
+    /// all pending connections will be dropped when the threshold is exeeded
+    pub fn new_with_max_percentage(percentage: f64) -> Self {
+        Self {
+            limits: MemoryUsageBasedConnectionLimits::default().with_max_percentage(percentage),
+            mem_tracker: ProcessMemoryUsageTracker::new(),
+        }
     }
 
     /// Sets memory usage refresh interval, default is 1s. Use `None` to always refresh
     pub fn with_memory_usage_refresh_interval(mut self, interval: Option<Duration>) -> Self {
         self.mem_tracker.refresh_interval = interval;
         self
+    }
+
+    /// Updates the process memory usage threshold in bytes,
+    pub fn update_max_bytes(&mut self, bytes: usize) {
+        self.limits = MemoryUsageBasedConnectionLimits::default().with_max_bytes(bytes);
+    }
+
+    /// Updates the process memory usage threshold in the percentage of the total physical memory,
+    pub fn update_max_percentage(&mut self, percentage: f64) {
+        self.limits = MemoryUsageBasedConnectionLimits::default().with_max_percentage(percentage);
     }
 }
 

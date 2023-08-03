@@ -35,20 +35,18 @@ fn max_percentage() {
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::new(
-            MemoryUsageBasedConnectionLimits::default().with_max_percentage(0.1),
-        )
-        .with_memory_usage_refresh_interval(None),
+        connection_limits: Behaviour::new_with_max_percentage(0.1)
+            .with_memory_usage_refresh_interval(None),
         mem: Default::default(),
     });
 
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
     let max_allowed_bytes = current_mem + connection_limit * 1024 * 1024;
-    network.behaviour_mut().connection_limits.update_limits(
-        MemoryUsageBasedConnectionLimits::default()
-            .with_max_percentage(max_allowed_bytes as f64 / system_info.total_memory() as f64),
-    );
+    network
+        .behaviour_mut()
+        .connection_limits
+        .update_max_percentage(max_allowed_bytes as f64 / system_info.total_memory() as f64);
 
     let addr: Multiaddr = "/memory/1234".parse().unwrap();
     let target = PeerId::random();
