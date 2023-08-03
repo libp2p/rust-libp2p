@@ -22,7 +22,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
+      - uses: Swatinem/rust-cache@b8a6852b4f997182bdea832df3f9e153038b5191 # v2.6.0
         with:
           shared-key: stable-cache
 
