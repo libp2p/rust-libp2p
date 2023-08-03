@@ -8,14 +8,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## QUIC - evaluate and move to quinn
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
-
-We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
-
 ## Attempt to switch from webrtc-rs to str0m
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
@@ -180,3 +172,11 @@ QUIC](https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol).
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
+
+## QUIC - evaluate and move to quinn
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | done   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
+
+We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
