@@ -33,7 +33,7 @@ impl fmt::Display for MemoryUsageLimitExceeded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "pending connections are dropped, process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
+            "process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
             self.process_physical_memory_bytes,
             self.max_allowed_bytes,
         )
