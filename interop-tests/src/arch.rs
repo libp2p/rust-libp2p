@@ -14,6 +14,7 @@ type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
+    use std::net::Ipv6Addr;
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
@@ -24,9 +25,10 @@ pub(crate) mod native {
     use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
+    use libp2p::multiaddr::Protocol;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::websocket::WsConfig;
-    use libp2p::{noise, tcp, tls, yamux, PeerId, Transport as _};
+    use libp2p::{noise, tcp, tls, yamux, Multiaddr, PeerId, Transport as _};
     use libp2p_mplex as mplex;
     use libp2p_quic as quic;
     use libp2p_webrtc as webrtc;
@@ -114,11 +116,16 @@ pub(crate) mod native {
                 )
                 .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                 .boxed(),
-                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+                // IPv4 does not pass tests locally, but IPv6 does.
+                Multiaddr::from(Ipv6Addr::UNSPECIFIED)
+                    .with(Protocol::Udp(0))
+                    .with(Protocol::WebRTCDirect)
+                    .to_string(),
             ),
             (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
             (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
             (Transport::Webtransport, _) => bail!("Webtransport can only be used with wasm"),
+            (Transport::WebRTCWebSys, _) => bail!("WebRTCWebSys can only be used with wasm"),
         };
         Ok((transport, addr))
     }
@@ -160,6 +167,8 @@ pub(crate) mod wasm {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
+    use libp2p_webrtc_websys as webrtc_websys;
+    use std::net::IpAddr;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
@@ -182,16 +191,19 @@ pub(crate) mod wasm {
         ip: &str,
         transport: Transport,
     ) -> Result<(BoxedTransport, String)> {
-        if let Transport::Webtransport = transport {
-            Ok((
+        match transport {
+            Transport::Webtransport => Ok((
                 libp2p::webtransport_websys::Transport::new(
                     libp2p::webtransport_websys::Config::new(&local_key),
                 )
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
-            ))
-        } else {
-            bail!("Only webtransport supported with wasm")
+            )),
+            Transport::WebRTCWebSys => Ok((
+                webrtc_websys::Transport::new(webrtc_websys::Config::new(&local_key)).boxed(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+            )),
+            _ => bail!("Only webtransport and webrtc are supported with wasm"),
         }
     }
 

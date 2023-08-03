@@ -1,7 +1,10 @@
 {
-  "id": "chromium-rust-libp2p-head",
-  "containerImageID": "chromium-rust-libp2p-head",
-  "transports": [{ "name": "webtransport", "onlyDial": true }],
-  "secureChannels": [],
-  "muxers": []
+    "id": "chromium-rust-libp2p-head",
+    "containerImageID": "chromium-rust-libp2p-head",
+    "transports": [
+        { "name": "webtransport", "onlyDial": true },
+        { "name": "webrtc-websys", "onlyDial": true }
+    ],
+    "secureChannels": [],
+    "muxers": []
 }

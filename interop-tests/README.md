@@ -9,12 +9,11 @@ another peer that this test can dial or listen for. For example to test that we
 can dial/listen for ourselves we can do the following:
 
 1. Start redis (needed by the tests): `docker run --rm -it -p 6379:6379
-   redis/redis-stack`.
+redis/redis-stack`.
 2. In one terminal run the dialer: `redis_addr=localhost:6379 ip="0.0.0.0"
-   transport=quic-v1 security=quic muxer=quic is_dialer="true" cargo run --bin ping`
+transport=quic-v1 security=quic muxer=quic is_dialer="true" cargo run --bin ping`
 3. In another terminal, run the listener: `redis_addr=localhost:6379
-   ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo run --bin native_ping`
-
+ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo run --bin native_ping`
 
 To test the interop with other versions do something similar, except replace one
 of these nodes with the other version's interop test.
@@ -27,7 +26,8 @@ Firefox is not yet supported as it doesn't support all required features yet
 (in v114 there is no support for certhashes).
 
 1. Build the wasm package: `wasm-pack build --target web`
-2. Run the dialer: `redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webtransport is_dialer=true cargo run --bin wasm_ping`
+2. Run the webtransport dialer: `redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webtransport is_dialer=true cargo run --bin wasm_ping`
+3. Run the webrtc-websys dialer: `redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webrtc-websys is_dialer=true cargo run --bin wasm_ping`
 
 # Running all interop tests locally with Compose
 
@@ -38,6 +38,7 @@ the following (from the root directory of this repository):
 1. Build the image: `docker build -t rust-libp2p-head . -f interop-tests/Dockerfile`.
 1. Build the images for all released versions in `libp2p/test-plans`: `(cd <path to >/libp2p/test-plans/multidim-interop/ && make)`.
 1. Run the test:
+
 ```
 RUST_LIBP2P="$PWD"; (cd <path to >/libp2p/test-plans/multidim-interop/ && npm run test -- --extra-version=$RUST_LIBP2P/interop-tests/ping-version.json --name-filter="rust-libp2p-head")
 ```
