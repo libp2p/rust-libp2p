@@ -24,7 +24,7 @@ rand = "0.8.5"
 rustls = { version = "0.21.2", default-features = false }
 thiserror = "1.0.44"
 tokio = { version = "1.29.1", default-features = false, features = ["net", "rt", "time"], optional = true }
-socket2 = { version = "0.5.3", features = ["all"] }
+socket2 = { version = "0.5.3" }
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]

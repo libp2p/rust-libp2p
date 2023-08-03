@@ -4062,7 +4062,6 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
- "libp2p-quic",
 ]
 
 [[package]]
