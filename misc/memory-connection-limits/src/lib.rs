@@ -51,7 +51,7 @@ use std::{
 /// ```rust
 /// # use libp2p_identify as identify;
 /// # use libp2p_swarm_derive::NetworkBehaviour;
-/// # use libp2p_memory_connection_limits as connection_limits;
+/// # use libp2p_memory_connection_limits as memory_connection_limits;
 ///
 /// #[derive(NetworkBehaviour)]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
