@@ -63,10 +63,9 @@ impl MemoryUsageBasedConnectionLimits {
     ) -> Result<(), ConnectionDenied> {
         if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
             mem_tracker.refresh_if_needed();
-            let process_memory_bytes = mem_tracker.total_bytes();
-            if process_memory_bytes > max_allowed_bytes {
+            if mem_tracker.physical_bytes > max_allowed_bytes {
                 return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
-                    process_memory_bytes,
+                    process_physical_memory_bytes: mem_tracker.physical_bytes,
                     max_allowed_bytes,
                 }));
             }
@@ -76,10 +75,18 @@ impl MemoryUsageBasedConnectionLimits {
     }
 
     fn max_allowed_bytes(&self) -> Option<usize> {
-        self.max_process_memory_usage_bytes.min(
-            self.max_process_memory_usage_percentage
-                .map(|p| (self.system_physical_memory_bytes as f64 * p).round() as usize),
-        )
+        let max_process_memory_usage_percentage = self
+            .max_process_memory_usage_percentage
+            .map(|p| (self.system_physical_memory_bytes as f64 * p).round() as usize);
+        match (
+            self.max_process_memory_usage_bytes,
+            max_process_memory_usage_percentage,
+        ) {
+            (None, None) => None,
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+        }
     }
 }
 
@@ -92,7 +99,7 @@ impl Default for MemoryUsageBasedConnectionLimits {
 /// A connection limit has been exceeded.
 #[derive(Debug, Clone, Copy)]
 pub struct MemoryUsageLimitExceeded {
-    pub process_memory_bytes: usize,
+    pub process_physical_memory_bytes: usize,
     pub max_allowed_bytes: usize,
 }
 
@@ -102,8 +109,8 @@ impl fmt::Display for MemoryUsageLimitExceeded {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "pending connections are dropped, process memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
-            self.process_memory_bytes,
+            "pending connections are dropped, process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
+            self.process_physical_memory_bytes,
             self.max_allowed_bytes,
         )
     }

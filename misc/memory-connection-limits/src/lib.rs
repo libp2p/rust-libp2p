@@ -50,7 +50,6 @@ use std::{
 ///
 /// ```rust
 /// # use libp2p_identify as identify;
-/// # use libp2p_ping as ping;
 /// # use libp2p_swarm_derive::NetworkBehaviour;
 /// # use libp2p_memory_connection_limits as connection_limits;
 ///
@@ -58,7 +57,6 @@ use std::{
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
 ///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
 ///   limits: connection_limits::Behaviour
 /// }
 /// ```
@@ -73,6 +71,16 @@ impl Behaviour {
             limits,
             mem_tracker: ProcessMemoryUsageTracker::new(),
         }
+    }
+
+    pub fn update_limits(&mut self, limits: MemoryUsageBasedConnectionLimits) {
+        self.limits = limits;
+    }
+
+    /// Sets memory usage refresh interval, default is 1s. Use `None` to always refresh
+    pub fn with_memory_usage_refresh_interval(mut self, interval: Option<Duration>) -> Self {
+        self.mem_tracker.refresh_interval = interval;
+        self
     }
 }
 
@@ -152,6 +160,7 @@ pub enum ConnectionKind {
 
 #[derive(Debug)]
 struct ProcessMemoryUsageTracker {
+    refresh_interval: Option<Duration>,
     last_checked: Instant,
     physical_bytes: usize,
     virtual_bytes: usize,
@@ -159,11 +168,14 @@ struct ProcessMemoryUsageTracker {
 
 impl ProcessMemoryUsageTracker {
     fn new() -> Self {
+        const DEFAULT_MEMORY_USAGE_REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
+
         let stats = memory_stats::memory_stats();
         if stats.is_none() {
             log::warn!("Failed to retrive process memory stats");
         }
         Self {
+            refresh_interval: Some(DEFAULT_MEMORY_USAGE_REFRESH_INTERVAL),
             last_checked: Instant::now(),
             physical_bytes: stats.map(|s| s.physical_mem).unwrap_or_default(),
             virtual_bytes: stats
@@ -173,9 +185,11 @@ impl ProcessMemoryUsageTracker {
     }
 
     fn need_refresh(&self) -> bool {
-        const PROCESS_MEMORY_USAGE_CHECK_INTERVAL: Duration = Duration::from_millis(1000);
-
-        self.last_checked + PROCESS_MEMORY_USAGE_CHECK_INTERVAL < Instant::now()
+        if let Some(refresh_interval) = self.refresh_interval {
+            self.last_checked + refresh_interval < Instant::now()
+        } else {
+            true
+        }
     }
 
     fn refresh(&mut self) {
@@ -192,9 +206,5 @@ impl ProcessMemoryUsageTracker {
         if self.need_refresh() {
             self.refresh();
         }
-    }
-
-    fn total_bytes(&self) -> usize {
-        self.physical_bytes + self.virtual_bytes
     }
 }
