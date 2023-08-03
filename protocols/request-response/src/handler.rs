@@ -27,7 +27,7 @@ use crate::handler::protocol::Protocol;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
-use futures::{channel::oneshot, future::BoxFuture, pin_mut, prelude::*, stream::FuturesUnordered};
+use futures::{channel::oneshot, prelude::*};
 use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -87,7 +87,7 @@ where
 
     inbound_request_id: Arc<AtomicU64>,
 
-    worker_streams: FuturesUnordered<BoxFuture<'static, Result<Event<TCodec>, io::Error>>>,
+    worker_streams: futures_bounded::WorkerFutures<RequestId, Result<Event<TCodec>, io::Error>>,
 }
 
 impl<TCodec> Handler<TCodec>
@@ -114,7 +114,7 @@ where
             inbound_sender,
             pending_events: VecDeque::new(),
             inbound_request_id,
-            worker_streams: Default::default(),
+            worker_streams: futures_bounded::WorkerFutures::new(substream_timeout, 100),
         }
     }
 
@@ -130,7 +130,6 @@ where
     ) {
         let mut codec = self.codec.clone();
         let request_id = RequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
-        let timeout = self.substream_timeout;
         let mut sender = self.inbound_sender.clone();
 
         let recv = async move {
@@ -158,14 +157,13 @@ where
             }
         };
 
-        self.worker_streams.push(Box::pin(async move {
-            pin_mut!(recv);
-
-            match future::select(recv, futures_timer::Delay::new(timeout)).await {
-                future::Either::Left((recv, _)) => recv,
-                future::Either::Right(((), _)) => Err(io::ErrorKind::TimedOut.into()),
-            }
-        }));
+        if self
+            .worker_streams
+            .try_push(request_id, recv.boxed())
+            .is_some()
+        {
+            log::warn!("Dropping inbound stream because we are at capacity")
+        }
     }
 
     fn on_fully_negotiated_outbound(
@@ -184,7 +182,6 @@ where
             .expect("negotiated a stream without a pending message");
 
         let mut codec = self.codec.clone();
-        let timeout = self.substream_timeout;
         let request_id = message.request_id;
 
         let send = async move {
@@ -200,14 +197,13 @@ where
             })
         };
 
-        self.worker_streams.push(Box::pin(async move {
-            pin_mut!(send);
-
-            match future::select(send, futures_timer::Delay::new(timeout)).await {
-                future::Either::Left((recv, _)) => recv,
-                future::Either::Right(((), _)) => Ok(Event::OutboundTimeout(request_id)),
-            }
-        }));
+        if self
+            .worker_streams
+            .try_push(request_id, send.boxed())
+            .is_some()
+        {
+            log::warn!("Dropping outbound stream because we are at capacity")
+        }
     }
 
     fn on_dial_upgrade_error(
@@ -373,12 +369,18 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<Protocol<TCodec::Protocol>, (), Self::ToBehaviour, Self::Error>>
     {
-        while let Poll::Ready(Some(result)) = self.worker_streams.poll_next_unpin(cx) {
-            match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
-                Err(e) => {
-                    log::debug!("worker stream failed: {e}")
+        loop {
+            match self.worker_streams.poll_unpin(cx) {
+                Poll::Ready((_, Ok(Ok(event)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event))
                 }
+                Poll::Ready((id, Ok(Err(e)))) => {
+                    log::debug!("Stream for request {id} failed: {e}");
+                }
+                Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
+                    log::debug!("Stream for request {id} timed out");
+                }
+                Poll::Pending => break,
             }
         }
 
