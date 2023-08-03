@@ -47,7 +47,7 @@ use libp2p_swarm::{
 
 use crate::priv_client::transport;
 use crate::protocol::inbound_stop::{open_circuit, Circuit};
-use crate::protocol::outbound_hop::{FatalUpgradeError, Output, UpgradeError};
+use crate::protocol::outbound_hop::{Output, UpgradeError};
 use crate::protocol::{self, inbound_stop, outbound_hop, MAX_MESSAGE_SIZE};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
@@ -117,8 +117,11 @@ pub struct Handler {
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
     /// A pending fatal error that results in the connection being closed.
-    pending_error:
-        Option<StreamUpgradeError<Either<inbound_stop::FatalUpgradeError, FatalUpgradeError>>>,
+    pending_error: Option<
+        StreamUpgradeError<
+            Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+        >,
+    >,
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
 
@@ -303,21 +306,23 @@ impl Handler {
             } = substream
                 .next()
                 .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
+                .ok_or(outbound_hop::FatalUpgradeError::StreamClosed)??;
 
             match type_pb {
                 proto::HopMessageType::CONNECT => {
-                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into());
+                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeConnect.into());
                 }
                 proto::HopMessageType::RESERVE => {
-                    return Err(FatalUpgradeError::UnexpectedTypeReserve.into());
+                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeReserve.into());
                 }
                 proto::HopMessageType::STATUS => {}
             }
 
             let limit = limit.map(Into::into);
 
-            match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+            match status.ok_or(UpgradeError::Fatal(
+                outbound_hop::FatalUpgradeError::MissingStatusField,
+            ))? {
                 proto::Status::OK => {}
                 proto::Status::RESERVATION_REFUSED => {
                     return Err(outbound_hop::ReservationFailedReason::Refused.into());
@@ -325,13 +330,14 @@ impl Handler {
                 proto::Status::RESOURCE_LIMIT_EXCEEDED => {
                     return Err(outbound_hop::ReservationFailedReason::ResourceLimitExceeded.into());
                 }
-                s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+                s => return Err(outbound_hop::FatalUpgradeError::UnexpectedStatus(s).into()),
             }
 
-            let reservation = reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
+            let reservation =
+                reservation.ok_or(outbound_hop::FatalUpgradeError::MissingReservationField)?;
 
             if reservation.addrs.is_empty() {
-                return Err(FatalUpgradeError::NoAddressesInReservation.into());
+                return Err(outbound_hop::FatalUpgradeError::NoAddressesInReservation.into());
             }
 
             let addrs = reservation
@@ -339,7 +345,7 @@ impl Handler {
                 .into_iter()
                 .map(|b| Multiaddr::try_from(b.to_vec()))
                 .collect::<Result<Vec<Multiaddr>, _>>()
-                .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
+                .map_err(|_| outbound_hop::FatalUpgradeError::InvalidReservationAddrs)?;
 
             let renewal_timeout = reservation
                 .expire
@@ -353,7 +359,7 @@ impl Handler {
                 .and_then(|duration| duration.checked_sub(duration / 4))
                 .map(Duration::from_secs)
                 .map(Delay::new)
-                .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
+                .ok_or(outbound_hop::FatalUpgradeError::InvalidReservationExpiration)?;
 
             substream.close().await?;
 
@@ -403,21 +409,23 @@ impl Handler {
             } = substream
                 .next()
                 .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
+                .ok_or(outbound_hop::FatalUpgradeError::StreamClosed)??;
 
             match type_pb {
                 proto::HopMessageType::CONNECT => {
-                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
+                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
                 proto::HopMessageType::RESERVE => {
-                    return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
+                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeReserve.into())
                 }
                 proto::HopMessageType::STATUS => {}
             }
 
             let limit = limit.map(Into::into);
 
-            match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+            match status.ok_or(UpgradeError::Fatal(
+                outbound_hop::FatalUpgradeError::MissingStatusField,
+            ))? {
                 proto::Status::OK => {}
                 proto::Status::RESOURCE_LIMIT_EXCEEDED => {
                     return Err(outbound_hop::CircuitFailedReason::ResourceLimitExceeded.into())
@@ -431,7 +439,7 @@ impl Handler {
                 proto::Status::PERMISSION_DENIED => {
                     return Err(outbound_hop::CircuitFailedReason::PermissionDenied.into())
                 }
-                s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+                s => return Err(outbound_hop::FatalUpgradeError::UnexpectedStatus(s).into()),
             }
 
             let FramedParts {
@@ -469,7 +477,9 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<Either<inbound_stop::FatalUpgradeError, FatalUpgradeError>>;
+    type Error = StreamUpgradeError<
+        Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+    >;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;

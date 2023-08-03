@@ -21,7 +21,7 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
@@ -47,7 +47,7 @@ use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
 use crate::proto::message_v2::pb::mod_HopMessage::Type;
 use crate::proto::Status;
-use crate::protocol::outbound_stop::{CircuitFailedReason, FatalUpgradeError};
+use crate::protocol::outbound_stop::CircuitFailedReason;
 use crate::protocol::MAX_MESSAGE_SIZE;
 use crate::protocol::{inbound_hop, outbound_stop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
@@ -61,28 +61,28 @@ pub struct Config {
 
 pub enum In {
     AcceptReservationReq {
-        inbound_reservation_req: ReservationReq,
+        inbound_reservation_req: inbound_hop::ReservationReq,
         addrs: Vec<Multiaddr>,
     },
     DenyReservationReq {
-        inbound_reservation_req: ReservationReq,
+        inbound_reservation_req: inbound_hop::ReservationReq,
         status: Status,
     },
     DenyCircuitReq {
         circuit_id: Option<CircuitId>,
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         status: Status,
     },
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
     },
     AcceptAndDriveCircuit {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
         dst_stream: Stream,
         dst_pending_data: Bytes,
@@ -147,7 +147,7 @@ impl fmt::Debug for In {
 pub enum Event {
     /// An inbound reservation request has been received.
     ReservationReqReceived {
-        inbound_reservation_req: ReservationReq,
+        inbound_reservation_req: inbound_hop::ReservationReq,
         endpoint: ConnectedPoint,
         /// Indicates whether the request replaces an existing reservation.
         renewed: bool,
@@ -167,7 +167,7 @@ pub enum Event {
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
     CircuitReqReceived {
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         endpoint: ConnectedPoint,
     },
     /// An inbound circuit request has been denied.
@@ -198,7 +198,7 @@ pub enum Event {
         circuit_id: CircuitId,
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         dst_handler_notifier: oneshot::Sender<()>,
         dst_stream: Stream,
         dst_pending_data: Bytes,
@@ -208,7 +208,7 @@ pub enum Event {
         circuit_id: CircuitId,
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
-        inbound_circuit_req: CircuitReq,
+        inbound_circuit_req: inbound_hop::CircuitReq,
         status: Status,
         error: StreamUpgradeError<CircuitFailedReason>,
     },
@@ -391,7 +391,8 @@ pub struct Handler {
     inbound_requests_futs:
         FuturesUnordered<BoxFuture<'static, Result<Event, inbound_hop::FatalUpgradeError>>>,
     stop_requested_streams: VecDeque<StopCommand>,
-    outbound_stop_futs: FuturesUnordered<BoxFuture<'static, Result<Event, FatalUpgradeError>>>,
+    outbound_stop_futs:
+        FuturesUnordered<BoxFuture<'static, Result<Event, outbound_stop::FatalUpgradeError>>>,
 }
 
 impl Handler {
@@ -440,7 +441,7 @@ impl Handler {
 
             let event = match type_pb {
                 Type::RESERVE => {
-                    let req = ReservationReq {
+                    let req = inbound_hop::ReservationReq {
                         substream,
                         reservation_duration,
                         max_circuit_duration,
@@ -458,7 +459,7 @@ impl Handler {
                         &peer.ok_or(inbound_hop::FatalUpgradeError::MissingPeer)?.id,
                     )
                     .map_err(|_| inbound_hop::FatalUpgradeError::ParsePeerId)?;
-                    let req = CircuitReq { dst, substream };
+                    let req = inbound_hop::CircuitReq { dst, substream };
 
                     Event::CircuitReqReceived {
                         inbound_circuit_req: req,
@@ -477,7 +478,7 @@ impl Handler {
         &self,
         io: Stream,
         stop_command: StopCommand,
-    ) -> BoxFuture<'static, Result<Event, FatalUpgradeError>> {
+    ) -> BoxFuture<'static, Result<Event, outbound_stop::FatalUpgradeError>> {
         let msg = proto::StopMessage {
             type_pb: proto::StopMessageType::CONNECT,
             peer: Some(proto::Peer {
@@ -512,11 +513,11 @@ impl Handler {
             } = substream
                 .next()
                 .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
+                .ok_or(outbound_stop::FatalUpgradeError::StreamClosed)??;
 
             match type_pb {
                 proto::StopMessageType::CONNECT => {
-                    return Err(FatalUpgradeError::UnexpectedTypeConnect);
+                    return Err(outbound_stop::FatalUpgradeError::UnexpectedTypeConnect);
                 }
                 proto::StopMessageType::STATUS => {}
             }
@@ -546,10 +547,10 @@ impl Handler {
                             error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
                         })
                     }
-                    s => return Err(FatalUpgradeError::UnexpectedStatus(s)),
+                    s => return Err(outbound_stop::FatalUpgradeError::UnexpectedStatus(s)),
                 },
                 None => {
-                    return Err(FatalUpgradeError::MissingStatusField);
+                    return Err(outbound_stop::FatalUpgradeError::MissingStatusField);
                 }
             }
 
@@ -588,7 +589,9 @@ type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<Either<inbound_hop::FatalUpgradeError, FatalUpgradeError>>;
+    type Error = StreamUpgradeError<
+        Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
+    >;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -982,127 +985,9 @@ struct CircuitParts {
 
 struct StopCommand {
     circuit_id: CircuitId,
-    inbound_circuit_req: CircuitReq,
+    inbound_circuit_req: inbound_hop::CircuitReq,
     src_peer_id: PeerId,
     src_connection_id: ConnectionId,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
-}
-
-pub struct ReservationReq {
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
-    reservation_duration: Duration,
-    max_circuit_duration: Duration,
-    max_circuit_bytes: u64,
-}
-
-impl ReservationReq {
-    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), inbound_hop::UpgradeError> {
-        if addrs.is_empty() {
-            log::debug!(
-                "Accepting relay reservation without providing external addresses of local node. \
-                 Thus the remote node might not be able to advertise its relayed address."
-            )
-        }
-
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
-            peer: None,
-            reservation: Some(proto::Reservation {
-                addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: (SystemTime::now() + self.reservation_duration)
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                voucher: None,
-            }),
-            limit: Some(proto::Limit {
-                duration: Some(
-                    self.max_circuit_duration
-                        .as_secs()
-                        .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
-                ),
-                data: Some(self.max_circuit_bytes),
-            }),
-            status: Some(proto::Status::OK),
-        };
-
-        self.send(msg).await
-    }
-
-    pub async fn deny(self, status: Status) -> Result<(), inbound_hop::UpgradeError> {
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status),
-        };
-
-        self.send(msg).await
-    }
-
-    async fn send(mut self, msg: proto::HopMessage) -> Result<(), inbound_hop::UpgradeError> {
-        self.substream.send(msg).await?;
-        self.substream.flush().await?;
-        self.substream.close().await?;
-
-        Ok(())
-    }
-}
-
-pub struct CircuitReq {
-    dst: PeerId,
-    substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
-}
-
-impl CircuitReq {
-    pub fn dst(&self) -> PeerId {
-        self.dst
-    }
-
-    pub async fn accept(mut self) -> Result<(Stream, Bytes), inbound_hop::UpgradeError> {
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(Status::OK),
-        };
-
-        self.send(msg).await?;
-
-        let FramedParts {
-            io,
-            read_buffer,
-            write_buffer,
-            ..
-        } = self.substream.into_parts();
-        assert!(
-            write_buffer.is_empty(),
-            "Expect a flushed Framed to have an empty write buffer."
-        );
-
-        Ok((io, read_buffer.freeze()))
-    }
-
-    pub async fn deny(mut self, status: Status) -> Result<(), inbound_hop::UpgradeError> {
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::STATUS,
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status),
-        };
-        self.send(msg).await?;
-        self.substream.close().await.map_err(Into::into)
-    }
-
-    async fn send(&mut self, msg: proto::HopMessage) -> Result<(), quick_protobuf_codec::Error> {
-        self.substream.send(msg).await?;
-        self.substream.flush().await?;
-
-        Ok(())
-    }
 }
