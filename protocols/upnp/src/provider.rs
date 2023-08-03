@@ -77,7 +77,7 @@ impl IpAddr {
                                     // AS112-v6 (`2001:4:112::/48`)
                                     || matches!(ip.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
                                     // ORCHIDv2 (`2001:20::/28`)
-                                    || matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x2F)
+                                    || matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if (0x20..=0x2F).contains(&b))
                                 ))
                                     // code for Ipv4::is_documentation()
                                     || (ip.segments()[0] == 0x2001) && (ip.segments()[1] == 0xdb8)
