@@ -55,6 +55,10 @@ where
             .boxed(),
         );
 
+        if let Some(waker) = self.empty_waker.take() {
+            waker.wake();
+        }
+
         None
     }
 
@@ -88,6 +92,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct Timeout {
     _priv: (),
 }
@@ -102,6 +107,8 @@ impl Timeout {
 mod tests {
     use super::*;
     use std::future::{pending, poll_fn, ready};
+    use std::pin::Pin;
+    use std::time::Instant;
 
     #[test]
     fn cannot_push_more_than_capacity_tasks() {
@@ -120,5 +127,67 @@ mod tests {
         let (_, result) = poll_fn(|cx| workers.poll_unpin(cx)).await;
 
         assert!(result.is_err())
+    }
+
+    // Each worker causes a delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
+    // We stop after NUM_WORKERS tasks, meaning the overall execution must at least take DELAY * NUM_WORKERS.
+    #[tokio::test]
+    async fn backpressure() {
+        const DELAY: Duration = Duration::from_millis(100);
+        const NUM_WORKERS: u32 = 10;
+
+        let start = Instant::now();
+        Task::new(DELAY, NUM_WORKERS, 1).await;
+        let duration = start.elapsed();
+
+        assert!(duration >= DELAY * NUM_WORKERS);
+    }
+
+    struct Task {
+        worker: Duration,
+        num_workers: usize,
+        num_processed: usize,
+        inner: WorkerFutures<(), ()>,
+    }
+
+    impl Task {
+        fn new(worker: Duration, num_workers: u32, capacity: usize) -> Self {
+            Self {
+                worker,
+                num_workers: num_workers as usize,
+                num_processed: 0,
+                inner: WorkerFutures::new(Duration::from_secs(60), capacity),
+            }
+        }
+    }
+
+    impl Future for Task {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let this = self.get_mut();
+
+            while this.num_processed < this.num_workers {
+                if let Poll::Ready(((), result)) = this.inner.poll_unpin(cx) {
+                    if result.is_err() {
+                        panic!("Timeout is great than worker delay")
+                    }
+
+                    this.num_processed += 1;
+                    continue;
+                }
+
+                if let Poll::Ready(()) = this.inner.poll_ready_unpin(cx) {
+                    let maybe_worker = this.inner.try_push((), Delay::new(this.worker));
+                    assert!(maybe_worker.is_none(), "we polled for readiness");
+
+                    continue;
+                }
+
+                return Poll::Pending;
+            }
+
+            Poll::Ready(())
+        }
     }
 }
