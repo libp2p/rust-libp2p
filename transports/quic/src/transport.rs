@@ -37,12 +37,13 @@ use libp2p_core::{
     Transport,
 };
 use libp2p_identity::PeerId;
+use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::HashMap;
-use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
+use std::{fmt, io};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -172,6 +173,19 @@ impl<P: Provider> GenTransport<P> {
             }
         }
     }
+
+    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
+        let domain = if socket_addr.is_ipv4() {
+            Domain::IPV4
+        } else {
+            Domain::IPV6
+        };
+        let socket = Socket::new(domain, Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+        Ok(socket)
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -188,7 +202,15 @@ impl<P: Provider> Transport for GenTransport<P> {
         let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
-        let socket = UdpSocket::bind(socket_addr).map_err(Self::Error::from)?;
+        let socket = self
+            .create_socket(&socket_addr)
+            .map_err(Self::Error::from)?;
+
+        socket
+            .bind(&socket_addr.into())
+            .map_err(Self::Error::from)?;
+
+        let socket: UdpSocket = socket.into();
         let socket_c = socket.try_clone().map_err(Self::Error::from)?;
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
         let listener = Listener::new(
