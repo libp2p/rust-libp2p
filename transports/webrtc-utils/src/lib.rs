@@ -6,4 +6,4 @@ pub mod proto {
     pub use self::webrtc::pb::{mod_Message::Flag, Message};
 }
 
-pub mod substream;
+pub mod stream;
