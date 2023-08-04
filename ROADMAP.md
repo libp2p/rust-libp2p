@@ -21,14 +21,6 @@ where the latter only have a self-signed TLS certificate. Compared to WebRTC, th
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
 
-### Address pipeline
-
-| Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
-|--------------|--------|-------------------|----------|--------------|------------|
-| Connectivity | todo   | Q4/2023           |          | AutoNATv2    | AutoNATv2  |
-
-Be smart on address prioritization. go-libp2p made a lot of progress here. Lots to learn. See https://github.com/libp2p/go-libp2p/issues/2229 and https://github.com/libp2p/rust-libp2p/issues/1896#issuecomment-1537774383.
-
 ### AutoNATv2
 
 | Category     | Status | Target Completion | Tracking | Dependencies     | Dependents       |
@@ -36,6 +28,14 @@ Be smart on address prioritization. go-libp2p made a lot of progress here. Lots 
 | Connectivity | todo   | Q4/2023           |          | Address pipeline | Address pipeline |
 
 Implement the new AutoNAT v2 specification. See https://github.com/libp2p/specs/pull/538.
+
+### Address pipeline
+
+| Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
+|--------------|--------|-------------------|----------|--------------|------------|
+| Connectivity | todo   | Q4/2023           |          | AutoNATv2    | AutoNATv2  |
+
+Be smart on address prioritization. go-libp2p made a lot of progress here. Lots to learn. See https://github.com/libp2p/go-libp2p/issues/2229 and https://github.com/libp2p/rust-libp2p/issues/1896#issuecomment-1537774383.
 
 ### Optimize Hole punching
 
