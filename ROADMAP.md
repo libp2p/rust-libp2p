@@ -10,13 +10,16 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 ## TODO and in-progress
 
-### Attempt to switch from webrtc-rs to str0m
+### WebTransport
 
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
+| Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
+|-----------------------------|--------|-------------------|---------------------------------------------------|------------------------------------|------------|
+| Connectivity / optimization | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/2993 | [QUIC](#experimental-quic-support) |            |
 
-Reduce maintenance burden and reduce dependency footprint.
+A WebTransport implementation in rust-libp2p will enable browsers to connect to rust-libp2p nodes
+where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
+more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
+(browser-to-server) this is not a high priority.
 
 ### Address pipeline
 
@@ -73,16 +76,13 @@ Use the browser's WebRTC stack to support
 the browser using rust-libp2p compiled to WASM. This makes rust-libp2p a truly end-to-end solution,
 enabling users to use rust-libp2p on both the client (browser) and server side.
 
-### WebTransport
+### Attempt to switch from webrtc-rs to str0m
 
-| Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
-|-----------------------------|--------|-------------------|---------------------------------------------------|------------------------------------|------------|
-| Connectivity / optimization | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/2993 | [QUIC](#experimental-quic-support) |            |
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3659 |              |            |
 
-A WebTransport implementation in rust-libp2p will enable browsers to connect to rust-libp2p nodes
-where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
-more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
-(browser-to-server) this is not a high priority.
+Reduce maintenance burden and reduce dependency footprint.
 
 ### Automate port-forwarding e.g. via UPnP
 
