@@ -32,7 +32,6 @@ multistream-select = { workspace = true }
 async-std = { version = "1.6.2", optional = true }
 tokio = { version = "1.29", features = ["rt"], optional = true }
 tracing = "0.1.37"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]

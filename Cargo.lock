@@ -3178,7 +3178,6 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "trybuild",
  "void",
  "wasm-bindgen-futures",
