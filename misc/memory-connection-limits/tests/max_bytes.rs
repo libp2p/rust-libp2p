@@ -69,10 +69,10 @@ fn max_bytes() {
                 .expect("connection denied because of limit");
 
             assert_eq!(
-                exceeded.max_allowed_bytes,
+                exceeded.max_allowed_bytes(),
                 max_allowed_bytes_plus_base_usage
             );
-            assert!(exceeded.process_physical_memory_bytes >= exceeded.max_allowed_bytes);
+            assert!(exceeded.process_physical_memory_bytes() >= exceeded.max_allowed_bytes());
         }
         e => panic!("Unexpected error: {e:?}"),
     }

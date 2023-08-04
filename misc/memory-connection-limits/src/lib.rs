@@ -203,8 +203,18 @@ impl NetworkBehaviour for Behaviour {
 /// A connection limit has been exceeded.
 #[derive(Debug, Clone, Copy)]
 pub struct MemoryUsageLimitExceeded {
-    pub process_physical_memory_bytes: usize,
-    pub max_allowed_bytes: usize,
+    process_physical_memory_bytes: usize,
+    max_allowed_bytes: usize,
+}
+
+impl MemoryUsageLimitExceeded {
+    pub fn process_physical_memory_bytes(&self) -> usize {
+        self.process_physical_memory_bytes
+    }
+
+    pub fn max_allowed_bytes(&self) -> usize {
+        self.max_allowed_bytes
+    }
 }
 
 impl std::error::Error for MemoryUsageLimitExceeded {}
