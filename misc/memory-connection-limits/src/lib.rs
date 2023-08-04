@@ -69,8 +69,9 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    /// Sets the process memory usage threshold in bytes,
-    /// all pending connections will be dropped when the threshold is exeeded
+    /// Sets the process memory usage threshold in absolute bytes.
+    ///
+    /// New inbound and outbound connections will be denied when the threshold is reached.
     pub fn new_with_max_bytes(bytes: usize) -> Self {
         Self {
             limits: MemoryUsageBasedConnectionLimits::default().with_max_bytes(bytes),
