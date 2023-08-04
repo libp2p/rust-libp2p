@@ -199,7 +199,7 @@ pub(crate) mod wasm {
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
             )),
-            Transport::WebRTCWebSys => Ok((
+            Transport::WebRTCDirect => Ok((
                 webrtc_websys::Transport::new(webrtc_websys::Config::new(&local_key)).boxed(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             )),
