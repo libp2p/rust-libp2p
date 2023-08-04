@@ -1,5 +1,7 @@
 //! Websys WebRTC Peer Connection
 //!
+use crate::stream::DataChannel;
+
 use super::cbfutures::CbFuture;
 use super::stream::DataChannelConfig;
 use super::{Error, WebRTCStream};
@@ -27,12 +29,6 @@ impl Connection {
             inner: SendWrapper::new(ConnectionInner::new(peer_connection)),
         }
     }
-
-    /// Connect
-    // pub(crate) async fn connect(&mut self) -> Result<PeerId, Error> {
-    //     let fut = SendWrapper::new(self.inner.connect());
-    //     fut.await
-    // }
 
     /// Peer Connection Getter
     pub(crate) fn peer_connection(&self) -> &RtcPeerConnection {
@@ -79,19 +75,14 @@ impl ConnectionInner {
 
     /// Initiates and polls a future from `create_data_channel`.
     /// Takes the RtcPeerConnection and DataChannelConfig and creates a pollable future
-    fn poll_create_data_channel(
-        &mut self,
-        cx: &mut Context,
-        config: DataChannelConfig,
-    ) -> Poll<Result<WebRTCStream, Error>> {
-        // Create Data Channel
-        // take the peer_connection and DataChannelConfig and create a pollable future
-        let mut dc = config.create_from(&self.peer_connection);
+    fn poll_create_data_channel(&mut self, cx: &mut Context) -> Poll<Result<WebRTCStream, Error>> {
+        // Create Regular Data Channel
+        let dc = DataChannel::new_regular(&self.peer_connection);
         let channel = WebRTCStream::new(dc);
         Poll::Ready(Ok(channel))
     }
 
-    /// Polls the ondatachannel callback for incoming data channels.
+    /// Polls the ondatachannel callback for inbound data channel stream.
     ///
     /// To poll for inbound WebRTCStreams, we need to poll for the ondatachannel callback
     /// We only get that callback for inbound data channels on our connections.
@@ -101,8 +92,24 @@ impl ConnectionInner {
         let dc = ready!(self.ondatachannel_fut.poll_unpin(cx));
 
         // Create a WebRTCStream from the Data Channel
-        let channel = WebRTCStream::new(dc);
+        let channel = WebRTCStream::new(DataChannel::Regular(dc));
         Poll::Ready(Ok(channel))
+    }
+
+    /// Poll the Inner Connection for Dropped Listeners
+    fn poll(&mut self, cx: &mut Context) -> Poll<Result<StreamMuxerEvent, Error>> {
+        loop {
+            match ready!(self.drop_listeners.poll_next_unpin(cx)) {
+                Some(Ok(())) => {}
+                Some(Err(e)) => {
+                    log::debug!("a DropListener failed: {e}")
+                }
+                None => {
+                    self.no_drop_listeners_waker = Some(cx.waker().clone());
+                    return Poll::Pending;
+                }
+            }
+        }
     }
 
     /// Closes the Peer Connection.
@@ -117,38 +124,6 @@ impl ConnectionInner {
     }
 }
 
-pub(crate) async fn register_data_channel(
-    conn: &RtcPeerConnection,
-    config: &DataChannelConfig,
-) -> RtcDataChannel {
-    // peer_connection.set_ondatachannel is callback based
-    // but we need a Future we can poll
-    // so we convert this callback into a Future by using [CbFuture]
-
-    // 1. create the ondatachannel callbackFuture
-    // 2. build the channel with the DataChannelConfig
-    // 3. await the ondatachannel callbackFutures
-    // 4. Now we have a ready DataChannel
-    let ondatachannel_fut = CbFuture::new();
-    let cback_clone = ondatachannel_fut.clone();
-
-    debug!("register_data_channel");
-    // set up callback and futures
-    // set_onopen callback to wake the Rust Future
-    let ondatachannel_callback = Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
-        let dc2 = ev.channel();
-        debug!("ondatachannel! Label (if any): {:?}", dc2.label());
-
-        cback_clone.publish(dc2);
-    });
-
-    conn.set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
-
-    let _dc = config.create_from(conn);
-
-    ondatachannel_fut.await
-}
-
 impl Drop for ConnectionInner {
     fn drop(&mut self) {
         self.close_connection();
@@ -161,10 +136,6 @@ impl StreamMuxer for Connection {
     type Substream = WebRTCStream; // A Substream of a WebRTC PeerConnection is a Data Channel
     type Error = Error;
 
-    /// Polls for an inbound WebRTC data channel stream
-    /// To poll for inbound WebRTCStreams, we need to poll for the ondatachannel callback.
-    /// We only get that callback for inbound data channels on our connections.
-    /// This callback is converted to a future using CbFuture, which we can poll here
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -179,11 +150,7 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        // Since this is NOT an initial Noise handshake outbound request (ie. Dialer)
-        // we need to create a new Data Channel WITHOUT negotiated flag set to true
-        // so use the Default DataChannelConfig
-        let config = DataChannelConfig::default();
-        self.inner.poll_create_data_channel(cx, config)
+        self.inner.poll_create_data_channel(cx)
     }
 
     fn poll_close(
@@ -200,17 +167,6 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        loop {
-            match ready!(self.inner.drop_listeners.poll_next_unpin(cx)) {
-                Some(Ok(())) => {}
-                Some(Err(e)) => {
-                    log::debug!("a DropListener failed: {e}")
-                }
-                None => {
-                    self.inner.no_drop_listeners_waker = Some(cx.waker().clone());
-                    return Poll::Pending;
-                }
-            }
-        }
+        self.inner.poll(cx)
     }
 }

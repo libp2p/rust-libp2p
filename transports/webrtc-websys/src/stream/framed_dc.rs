@@ -21,7 +21,7 @@
 use super::poll_data_channel::PollDataChannel;
 use asynchronous_codec::Framed;
 use libp2p_webrtc_utils::proto::Message;
-use libp2p_webrtc_utils::substream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
+use libp2p_webrtc_utils::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
 use web_sys::RtcDataChannel;
 
 pub(crate) type FramedDc = Framed<PollDataChannel, quick_protobuf_codec::Codec<Message>>;
