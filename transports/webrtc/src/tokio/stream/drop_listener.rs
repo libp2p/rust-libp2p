@@ -27,7 +27,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::tokio::substream::framed_dc::FramedDc;
+use crate::tokio::stream::framed_dc::FramedDc;
 use crate::utils::proto::{Flag, Message};
 
 #[must_use]

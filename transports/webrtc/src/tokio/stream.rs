@@ -31,9 +31,9 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::tokio::{substream::drop_listener::GracefullyClosed, substream::framed_dc::FramedDc};
+use crate::tokio::stream::{drop_listener::GracefullyClosed, framed_dc::FramedDc};
 use crate::utils::proto::{Flag, Message};
-use crate::utils::substream::{
+use crate::utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
@@ -238,7 +238,7 @@ fn io_poll_next(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::substream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
+    use crate::utils::stream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
 
     use super::*;
     use asynchronous_codec::Encoder;

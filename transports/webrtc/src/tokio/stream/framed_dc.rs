@@ -26,7 +26,7 @@ use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 use std::sync::Arc;
 
 use crate::utils::proto::Message;
-use crate::utils::substream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
+use crate::utils::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
 
 pub(crate) type FramedDc = Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>;
 pub(crate) fn new(data_channel: Arc<DataChannel>) -> FramedDc {
