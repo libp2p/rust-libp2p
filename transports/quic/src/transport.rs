@@ -174,7 +174,7 @@ impl<P: Provider> GenTransport<P> {
         }
     }
 
-    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<Socket> {
+    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<UdpSocket> {
         let domain = if socket_addr.is_ipv4() {
             Domain::IPV4
         } else {
@@ -186,7 +186,8 @@ impl<P: Provider> GenTransport<P> {
         }
 
         socket.bind(&socket_addr.into())?;
-        Ok(socket)
+
+        Ok(socket.into())
     }
 }
 
@@ -206,7 +207,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         let server_config = self.quinn_config.server_config.clone();
         let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
 
-        let socket: UdpSocket = socket.into();
         let socket_c = socket.try_clone().map_err(Self::Error::from)?;
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
         let listener = Listener::new(
@@ -905,5 +905,26 @@ mod test {
             )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+    }
+
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_listens_ipv4_ipv6_separately() {
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::tokio::Transport::new(config);
+
+        transport
+            .listen_on(
+                ListenerId::next(),
+                "/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap(),
+            )
+            .unwrap();
+        transport
+            .listen_on(
+                ListenerId::next(),
+                "/ip6/::/udp/4001/quic-v1".parse().unwrap(),
+            )
+            .unwrap();
     }
 }
