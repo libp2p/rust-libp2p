@@ -18,12 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod connection_limits;
-use connection_limits::MemoryUsageBasedConnectionLimits;
-
-mod error;
-pub use error::MemoryUsageLimitExceeded;
-
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
@@ -33,8 +27,8 @@ use libp2p_swarm::{
 use void::Void;
 
 use std::{
+    fmt,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
@@ -64,44 +58,81 @@ use std::{
 /// }
 /// ```
 pub struct Behaviour {
-    limits: MemoryUsageBasedConnectionLimits,
-    mem_tracker: ProcessMemoryUsageTracker,
+    max_process_memory_usage_bytes: Option<usize>,
+    max_process_memory_usage_percentage: Option<f64>,
+    system_physical_memory_bytes: usize,
 }
 
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
-    pub fn new_with_max_bytes(bytes: usize) -> Self {
-        Self {
-            limits: MemoryUsageBasedConnectionLimits::default().with_max_bytes(bytes),
-            mem_tracker: ProcessMemoryUsageTracker::new(),
-        }
+    pub fn with_max_bytes(bytes: usize) -> Self {
+        let mut b = Self::new();
+        b.update_max_bytes(bytes);
+        b
     }
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory,
     /// all pending connections will be dropped when the threshold is exeeded
-    pub fn new_with_max_percentage(percentage: f64) -> Self {
-        Self {
-            limits: MemoryUsageBasedConnectionLimits::default().with_max_percentage(percentage),
-            mem_tracker: ProcessMemoryUsageTracker::new(),
-        }
-    }
-
-    /// Sets memory usage refresh interval, default is 1s. Use `None` to always refresh
-    pub fn with_memory_usage_refresh_interval(mut self, interval: Option<Duration>) -> Self {
-        self.mem_tracker.refresh_interval = interval;
-        self
+    pub fn with_max_percentage(percentage: f64) -> Self {
+        let mut b = Self::new();
+        b.update_max_percentage(percentage);
+        b
     }
 
     /// Updates the process memory usage threshold in bytes,
     pub fn update_max_bytes(&mut self, bytes: usize) {
-        self.limits = MemoryUsageBasedConnectionLimits::default().with_max_bytes(bytes);
+        self.max_process_memory_usage_bytes = Some(bytes);
     }
 
     /// Updates the process memory usage threshold in the percentage of the total physical memory,
     pub fn update_max_percentage(&mut self, percentage: f64) {
-        self.limits = MemoryUsageBasedConnectionLimits::default().with_max_percentage(percentage);
+        self.max_process_memory_usage_percentage = Some(percentage);
+    }
+
+    fn new() -> Self {
+        use sysinfo::{RefreshKind, SystemExt};
+
+        let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
+
+        Self {
+            max_process_memory_usage_bytes: None,
+            max_process_memory_usage_percentage: None,
+            system_physical_memory_bytes: system_info.total_memory() as usize,
+        }
+    }
+
+    fn check_limit(&self) -> Result<(), ConnectionDenied> {
+        if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
+            if let Some(stats) = memory_stats::memory_stats() {
+                if stats.physical_mem > max_allowed_bytes {
+                    return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
+                        process_physical_memory_bytes: stats.physical_mem,
+                        max_allowed_bytes,
+                    }));
+                }
+            } else {
+                log::warn!("Failed to retrive process memory stats");
+            }
+        }
+
+        Ok(())
+    }
+
+    fn max_allowed_bytes(&self) -> Option<usize> {
+        let max_process_memory_usage_percentage = self
+            .max_process_memory_usage_percentage
+            .map(|p| (self.system_physical_memory_bytes as f64 * p).round() as usize);
+        match (
+            self.max_process_memory_usage_bytes,
+            max_process_memory_usage_percentage,
+        ) {
+            (None, None) => None,
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+        }
     }
 }
 
@@ -115,7 +146,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.limits.check_limit(&mut self.mem_tracker)
+        self.check_limit()
     }
 
     fn handle_pending_outbound_connection(
@@ -125,7 +156,7 @@ impl NetworkBehaviour for Behaviour {
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        self.limits.check_limit(&mut self.mem_tracker)?;
+        self.check_limit()?;
         Ok(vec![])
     }
 
@@ -169,63 +200,22 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
+/// A connection limit has been exceeded.
 #[derive(Debug, Clone, Copy)]
-pub enum ConnectionKind {
-    PendingIncoming,
-    PendingOutgoing,
-    EstablishedIncoming,
-    EstablishedOutgoing,
-    EstablishedPerPeer,
-    EstablishedTotal,
+pub struct MemoryUsageLimitExceeded {
+    pub process_physical_memory_bytes: usize,
+    pub max_allowed_bytes: usize,
 }
 
-#[derive(Debug)]
-struct ProcessMemoryUsageTracker {
-    refresh_interval: Option<Duration>,
-    last_checked: Instant,
-    physical_bytes: usize,
-    virtual_bytes: usize,
-}
+impl std::error::Error for MemoryUsageLimitExceeded {}
 
-impl ProcessMemoryUsageTracker {
-    fn new() -> Self {
-        const DEFAULT_MEMORY_USAGE_REFRESH_INTERVAL: Duration = Duration::from_millis(1000);
-
-        let stats = memory_stats::memory_stats();
-        if stats.is_none() {
-            log::warn!("Failed to retrive process memory stats");
-        }
-        Self {
-            refresh_interval: Some(DEFAULT_MEMORY_USAGE_REFRESH_INTERVAL),
-            last_checked: Instant::now(),
-            physical_bytes: stats.map(|s| s.physical_mem).unwrap_or_default(),
-            virtual_bytes: stats
-                .map(|s: memory_stats::MemoryStats| s.virtual_mem)
-                .unwrap_or_default(),
-        }
-    }
-
-    fn need_refresh(&self) -> bool {
-        if let Some(refresh_interval) = self.refresh_interval {
-            self.last_checked + refresh_interval < Instant::now()
-        } else {
-            true
-        }
-    }
-
-    fn refresh(&mut self) {
-        if let Some(stats) = memory_stats::memory_stats() {
-            self.physical_bytes = stats.physical_mem;
-            self.virtual_bytes = stats.virtual_mem;
-        } else {
-            log::warn!("Failed to retrive process memory stats");
-        }
-        self.last_checked = Instant::now();
-    }
-
-    fn refresh_if_needed(&mut self) {
-        if self.need_refresh() {
-            self.refresh();
-        }
+impl fmt::Display for MemoryUsageLimitExceeded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "process physical memory usage limit exceeded: process memory: {} bytes, max allowed: {} bytes",
+            self.process_physical_memory_bytes,
+            self.max_allowed_bytes,
+        )
     }
 }

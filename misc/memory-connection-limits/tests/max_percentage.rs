@@ -35,9 +35,8 @@ fn max_percentage() {
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::new_with_max_percentage(0.1)
-            .with_memory_usage_refresh_interval(None),
-        mem: Default::default(),
+        connection_limits: Behaviour::with_max_percentage(0.1),
+        mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
     // Adds current mem usage to the limit and update

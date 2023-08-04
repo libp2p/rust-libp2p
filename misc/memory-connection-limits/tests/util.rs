@@ -23,8 +23,8 @@ use std::task::{Context, Poll};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use void::Void;
 
@@ -32,22 +32,35 @@ use void::Void;
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 pub(crate) struct TestBehaviour {
     pub(crate) connection_limits: libp2p_memory_connection_limits::Behaviour,
-    pub(crate) mem: ConsumeMemoryBehaviour,
+    pub(crate) mem_consumer: ConsumeMemoryBehaviour1MBPending0Established,
 }
+
+pub(crate) type ConsumeMemoryBehaviour1MBPending0Established =
+    ConsumeMemoryBehaviour<{ 1024 * 1024 }, 0>;
 
 #[derive(Default)]
-pub(crate) struct ConsumeMemoryBehaviour {
-    map: Vec<Vec<u8>>,
+pub(crate) struct ConsumeMemoryBehaviour<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> {
+    mem_pending: Vec<Vec<u8>>,
+    mem_established: Vec<Vec<u8>>,
 }
 
-impl ConsumeMemoryBehaviour {
-    fn handle_connection(&mut self) {
+impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize>
+    ConsumeMemoryBehaviour<MEM_PENDING, MEM_ESTABLISHED>
+{
+    fn handle_pending(&mut self) {
         // 1MB
-        self.map.push(vec![1; 1024 * 1024]);
+        self.mem_pending.push(vec![1; MEM_PENDING]);
+    }
+
+    fn handle_established(&mut self) {
+        // 1MB
+        self.mem_established.push(vec![1; MEM_ESTABLISHED]);
     }
 }
 
-impl NetworkBehaviour for ConsumeMemoryBehaviour {
+impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
+    for ConsumeMemoryBehaviour<MEM_PENDING, MEM_ESTABLISHED>
+{
     type ConnectionHandler = dummy::ConnectionHandler;
     type ToSwarm = Void;
 
@@ -57,7 +70,7 @@ impl NetworkBehaviour for ConsumeMemoryBehaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
-        self.handle_connection();
+        self.handle_pending();
         Ok(())
     }
 
@@ -68,7 +81,7 @@ impl NetworkBehaviour for ConsumeMemoryBehaviour {
         _: &[Multiaddr],
         _: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
-        self.handle_connection();
+        self.handle_pending();
         Ok(vec![])
     }
 
@@ -79,7 +92,7 @@ impl NetworkBehaviour for ConsumeMemoryBehaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.handle_connection();
+        self.handle_established();
         Ok(dummy::ConnectionHandler)
     }
 
@@ -90,15 +103,11 @@ impl NetworkBehaviour for ConsumeMemoryBehaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        self.handle_connection();
+        self.handle_established();
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        if let FromSwarm::ConnectionClosed(ConnectionClosed { .. }) = event {
-            self.map.pop();
-        }
-    }
+    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
 
     fn on_connection_handler_event(
         &mut self,

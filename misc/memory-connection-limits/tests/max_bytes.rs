@@ -34,9 +34,8 @@ fn max_bytes() {
     let max_allowed_bytes = connection_limit * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::new_with_max_bytes(max_allowed_bytes)
-            .with_memory_usage_refresh_interval(None),
-        mem: Default::default(),
+        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
+        mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
     // Adds current mem usage to the limit and update
