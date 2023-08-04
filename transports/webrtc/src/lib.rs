@@ -82,4 +82,4 @@
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-pub use libp2p_webrtc_utils as utils;
+use libp2p_webrtc_utils as utils;
