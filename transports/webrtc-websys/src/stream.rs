@@ -3,7 +3,7 @@ use self::framed_dc::FramedDc;
 use bytes::Bytes;
 use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
 use libp2p_webrtc_utils::proto::{Flag, Message};
-use libp2p_webrtc_utils::substream::{
+use libp2p_webrtc_utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
@@ -31,54 +31,90 @@ const MAX_BUFFERED_AMOUNT: u32 = 16 * 1024 * 1024;
 // How long time we wait for the 'bufferedamountlow' event to be emitted
 const BUFFERED_AMOUNT_LOW_TIMEOUT: u32 = 30 * 1000;
 
-#[derive(Debug)]
+/// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
+const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
+
+/// Builder for DataChannel
+#[derive(Default, Debug)]
 pub struct DataChannelConfig {
     negotiated: bool,
     id: u16,
-    binary_type: RtcDataChannelType,
 }
 
-impl Default for DataChannelConfig {
-    fn default() -> Self {
-        Self {
-            negotiated: false,
-            id: 0,
-            /// We set our default to Arraybuffer
-            binary_type: RtcDataChannelType::Arraybuffer, // Blob is the default in the Browser,
+/// DataChannel type to ensure only the properly configurations
+/// are used when building a WebRTCStream
+pub enum DataChannel {
+    Regular(RtcDataChannel),
+    Handshake(RtcDataChannel),
+}
+
+impl DataChannel {
+    pub fn new_regular(peer_connection: &RtcPeerConnection) -> Self {
+        Self::Regular(DataChannelConfig::create(peer_connection))
+    }
+
+    pub fn new_handshake(peer_connection: &RtcPeerConnection) -> Self {
+        Self::Handshake(DataChannelConfig::create_handshake_channel(peer_connection))
+    }
+}
+
+/// From DataChannel enum to RtcDataChannel
+impl From<DataChannel> for RtcDataChannel {
+    fn from(dc: DataChannel) -> Self {
+        match dc {
+            DataChannel::Regular(dc) => dc,
+            DataChannel::Handshake(dc) => dc,
         }
     }
 }
 
 /// Builds a Data Channel with selected options and given peer connection
 ///
-///
+/// The default config is used in most cases, except when negotiating a Noise handshake
 impl DataChannelConfig {
-    pub fn new() -> Self {
-        Self::default()
+    /// Create a new [DataChannelConfig] with the default values
+    /// Build the [RtcDataChannel] on a given peer connection
+    /// by calling
+    ///
+    /// ```no_run
+    /// let channel = DataChannelConfig::new().create_from(peer_conn);
+    /// ```
+    fn create(peer_connection: &RtcPeerConnection) -> RtcDataChannel {
+        Self::default().create_from(peer_connection)
     }
 
-    pub fn negotiated(&mut self, negotiated: bool) -> &mut Self {
+    /// Creates a new data channel with Handshake config,
+    /// uses negotiated: true, id: 0
+    /// Build the RtcDataChannel on a given peer connection
+    /// by calling `create_from(peer_conn)`
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let channel = DataChannelConfig::new_handshake_channel(&peer_connection)
+    /// ```
+    fn create_handshake_channel(peer_connection: &RtcPeerConnection) -> RtcDataChannel {
+        Self::default()
+            .negotiated(true)
+            .id(0)
+            .create_from(peer_connection)
+    }
+
+    fn negotiated(&mut self, negotiated: bool) -> &mut Self {
         self.negotiated = negotiated;
         self
     }
 
     /// Set a custom id for the Data Channel
-    pub fn id(&mut self, id: u16) -> &mut Self {
+    fn id(&mut self, id: u16) -> &mut Self {
         self.id = id;
         self
     }
 
-    // Set the binary type for the Data Channel
-    // TODO: We'll likely never use this, all channels are created with Arraybuffer?
-    // pub fn binary_type(&mut self, binary_type: RtcDataChannelType) -> &mut Self {
-    //     self.binary_type = binary_type;
-    //     self
-    // }
-
     /// Opens a WebRTC DataChannel from [RtcPeerConnection] with the selected [DataChannelConfig]
     /// We can create `ondatachannel` future before building this
     /// then await it after building this
-    pub fn create_from(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
+    fn create_from(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
         const LABEL: &str = "";
 
         let dc = match self.negotiated {
@@ -94,7 +130,7 @@ impl DataChannelConfig {
                 peer_connection.create_data_channel(LABEL)
             }
         };
-        dc.set_binary_type(self.binary_type);
+        dc.set_binary_type(ARRAY_BUFFER_BINARY_TYPE); // Hardcoded here, it's the only type we use
         dc
     }
 }
@@ -107,10 +143,10 @@ pub struct WebRTCStream {
 }
 
 impl WebRTCStream {
-    /// Create a new Substream
-    pub fn new(channel: RtcDataChannel) -> Self {
+    /// Create a new WebRTC Substream
+    pub fn new(channel: DataChannel) -> Self {
         Self {
-            inner: SendWrapper::new(StreamInner::new(channel)),
+            inner: SendWrapper::new(StreamInner::new(channel.into())),
             read_buffer: Bytes::new(),
             state: State::Open,
         }
@@ -124,14 +160,7 @@ impl WebRTCStream {
 
 struct StreamInner {
     io: FramedDc,
-    // channel: RtcDataChannel,
-    // onclose_fut: CbFuture<()>,
     state: State,
-    // Resolves when the data channel is opened.
-    // onopen_fut: CbFuture<()>,
-    // onmessage_fut: CbFuture<Vec<u8>>, // incoming_data: FusedJsPromise,
-    // message_queue: Vec<u8>,
-    // ondatachannel_fut: CbFuture<RtcDataChannel>,
 }
 
 impl StreamInner {
@@ -141,36 +170,6 @@ impl StreamInner {
             state: State::Open, // always starts open
         }
     }
-
-    // fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-    //     // If we have leftovers from a previous read, then use them.
-    //     // Otherwise read new data.
-    //     let data = match self.read_leftovers.take() {
-    //         Some(data) => data,
-    //         None => {
-    //             match ready!(self.poll_reader_read(cx))? {
-    //                 Some(data) => data,
-    //                 // EOF
-    //                 None => return Poll::Ready(Ok(0)),
-    //             }
-    //         }
-    //     };
-
-    //     if data.byte_length() == 0 {
-    //         return Poll::Ready(Ok(0));
-    //     }
-
-    //     let out_len = data.byte_length().min(buf.len() as u32);
-    //     data.slice(0, out_len).copy_to(&mut buf[..out_len as usize]);
-
-    //     let leftovers = data.slice(out_len, data.byte_length());
-
-    //     if leftovers.byte_length() > 0 {
-    //         self.read_leftovers = Some(leftovers);
-    //     }
-
-    //     Poll::Ready(Ok(out_len as usize))
-    // }
 }
 
 impl AsyncRead for WebRTCStream {
@@ -216,18 +215,6 @@ impl AsyncRead for WebRTCStream {
                 }
             }
         }
-
-        // Kick the can down the road to inner.io.poll_ready_unpin
-        // ready!(self.inner.io.poll_ready_unpin(cx))?;
-
-        // let data = ready!(self.inner.onmessage_fut.poll_unpin(cx));
-        // debug!("poll_read, {:?}", data);
-        // let data_len = data.len();
-        // let buf_len = buf.len();
-        // debug!("poll_read [data, buffer]: [{:?}, {}]", data_len, buf_len);
-        // let len = std::cmp::min(data_len, buf_len);
-        // buf[..len].copy_from_slice(&data[..len]);
-        // Poll::Ready(Ok(len))
     }
 }
 
