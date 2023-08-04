@@ -1,3 +1,7 @@
+use super::fingerprint::Fingerprint;
+use super::upgrade;
+use super::Connection;
+use super::Error;
 use futures::future::FutureExt;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::StreamMuxerBox;
@@ -7,12 +11,6 @@ use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-// use crate::endpoint::Endpoint;
-use super::fingerprint::Fingerprint;
-use super::upgrade::Upgrader;
-use super::Connection;
-use super::Error;
 
 const HANDSHAKE_TIMEOUT_MS: u64 = 10_000;
 
@@ -81,9 +79,8 @@ impl libp2p_core::Transport for Transport {
 
         Ok(async move {
             // let peer_id = connection.connect().await?;
-            let (peer_id, connection) = Upgrader::new()
-                .outbound(sock_addr, server_fingerprint, config.keypair.clone())
-                .await?;
+            let (peer_id, connection) =
+                upgrade::outbound(sock_addr, server_fingerprint, config.keypair.clone()).await?;
 
             Ok((peer_id, connection))
         }
