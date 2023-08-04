@@ -1,5 +1,7 @@
 pub(crate) mod noise;
 
+use crate::stream::DataChannel;
+
 pub(crate) use super::fingerprint::Fingerprint;
 use super::stream::{DataChannelConfig, WebRTCStream};
 use super::Error;
@@ -80,10 +82,7 @@ impl UpgraderInner {
 
         // Create substream for Noise handshake
         // Must create data channel before Offer is created for it to be included in the SDP
-        let handshake_data_channel: RtcDataChannel = DataChannelConfig::new()
-            .negotiated(true)
-            .id(0)
-            .create_from(&peer_connection);
+        let handshake_data_channel = DataChannel::new_handshake(&peer_connection);
 
         let webrtc_stream = WebRTCStream::new(handshake_data_channel);
 
