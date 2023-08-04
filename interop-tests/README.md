@@ -8,8 +8,7 @@ You can run this test locally by having a local Redis instance and by having
 another peer that this test can dial or listen for. For example to test that we
 can dial/listen for ourselves we can do the following:
 
-1. Start redis (needed by the tests): `docker run --rm -it -p 6379:6379
-redis/redis-stack`.
+1. Start redis (needed by the tests): `docker run --rm -p 6379:6379 redis:7-alpine`.
 2. In one terminal run the dialer: `redis_addr=localhost:6379 ip="0.0.0.0"
 transport=quic-v1 security=quic muxer=quic is_dialer="true" cargo run --bin ping`
 3. In another terminal, run the listener: `redis_addr=localhost:6379
