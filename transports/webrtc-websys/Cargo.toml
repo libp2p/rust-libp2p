@@ -2,7 +2,7 @@
 name = "libp2p-webrtc-websys"
 version = "0.1.0"
 authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
-description = "Web-Sys WebRTC transport for libp2p"
+description = "WebRTC for libp2p under WASM environment"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 edition = "2021"
@@ -31,7 +31,6 @@ thiserror = "1"
 tinytemplate = "1.2"
 log = "0.4.19"
 
-# wasm-bindgen specific deps
 js-sys = { version = "0.3" }
 getrandom = { version = "0.2.9", features = ["js"] }
 regex = { version = "1.9" }
