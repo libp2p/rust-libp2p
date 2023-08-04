@@ -3,12 +3,10 @@
 use crate::stream::DataChannel;
 
 use super::cbfutures::CbFuture;
-use super::stream::DataChannelConfig;
 use super::{Error, WebRTCStream};
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use log::debug;
 use send_wrapper::SendWrapper;
 use std::pin::Pin;
 use std::task::Waker;
@@ -56,7 +54,7 @@ impl ConnectionInner {
         let ondatachannel_callback =
             Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
                 let dc2 = ev.channel();
-                debug!("ondatachannel! Label (if any): {:?}", dc2.label());
+                log::debug!("ondatachannel! Label (if any): {:?}", dc2.label());
 
                 cback_clone.publish(dc2);
             });
@@ -74,7 +72,7 @@ impl ConnectionInner {
     }
 
     /// Initiates and polls a future from `create_data_channel`.
-    /// Takes the RtcPeerConnection and DataChannelConfig and creates a pollable future
+    /// Takes the RtcPeerConnection and creates a regular DataChannel
     fn poll_create_data_channel(&mut self, cx: &mut Context) -> Poll<Result<WebRTCStream, Error>> {
         // Create Regular Data Channel
         let dc = DataChannel::new_regular(&self.peer_connection);
@@ -157,7 +155,7 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        debug!("connection::poll_close");
+        log::debug!("connection::poll_close");
 
         self.inner.close_connection();
         Poll::Ready(Ok(()))
