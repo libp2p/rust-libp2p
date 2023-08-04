@@ -25,7 +25,6 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use log::debug;
 
 // TODO: Can the browser handle inbound connections?
 pub(crate) async fn inbound<T>(
@@ -62,19 +61,16 @@ where
 
     let info = noise.protocol_info().next().unwrap();
 
-    debug!("outbound noise upgrade info {:?}", info);
+    log::debug!("Outbound noise upgrade info {:?}", info);
 
     // Server must start the Noise handshake. Browsers cannot initiate
     // noise.upgrade_inbound has into_responder(), so that's the one we need
     let (peer_id, mut channel) = match noise.upgrade_inbound(stream, info).await {
         Ok((peer_id, channel)) => (peer_id, channel),
-        Err(e) => {
-            debug!("outbound noise upgrade error {:?}", e);
-            return Err(Error::Noise(e));
-        }
+        Err(e) => return Err(Error::Noise(e)),
     };
 
-    debug!("outbound noise upgrade peer_id {:?}", peer_id);
+    log::debug!("Outbound noise upgrade peer_id {:?}", peer_id);
     channel.close().await?; // uses AsyncWriteExt to close the EphermalKeyExchange channel?
 
     Ok(peer_id)

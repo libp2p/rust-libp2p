@@ -7,7 +7,6 @@ use libp2p_webrtc_utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
-use log::debug;
 use send_wrapper::SendWrapper;
 use std::io;
 use std::pin::Pin;
@@ -121,12 +120,12 @@ impl DataChannelConfig {
             true => {
                 let mut data_channel_dict = RtcDataChannelInit::new();
                 data_channel_dict.negotiated(true).id(self.id);
-                debug!("Creating negotiated DataChannel");
+                log::debug!("Creating negotiated DataChannel");
                 peer_connection
                     .create_data_channel_with_data_channel_dict(LABEL, &data_channel_dict)
             }
             false => {
-                debug!("Creating NON negotiated DataChannel");
+                log::debug!("Creating NON negotiated DataChannel");
                 peer_connection.create_data_channel(LABEL)
             }
         };
@@ -158,16 +157,15 @@ impl WebRTCStream {
     }
 }
 
+/// Inner Stream to make Sendable
 struct StreamInner {
     io: FramedDc,
-    state: State,
 }
 
 impl StreamInner {
     pub fn new(channel: RtcDataChannel) -> Self {
         Self {
             io: framed_dc::new(channel),
-            state: State::Open, // always starts open
         }
     }
 }
@@ -179,7 +177,7 @@ impl AsyncRead for WebRTCStream {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            self.inner.state.read_barrier()?;
+            self.state.read_barrier()?;
 
             // Return buffered data, if any
             if !self.read_buffer.is_empty() {
@@ -287,14 +285,14 @@ impl AsyncWrite for WebRTCStream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        debug!("poll_closing");
+        log::debug!("poll_closing");
 
         loop {
             match self.state.close_write_barrier()? {
                 Some(Closing::Requested) => {
                     ready!(self.inner.io.poll_ready_unpin(cx))?;
 
-                    debug!("Sending FIN flag");
+                    log::debug!("Sending FIN flag");
 
                     self.inner.io.start_send_unpin(Message {
                         flag: Some(Flag::FIN),
@@ -306,6 +304,7 @@ impl AsyncWrite for WebRTCStream {
                 }
                 Some(Closing::MessageSent) => {
                     ready!(self.inner.io.poll_flush_unpin(cx))?;
+                    ready!(self.inner.io.poll_close_unpin(cx))?;
 
                     self.state.write_closed();
                     // TODO: implement drop_notifier
@@ -320,21 +319,6 @@ impl AsyncWrite for WebRTCStream {
                 None => return Poll::Ready(Ok(())),
             }
         }
-
-        // match ready!(self.inner.io.poll_close_unpin(cx)) {
-        //     Ok(()) => {
-        //         debug!("poll_close, Ok(())");
-        //         self.state.close_write_message_sent();
-        //         Poll::Ready(Ok(()))
-        //     }
-        //     Err(e) => {
-        //         debug!("poll_close, Err({:?})", e);
-        //         Poll::Ready(Err(io::Error::new(
-        //             io::ErrorKind::Other,
-        //             "poll_close failed",
-        //         )))
-        //     }
-        // }
     }
 }
 
