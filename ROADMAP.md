@@ -8,7 +8,9 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Attempt to switch from webrtc-rs to str0m
+## TODO and in-progress
+
+### Attempt to switch from webrtc-rs to str0m
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
@@ -16,7 +18,7 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 Reduce maintenance burden and reduce dependency footprint.
 
-## Address pipeline
+### Address pipeline
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
 |--------------|--------|-------------------|----------|--------------|------------|
@@ -24,7 +26,7 @@ Reduce maintenance burden and reduce dependency footprint.
 
 Be smart on address prioritization. go-libp2p made a lot of progress here. Lots to learn. See https://github.com/libp2p/go-libp2p/issues/2229 and https://github.com/libp2p/rust-libp2p/issues/1896#issuecomment-1537774383.
 
-## AutoNATv2
+### AutoNATv2
 
 | Category     | Status | Target Completion | Tracking | Dependencies     | Dependents       |
 |--------------|--------|-------------------|----------|------------------|------------------|
@@ -32,7 +34,7 @@ Be smart on address prioritization. go-libp2p made a lot of progress here. Lots 
 
 Implement the new AutoNAT v2 specification. See https://github.com/libp2p/specs/pull/538.
 
-## Optimize Hole punching
+### Optimize Hole punching
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
 |--------------|--------|-------------------|----------|--------------|------------|
@@ -47,7 +49,7 @@ action](https://discuss.libp2p.io/t/decentralized-nat-hole-punching-measurement-
 case you want to help. Based on this data we will likely find many optimizations we can do to our
 hole punching stack.
 
-## Improved Wasm support
+### Improved Wasm support
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                   |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|----------------------------------------------|
@@ -59,7 +61,7 @@ happen earlier. Though (a) I think we should prioritize improving existing funct
 functionality and (b) we don't have high demand for this feature from the community. (One could
 argue that that demand follows this roadmap item and not the other way round.)
 
-## WebRTC in the browser via WASM
+### WebRTC in the browser via WASM
 
 | Category     | Status | Target Completion | Tracking                                   | Dependencies                                                                              | Dependents |
 |--------------|--------|-------------------|--------------------------------------------|-------------------------------------------------------------------------------------------|------------|
@@ -71,7 +73,7 @@ Use the browser's WebRTC stack to support
 the browser using rust-libp2p compiled to WASM. This makes rust-libp2p a truly end-to-end solution,
 enabling users to use rust-libp2p on both the client (browser) and server side.
 
-## WebTransport
+### WebTransport
 
 | Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
 |-----------------------------|--------|-------------------|---------------------------------------------------|------------------------------------|------------|
@@ -82,7 +84,7 @@ where the latter only have a self-signed TLS certificate. Compared to WebRTC, th
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
 
-## Automate port-forwarding e.g. via UPnP
+### Automate port-forwarding e.g. via UPnP
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
