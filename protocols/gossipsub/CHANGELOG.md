@@ -1,3 +1,10 @@
+## 0.46.0 - unreleased
+
+- Remove `fast_message_id_fn` mechanism from `Config`.
+  See [PR 4285].
+
+[PR 4285]: https://github.com/libp2p/rust-libp2p/pull/4285
+
 ## 0.45.1
 
 - Add getter function to obtain `TopicScoreParams`.
