@@ -179,7 +179,6 @@ pub enum Transport {
     WebRtcDirect,
     Ws,
     Webtransport,
-    WebRTCWebSys,
 }
 
 impl FromStr for Transport {
@@ -192,7 +191,6 @@ impl FromStr for Transport {
             "webrtc-direct" => Self::WebRtcDirect,
             "ws" => Self::Ws,
             "webtransport" => Self::Webtransport,
-            "webrtc-websys" => Self::WebRTCWebSys,
             other => bail!("unknown transport {other}"),
         })
     }

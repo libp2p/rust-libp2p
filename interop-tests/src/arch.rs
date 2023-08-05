@@ -117,7 +117,7 @@ pub(crate) mod native {
                 .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                 .boxed(),
                 // IPv4 does not pass tests locally, but IPv6 does.
-                Multiaddr::from(Ipv6Addr::UNSPECIFIED)
+                Multiaddr::from(Ipv6Addr::LOCALHOST)
                     .with(Protocol::Udp(0))
                     .with(Protocol::WebRTCDirect)
                     .to_string(),
@@ -125,7 +125,6 @@ pub(crate) mod native {
             (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
             (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
             (Transport::Webtransport, _) => bail!("Webtransport can only be used with wasm"),
-            (Transport::WebRTCWebSys, _) => bail!("WebRTCWebSys can only be used with wasm"),
         };
         Ok((transport, addr))
     }
