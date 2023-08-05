@@ -304,9 +304,12 @@ impl AsyncWrite for WebRTCStream {
                 }
                 Some(Closing::MessageSent) => {
                     ready!(self.inner.io.poll_flush_unpin(cx))?;
-                    ready!(self.inner.io.poll_close_unpin(cx))?;
 
                     self.state.write_closed();
+
+                    // send the actual RtcDataChannel `.close()` command
+                    ready!(self.inner.io.poll_close_unpin(cx))?;
+
                     // TODO: implement drop_notifier
                     // let _ = self
                     //     .drop_notifier
