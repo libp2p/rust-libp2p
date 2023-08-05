@@ -3,7 +3,7 @@ pub(crate) mod noise;
 use crate::stream::DataChannel;
 
 pub(crate) use super::fingerprint::Fingerprint;
-use super::stream::WebRTCStream;
+use super::stream::Stream;
 use super::Error;
 use super::{sdp, Connection};
 use js_sys::{Object, Reflect};
@@ -61,7 +61,7 @@ async fn outbound_inner(
     // Must create data channel before Offer is created for it to be included in the SDP
     let handshake_data_channel = DataChannel::new_handshake(&peer_connection);
 
-    let webrtc_stream = WebRTCStream::new(handshake_data_channel);
+    let webrtc_stream = Stream::new(handshake_data_channel);
 
     let ufrag = format!("libp2p+webrtc+v1/{}", gen_ufrag(32));
     /*

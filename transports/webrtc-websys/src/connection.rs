@@ -3,7 +3,7 @@
 use crate::stream::DataChannel;
 
 use super::cbfutures::CbFuture;
-use super::{Error, WebRTCStream};
+use super::{Error, Stream};
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
@@ -73,10 +73,10 @@ impl ConnectionInner {
 
     /// Initiates and polls a future from `create_data_channel`.
     /// Takes the RtcPeerConnection and creates a regular DataChannel
-    fn poll_create_data_channel(&mut self, cx: &mut Context) -> Poll<Result<WebRTCStream, Error>> {
+    fn poll_create_data_channel(&mut self, cx: &mut Context) -> Poll<Result<Stream, Error>> {
         // Create Regular Data Channel
         let dc = DataChannel::new_regular(&self.peer_connection);
-        let channel = WebRTCStream::new(dc);
+        let channel = Stream::new(dc);
         Poll::Ready(Ok(channel))
     }
 
@@ -85,12 +85,12 @@ impl ConnectionInner {
     /// To poll for inbound WebRTCStreams, we need to poll for the ondatachannel callback
     /// We only get that callback for inbound data channels on our connections.
     /// This callback is converted to a future using CbFuture, which we can poll here
-    fn poll_ondatachannel(&mut self, cx: &mut Context) -> Poll<Result<WebRTCStream, Error>> {
+    fn poll_ondatachannel(&mut self, cx: &mut Context) -> Poll<Result<Stream, Error>> {
         // Poll the ondatachannel callback for incoming data channels
         let dc = ready!(self.ondatachannel_fut.poll_unpin(cx));
 
         // Create a WebRTCStream from the Data Channel
-        let channel = WebRTCStream::new(DataChannel::Regular(dc));
+        let channel = Stream::new(DataChannel::Regular(dc));
         Poll::Ready(Ok(channel))
     }
 
@@ -131,7 +131,7 @@ impl Drop for ConnectionInner {
 /// WebRTC native multiplexing
 /// Allows users to open substreams
 impl StreamMuxer for Connection {
-    type Substream = WebRTCStream; // A Substream of a WebRTC PeerConnection is a Data Channel
+    type Substream = Stream; // A Substream of a WebRTC PeerConnection is a Data Channel
     type Error = Error;
 
     fn poll_inbound(

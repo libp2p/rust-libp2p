@@ -135,13 +135,13 @@ impl DataChannelConfig {
 }
 
 /// Substream over the Connection
-pub struct WebRTCStream {
+pub struct Stream {
     inner: SendWrapper<StreamInner>,
     state: State,
     read_buffer: Bytes,
 }
 
-impl WebRTCStream {
+impl Stream {
     /// Create a new WebRTC Substream
     pub fn new(channel: DataChannel) -> Self {
         Self {
@@ -170,7 +170,7 @@ impl StreamInner {
     }
 }
 
-impl AsyncRead for WebRTCStream {
+impl AsyncRead for Stream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -216,7 +216,7 @@ impl AsyncRead for WebRTCStream {
     }
 }
 
-impl AsyncWrite for WebRTCStream {
+impl AsyncWrite for Stream {
     /// Attempt to write bytes from buf into the object.
     /// On success, returns Poll::Ready(Ok(num_bytes_written)).
     /// If the object is not ready for writing,
