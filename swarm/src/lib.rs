@@ -67,10 +67,6 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
-#[deprecated(
-    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
-)]
-pub mod keep_alive;
 mod listen_opts;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
@@ -1816,6 +1812,7 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dummy;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
@@ -1913,10 +1910,14 @@ mod tests {
     fn test_swarm_disconnect() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
+        let handler_proto = dummy::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -1979,10 +1980,14 @@ mod tests {
     fn test_behaviour_disconnect_all() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
+        let handler_proto = dummy::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2049,10 +2054,14 @@ mod tests {
     fn test_behaviour_disconnect_one() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
+        let handler_proto = dummy::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2130,7 +2139,8 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut swarm = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
+                let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler)
+                    .idle_connection_timeout(Duration::from_secs(5))
                     .dial_concurrency_factor(concurrency_factor.0)
                     .build();
 
