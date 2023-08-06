@@ -220,9 +220,11 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((DEFAULT_PROTOCOL_NAME, ProtocolSupport::Full));
-        let mut cfg = request_response::Config::default();
-        cfg.set_request_timeout(config.timeout);
-        let inner = request_response::Behaviour::with_codec(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::with_codec(
+            AutoNatCodec,
+            protocols,
+            request_response::Config::default().with_request_timeout(config.timeout),
+        );
         Self {
             local_peer_id,
             inner,

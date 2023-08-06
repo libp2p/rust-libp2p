@@ -100,6 +100,7 @@ where
         keep_alive_timeout: Duration,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
+        max_concurrent_streams: usize,
     ) -> Self {
         let (inbound_sender, inbound_receiver) = mpsc::channel(0);
         Self {
@@ -114,7 +115,10 @@ where
             inbound_sender,
             pending_events: VecDeque::new(),
             inbound_request_id,
-            worker_streams: futures_bounded::WorkerFutures::new(substream_timeout, 100),
+            worker_streams: futures_bounded::WorkerFutures::new(
+                substream_timeout,
+                max_concurrent_streams,
+            ),
         }
     }
 

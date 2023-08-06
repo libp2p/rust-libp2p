@@ -285,6 +285,7 @@ impl fmt::Display for RequestId {
 pub struct Config {
     request_timeout: Duration,
     connection_keep_alive: Duration,
+    max_concurrent_streams: usize,
 }
 
 impl Default for Config {
@@ -292,20 +293,41 @@ impl Default for Config {
         Self {
             connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
+            max_concurrent_streams: 100,
         }
     }
 }
 
 impl Config {
     /// Sets the keep-alive timeout of idle connections.
+    #[deprecated(note = "Use `Config::with_connection_keep_alive` for one-liner constructions.")]
     pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
         self.connection_keep_alive = v;
         self
     }
 
     /// Sets the timeout for inbound and outbound requests.
+    #[deprecated(note = "Use `Config::with_request_timeout` for one-liner constructions.")]
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
+        self
+    }
+
+    /// Sets the keep-alive timeout of idle connections.
+    pub fn with_connection_keep_alive(mut self, v: Duration) -> Self {
+        self.connection_keep_alive = v;
+        self
+    }
+
+    /// Sets the timeout for inbound and outbound requests.
+    pub fn with_request_timeout(mut self, v: Duration) -> Self {
+        self.request_timeout = v;
+        self
+    }
+
+    /// Sets the upper bound for the number of concurrent inbound + outbound streams.
+    pub fn with_max_concurrent_streams(mut self, num_streams: usize) -> Self {
+        self.max_concurrent_streams = num_streams;
         self
     }
 }
@@ -722,6 +744,7 @@ where
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
+            self.config.max_concurrent_streams,
         ))
     }
 
@@ -761,6 +784,7 @@ where
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
+            self.config.max_concurrent_streams,
         ))
     }
 
