@@ -357,7 +357,7 @@ where
                 (_, KeepAlive::No) => {
                     // handle idle_timeout
                     let duration = *idle_timeout; // Default timeout is 0 seconds
-                    if duration > Duration::new(0, 0) {
+                    if duration > Duration::ZERO {
                         let deadline = Instant::now() + duration;
                         *shutdown = Shutdown::Later(Delay::new(duration), deadline);
                     } else {
@@ -701,7 +701,7 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keep_alive;
+    use crate::dummy;
     use futures::future;
     use futures::AsyncRead;
     use futures::AsyncWrite;
@@ -717,12 +717,11 @@ mod tests {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
             let alive_substream_counter = Arc::new(());
-
             let mut connection = Connection::new(
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
-                keep_alive::ConnectionHandler,
+                MockConnectionHandler::new(Duration::ZERO),
                 None,
                 max_negotiating_inbound_streams,
                 Duration::ZERO,
@@ -771,17 +770,13 @@ mod tests {
 
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
-            ConfigurableProtocolConnectionHandler::default(),
+            dummy::ConnectionHandler,
             None,
             0,
             Duration::from_secs(5),
         );
 
-        // Create a mock context and pin the connection
-        let mut cx = Context::from_waker(futures::task::noop_waker_ref());
-        let connection = Pin::new(&mut connection);
-
-        let poll_result = connection.poll(&mut cx);
+        let poll_result = connection.poll_noop_waker();
         assert!(poll_result.is_pending());
     }
 
