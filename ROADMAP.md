@@ -16,10 +16,9 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 |-----------------------------|--------|-------------------|---------------------------------------------------|------------------------------------|------------|
 | Connectivity / optimization | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/2993 | [QUIC](#experimental-quic-support) |            |
 
-A WebTransport implementation in rust-libp2p will enable browsers to connect to rust-libp2p nodes
-where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
-more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
-(browser-to-server) this is not a high priority.
+A WebTransport implementation in rust-libp2p will enable browsers to connect to rust-libp2p server
+nodes where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would
+likely be more stable and performant.
 
 ### AutoNATv2
 
