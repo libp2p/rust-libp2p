@@ -43,6 +43,8 @@ use std::{
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
 ///
+/// Note: Note: `fn xx_max_bytes` and `fn xx_max_percentage` are mutually exclusive
+///
 /// # Example
 ///
 /// ```rust
@@ -58,9 +60,7 @@ use std::{
 /// }
 /// ```
 pub struct Behaviour {
-    max_process_memory_usage_bytes: Option<usize>,
-    max_process_memory_usage_percentage: Option<f64>,
-    system_physical_memory_bytes: usize,
+    max_allowed_bytes: Option<usize>,
 }
 
 impl Behaviour {
@@ -74,32 +74,36 @@ impl Behaviour {
     }
 
     /// Sets the process memory usage threshold in the percentage of the total physical memory,
-    /// all pending connections will be dropped when the threshold is exeeded
+    ///
+    /// New inbound and outbound connections will be denied when the threshold is reached.
     pub fn with_max_percentage(percentage: f64) -> Self {
         let mut b = Self::new();
         b.update_max_percentage(percentage);
         b
     }
 
-    /// Updates the process memory usage threshold in bytes,
+    /// Updates the process memory usage threshold in bytes
     pub fn update_max_bytes(&mut self, bytes: usize) {
-        self.max_process_memory_usage_bytes = Some(bytes);
+        self.max_allowed_bytes = Some(bytes);
     }
 
-    /// Updates the process memory usage threshold in the percentage of the total physical memory,
+    /// Updates the process memory usage threshold in the percentage of the total physical memory
     pub fn update_max_percentage(&mut self, percentage: f64) {
-        self.max_process_memory_usage_percentage = Some(percentage);
+        use sysinfo::{RefreshKind, SystemExt};
+
+        let system_memory_bytes =
+            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
+        self.max_allowed_bytes = Some((system_memory_bytes as f64 * percentage).round() as usize);
+    }
+
+    /// Gets the process memory usage threshold in bytes
+    pub fn max_allowed_bytes(&self) -> Option<usize> {
+        self.max_allowed_bytes
     }
 
     fn new() -> Self {
-        use sysinfo::{RefreshKind, SystemExt};
-
-        let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
-
         Self {
-            max_process_memory_usage_bytes: None,
-            max_process_memory_usage_percentage: None,
-            system_physical_memory_bytes: system_info.total_memory() as usize,
+            max_allowed_bytes: None,
         }
     }
 
@@ -118,21 +122,6 @@ impl Behaviour {
         }
 
         Ok(())
-    }
-
-    fn max_allowed_bytes(&self) -> Option<usize> {
-        let max_process_memory_usage_percentage = self
-            .max_process_memory_usage_percentage
-            .map(|p| (self.system_physical_memory_bytes as f64 * p).round() as usize);
-        match (
-            self.max_process_memory_usage_bytes,
-            max_process_memory_usage_percentage,
-        ) {
-            (None, None) => None,
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (Some(a), None) => Some(a),
-            (None, Some(b)) => Some(b),
-        }
     }
 }
 

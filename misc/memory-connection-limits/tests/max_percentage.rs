@@ -27,11 +27,10 @@ use util::*;
 
 use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
 use libp2p_swarm_test::SwarmExt;
-use rand::{rngs::OsRng, Rng};
 
 #[test]
 fn max_percentage() {
-    let connection_limit = OsRng.gen_range(1..30);
+    const CONNECTION_LIMIT: usize = 20;
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
@@ -41,7 +40,7 @@ fn max_percentage() {
 
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
-    let max_allowed_bytes = current_mem + connection_limit * 1024 * 1024;
+    let max_allowed_bytes = current_mem + CONNECTION_LIMIT * 1024 * 1024;
     network
         .behaviour_mut()
         .connection_limits
@@ -50,7 +49,7 @@ fn max_percentage() {
     let addr: Multiaddr = "/memory/1234".parse().unwrap();
     let target = PeerId::random();
 
-    for _ in 0..connection_limit {
+    for _ in 0..CONNECTION_LIMIT {
         network
             .dial(
                 DialOpts::peer_id(target)

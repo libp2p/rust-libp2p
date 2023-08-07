@@ -26,12 +26,11 @@ use util::*;
 
 use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
 use libp2p_swarm_test::SwarmExt;
-use rand::{rngs::OsRng, Rng};
 
 #[test]
 fn max_bytes() {
-    let connection_limit = OsRng.gen_range(1..30);
-    let max_allowed_bytes = connection_limit * 1024 * 1024;
+    const CONNECTION_LIMIT: usize = 20;
+    let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
         connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
@@ -49,7 +48,7 @@ fn max_bytes() {
     let addr: Multiaddr = "/memory/1234".parse().unwrap();
     let target = PeerId::random();
 
-    for _ in 0..connection_limit {
+    for _ in 0..CONNECTION_LIMIT {
         network
             .dial(
                 DialOpts::peer_id(target)
