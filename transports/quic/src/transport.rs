@@ -175,12 +175,11 @@ impl<P: Provider> GenTransport<P> {
     }
 
     fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<UdpSocket> {
-        let domain = if socket_addr.is_ipv4() {
-            Domain::IPV4
-        } else {
-            Domain::IPV6
-        };
-        let socket = Socket::new(domain, Type::DGRAM, Some(socket2::Protocol::UDP))?;
+        let socket = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )?;
         if socket_addr.is_ipv6() {
             socket.set_only_v6(true)?;
         }
