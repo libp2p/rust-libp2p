@@ -235,9 +235,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: thomaseizinger/cargo-semver-checks-action@060d5a2882a4b9ec99b054efb1b13115acc127ce
+      - uses: thomaseizinger/cargo-semver-checks-action@b266e63c6c2823106f61fd9ee4805ac6ce0a2783
         with:
-          version: "v0.20.1"
+          version: "foobar"
 
   rustfmt:
     runs-on: ubuntu-latest
