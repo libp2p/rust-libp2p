@@ -18,15 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use asynchronous_codec::Framed;
 use futures::channel::mpsc;
+use futures::prelude::*;
 use futures_timer::Delay;
+use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
 use libp2p_core::Multiaddr;
+use libp2p_swarm::Stream;
 
 use crate::priv_client::transport;
 use crate::proto;
-use crate::protocol::Limit;
+use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
 
 #[derive(Debug, Error)]
 pub(crate) enum UpgradeError {
@@ -102,4 +106,92 @@ pub(crate) enum Output {
     Circuit {
         limit: Option<Limit>,
     },
+}
+
+pub(crate) async fn send_reserve_message_and_process_response(
+    protocol: Stream,
+    to_listener: mpsc::Sender<transport::ToListenerMsg>,
+) -> Result<Output, UpgradeError> {
+    let msg = proto::HopMessage {
+        type_pb: proto::HopMessageType::RESERVE,
+        peer: None,
+        reservation: None,
+        limit: None,
+        status: None,
+    };
+    let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+
+    substream.send(msg).await?;
+
+    let proto::HopMessage {
+        type_pb,
+        peer: _,
+        reservation,
+        limit,
+        status,
+    } = substream
+        .next()
+        .await
+        .ok_or(FatalUpgradeError::StreamClosed)??;
+
+    match type_pb {
+        proto::HopMessageType::CONNECT => {
+            return Err(FatalUpgradeError::UnexpectedTypeConnect.into());
+        }
+        proto::HopMessageType::RESERVE => {
+            return Err(FatalUpgradeError::UnexpectedTypeReserve.into());
+        }
+        proto::HopMessageType::STATUS => {}
+    }
+
+    let limit = limit.map(Into::into);
+
+    match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+        proto::Status::OK => {}
+        proto::Status::RESERVATION_REFUSED => {
+            return Err(ReservationFailedReason::Refused.into());
+        }
+        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
+            return Err(ReservationFailedReason::ResourceLimitExceeded.into());
+        }
+        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+    }
+
+    let reservation = reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
+
+    if reservation.addrs.is_empty() {
+        return Err(FatalUpgradeError::NoAddressesInReservation.into());
+    }
+
+    let addrs = reservation
+        .addrs
+        .into_iter()
+        .map(|b| Multiaddr::try_from(b.to_vec()))
+        .collect::<Result<Vec<Multiaddr>, _>>()
+        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
+
+    let renewal_timeout = reservation
+        .expire
+        .checked_sub(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
+        // Renew the reservation after 3/4 of the reservation expiration timestamp.
+        .and_then(|duration| duration.checked_sub(duration / 4))
+        .map(Duration::from_secs)
+        .map(Delay::new)
+        .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
+
+    substream.close().await?;
+
+    let output = Output::Reservation {
+        renewal_timeout,
+        addrs,
+        limit,
+        to_listener,
+    };
+
+    Ok(output)
 }

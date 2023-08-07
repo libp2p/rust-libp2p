@@ -44,7 +44,7 @@ use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -279,102 +279,6 @@ impl Handler {
         {
             log::warn!("Dropping existing inbound circuit request to be denied from {:?} in favor of new one.", src_peer_id);
         }
-    }
-
-    fn send_reserve_message_and_process_response(
-        &self,
-        protocol: Stream,
-        to_listener: mpsc::Sender<transport::ToListenerMsg>,
-    ) -> BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>> {
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::RESERVE,
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: None,
-        };
-        let mut substream =
-            Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
-
-        async move {
-            substream.send(msg).await?;
-
-            let proto::HopMessage {
-                type_pb,
-                peer: _,
-                reservation,
-                limit,
-                status,
-            } = substream
-                .next()
-                .await
-                .ok_or(outbound_hop::FatalUpgradeError::StreamClosed)??;
-
-            match type_pb {
-                proto::HopMessageType::CONNECT => {
-                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeConnect.into());
-                }
-                proto::HopMessageType::RESERVE => {
-                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeReserve.into());
-                }
-                proto::HopMessageType::STATUS => {}
-            }
-
-            let limit = limit.map(Into::into);
-
-            match status.ok_or(outbound_hop::UpgradeError::Fatal(
-                outbound_hop::FatalUpgradeError::MissingStatusField,
-            ))? {
-                proto::Status::OK => {}
-                proto::Status::RESERVATION_REFUSED => {
-                    return Err(outbound_hop::ReservationFailedReason::Refused.into());
-                }
-                proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                    return Err(outbound_hop::ReservationFailedReason::ResourceLimitExceeded.into());
-                }
-                s => return Err(outbound_hop::FatalUpgradeError::UnexpectedStatus(s).into()),
-            }
-
-            let reservation =
-                reservation.ok_or(outbound_hop::FatalUpgradeError::MissingReservationField)?;
-
-            if reservation.addrs.is_empty() {
-                return Err(outbound_hop::FatalUpgradeError::NoAddressesInReservation.into());
-            }
-
-            let addrs = reservation
-                .addrs
-                .into_iter()
-                .map(|b| Multiaddr::try_from(b.to_vec()))
-                .collect::<Result<Vec<Multiaddr>, _>>()
-                .map_err(|_| outbound_hop::FatalUpgradeError::InvalidReservationAddrs)?;
-
-            let renewal_timeout = reservation
-                .expire
-                .checked_sub(
-                    SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs(),
-                )
-                // Renew the reservation after 3/4 of the reservation expiration timestamp.
-                .and_then(|duration| duration.checked_sub(duration / 4))
-                .map(Duration::from_secs)
-                .map(Delay::new)
-                .ok_or(outbound_hop::FatalUpgradeError::InvalidReservationExpiration)?;
-
-            substream.close().await?;
-
-            let output = outbound_hop::Output::Reservation {
-                renewal_timeout,
-                addrs,
-                limit,
-                to_listener,
-            };
-
-            Ok(output)
-        }
-        .boxed()
     }
 
     fn send_connection_message_and_process_response(
@@ -739,8 +643,13 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 if let Some(to_listener) = self.wait_for_reserve_outbound_stream.pop_front() {
-                    self.reserve_futs
-                        .push(self.send_reserve_message_and_process_response(stream, to_listener));
+                    self.reserve_futs.push(
+                        outbound_hop::send_reserve_message_and_process_response(
+                            stream,
+                            to_listener,
+                        )
+                        .boxed(),
+                    );
                     return;
                 }
 
