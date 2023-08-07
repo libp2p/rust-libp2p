@@ -202,7 +202,7 @@ pub(crate) async fn send_reserve_message_and_process_response(
 pub(crate) async fn send_connection_message_and_process_response(
     protocol: Stream,
     remote_peer_id: PeerId,
-    con_command: ConnectionCommand,
+    con_command: Command,
     tx: oneshot::Sender<Void>,
 ) -> Result<Option<Output>, UpgradeError> {
     let msg = proto::HopMessage {
@@ -288,12 +288,12 @@ pub(crate) async fn send_connection_message_and_process_response(
     Ok(output)
 }
 
-pub(crate) struct ConnectionCommand {
+pub(crate) struct Command {
     dst_peer_id: PeerId,
     pub(crate) send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
 }
 
-impl ConnectionCommand {
+impl Command {
     pub(crate) fn new(
         dst_peer_id: PeerId,
         send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,

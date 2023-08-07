@@ -134,7 +134,7 @@ pub struct Handler {
         BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
     >,
 
-    wait_for_connection_outbound_stream: VecDeque<outbound_hop::ConnectionCommand>,
+    wait_for_connection_outbound_stream: VecDeque<outbound_hop::Command>,
     circuit_connection_futs: FuturesUnordered<
         BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>,
     >,
@@ -310,7 +310,7 @@ impl ConnectionHandler for Handler {
                 dst_peer_id,
             } => {
                 self.wait_for_connection_outbound_stream
-                    .push_back(outbound_hop::ConnectionCommand::new(dst_peer_id, send_back));
+                    .push_back(outbound_hop::Command::new(dst_peer_id, send_back));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
