@@ -48,10 +48,11 @@ use thiserror::Error;
 /// 1. Establish relayed connections by dialing `/p2p-circuit` addresses.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
+///    # use libp2p_identity::PeerId;
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = relay::client::new(
 ///        PeerId::random(),
@@ -70,10 +71,11 @@ use thiserror::Error;
 /// 3. Listen for incoming relayed connections via specific relay.
 ///
 ///    ```
-///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport, PeerId};
+///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, transport::ListenerId, Transport};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay as relay;
+///    # use libp2p_identity::PeerId;
 ///    # let relay_id = PeerId::random();
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
@@ -267,9 +269,7 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
                     return Err(Error::MultipleCircuitRelayProtocolsUnsupported.into());
                 }
             }
-            Protocol::P2p(hash) => {
-                let peer_id = PeerId::from_multihash(hash).map_err(|_| Error::InvalidHash)?;
-
+            Protocol::P2p(peer_id) => {
                 if before_circuit {
                     if relayed_multiaddr.relay_peer_id.is_some() {
                         return Err(Error::MalformedMultiaddr.into());
@@ -301,7 +301,7 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
     Ok(relayed_multiaddr)
 }
 
-pub struct Listener {
+pub(crate) struct Listener {
     listener_id: ListenerId,
     /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
@@ -378,7 +378,7 @@ impl Stream for Listener {
                         upgrade: ready(Ok(stream)),
                         listener_id,
                         local_addr: relay_addr.with(Protocol::P2pCircuit),
-                        send_back_addr: Protocol::P2p(src_peer_id.into()).into(),
+                        send_back_addr: Protocol::P2p(src_peer_id).into(),
                     })
                 }
                 ToListenerMsg::Reservation(Err(())) => self.close(Err(Error::Reservation)),
@@ -422,8 +422,9 @@ impl From<Error> for TransportError<Error> {
 
 /// Message from the [`Transport`] to the [`Behaviour`](crate::Behaviour)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
-pub enum TransportToBehaviourMsg {
+pub(crate) enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.
+    #[allow(dead_code)]
     DialReq {
         request_id: RequestId,
         relay_addr: Multiaddr,

@@ -174,12 +174,6 @@ where
         self.transport.inner_mut().set_tls_config(c);
         self
     }
-
-    /// Should the deflate extension (RFC 7692) be used if supported?
-    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.transport.inner_mut().use_deflate(flag);
-        self
-    }
 }
 
 impl<T> Transport for WsConfig<T>
@@ -344,7 +338,7 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random().into())))
+            .dial(addr.with(Protocol::P2p(PeerId::random())))
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);

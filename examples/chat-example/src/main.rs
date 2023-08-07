@@ -18,32 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic chat application with logs demonstrating libp2p and the gossipsub protocol
-//! combined with mDNS for the discovery of peers to gossip with.
-//!
-//! Using two terminal windows, start two instances, typing the following in each:
-//!
-//! ```sh
-//! cargo run
-//! ```
-//!
-//! Mutual mDNS discovery may take a few seconds. When each peer does discover the other
-//! it will print a message like:
-//!
-//! ```sh
-//! mDNS discovered a new peer: {peerId}
-//! ```
-//!
-//! Type a message and hit return: the message is sent and printed in the other terminal.
-//! Close with Ctrl-c.
-//!
-//! You can open more terminal windows and add more peers using the same line above.
-//!
-//! Once an additional peer is mDNS discovered it can participate in the conversation
-//! and all peers will receive messages sent from it.
-//!
-//! If a participant exits (Control-C or otherwise) the other peers will receive an mDNS expired
-//! event and remove the expired peer from the list of known peers.
+#![doc = include_str!("../README.md")]
 
 use async_std::io;
 use futures::{future::Either, prelude::*, select};
@@ -74,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(id_keys.public());
     println!("Local peer id: {local_peer_id}");
 
-    // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))

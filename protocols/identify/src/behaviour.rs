@@ -25,8 +25,8 @@ use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    AddressScore, ConnectionDenied, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -43,8 +43,7 @@ use std::{
 /// about them, and answers identify queries from other nodes.
 ///
 /// All external addresses of the local node supposedly observed by remotes
-/// are reported via [`ToSwarm::ReportObservedAddr`] with a
-/// [score](AddressScore) of `1`.
+/// are reported via [`ToSwarm::NewExternalAddrCandidate`].
 pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
@@ -295,10 +294,8 @@ impl NetworkBehaviour for Behaviour {
                 let observed = info.observed_addr.clone();
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Received { peer_id, info }));
-                self.events.push_back(ToSwarm::ReportObservedAddr {
-                    address: observed,
-                    score: AddressScore::Finite(1),
-                });
+                self.events
+                    .push_back(ToSwarm::NewExternalAddrCandidate(observed));
             }
             handler::Event::Identification => {
                 self.events
@@ -405,8 +402,9 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
+            | FromSwarm::NewExternalAddrCandidate(_)
+            | FromSwarm::ExternalAddrExpired(_) => {}
+            FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }
@@ -448,7 +446,7 @@ pub enum Event {
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
     if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {
-        return multi_addr_peer_id == *peer_id.as_ref();
+        return multi_addr_peer_id == *peer_id;
     }
     true
 }
@@ -506,8 +504,8 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(multiaddr::Protocol::P2p(peer_id.into()));
-        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id.into()));
+        addr.push(multiaddr::Protocol::P2p(peer_id));
+        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));
         assert!(!multiaddr_matches_peer_id(

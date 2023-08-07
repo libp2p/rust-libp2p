@@ -28,9 +28,10 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
+use crate::listen_opts::ListenOpts;
 use crate::{
-    AddressRecord, AddressScore, ConnectionDenied, ConnectionHandler, DialError, ListenError,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -219,10 +220,6 @@ pub trait NetworkBehaviour: 'static {
 pub trait PollParameters {
     /// Iterator returned by [`supported_protocols`](PollParameters::supported_protocols).
     type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
-    /// Iterator returned by [`listened_addresses`](PollParameters::listened_addresses).
-    type ListenedAddressesIter: ExactSizeIterator<Item = Multiaddr>;
-    /// Iterator returned by [`external_addresses`](PollParameters::external_addresses).
-    type ExternalAddressesIter: ExactSizeIterator<Item = AddressRecord>;
 
     /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
     /// an inbound substream.
@@ -234,27 +231,6 @@ pub trait PollParameters {
         note = "Use `libp2p_swarm::SupportedProtocols` in your `ConnectionHandler` instead."
     )]
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
-
-    /// Returns the list of the addresses we're listening on.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Use `libp2p_swarm::ListenAddresses` instead."
-    )]
-    fn listened_addresses(&self) -> Self::ListenedAddressesIter;
-
-    /// Returns the list of the addresses nodes can use to reach us.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Use `libp2p_swarm::ExternalAddresses` instead."
-    )]
-    fn external_addresses(&self) -> Self::ExternalAddressesIter;
-
-    /// Returns the peer id of the local node.
-    #[deprecated(
-        since = "0.42.0",
-        note = "Pass the node's `PeerId` into the behaviour instead."
-    )]
-    fn local_peer_id(&self) -> &PeerId;
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
@@ -274,6 +250,12 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This [`ConnectionId`] will be used throughout the connection's lifecycle to associate events with it.
     /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
     Dial { opts: DialOpts },
+
+    /// Instructs the [`Swarm`](crate::Swarm) to listen on the provided address.
+    ListenOn { opts: ListenOpts },
+
+    /// Instructs the [`Swarm`](crate::Swarm) to remove the listener.
+    RemoveListener { id: ListenerId },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -299,21 +281,28 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
         event: TInEvent,
     },
 
-    /// Informs the `Swarm` about an address observed by a remote for
-    /// the local node by which the local node is supposedly publicly
-    /// reachable.
+    /// Reports a new candidate for an external address to the [`Swarm`](crate::Swarm).
     ///
-    /// It is advisable to issue `ReportObservedAddr` actions at a fixed frequency
-    /// per node. This way address information will be more accurate over time
-    /// and individual outliers carry less weight.
-    ReportObservedAddr {
-        /// The observed address of the local node.
-        address: Multiaddr,
-        /// The score to associate with this observation, i.e.
-        /// an indicator for the trusworthiness of this address
-        /// relative to other observed addresses.
-        score: AddressScore,
-    },
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::NewExternalAddrCandidate`].
+    ///
+    /// This address could come from a variety of sources:
+    /// - A protocol such as identify obtained it from a remote.
+    /// - The user provided it based on configuration.
+    /// - We made an educated guess based on one of our listen addresses.
+    /// - We established a new relay connection.
+    NewExternalAddrCandidate(Multiaddr),
+
+    /// Indicates to the [`Swarm`](crate::Swarm) that the provided address is confirmed to be externally reachable.
+    ///
+    /// This is intended to be issued in response to a [`FromSwarm::NewExternalAddrCandidate`] if we are indeed externally reachable on this address.
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrConfirmed`].
+    ExternalAddrConfirmed(Multiaddr),
+
+    /// Indicates to the [`Swarm`](crate::Swarm) that we are no longer externally reachable under the provided address.
+    ///
+    /// This expires an address that was earlier confirmed via [`ToSwarm::ExternalAddrConfirmed`].
+    /// This address will be shared with all [`NetworkBehaviour`]s via [`FromSwarm::ExternalAddrExpired`].
+    ExternalAddrExpired(Multiaddr),
 
     /// Instructs the `Swarm` to initiate a graceful close of one or all connections
     /// with the given peer.
@@ -342,6 +331,8 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -351,9 +342,6 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
                 handler,
                 event: f(event),
             },
-            ToSwarm::ReportObservedAddr { address, score } => {
-                ToSwarm::ReportObservedAddr { address, score }
-            }
             ToSwarm::CloseConnection {
                 peer_id,
                 connection,
@@ -361,6 +349,9 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
                 peer_id,
                 connection,
             },
+            ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
+            ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
+            ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
         }
     }
 }
@@ -371,6 +362,8 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -380,9 +373,9 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
                 handler,
                 event,
             },
-            ToSwarm::ReportObservedAddr { address, score } => {
-                ToSwarm::ReportObservedAddr { address, score }
-            }
+            ToSwarm::NewExternalAddrCandidate(addr) => ToSwarm::NewExternalAddrCandidate(addr),
+            ToSwarm::ExternalAddrConfirmed(addr) => ToSwarm::ExternalAddrConfirmed(addr),
+            ToSwarm::ExternalAddrExpired(addr) => ToSwarm::ExternalAddrExpired(addr),
             ToSwarm::CloseConnection {
                 peer_id,
                 connection,
@@ -415,7 +408,6 @@ pub enum CloseConnection {
 
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
-#[allow(deprecated)]
 pub enum FromSwarm<'a, Handler> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),
@@ -449,10 +441,12 @@ pub enum FromSwarm<'a, Handler> {
     ListenerError(ListenerError<'a>),
     /// Informs the behaviour that a listener closed.
     ListenerClosed(ListenerClosed<'a>),
-    /// Informs the behaviour that we have discovered a new external address for us.
-    NewExternalAddr(NewExternalAddr<'a>),
-    /// Informs the behaviour that an external address was removed.
-    ExpiredExternalAddr(ExpiredExternalAddr<'a>),
+    /// Informs the behaviour that we have discovered a new candidate for an external address for us.
+    NewExternalAddrCandidate(NewExternalAddrCandidate<'a>),
+    /// Informs the behaviour that an external address of the local node was confirmed.
+    ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
+    /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
+    ExternalAddrExpired(ExternalAddrExpired<'a>),
 }
 
 /// [`FromSwarm`] variant that informs the behaviour about a newly established connection to a peer.
@@ -470,7 +464,6 @@ pub struct ConnectionEstablished<'a> {
 /// This event is always paired with an earlier
 /// [`FromSwarm::ConnectionEstablished`] with the same peer ID, connection ID
 /// and endpoint.
-#[allow(deprecated)]
 pub struct ConnectionClosed<'a, Handler> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
@@ -548,16 +541,21 @@ pub struct ListenerClosed<'a> {
     pub reason: Result<(), &'a std::io::Error>,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour
-/// that we have discovered a new external address for us.
+/// [`FromSwarm`] variant that informs the behaviour about a new candidate for an external address for us.
 #[derive(Clone, Copy)]
-pub struct NewExternalAddr<'a> {
+pub struct NewExternalAddrCandidate<'a> {
+    pub addr: &'a Multiaddr,
+}
+
+/// [`FromSwarm`] variant that informs the behaviour that an external address was confirmed.
+#[derive(Clone, Copy)]
+pub struct ExternalAddrConfirmed<'a> {
     pub addr: &'a Multiaddr,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
 #[derive(Clone, Copy)]
-pub struct ExpiredExternalAddr<'a> {
+pub struct ExternalAddrExpired<'a> {
     pub addr: &'a Multiaddr,
 }
 
@@ -657,12 +655,9 @@ impl<'a, Handler> FromSwarm<'a, Handler> {
                 listener_id,
                 reason,
             })),
-            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
-                Some(FromSwarm::NewExternalAddr(NewExternalAddr { addr }))
-            }
-            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
-                Some(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }))
-            }
+            FromSwarm::NewExternalAddrCandidate(e) => Some(FromSwarm::NewExternalAddrCandidate(e)),
+            FromSwarm::ExternalAddrExpired(e) => Some(FromSwarm::ExternalAddrExpired(e)),
+            FromSwarm::ExternalAddrConfirmed(e) => Some(FromSwarm::ExternalAddrConfirmed(e)),
         }
     }
 }

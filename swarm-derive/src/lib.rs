@@ -21,45 +21,48 @@
 #![recursion_limit = "256"]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod syn_ext;
+
+use crate::syn_ext::RequireStrLit;
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{
-    parse_macro_input, Data, DataStruct, DeriveInput, Expr, ExprLit, Lit, Meta, MetaNameValue,
-    Token,
-};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Meta, Token};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
 #[proc_macro_derive(NetworkBehaviour, attributes(behaviour))]
 pub fn hello_macro_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    build(&ast)
+    build(&ast).unwrap_or_else(|e| e.to_compile_error().into())
 }
 
 /// The actual implementation.
-fn build(ast: &DeriveInput) -> TokenStream {
+fn build(ast: &DeriveInput) -> syn::Result<TokenStream> {
     match ast.data {
         Data::Struct(ref s) => build_struct(ast, s),
-        Data::Enum(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for enums"),
-        Data::Union(_) => unimplemented!("Deriving NetworkBehaviour is not implemented for unions"),
+        Data::Enum(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on enums",
+        )),
+        Data::Union(_) => Err(syn::Error::new_spanned(
+            ast,
+            "Cannot derive `NetworkBehaviour` on union",
+        )),
     }
 }
 
 /// The version for structs
-fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
+fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<TokenStream> {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let BehaviourAttributes {
         prelude_path,
         user_specified_out_event,
         deprecation_tokenstream,
-    } = match parse_attributes(ast) {
-        Ok(attrs) => attrs,
-        Err(e) => return e,
-    };
+    } = parse_attributes(ast)?;
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
@@ -79,8 +82,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let new_listener = quote! { #prelude_path::NewListener };
     let new_listen_addr = quote! { #prelude_path::NewListenAddr };
     let expired_listen_addr = quote! { #prelude_path::ExpiredListenAddr };
-    let new_external_addr = quote! { #prelude_path::NewExternalAddr };
-    let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
+    let new_external_addr_candidate = quote! { #prelude_path::NewExternalAddrCandidate };
+    let external_addr_expired = quote! { #prelude_path::ExternalAddrExpired };
+    let external_addr_confirmed = quote! { #prelude_path::ExternalAddrConfirmed };
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler = quote! { #prelude_path::THandler };
@@ -440,19 +444,19 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewExternalAddr` variant.
-    let on_new_external_addr_stmts = {
+    let on_new_external_addr_candidate_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                self.#i.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
                         addr,
                     }));
                 },
                 None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddrCandidate(#new_external_addr_candidate {
                         addr,
                     }));
                 },
@@ -460,20 +464,41 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the `FromSwarm::ExpiredExternalAddr` variant.
-    let on_expired_external_addr_stmts = {
+    // for the `FromSwarm::ExternalAddrExpired` variant.
+    let on_external_addr_expired_stmts = {
         data_struct
             .fields
             .iter()
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                self.#i.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                self.#i.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
                         addr,
                     }));
                 },
                 None => quote! {
-                self.#field_n.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrExpired(#external_addr_expired {
+                        addr,
+                    }));
+                },
+            })
+    };
+
+    // Build the list of statements to put in the body of `on_swarm_event()`
+    // for the `FromSwarm::ExternalAddrConfirmed` variant.
+    let on_external_addr_confirmed_stmts = {
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(field_n, field)| match field.ident {
+                Some(ref i) => quote! {
+                self.#i.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
+                        addr,
+                    }));
+                },
+                None => quote! {
+                self.#field_n.on_swarm_event(#from_swarm::ExternalAddrConfirmed(#external_addr_confirmed {
                         addr,
                     }));
                 },
@@ -707,6 +732,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
                 }
+                std::task::Poll::Ready(#network_behaviour_action::ListenOn { opts }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ListenOn { opts });
+                }
+                std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::RemoveListener { id });
+                }
                 std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
                         peer_id,
@@ -714,8 +745,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         event: #wrapped_event,
                     });
                 }
-                std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
+                std::task::Poll::Ready(#network_behaviour_action::NewExternalAddrCandidate(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::NewExternalAddrCandidate(addr));
+                }
+                std::task::Poll::Ready(#network_behaviour_action::ExternalAddrConfirmed(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ExternalAddrConfirmed(addr));
+                }
+                std::task::Poll::Ready(#network_behaviour_action::ExternalAddrExpired(addr)) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ExternalAddrExpired(addr));
                 }
                 std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
@@ -831,12 +868,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     #from_swarm::ExpiredListenAddr(
                         #expired_listen_addr { listener_id, addr })
                     => { #(#on_expired_listen_addr_stmts)* }
-                    #from_swarm::NewExternalAddr(
-                        #new_external_addr { addr })
-                    => { #(#on_new_external_addr_stmts)* }
-                    #from_swarm::ExpiredExternalAddr(
-                        #expired_external_addr { addr })
-                    => { #(#on_expired_external_addr_stmts)* }
+                    #from_swarm::NewExternalAddrCandidate(
+                        #new_external_addr_candidate { addr })
+                    => { #(#on_new_external_addr_candidate_stmts)* }
+                    #from_swarm::ExternalAddrExpired(
+                        #external_addr_expired { addr })
+                    => { #(#on_external_addr_expired_stmts)* }
+                    #from_swarm::ExternalAddrConfirmed(
+                        #external_addr_confirmed { addr })
+                    => { #(#on_external_addr_confirmed_stmts)* }
                     #from_swarm::ListenerError(
                         #listener_error { listener_id, err })
                     => { #(#on_listener_error_stmts)* }
@@ -849,7 +889,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         }
     };
 
-    final_quote.into()
+    Ok(final_quote.into())
 }
 
 struct BehaviourAttributes {
@@ -859,7 +899,7 @@ struct BehaviourAttributes {
 }
 
 /// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
-fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStream> {
+fn parse_attributes(ast: &DeriveInput) -> syn::Result<BehaviourAttributes> {
     let mut attributes = BehaviourAttributes {
         prelude_path: syn::parse_quote! { ::libp2p::swarm::derive_prelude },
         user_specified_out_event: None,
@@ -871,33 +911,13 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
         .iter()
         .filter(|attr| attr.path().is_ident("behaviour"))
     {
-        let nested = attr
-            .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-            .expect("`parse_args_with` never fails when parsing nested meta");
+        let nested = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)?;
 
         for meta in nested {
             if meta.path().is_ident("prelude") {
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.prelude_path = syn::parse_str(&s.value()).unwrap();
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`prelude` value must be a quoted path",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.prelude_path = syn::parse_str(&value)?;
 
                 continue;
             }
@@ -912,29 +932,10 @@ fn parse_attributes(ast: &DeriveInput) -> Result<BehaviourAttributes, TokenStrea
 
                     attributes.deprecation_tokenstream = quote::quote! { #warning };
                 }
-                match meta {
-                    Meta::Path(_) => unimplemented!(),
-                    Meta::List(_) => unimplemented!(),
 
-                    Meta::NameValue(MetaNameValue {
-                        value:
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ..
-                    }) => {
-                        attributes.user_specified_out_event =
-                            Some(syn::parse_str(&s.value()).unwrap());
-                    }
-                    Meta::NameValue(name_value) => {
-                        return Err(syn::Error::new_spanned(
-                            name_value.value,
-                            "`to_swarm` value must be a quoted type",
-                        )
-                        .to_compile_error()
-                        .into());
-                    }
-                }
+                let value = meta.require_name_value()?.value.require_str_lit()?;
+
+                attributes.user_specified_out_event = Some(syn::parse_str(&value)?);
 
                 continue;
             }

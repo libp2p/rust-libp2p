@@ -840,20 +840,6 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
-/// The configuration for a TCP/IP transport capability for libp2p.
-#[deprecated(since = "0.37.0", note = "Use `Config` instead.")]
-pub type GenTcpConfig = Config;
-
-/// The type of a [`Transport`](libp2p_core::Transport) using the `async-io` implementation.
-#[cfg(feature = "async-io")]
-#[deprecated(since = "0.37.0", note = "Use `async_io::Transport` instead.")]
-pub type TcpTransport = Transport<async_io::Tcp>;
-
-/// The type of a [`Transport`](libp2p_core::Transport) using the `tokio` implementation.
-#[cfg(feature = "tokio")]
-#[deprecated(since = "0.37.0", note = "Use `tokio::Transport` instead.")]
-pub type TokioTcpTransport = Transport<tokio::Tcp>;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1294,7 +1280,7 @@ mod tests {
         let tcp_observed_addr = Multiaddr::empty()
             .with(Protocol::Ip4(observed_ip))
             .with(Protocol::Tcp(1))
-            .with(Protocol::P2p(PeerId::random().into()));
+            .with(Protocol::P2p(PeerId::random()));
 
         let translated = transport
             .address_translation(&tcp_listen_addr, &tcp_observed_addr)

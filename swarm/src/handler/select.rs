@@ -227,8 +227,8 @@ where
         >,
     > {
         match self.proto1.poll(cx) {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Left(event)));
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
@@ -247,8 +247,10 @@ where
         };
 
         match self.proto2.poll(cx) {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Right(event)));
+            Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Right(
+                    event,
+                )));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));

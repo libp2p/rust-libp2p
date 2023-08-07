@@ -97,20 +97,6 @@ impl SecretKey {
     /// error is returned.
     ///
     /// Note that the expected binary format is the same as `libsecp256k1`'s.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `SecretKey::try_from_bytes` instead."
-    )]
-    #[allow(unused_mut)]
-    pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
-        Self::try_from_bytes(sk)
-    }
-
-    /// Create a secret key from a byte slice, zeroing the slice on success.
-    /// If the bytes do not constitute a valid Secp256k1 secret key, an
-    /// error is returned.
-    ///
-    /// Note that the expected binary format is the same as `libsecp256k1`'s.
     pub fn try_from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
         let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
@@ -215,41 +201,15 @@ impl PublicKey {
             .unwrap_or(false)
     }
 
-    /// Encode the public key in compressed form, i.e. with one coordinate
-    /// represented by a single bit.
-    #[deprecated(since = "0.2.0", note = "Renamed to `PublicKey::to_bytes`.")]
-    pub fn encode(&self) -> [u8; 33] {
-        self.to_bytes()
-    }
-
     /// Convert the public key to a byte buffer in compressed form, i.e. with one coordinate
     /// represented by a single bit.
     pub fn to_bytes(&self) -> [u8; 33] {
         self.0.serialize_compressed()
     }
 
-    /// Encode the public key in uncompressed form.
-    #[deprecated(
-        since = "0.2.0",
-        note = "Renamed to `PublicKey::to_bytes_uncompressed`."
-    )]
-    pub fn encode_uncompressed(&self) -> [u8; 65] {
-        self.to_bytes_uncompressed()
-    }
-
     /// Convert the public key to a byte buffer in uncompressed form.
     pub fn to_bytes_uncompressed(&self) -> [u8; 65] {
         self.0.serialize()
-    }
-
-    /// Decode a public key from a byte slice in the the format produced
-    /// by `encode`.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_from_bytes` instead."
-    )]
-    pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_from_bytes(k)
     }
 
     /// Decode a public key from a byte slice in the the format produced

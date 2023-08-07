@@ -858,7 +858,7 @@ fn test_handle_received_subscriptions() {
     // UNSUBSCRIBE  - Remove topic from peer_topics for peer.
     //              - Remove peer from topic_peers.
 
-    let topics = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1280,7 +1280,7 @@ fn test_handle_graft_is_not_subscribed() {
 #[test]
 // tests multiple topics in a single graft message
 fn test_handle_graft_multiple_topics() {
-    let topics: Vec<String> = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics: Vec<String> = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -5099,7 +5099,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
     }
 
     let message_id_fn = |m: &Message| -> MessageId {
-        let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
+        let (mut id, counters_pointer): (MessageId, *mut Pointers) =
             get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).slow_counter += 1;
@@ -5108,7 +5108,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         id
     };
     let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
-        let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
+        let (id, counters_pointer) = get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).fast_counter += 1;
         }

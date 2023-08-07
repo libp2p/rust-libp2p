@@ -43,7 +43,7 @@ where
 
 /// A `Boxed` transport is a `Transport` whose `Dial`, `Listener`
 /// and `ListenerUpgrade` futures are `Box`ed and only the `Output`
-/// and `Error` types are captured in type variables.
+/// type is captured in a type variable.
 pub struct Boxed<O> {
     inner: Box<dyn Abstract<O> + Send + Unpin>,
 }

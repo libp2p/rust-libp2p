@@ -81,6 +81,14 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
         }
     }
 
+    pub(crate) fn is_initiator(&self) -> bool {
+        self.session.is_initiator()
+    }
+
+    pub(crate) fn is_responder(&self) -> bool {
+        !self.session.is_initiator()
+    }
+
     /// Converts the `NoiseFramed` into a `NoiseOutput` encrypted data stream
     /// once the handshake is complete, including the static DH [`PublicKey`]
     /// of the remote, if received.
@@ -166,7 +174,7 @@ where
     type Item = io::Result<Bytes>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         loop {
             trace!("read state: {:?}", this.read_state);
             match this.read_state {
@@ -265,7 +273,7 @@ where
     type Error = io::Error;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         loop {
             trace!("write state {:?}", this.write_state);
             match this.write_state {
@@ -321,7 +329,7 @@ where
 
     fn start_send(self: Pin<&mut Self>, frame: &Vec<u8>) -> Result<(), Self::Error> {
         assert!(frame.len() <= MAX_FRAME_LEN);
-        let mut this = Pin::into_inner(self);
+        let this = Pin::into_inner(self);
         assert!(this.write_state.is_ready());
 
         this.write_buffer

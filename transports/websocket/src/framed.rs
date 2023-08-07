@@ -32,7 +32,6 @@ use log::{debug, trace};
 use parking_lot::Mutex;
 use soketto::{
     connection::{self, CloseReason},
-    extension::deflate::Deflate,
     handshake,
 };
 use std::{collections::HashMap, ops::DerefMut, sync::Arc};
@@ -51,7 +50,6 @@ pub struct WsConfig<T> {
     max_data_size: usize,
     tls_config: tls::Config,
     max_redirects: u8,
-    use_deflate: bool,
     /// Websocket protocol of the inner listener.
     ///
     /// This is the suffix of the address provided in `listen_on`.
@@ -59,7 +57,10 @@ pub struct WsConfig<T> {
     listener_protos: HashMap<ListenerId, Protocol<'static>>,
 }
 
-impl<T> WsConfig<T> {
+impl<T> WsConfig<T>
+where
+    T: Send,
+{
     /// Create a new websocket transport based on another transport.
     pub fn new(transport: T) -> Self {
         WsConfig {
@@ -67,7 +68,6 @@ impl<T> WsConfig<T> {
             max_data_size: MAX_DATA_SIZE,
             tls_config: tls::Config::client(),
             max_redirects: 0,
-            use_deflate: false,
             listener_protos: HashMap::new(),
         }
     }
@@ -97,12 +97,6 @@ impl<T> WsConfig<T> {
     /// Set the TLS configuration if TLS support is desired.
     pub fn set_tls_config(&mut self, c: tls::Config) -> &mut Self {
         self.tls_config = c;
-        self
-    }
-
-    /// Should the deflate extension (RFC 7692) be used if supported?
-    pub fn use_deflate(&mut self, flag: bool) -> &mut Self {
-        self.use_deflate = flag;
         self
     }
 }
@@ -285,19 +279,12 @@ where
 
         let transport = self.transport.clone();
         let tls_config = self.tls_config.clone();
-        let use_deflate = self.use_deflate;
         let max_redirects = self.max_redirects;
 
         let future = async move {
             loop {
-                match Self::dial_once(
-                    transport.clone(),
-                    addr,
-                    tls_config.clone(),
-                    use_deflate,
-                    role_override,
-                )
-                .await
+                match Self::dial_once(transport.clone(), addr, tls_config.clone(), role_override)
+                    .await
                 {
                     Ok(Either::Left(redirect)) => {
                         if remaining_redirects == 0 {
@@ -321,7 +308,6 @@ where
         transport: Arc<Mutex<T>>,
         addr: WsAddress,
         tls_config: tls::Config,
-        use_deflate: bool,
         role_override: Endpoint,
     ) -> Result<Either<String, Connection<T::Output>>, Error<T::Error>> {
         trace!("Dialing websocket address: {:?}", addr);
@@ -364,10 +350,6 @@ where
 
         let mut client = handshake::Client::new(stream, &addr.host_port, addr.path.as_ref());
 
-        if use_deflate {
-            client.add_extension(Box::new(Deflate::new(connection::Mode::Client)));
-        }
-
         match client
             .handshake()
             .map_err(|e| Error::Handshake(Box::new(e)))
@@ -403,7 +385,6 @@ where
         let remote_addr2 = remote_addr.clone(); // used for logging
         let tls_config = self.tls_config.clone();
         let max_size = self.max_data_size;
-        let use_deflate = self.use_deflate;
 
         async move {
             let stream = upgrade.map_err(Error::Transport).await?;
@@ -439,10 +420,6 @@ where
             );
 
             let mut server = handshake::Server::new(stream);
-
-            if use_deflate {
-                server.add_extension(Box::new(Deflate::new(connection::Mode::Server)));
-            }
 
             let ws_key = {
                 let request = server

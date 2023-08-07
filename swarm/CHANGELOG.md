@@ -1,4 +1,21 @@
-## 0.43.0 - unreleased
+## 0.43.2
+- Display the cause of a `ListenError::Denied`.
+  See [PR 4232]
+
+[PR 4232]: https://github.com/libp2p/rust-libp2p/pull/4158
+
+## 0.43.1
+
+- Do not announce external address candidate before address translation, unless translation does not apply.
+  This will prevent ephemeral TCP addresses being announced as external address candidates.
+  See [PR 4158].
+
+[PR 4158]: https://github.com/libp2p/rust-libp2p/pull/4158
+
+## 0.43.0
+
+- Allow `NetworkBehaviours` to create and remove listeners.
+  See [PR 3292].
 
 - Raise MSRV to 1.65.
   See [PR 3715].
@@ -50,6 +67,20 @@
 - Remove deprecated `NetworkBehaviourAction` type.
   See [PR 3919].
 
+- Expose `ConnectionId` on `SwarmEvent::{ConnectionEstablished,ConnectionClosed,IncomingConnection,IncomingConnectionError,OutgoingConnectionError,Dialing}`.
+  Also emit `SwarmEvent::Dialing` for dials with unknown `PeerId`.
+  See [PR 3927].
+
+- Rename `ConnectionHandlerEvent::Custom` to `ConnectionHandlerEvent::NotifyBehaviour`. See [PR 3955].
+
+- Remove `DialError::InvalidPeerId` variant. With the move to `multiaddr` `v0.18.0` peer IDs in `/p2p` are type safe and thus usage of the contained peer ID can not result in a parsing error.
+  See [PR 4037].
+
+- Remove deprecated items. See [PR 3956].
+
+- Add ability to `downcast_ref` ConnectionDenied errors. See [PR 4020].
+
+[PR 3292]: https://github.com/libp2p/rust-libp2p/pull/3292
 [PR 3605]: https://github.com/libp2p/rust-libp2p/pull/3605
 [PR 3651]: https://github.com/libp2p/rust-libp2p/pull/3651
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
@@ -62,6 +93,11 @@
 [PR 3886]: https://github.com/libp2p/rust-libp2p/pull/3886
 [PR 3912]: https://github.com/libp2p/rust-libp2p/pull/3912
 [PR 3919]: https://github.com/libp2p/rust-libp2p/pull/3919
+[PR 3927]: https://github.com/libp2p/rust-libp2p/pull/3927
+[PR 3955]: https://github.com/libp2p/rust-libp2p/pull/3955
+[PR 3956]: https://github.com/libp2p/rust-libp2p/pull/3956
+[PR 4020]: https://github.com/libp2p/rust-libp2p/pull/4020
+[PR 4037]: https://github.com/libp2p/rust-libp2p/pull/4037
 
 ## 0.42.2
 

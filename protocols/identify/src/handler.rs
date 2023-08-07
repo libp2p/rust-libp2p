@@ -36,7 +36,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use log::warn;
+use log::{warn, Level};
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
@@ -59,6 +59,9 @@ pub struct Handler {
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
+
+    /// Whether we have exchanged at least one periodic identify.
+    exchanged_one_periodic_identify: bool,
 
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
@@ -122,6 +125,7 @@ impl Handler {
             events: SmallVec::new(),
             pending_replies: FuturesUnordered::new(),
             trigger_next_identify: Delay::new(initial_delay),
+            exchanged_one_periodic_identify: false,
             interval,
             public_key,
             protocol_version,
@@ -174,13 +178,13 @@ impl Handler {
             future::Either::Left(remote_info) => {
                 self.update_supported_protocols_for_remote(&remote_info);
                 self.events
-                    .push(ConnectionHandlerEvent::Custom(Event::Identified(
+                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                         remote_info,
                     )));
             }
-            future::Either::Right(()) => self
-                .events
-                .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
+            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::IdentificationPushed,
+            )),
         }
     }
 
@@ -192,10 +196,9 @@ impl Handler {
         >,
     ) {
         let err = err.map_upgrade_err(|e| e.into_inner());
-        self.events
-            .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
-                err,
-            )));
+        self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+            Event::IdentificationError(err),
+        ));
         self.trigger_next_identify.reset(self.interval);
     }
 
@@ -238,6 +241,14 @@ impl Handler {
         }
 
         self.remote_supported_protocols = new_remote_protocols;
+    }
+
+    fn local_protocols_to_string(&mut self) -> String {
+        self.local_supported_protocols
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 
@@ -309,7 +320,9 @@ impl ConnectionHandler for Handler {
 
             if let Ok(info) = res {
                 self.update_supported_protocols_for_remote(&info);
-                return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    info,
+                )));
             }
         }
 
@@ -318,8 +331,9 @@ impl ConnectionHandler for Handler {
             let event = result
                 .map(|()| Event::Identification)
                 .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
+            self.exchanged_one_periodic_identify = true;
 
-            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
 
         Poll::Pending
@@ -348,7 +362,29 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
             ConnectionEvent::LocalProtocolsChange(change) => {
-                self.local_supported_protocols.on_protocols_change(change);
+                let before = log::log_enabled!(Level::Debug)
+                    .then(|| self.local_protocols_to_string())
+                    .unwrap_or_default();
+                let protocols_changed = self.local_supported_protocols.on_protocols_change(change);
+                let after = log::log_enabled!(Level::Debug)
+                    .then(|| self.local_protocols_to_string())
+                    .unwrap_or_default();
+
+                if protocols_changed && self.exchanged_one_periodic_identify {
+                    log::debug!(
+                        "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
+                        self.remote_peer_id
+                    );
+
+                    let info = self.build_info();
+                    self.events
+                        .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                            protocol: SubstreamProtocol::new(
+                                Either::Right(Push::outbound(info)),
+                                (),
+                            ),
+                        });
+                }
             }
         }
     }

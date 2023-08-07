@@ -42,13 +42,15 @@ impl std::fmt::Debug for Keypair {
 }
 
 impl Keypair {
-    /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
-    /// format (i.e. unencrypted) as defined in [RFC5208].
+    /// Decode an RSA keypair from a DER-encoded private key in PKCS#1 RSAPrivateKey
+    /// format (i.e. unencrypted) as defined in [RFC3447].
     ///
-    /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[deprecated(since = "0.2.0", note = "Renamed to `Keypair::try_decode_pkcs8`.")]
-    pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
-        Self::try_decode_pkcs8(der)
+    /// [RFC3447]: https://tools.ietf.org/html/rfc3447#appendix-A.1.2
+    pub fn try_decode_pkcs1(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        let kp = RsaKeyPair::from_der(der)
+            .map_err(|e| DecodingError::failed_to_parse("RSA DER PKCS#1 RSAPrivateKey", e))?;
+        der.zeroize();
+        Ok(Keypair(Arc::new(kp)))
     }
 
     /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
@@ -114,16 +116,6 @@ impl PublicKey {
         spki.encode(&mut buf)
             .map(|_| buf)
             .expect("RSA X.509 public key encoding failed.")
-    }
-
-    /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
-    /// structure. See also `encode_x509`.
-    #[deprecated(
-        since = "0.2.0",
-        note = "This method name does not follow Rust naming conventions, use `PublicKey::try_decode_x509` instead."
-    )]
-    pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
-        Self::try_decode_x509(pk)
     }
 
     /// Decode an RSA public key from a DER-encoded X.509 SubjectPublicKeyInfo
