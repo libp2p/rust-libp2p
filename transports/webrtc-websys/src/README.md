@@ -1,3 +1,0 @@
-# WebRTC Websys
-
-TODO
