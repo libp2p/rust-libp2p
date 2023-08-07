@@ -23,13 +23,11 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
-use futures::prelude::*;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
@@ -47,9 +45,8 @@ use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
 use crate::proto::Status;
 use crate::protocol::outbound_stop::CircuitFailedReason;
-use crate::protocol::MAX_MESSAGE_SIZE;
 use crate::protocol::{inbound_hop, outbound_stop};
-use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use crate::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -389,7 +386,7 @@ pub struct Handler {
 
     inbound_requests_futs:
         FuturesUnordered<BoxFuture<'static, Result<Event, inbound_hop::FatalUpgradeError>>>,
-    stop_requested_streams: VecDeque<StopCommand>,
+    stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
     outbound_stop_futs:
         FuturesUnordered<BoxFuture<'static, Result<Event, outbound_stop::FatalUpgradeError>>>,
 }
@@ -412,110 +409,6 @@ impl Handler {
             stop_requested_streams: Default::default(),
             outbound_stop_futs: Default::default(),
         }
-    }
-
-    fn send_stop_message_and_process_result(
-        &self,
-        io: Stream,
-        stop_command: StopCommand,
-    ) -> BoxFuture<'static, Result<Event, outbound_stop::FatalUpgradeError>> {
-        let msg = proto::StopMessage {
-            type_pb: proto::StopMessageType::CONNECT,
-            peer: Some(proto::Peer {
-                id: stop_command.src_peer_id.to_bytes(),
-                addrs: vec![],
-            }),
-            limit: Some(proto::Limit {
-                duration: Some(
-                    stop_command
-                        .max_circuit_duration
-                        .as_secs()
-                        .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
-                ),
-                data: Some(stop_command.max_circuit_bytes),
-            }),
-            status: None,
-        };
-
-        let (tx, rx) = oneshot::channel();
-        self.alive_lend_out_substreams.push(rx);
-
-        let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
-        async move {
-            substream.send(msg).await?;
-
-            let proto::StopMessage {
-                type_pb,
-                peer: _,
-                limit: _,
-                status,
-            } = substream
-                .next()
-                .await
-                .ok_or(outbound_stop::FatalUpgradeError::StreamClosed)??;
-
-            match type_pb {
-                proto::StopMessageType::CONNECT => {
-                    return Err(outbound_stop::FatalUpgradeError::UnexpectedTypeConnect);
-                }
-                proto::StopMessageType::STATUS => {}
-            }
-
-            match status {
-                Some(proto_status) => match proto_status {
-                    Status::OK => {}
-                    Status::RESOURCE_LIMIT_EXCEEDED => {
-                        return Ok(Event::OutboundConnectNegotiationFailed {
-                            circuit_id: stop_command.circuit_id,
-                            src_peer_id: stop_command.src_peer_id,
-                            src_connection_id: stop_command.src_connection_id,
-                            inbound_circuit_req: stop_command.inbound_circuit_req,
-                            status: proto_status,
-                            error: StreamUpgradeError::Apply(
-                                CircuitFailedReason::ResourceLimitExceeded,
-                            ),
-                        })
-                    }
-                    Status::PERMISSION_DENIED => {
-                        return Ok(Event::OutboundConnectNegotiationFailed {
-                            circuit_id: stop_command.circuit_id,
-                            src_peer_id: stop_command.src_peer_id,
-                            src_connection_id: stop_command.src_connection_id,
-                            inbound_circuit_req: stop_command.inbound_circuit_req,
-                            status: proto_status,
-                            error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
-                        })
-                    }
-                    s => return Err(outbound_stop::FatalUpgradeError::UnexpectedStatus(s)),
-                },
-                None => {
-                    return Err(outbound_stop::FatalUpgradeError::MissingStatusField);
-                }
-            }
-
-            let FramedParts {
-                io,
-                read_buffer,
-                write_buffer,
-                ..
-            } = substream.into_parts();
-            assert!(
-                write_buffer.is_empty(),
-                "Expect a flushed Framed to have an empty write buffer."
-            );
-
-            Ok(Event::OutboundConnectNegotiated {
-                circuit_id: stop_command.circuit_id,
-                src_peer_id: stop_command.src_peer_id,
-                src_connection_id: stop_command.src_connection_id,
-                inbound_circuit_req: stop_command.inbound_circuit_req,
-                dst_handler_notifier: tx,
-                dst_stream: io,
-                dst_pending_data: read_buffer.freeze(),
-            })
-        }
-        .boxed()
     }
 }
 
@@ -577,14 +470,14 @@ impl ConnectionHandler for Handler {
                 src_peer_id,
                 src_connection_id,
             } => {
-                self.stop_requested_streams.push_back(StopCommand {
-                    circuit_id,
-                    inbound_circuit_req,
-                    src_peer_id,
-                    src_connection_id,
-                    max_circuit_duration: self.config.max_circuit_duration,
-                    max_circuit_bytes: self.config.max_circuit_bytes,
-                });
+                self.stop_requested_streams
+                    .push_back(outbound_stop::StopCommand::new(
+                        circuit_id,
+                        inbound_circuit_req,
+                        src_peer_id,
+                        src_connection_id,
+                        &self.config,
+                    ));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ()),
@@ -910,8 +803,14 @@ impl ConnectionHandler for Handler {
                     .stop_requested_streams
                     .pop_front()
                     .expect("opened a stream without a pending stop command");
-                self.outbound_stop_futs
-                    .push(self.send_stop_message_and_process_result(stream, stop_command));
+
+                let (tx, rx) = oneshot::channel();
+                self.alive_lend_out_substreams.push(rx);
+
+                self.outbound_stop_futs.push(
+                    outbound_stop::send_stop_message_and_process_result(stream, stop_command, tx)
+                        .boxed(),
+                );
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
@@ -930,13 +829,4 @@ struct CircuitParts {
     dst_handler_notifier: oneshot::Sender<()>,
     dst_stream: Stream,
     dst_pending_data: Bytes,
-}
-
-struct StopCommand {
-    circuit_id: CircuitId,
-    inbound_circuit_req: inbound_hop::CircuitReq,
-    src_peer_id: PeerId,
-    src_connection_id: ConnectionId,
-    max_circuit_duration: Duration,
-    max_circuit_bytes: u64,
 }
