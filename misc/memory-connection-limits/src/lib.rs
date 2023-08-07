@@ -121,12 +121,16 @@ impl Behaviour {
             return;
         }
 
-        if let Some(stats) = memory_stats::memory_stats() {
-            self.last_refreshed = now;
-            self.process_physical_memory_bytes = stats.physical_mem;
-        } else {
-            log::warn!("Failed to retrieve process memory stats");
-        }
+        let stats = match memory_stats::memory_stats() {
+            Some(stats) => stats,
+            None => {
+                log::warn!("Failed to retrieve process memory stats");
+                return;
+            }
+        };
+
+        self.last_refreshed = now;
+        self.process_physical_memory_bytes = stats.physical_mem;
     }
 }
 
