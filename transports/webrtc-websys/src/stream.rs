@@ -11,9 +11,7 @@ use send_wrapper::SendWrapper;
 use std::io;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
-use web_sys::{
-    RtcDataChannel, RtcDataChannelInit, RtcDataChannelState, RtcDataChannelType, RtcPeerConnection,
-};
+use web_sys::{RtcDataChannel, RtcDataChannelInit, RtcDataChannelType, RtcPeerConnection};
 
 mod drop_listener;
 mod framed_dc;
@@ -22,112 +20,46 @@ mod poll_data_channel;
 pub(crate) use drop_listener::DropListener;
 
 // Max message size that can be sent to the DataChannel
-const MAX_MESSAGE_SIZE: u32 = 16 * 1024;
+// const MAX_MESSAGE_SIZE: u32 = 16 * 1024;
 
 // How much can be buffered to the DataChannel at once
-const MAX_BUFFERED_AMOUNT: u32 = 16 * 1024 * 1024;
+// const MAX_BUFFERED_AMOUNT: u32 = 16 * 1024 * 1024;
 
 // How long time we wait for the 'bufferedamountlow' event to be emitted
-const BUFFERED_AMOUNT_LOW_TIMEOUT: u32 = 30 * 1000;
+// const BUFFERED_AMOUNT_LOW_TIMEOUT: u32 = 30 * 1000;
 
 /// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
 const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
 
 /// Builder for DataChannel
 #[derive(Default, Debug)]
-pub struct DataChannelConfig {
+pub struct RtcDataChannelBuilder {
     negotiated: bool,
-    id: u16,
-}
-
-/// DataChannel type to ensure only the properly configurations
-/// are used when building a WebRTCStream
-pub enum DataChannel {
-    Regular(RtcDataChannel),
-    Handshake(RtcDataChannel),
-}
-
-impl DataChannel {
-    pub fn new_regular(peer_connection: &RtcPeerConnection) -> Self {
-        Self::Regular(DataChannelConfig::create(peer_connection))
-    }
-
-    pub fn new_handshake(peer_connection: &RtcPeerConnection) -> Self {
-        Self::Handshake(DataChannelConfig::create_handshake_channel(peer_connection))
-    }
-}
-
-/// From DataChannel enum to RtcDataChannel
-impl From<DataChannel> for RtcDataChannel {
-    fn from(dc: DataChannel) -> Self {
-        match dc {
-            DataChannel::Regular(dc) => dc,
-            DataChannel::Handshake(dc) => dc,
-        }
-    }
 }
 
 /// Builds a Data Channel with selected options and given peer connection
 ///
 /// The default config is used in most cases, except when negotiating a Noise handshake
-impl DataChannelConfig {
-    /// Create a new [DataChannelConfig] with the default values
-    /// Build the [RtcDataChannel] on a given peer connection
-    /// by calling
-    ///
-    /// ```no_run
-    /// let channel = DataChannelConfig::new().create_from(peer_conn);
-    /// ```
-    fn create(peer_connection: &RtcPeerConnection) -> RtcDataChannel {
-        Self::default().create_from(peer_connection)
-    }
-
-    /// Creates a new data channel with Handshake config,
-    /// uses negotiated: true, id: 0
-    /// Build the RtcDataChannel on a given peer connection
-    /// by calling `create_from(peer_conn)`
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let channel = DataChannelConfig::new_handshake_channel(&peer_connection)
-    /// ```
-    fn create_handshake_channel(peer_connection: &RtcPeerConnection) -> RtcDataChannel {
-        Self::default()
-            .negotiated(true)
-            .id(0)
-            .create_from(peer_connection)
-    }
-
-    fn negotiated(&mut self, negotiated: bool) -> &mut Self {
+impl RtcDataChannelBuilder {
+    /// Sets the DataChannel to be used for the Noise handshake
+    /// Defaults to false
+    pub fn negotiated(&mut self, negotiated: bool) -> &mut Self {
         self.negotiated = negotiated;
         self
     }
 
-    /// Set a custom id for the Data Channel
-    fn id(&mut self, id: u16) -> &mut Self {
-        self.id = id;
-        self
-    }
-
-    /// Opens a WebRTC DataChannel from [RtcPeerConnection] with the selected [DataChannelConfig]
-    /// We can create `ondatachannel` future before building this
-    /// then await it after building this
-    fn create_from(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
+    /// Builds the WebRTC DataChannel from [RtcPeerConnection] with the given configuration
+    pub fn build_with(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
         const LABEL: &str = "";
 
         let dc = match self.negotiated {
             true => {
                 let mut data_channel_dict = RtcDataChannelInit::new();
-                data_channel_dict.negotiated(true).id(self.id);
-                log::debug!("Creating negotiated DataChannel");
+                data_channel_dict.negotiated(true).id(0); // id is only ever set to zero when negotiated is true
                 peer_connection
                     .create_data_channel_with_data_channel_dict(LABEL, &data_channel_dict)
             }
-            false => {
-                log::debug!("Creating NON negotiated DataChannel");
-                peer_connection.create_data_channel(LABEL)
-            }
+            false => peer_connection.create_data_channel(LABEL),
         };
         dc.set_binary_type(ARRAY_BUFFER_BINARY_TYPE); // Hardcoded here, it's the only type we use
         dc
@@ -143,9 +75,9 @@ pub struct Stream {
 
 impl Stream {
     /// Create a new WebRTC Substream
-    pub fn new(channel: DataChannel) -> Self {
+    pub fn new(channel: RtcDataChannel) -> Self {
         Self {
-            inner: SendWrapper::new(StreamInner::new(channel.into())),
+            inner: SendWrapper::new(StreamInner::new(channel)),
             read_buffer: Bytes::new(),
             state: State::Open,
         }
@@ -307,10 +239,7 @@ impl AsyncWrite for Stream {
 
                     self.state.write_closed();
 
-                    // send the actual RtcDataChannel `.close()` command
-                    ready!(self.inner.io.poll_close_unpin(cx))?;
-
-                    // TODO: implement drop_notifier
+                    // TODO: implement drop_notifier?
                     // let _ = self
                     //     .drop_notifier
                     //     .take()

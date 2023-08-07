@@ -1,6 +1,6 @@
 //! Websys WebRTC Peer Connection
 //!
-use crate::stream::DataChannel;
+use crate::stream::RtcDataChannelBuilder;
 
 use super::{Error, Stream};
 use futures::channel;
@@ -68,7 +68,7 @@ impl ConnectionInner {
     /// Takes the RtcPeerConnection and creates a regular DataChannel
     fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Result<Stream, Error>> {
         // Create Regular Data Channel
-        let dc = DataChannel::new_regular(&self.peer_connection);
+        let dc = RtcDataChannelBuilder::default().build_with(&self.peer_connection);
         let channel = Stream::new(dc);
         Poll::Ready(Ok(channel))
     }
@@ -82,7 +82,7 @@ impl ConnectionInner {
         match ready!(self.rx_ondatachannel.poll_next_unpin(cx)) {
             Some(dc) => {
                 // Create a WebRTC Stream from the Data Channel
-                let channel = Stream::new(DataChannel::Regular(dc));
+                let channel = Stream::new(dc);
                 Poll::Ready(Ok(channel))
             }
             None => {

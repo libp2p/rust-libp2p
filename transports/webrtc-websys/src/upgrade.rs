@@ -1,6 +1,6 @@
 pub(crate) mod noise;
 
-use crate::stream::DataChannel;
+use crate::stream::RtcDataChannelBuilder;
 
 pub(crate) use super::fingerprint::Fingerprint;
 use super::stream::Stream;
@@ -46,9 +46,6 @@ async fn outbound_inner(
 
     let certificate = JsFuture::from(certificate_promise).await?; // Needs to be Send
 
-    let ice: js_sys::Object = Object::new();
-    Reflect::set(&ice, &"urls".into(), &"stun:stun.l.google.com:19302".into()).unwrap();
-
     let mut config = RtcConfiguration::default();
     // wrap certificate in a js Array first before adding it to the config object
     let certificate_arr = js_sys::Array::new();
@@ -59,7 +56,9 @@ async fn outbound_inner(
 
     // Create substream for Noise handshake
     // Must create data channel before Offer is created for it to be included in the SDP
-    let handshake_data_channel = DataChannel::new_handshake(&peer_connection);
+    let handshake_data_channel = RtcDataChannelBuilder::default()
+        .negotiated(true)
+        .build_with(&peer_connection);
 
     let webrtc_stream = Stream::new(handshake_data_channel);
 
@@ -69,7 +68,7 @@ async fn outbound_inner(
      */
     let offer = JsFuture::from(peer_connection.create_offer()).await?; // Needs to be Send
     let offer_obj = sdp::offer(offer, &ufrag);
-    log::debug!("Offer SDP: {:?}", offer_obj);
+    log::trace!("Offer SDP: {:?}", offer_obj);
     let sld_promise = peer_connection.set_local_description(&offer_obj);
     JsFuture::from(sld_promise)
         .await
@@ -80,7 +79,7 @@ async fn outbound_inner(
      */
     // TODO: Update SDP Answer format for Browser WebRTC
     let answer_obj = sdp::answer(sock_addr, &remote_fingerprint, &ufrag);
-    log::debug!("Answer SDP: {:?}", answer_obj);
+    log::trace!("Answer SDP: {:?}", answer_obj);
     let srd_promise = peer_connection.set_remote_description(&answer_obj);
     JsFuture::from(srd_promise)
         .await
@@ -92,12 +91,12 @@ async fn outbound_inner(
         None => return Err(Error::JsError("local_description is None".to_string())),
     };
     let local_fingerprint = match sdp::fingerprint(&local_sdp) {
-        Ok(fingerprint) => fingerprint,
-        Err(e) => return Err(Error::JsError(format!("local fingerprint error: {}", e))),
+        Some(fingerprint) => fingerprint,
+        None => return Err(Error::JsError(format!("No local fingerprint found"))),
     };
 
-    log::debug!("local_fingerprint: {:?}", local_fingerprint);
-    log::debug!("remote_fingerprint: {:?}", remote_fingerprint);
+    log::trace!("local_fingerprint: {:?}", local_fingerprint);
+    log::trace!("remote_fingerprint: {:?}", remote_fingerprint);
 
     let peer_id = noise::outbound(
         id_keys,
@@ -107,7 +106,7 @@ async fn outbound_inner(
     )
     .await?;
 
-    log::debug!("peer_id: {:?}", peer_id);
+    log::debug!("Remote peer identified as {peer_id}");
 
     Ok((peer_id, Connection::new(peer_connection)))
 }
