@@ -150,6 +150,16 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit()
     }
 
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
+    }
+
     fn handle_pending_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -159,16 +169,6 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.check_limit()?;
         Ok(vec![])
-    }
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(dummy::ConnectionHandler)
     }
 
     fn handle_established_outbound_connection(
