@@ -266,7 +266,10 @@ impl Handler {
                 "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                 src_peer_id
             );
-        } else if self
+            return;
+        }
+
+        if self
             .circuit_deny_futs
             .insert(
                 src_peer_id,
