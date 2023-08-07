@@ -17,7 +17,7 @@ rcgen = "0.10.0"
 ring = "0.16.20"
 thiserror = "1.0.44"
 webpki = { version = "0.22.0", features = ["std"] }
-x509-parser = "0.15.0"
+x509-parser = "0.15.1"
 yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
