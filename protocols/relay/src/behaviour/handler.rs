@@ -20,8 +20,8 @@
 
 use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
-use crate::{HOP_PROTOCOL_NAME, proto, STOP_PROTOCOL_NAME};
 use crate::protocol::{inbound_hop, outbound_stop};
+use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot::{self, Canceled};
@@ -30,17 +30,18 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{
-    ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
+use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol};
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use libp2p_core::upgrade::ReadyUpgrade;
 
 #[derive(Debug, Clone)]
 pub struct Config {

@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::priv_client::transport;
-use crate::{HOP_PROTOCOL_NAME, proto, STOP_PROTOCOL_NAME};
-use crate::protocol::{self, inbound_stop, MAX_MESSAGE_SIZE, outbound_hop};
+use crate::protocol::{self, inbound_stop, outbound_hop, MAX_MESSAGE_SIZE};
+use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use asynchronous_codec::{Framed, FramedParts};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
@@ -29,19 +30,21 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol};
+use libp2p_swarm::{
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
+    StreamUpgradeError, SubstreamProtocol,
+};
 use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
-use asynchronous_codec::{Framed, FramedParts};
-use libp2p_core::upgrade::ReadyUpgrade;
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -128,11 +131,14 @@ pub struct Handler {
     >,
 
     wait_for_reserve_outbound_stream: VecDeque<mpsc::Sender<transport::ToListenerMsg>>,
-    reserve_futs: FuturesUnordered<BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>>,
+    reserve_futs: FuturesUnordered<
+        BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
+    >,
 
     wait_for_connection_outbound_stream: VecDeque<ConnectionCommand>,
-    circuit_connection_futs:
-        FuturesUnordered<BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>>,
+    circuit_connection_futs: FuturesUnordered<
+        BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>,
+    >,
 
     reservation: Reservation,
 
@@ -146,8 +152,9 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs:
-        FuturesUnordered<BoxFuture<'static, Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>>,
+    open_circuit_futs: FuturesUnordered<
+        BoxFuture<'static, Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
+    >,
 
     circuit_deny_futs: HashMap<PeerId, BoxFuture<'static, Result<(), inbound_stop::UpgradeError>>>,
 
@@ -577,11 +584,13 @@ impl ConnectionHandler for Handler {
                 Ok(None) => None,
                 Err(err) => {
                     let res = match err {
-                        outbound_hop::UpgradeError::CircuitFailed(e) => ConnectionHandlerEvent::NotifyBehaviour(
-                            Event::OutboundCircuitReqFailed {
-                                error: StreamUpgradeError::Apply(e),
-                            },
-                        ),
+                        outbound_hop::UpgradeError::CircuitFailed(e) => {
+                            ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::OutboundCircuitReqFailed {
+                                    error: StreamUpgradeError::Apply(e),
+                                },
+                            )
+                        }
                         outbound_hop::UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
                             StreamUpgradeError::Apply(Either::Right(e)),
                         ),
@@ -719,7 +728,8 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.open_circuit_futs.push(inbound_stop::open_circuit(stream).boxed());
+                self.open_circuit_futs
+                    .push(inbound_stop::open_circuit(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
