@@ -1,14 +1,13 @@
-// Inspired by webrtc::data::data_channel::poll_data_channel.rs
-use crate::cbfutures::{CbFuture, CbStream};
+// This crate inspired by webrtc::data::data_channel::poll_data_channel.rs
 use crate::error::Error;
+use futures::channel;
 use futures::{AsyncRead, AsyncWrite, FutureExt, StreamExt};
 use std::fmt;
-use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::result::Result;
 use std::task::{ready, Context, Poll};
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
 /// Default capacity of the temporary read buffer used by [`webrtc_sctp::stream::PollStream`].
@@ -20,88 +19,85 @@ const DEFAULT_READ_BUF_SIZE: usize = 8192;
 /// Both `poll_read` and `poll_write` calls allocate temporary buffers, which results in an
 /// additional overhead.
 pub struct PollDataChannel {
+    /// The [RtcDataChannel]
     data_channel: RtcDataChannel,
 
-    /// onmessage is an Option, Some(data) means there is data, None means the channel has closed
-    onmessage_fut: CbStream<Vec<u8>>,
-    onopen_fut: CbFuture<()>,
-    onbufferedamountlow_fut: CbFuture<()>,
-    onclose_fut: CbFuture<()>,
+    /// Receive messages from the RtcDataChannel callback
+    /// mpsc since multiple messages may be sent
+    rx_onmessage: channel::mpsc::Receiver<Vec<u8>>,
+    /// Receive onopen event from the RtcDataChannel callback
+    /// oneshot since only one onopen event is sent
+    rx_onopen: channel::oneshot::Receiver<()>,
+    /// Receieve onbufferedamountlow event from the RtcDataChannel callback
+    /// mpsc since multiple onbufferedamountlow events may be sent
+    rx_onbufferedamountlow: channel::mpsc::Receiver<()>,
+    /// Receive onclose event from the RtcDataChannel callback
+    /// oneshot since only one onclose event is sent
+    rx_onclose: channel::oneshot::Receiver<()>,
 
     read_buf_cap: usize,
 }
 
 impl PollDataChannel {
     /// Constructs a new `PollDataChannel`.
-    pub fn new(data_channel: RtcDataChannel) -> Self {
-        // On Open
-        let onopen_fut = CbFuture::new();
-        let onopen_cback_clone = onopen_fut.clone();
+    pub(crate) fn new(data_channel: RtcDataChannel) -> Self {
+        /*
+         * On Open
+         */
+        let (tx_onopen, rx_onopen) = channel::oneshot::channel();
 
-        let onopen_callback = Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
-            // TODO: Send any queued messages
+        let onopen_callback = Closure::once_into_js(move |_ev: RtcDataChannelEvent| {
             log::debug!("Data Channel opened");
-            onopen_cback_clone.publish(());
+            if let Err(e) = tx_onopen.send(()) {
+                log::error!("Error sending onopen event {:?}", e);
+            }
         });
 
         data_channel.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));
-        onopen_callback.forget();
-
-        /*
-         * On Error
-         */
-        let onerror_fut = CbFuture::new();
-        let onerror_cback_clone = onerror_fut.clone();
-
-        let onerror_callback = Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
-            log::debug!("Data Channel error");
-            onerror_cback_clone.publish(());
-        });
-
-        data_channel.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
-        onerror_callback.forget();
+        // note: `once_into_js` does NOT call `forget()`, see the wasm_bindgen::Closure docs
 
         /*
          * On Message Stream
          */
-        let onmessage_fut = CbStream::new();
-        let onmessage_cback_clone = onmessage_fut.clone();
+        let (mut tx_onmessage, rx_onmessage) = channel::mpsc::channel(8); // TODO: How big should this be?
 
         let onmessage_callback = Closure::<dyn FnMut(_)>::new(move |ev: MessageEvent| {
             let data = ev.data();
             // Convert from Js ArrayBuffer to Vec<u8>
             let data = js_sys::Uint8Array::new(&data).to_vec();
-            log::debug!("onmessage data: {:?}", data);
-            onmessage_cback_clone.publish(data);
+            log::trace!("onmessage data: {:?}", data);
+            if let Err(e) = tx_onmessage.start_send(data) {
+                log::error!("Error sending onmessage event {:?}", e)
+            }
         });
 
         data_channel.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
         onmessage_callback.forget();
 
         // On Close
-        let onclose_fut = CbFuture::new();
-        let onclose_cback_clone = onclose_fut.clone();
+        let (tx_onclose, rx_onclose) = channel::oneshot::channel();
 
-        let onclose_callback = Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
-            // TODO: Set state to closed?
-            // TODO: Set futures::Stream Poll::Ready(None)?
-            log::debug!("Data Channel closed. onclose_callback");
-            onclose_cback_clone.publish(());
+        let onclose_callback = Closure::once_into_js(move |_ev: RtcDataChannelEvent| {
+            log::trace!("Data Channel closed");
+            // TODO: This is Erroring, likely because the channel is already closed by the time we try to send/receive this?
+            if let Err(e) = tx_onclose.send(()) {
+                log::error!("Error sending onclose event {:?}", e);
+            }
         });
 
         data_channel.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
-        onclose_callback.forget();
 
         /*
          * Convert `RTCDataChannel: bufferedamountlow event` Low Event Callback to Future
          */
-        let onbufferedamountlow_fut = CbFuture::new();
-        let onbufferedamountlow_cback_clone = onbufferedamountlow_fut.clone();
+        let (mut tx_onbufferedamountlow, rx_onbufferedamountlow) = channel::mpsc::channel(1);
 
         let onbufferedamountlow_callback =
             Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
                 log::debug!("bufferedamountlow event");
-                onbufferedamountlow_cback_clone.publish(());
+                if let Err(e) = tx_onbufferedamountlow.start_send(()) {
+                    log::error!("Error sending onbufferedamountlow event {:?}", e)
+                }
             });
 
         data_channel
@@ -110,16 +106,16 @@ impl PollDataChannel {
 
         Self {
             data_channel,
-            onmessage_fut,
-            onopen_fut,
-            onclose_fut,
-            onbufferedamountlow_fut,
+            rx_onmessage,
+            rx_onopen,
+            rx_onclose,
+            rx_onbufferedamountlow,
             read_buf_cap: DEFAULT_READ_BUF_SIZE,
         }
     }
 
     /// Get back the inner data_channel.
-    pub fn into_inner(self) -> RtcDataChannel {
+    pub(crate) fn into_inner(self) -> RtcDataChannel {
         self.data_channel
     }
 
@@ -134,28 +130,23 @@ impl PollDataChannel {
     }
 
     /// Get Ready State of [RtcDataChannel]
-    pub fn ready_state(&self) -> RtcDataChannelState {
+    pub(crate) fn ready_state(&self) -> RtcDataChannelState {
         self.data_channel.ready_state()
-    }
-
-    /// Poll onopen_fut
-    pub fn poll_onopen(&mut self, cx: &mut Context) -> Poll<()> {
-        self.onopen_fut.poll_unpin(cx)
     }
 
     /// Send data buffer
     pub fn send(&self, data: &[u8]) -> Result<(), Error> {
-        log::debug!("send: {:?}", data);
+        log::trace!("send: {:?}", data);
         self.data_channel.send_with_u8_array(data)?;
         Ok(())
     }
 
     /// StreamIdentifier returns the Stream identifier associated to the stream.
-    pub fn stream_identifier(&self) -> u16 {
-        // let label = self.data_channel.id(); // not available (yet), see https://github.com/rustwasm/wasm-bindgen/issues/3542
+    pub(crate) fn stream_identifier(&self) -> u16 {
+        // self.data_channel.id() // not released (yet), see https://github.com/rustwasm/wasm-bindgen/issues/3547
 
-        // label is "" so it's not unique
-        // FIXME: After the above issue is fixed, use the label instead of the stream id
+        // temp workaround: use label, though it is "" so it's not unique
+        // TODO: After the above PR is released, use the label instead of the stream id
         let label = self.data_channel.label();
         let b = label.as_bytes();
         let mut stream_id: u16 = 0;
@@ -172,7 +163,7 @@ impl AsyncRead for PollDataChannel {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize, std::io::Error>> {
-        match ready!(self.onmessage_fut.poll_next_unpin(cx)) {
+        match ready!(self.rx_onmessage.poll_next_unpin(cx)) {
             Some(data) => {
                 let data_len = data.len();
                 let buf_len = buf.len();
@@ -196,7 +187,7 @@ impl AsyncWrite for PollDataChannel {
         // If the data channel is not open,
         // poll on open future until the channel is open
         if self.data_channel.ready_state() != RtcDataChannelState::Open {
-            ready!(self.onopen_fut.poll_unpin(cx));
+            ready!(self.rx_onopen.poll_unpin(cx)).unwrap();
         }
 
         // Now that the channel is open, send the data
@@ -230,15 +221,9 @@ impl AsyncWrite for PollDataChannel {
         }
 
         // Otherwise, wait for the event to occur, so poll on onbufferedamountlow_fut
-        match self.onbufferedamountlow_fut.poll_unpin(cx) {
-            Poll::Ready(()) => {
-                log::debug!("flushed");
-                Poll::Ready(Ok(()))
-            }
-            Poll::Pending => {
-                log::debug!("pending");
-                Poll::Pending
-            }
+        match self.rx_onbufferedamountlow.poll_next_unpin(cx) {
+            Poll::Pending => Poll::Pending,
+            _ => Poll::Ready(Ok(())),
         }
     }
 
@@ -248,9 +233,11 @@ impl AsyncWrite for PollDataChannel {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::result::Result<(), std::io::Error>> {
-        log::debug!("poll_close");
+        log::trace!("poll_close");
         self.data_channel.close();
-        ready!(self.onclose_fut.poll_unpin(cx));
+        // TODO: polling onclose 'should' be done here but it Errors went sent, as data channals can be closed by either end
+        // ready!(self.rx_onclose.poll_unpin(cx));
+        log::trace!("close complete");
         Poll::Ready(Ok(()))
     }
 }
