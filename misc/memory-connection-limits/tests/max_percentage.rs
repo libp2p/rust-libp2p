@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod util;
-use std::time::Duration;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -36,10 +35,21 @@ fn max_percentage() {
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_percentage(0.1)
-            .with_refresh_interval(Duration::from_millis(0)),
+        connection_limits: Behaviour::with_max_percentage(0.1).with_refresh_interval(None),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
+
+    let addr: Multiaddr = "/memory/1234".parse().unwrap();
+    let target = PeerId::random();
+
+    // Exercise `dial` function to get more stable memory stats later
+    network
+        .dial(
+            DialOpts::peer_id(target)
+                .addresses(vec![addr.clone()])
+                .build(),
+        )
+        .expect("Unexpected connection limit.");
 
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
@@ -48,9 +58,6 @@ fn max_percentage() {
         .behaviour_mut()
         .connection_limits
         .update_max_percentage(max_allowed_bytes as f64 / system_info.total_memory() as f64);
-
-    let addr: Multiaddr = "/memory/1234".parse().unwrap();
-    let target = PeerId::random();
 
     for _ in 0..CONNECTION_LIMIT {
         network

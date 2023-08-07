@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod util;
-use std::time::Duration;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -35,21 +34,29 @@ fn max_bytes() {
     let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes)
-            .with_refresh_interval(Duration::from_millis(0)),
+        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes).with_refresh_interval(None),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
+    let addr: Multiaddr = "/memory/1234".parse().unwrap();
+    let target = PeerId::random();
+
+    // Exercise `dial` function to get more stable memory stats later
+    network
+        .dial(
+            DialOpts::peer_id(target)
+                .addresses(vec![addr.clone()])
+                .build(),
+        )
+        .expect("Unexpected connection limit.");
+
     // Adds current mem usage to the limit and update
-    let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
-    let max_allowed_bytes_plus_base_usage = max_allowed_bytes + current_mem;
+    let max_allowed_bytes_plus_base_usage =
+        max_allowed_bytes + memory_stats::memory_stats().unwrap().physical_mem;
     network
         .behaviour_mut()
         .connection_limits
         .update_max_bytes(max_allowed_bytes_plus_base_usage);
-
-    let addr: Multiaddr = "/memory/1234".parse().unwrap();
-    let target = PeerId::random();
 
     for _ in 0..CONNECTION_LIMIT {
         network

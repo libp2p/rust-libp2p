@@ -64,7 +64,7 @@ pub struct Behaviour {
     max_allowed_bytes: Option<usize>,
     process_physical_memory_bytes: usize,
     last_refreshed: Instant,
-    refresh_interval: Duration,
+    refresh_interval: Option<Duration>,
 }
 
 impl Behaviour {
@@ -86,8 +86,8 @@ impl Behaviour {
         b
     }
 
-    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms
-    pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
+    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms. Use `None` to always refresh.
+    pub fn with_refresh_interval(mut self, interval: Option<Duration>) -> Self {
         self.refresh_interval = interval;
         self
     }
@@ -120,7 +120,7 @@ impl Behaviour {
                 .map(|s| s.physical_mem)
                 .unwrap_or_default(),
             last_refreshed: Instant::now(),
-            refresh_interval: DEFAULT_REFRESH_INTERVAL,
+            refresh_interval: Some(DEFAULT_REFRESH_INTERVAL),
         }
     }
 
@@ -140,7 +140,10 @@ impl Behaviour {
 
     fn refresh_memory_stats_if_needed(&mut self) {
         let now = Instant::now();
-        if self.last_refreshed + self.refresh_interval < now {
+        if match self.refresh_interval {
+            Some(refresh_interval) => self.last_refreshed + refresh_interval < now,
+            None => true,
+        } {
             self.last_refreshed = now;
             if let Some(stats) = memory_stats::memory_stats() {
                 self.process_physical_memory_bytes = stats.physical_mem;
