@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     break;
                 }
                 upnp::Event::NonRoutableGateway => {
-                    println!("Gateway is not exposed directly to the public network.");
+                    println!("Gateway is not exposed directly to the public Internet, i.e. it itself has a private IP address.");
                     break;
                 }
                 _ => {}
