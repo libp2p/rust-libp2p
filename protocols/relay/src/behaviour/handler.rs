@@ -406,6 +406,34 @@ impl Handler {
             protocol_futs: Default::default(),
         }
     }
+
+    fn on_fully_negotiated_inbound(&self, stream: Stream) {
+        self.protocol_futs.push(
+            inbound_hop::process_inbound_request(
+                stream,
+                self.config.reservation_duration,
+                self.config.max_circuit_duration,
+                self.config.max_circuit_bytes,
+                self.endpoint.clone(),
+                self.active_reservation.is_some(),
+            )
+            .boxed(),
+        );
+    }
+
+    fn on_fully_negotiated_outbound(&mut self, stream: Stream) {
+        let stop_command = self
+            .stop_requested_streams
+            .pop_front()
+            .expect("opened a stream without a pending stop command");
+
+        let (tx, rx) = oneshot::channel();
+        self.alive_lend_out_substreams.push(rx);
+
+        self.protocol_futs.push(
+            outbound_stop::send_stop_message_and_process_result(stream, stop_command, tx).boxed(),
+        );
+    }
 }
 
 enum ReservationRequestFuture {
@@ -767,34 +795,13 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.protocol_futs.push(
-                    inbound_hop::process_inbound_request(
-                        stream,
-                        self.config.reservation_duration,
-                        self.config.max_circuit_duration,
-                        self.config.max_circuit_bytes,
-                        self.endpoint.clone(),
-                        self.active_reservation.is_some(),
-                    )
-                    .boxed(),
-                );
+                self.on_fully_negotiated_inbound(stream);
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
                 ..
             }) => {
-                let stop_command = self
-                    .stop_requested_streams
-                    .pop_front()
-                    .expect("opened a stream without a pending stop command");
-
-                let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-
-                self.protocol_futs.push(
-                    outbound_stop::send_stop_message_and_process_result(stream, stop_command, tx)
-                        .boxed(),
-                );
+                self.on_fully_negotiated_outbound(stream);
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
