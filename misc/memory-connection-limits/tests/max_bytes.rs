@@ -23,6 +23,7 @@ mod util;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
+use std::time::Duration;
 use util::*;
 
 use libp2p_swarm::{dial_opts::DialOpts, DialError, Swarm};
@@ -34,7 +35,7 @@ fn max_bytes() {
     let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes).with_refresh_interval(None),
+        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
@@ -53,10 +54,8 @@ fn max_bytes() {
     // Adds current mem usage to the limit and update
     let max_allowed_bytes_plus_base_usage =
         max_allowed_bytes + memory_stats::memory_stats().unwrap().physical_mem;
-    network
-        .behaviour_mut()
-        .connection_limits
-        .update_max_bytes(max_allowed_bytes_plus_base_usage);
+    network.behaviour_mut().connection_limits =
+        Behaviour::with_max_bytes(max_allowed_bytes_plus_base_usage);
 
     for _ in 0..CONNECTION_LIMIT {
         network
@@ -67,6 +66,8 @@ fn max_bytes() {
             )
             .expect("Unexpected connection limit.");
     }
+
+    std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
 
     match network
         .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())

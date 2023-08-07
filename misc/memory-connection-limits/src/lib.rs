@@ -44,7 +44,8 @@ use std::{
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
 ///
-/// Note: Note: `fn xx_max_bytes` and `fn xx_max_percentage` are mutually exclusive
+/// [Behaviour::with_max_bytes] and [Behaviour::with_max_percentage] are mutually exclusive.
+/// If you need to employ both of them, compose two instances of [Behaviour] into your custom behaviour.
 ///
 /// # Example
 ///
@@ -61,78 +62,55 @@ use std::{
 /// }
 /// ```
 pub struct Behaviour {
-    max_allowed_bytes: Option<usize>,
+    max_allowed_bytes: usize,
     process_physical_memory_bytes: usize,
     last_refreshed: Instant,
-    refresh_interval: Option<Duration>,
 }
+
+/// The maximum duration for which the retrieved memory-stats of the process are allowed to be stale.
+///
+/// Once exceeded, we will retrieve new stats.
+const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
 
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
-    pub fn with_max_bytes(bytes: usize) -> Self {
-        let mut b = Self::new();
-        b.update_max_bytes(bytes);
-        b
-    }
-
-    /// Sets the process memory usage threshold in the percentage of the total physical memory,
-    ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
-    pub fn with_max_percentage(percentage: f64) -> Self {
-        let mut b = Self::new();
-        b.update_max_percentage(percentage);
-        b
-    }
-
-    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms. Use `None` to always refresh.
-    pub fn with_refresh_interval(mut self, interval: Option<Duration>) -> Self {
-        self.refresh_interval = interval;
-        self
-    }
-
-    /// Updates the process memory usage threshold in bytes
-    pub fn update_max_bytes(&mut self, bytes: usize) {
-        self.max_allowed_bytes = Some(bytes);
-    }
-
-    /// Updates the process memory usage threshold in the percentage of the total physical memory
-    pub fn update_max_percentage(&mut self, percentage: f64) {
-        use sysinfo::{RefreshKind, SystemExt};
-
-        let system_memory_bytes =
-            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
-        self.max_allowed_bytes = Some((system_memory_bytes as f64 * percentage).round() as usize);
-    }
-
-    /// Gets the process memory usage threshold in bytes
-    pub fn max_allowed_bytes(&self) -> Option<usize> {
-        self.max_allowed_bytes
-    }
-
-    fn new() -> Self {
-        const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
-
+    pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
         Self {
-            max_allowed_bytes: None,
+            max_allowed_bytes,
             process_physical_memory_bytes: memory_stats::memory_stats()
                 .map(|s| s.physical_mem)
                 .unwrap_or_default(),
             last_refreshed: Instant::now(),
-            refresh_interval: Some(DEFAULT_REFRESH_INTERVAL),
         }
     }
 
+    /// Sets the process memory usage threshold in the percentage of the total physical memory.
+    ///
+    /// New inbound and outbound connections will be denied when the threshold is reached.
+    pub fn with_max_percentage(percentage: f64) -> Self {
+        use sysinfo::{RefreshKind, SystemExt};
+
+        let system_memory_bytes =
+            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
+
+        Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
+    }
+
+    /// Gets the process memory usage threshold in bytes.
+    pub fn max_allowed_bytes(&self) -> usize {
+        self.max_allowed_bytes
+    }
+
     fn check_limit(&mut self) -> Result<(), ConnectionDenied> {
-        if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
-            self.refresh_memory_stats_if_needed();
-            if self.process_physical_memory_bytes > max_allowed_bytes {
-                return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
-                    process_physical_memory_bytes: self.process_physical_memory_bytes,
-                    max_allowed_bytes,
-                }));
-            }
+        self.refresh_memory_stats_if_needed();
+
+        if self.process_physical_memory_bytes > self.max_allowed_bytes {
+            return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
+                process_physical_memory_bytes: self.process_physical_memory_bytes,
+                max_allowed_bytes: self.max_allowed_bytes,
+            }));
         }
 
         Ok(())
@@ -140,17 +118,22 @@ impl Behaviour {
 
     fn refresh_memory_stats_if_needed(&mut self) {
         let now = Instant::now();
-        if match self.refresh_interval {
-            Some(refresh_interval) => self.last_refreshed + refresh_interval < now,
-            None => true,
-        } {
-            self.last_refreshed = now;
-            if let Some(stats) = memory_stats::memory_stats() {
-                self.process_physical_memory_bytes = stats.physical_mem;
-            } else {
-                log::warn!("Failed to retrive process memory stats");
-            }
+
+        if self.last_refreshed + MAX_STALE_DURATION > now {
+            // Memory stats are reasonably recent, don't refresh.
+            return;
         }
+
+        let stats = match memory_stats::memory_stats() {
+            Some(stats) => stats,
+            None => {
+                log::warn!("Failed to retrieve process memory stats");
+                return;
+            }
+        };
+
+        self.last_refreshed = now;
+        self.process_physical_memory_bytes = stats.physical_mem;
     }
 }
 
@@ -167,6 +150,16 @@ impl NetworkBehaviour for Behaviour {
         self.check_limit()
     }
 
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(dummy::ConnectionHandler)
+    }
+
     fn handle_pending_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -176,16 +169,6 @@ impl NetworkBehaviour for Behaviour {
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.check_limit()?;
         Ok(vec![])
-    }
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(dummy::ConnectionHandler)
     }
 
     fn handle_established_outbound_connection(
