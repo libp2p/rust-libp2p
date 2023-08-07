@@ -8,7 +8,7 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## TODO and in-progress
+## In the works
 
 ### WebTransport
 
