@@ -96,12 +96,6 @@ impl Behaviour {
         Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
     }
 
-    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms
-    pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
-        self.refresh_interval = interval;
-        self
-    }
-
     /// Gets the process memory usage threshold in bytes
     pub fn max_allowed_bytes(&self) -> usize {
         self.max_allowed_bytes

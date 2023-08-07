@@ -36,8 +36,7 @@ fn max_percentage() {
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_percentage(0.1)
-            .with_refresh_interval(Duration::from_millis(0)),
+        connection_limits: Behaviour::with_max_percentage(0.1),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
@@ -60,6 +59,8 @@ fn max_percentage() {
             )
             .expect("Unexpected connection limit.");
     }
+
+    std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
 
     match network
         .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
