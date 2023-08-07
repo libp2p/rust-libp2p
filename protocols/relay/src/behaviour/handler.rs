@@ -425,9 +425,8 @@ impl Handler {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
-        self.protocol_futs.push(
-            outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed(),
-        );
+        self.protocol_futs
+            .push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed());
     }
 }
 
