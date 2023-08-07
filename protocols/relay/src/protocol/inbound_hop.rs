@@ -181,7 +181,7 @@ impl CircuitReq {
     }
 }
 
-pub(crate) async fn process_inbound_request(
+pub(crate) async fn handle_inbound_request(
     io: Stream,
     reservation_duration: Duration,
     max_circuit_duration: Duration,

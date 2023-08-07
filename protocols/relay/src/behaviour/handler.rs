@@ -404,7 +404,7 @@ impl Handler {
 
     fn on_fully_negotiated_inbound(&self, stream: Stream) {
         self.protocol_futs.push(
-            inbound_hop::process_inbound_request(
+            inbound_hop::handle_inbound_request(
                 stream,
                 self.config.reservation_duration,
                 self.config.max_circuit_duration,
@@ -426,7 +426,7 @@ impl Handler {
         self.alive_lend_out_substreams.push(rx);
 
         self.protocol_futs.push(
-            outbound_stop::send_stop_message_and_process_result(stream, stop_command, tx).boxed(),
+            outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed(),
         );
     }
 }

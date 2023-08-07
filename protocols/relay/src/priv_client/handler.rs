@@ -534,7 +534,7 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 self.open_circuit_futs
-                    .push(inbound_stop::open_circuit(stream).boxed());
+                    .push(inbound_stop::handle_open_circuit(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
@@ -559,7 +559,7 @@ impl ConnectionHandler for Handler {
                 self.alive_lend_out_substreams.push(rx);
 
                 self.circuit_connection_futs.push(
-                    outbound_hop::send_connection_message_and_process_response(
+                    outbound_hop::handle_connection_message_response(
                         stream,
                         self.remote_peer_id,
                         con_command,

@@ -199,7 +199,7 @@ pub(crate) async fn send_reserve_message_and_process_response(
     Ok(output)
 }
 
-pub(crate) async fn send_connection_message_and_process_response(
+pub(crate) async fn handle_connection_message_response(
     protocol: Stream,
     remote_peer_id: PeerId,
     con_command: Command,

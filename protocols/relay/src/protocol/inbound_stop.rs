@@ -27,7 +27,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
 use thiserror::Error;
 
-pub(crate) async fn open_circuit(io: Stream) -> Result<Circuit, FatalUpgradeError> {
+pub(crate) async fn handle_open_circuit(io: Stream) -> Result<Circuit, FatalUpgradeError> {
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     let proto::StopMessage {

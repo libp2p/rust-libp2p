@@ -74,7 +74,7 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
-pub(crate) async fn send_stop_message_and_process_result(
+pub(crate) async fn handle_stop_message_response(
     io: Stream,
     stop_command: StopCommand,
     tx: oneshot::Sender<()>,
