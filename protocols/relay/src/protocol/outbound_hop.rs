@@ -18,19 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use asynchronous_codec::Framed;
-use futures::channel::mpsc;
+use asynchronous_codec::{Framed, FramedParts};
+use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use futures_timer::Delay;
+use log::debug;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
+use void::Void;
 
 use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use libp2p_swarm::Stream;
 
 use crate::priv_client::transport;
-use crate::proto;
 use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
+use crate::{priv_client, proto};
 
 #[derive(Debug, Error)]
 pub(crate) enum UpgradeError {
@@ -194,4 +197,110 @@ pub(crate) async fn send_reserve_message_and_process_response(
     };
 
     Ok(output)
+}
+
+pub(crate) async fn send_connection_message_and_process_response(
+    protocol: Stream,
+    remote_peer_id: PeerId,
+    con_command: ConnectionCommand,
+    tx: oneshot::Sender<Void>,
+) -> Result<Option<Output>, UpgradeError> {
+    let msg = proto::HopMessage {
+        type_pb: proto::HopMessageType::CONNECT,
+        peer: Some(proto::Peer {
+            id: con_command.dst_peer_id.to_bytes(),
+            addrs: vec![],
+        }),
+        reservation: None,
+        limit: None,
+        status: None,
+    };
+
+    let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+
+    substream.send(msg).await?;
+    let proto::HopMessage {
+        type_pb,
+        peer: _,
+        reservation: _,
+        limit,
+        status,
+    } = substream
+        .next()
+        .await
+        .ok_or(FatalUpgradeError::StreamClosed)??;
+
+    match type_pb {
+        proto::HopMessageType::CONNECT => {
+            return Err(FatalUpgradeError::UnexpectedTypeConnect.into());
+        }
+        proto::HopMessageType::RESERVE => {
+            return Err(FatalUpgradeError::UnexpectedTypeReserve.into());
+        }
+        proto::HopMessageType::STATUS => {}
+    }
+
+    let limit = limit.map(Into::into);
+
+    match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+        proto::Status::OK => {}
+        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
+            return Err(CircuitFailedReason::ResourceLimitExceeded.into());
+        }
+        proto::Status::CONNECTION_FAILED => {
+            return Err(CircuitFailedReason::ConnectionFailed.into());
+        }
+        proto::Status::NO_RESERVATION => {
+            return Err(CircuitFailedReason::NoReservation.into());
+        }
+        proto::Status::PERMISSION_DENIED => {
+            return Err(CircuitFailedReason::PermissionDenied.into());
+        }
+        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+    }
+
+    let FramedParts {
+        io,
+        read_buffer,
+        write_buffer,
+        ..
+    } = substream.into_parts();
+    assert!(
+        write_buffer.is_empty(),
+        "Expect a flushed Framed to have empty write buffer."
+    );
+
+    let output = match con_command.send_back.send(Ok(priv_client::Connection {
+        state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
+    })) {
+        Ok(()) => Some(Output::Circuit { limit }),
+        Err(_) => {
+            debug!(
+                "Oneshot to `client::transport::Dial` future dropped. \
+                         Dropping established relayed connection to {:?}.",
+                remote_peer_id,
+            );
+
+            None
+        }
+    };
+
+    Ok(output)
+}
+
+pub(crate) struct ConnectionCommand {
+    dst_peer_id: PeerId,
+    pub(crate) send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
+}
+
+impl ConnectionCommand {
+    pub(crate) fn new(
+        dst_peer_id: PeerId,
+        send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
+    ) -> Self {
+        Self {
+            dst_peer_id,
+            send_back,
+        }
+    }
 }

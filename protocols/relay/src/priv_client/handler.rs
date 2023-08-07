@@ -19,9 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::priv_client::transport;
-use crate::protocol::{self, inbound_stop, outbound_hop, MAX_MESSAGE_SIZE};
+use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
-use asynchronous_codec::{Framed, FramedParts};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
@@ -37,8 +36,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use log::debug;
 use std::collections::{HashMap, VecDeque};
@@ -135,7 +134,7 @@ pub struct Handler {
         BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
     >,
 
-    wait_for_connection_outbound_stream: VecDeque<ConnectionCommand>,
+    wait_for_connection_outbound_stream: VecDeque<outbound_hop::ConnectionCommand>,
     circuit_connection_futs: FuturesUnordered<
         BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>,
     >,
@@ -280,104 +279,6 @@ impl Handler {
             log::warn!("Dropping existing inbound circuit request to be denied from {:?} in favor of new one.", src_peer_id);
         }
     }
-
-    fn send_connection_message_and_process_response(
-        &self,
-        protocol: Stream,
-        con_command: ConnectionCommand,
-    ) -> BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>> {
-        let msg = proto::HopMessage {
-            type_pb: proto::HopMessageType::CONNECT,
-            peer: Some(proto::Peer {
-                id: con_command.dst_peer_id.to_bytes(),
-                addrs: vec![],
-            }),
-            reservation: None,
-            limit: None,
-            status: None,
-        };
-
-        let (tx, rx) = oneshot::channel();
-        self.alive_lend_out_substreams.push(rx);
-
-        let mut substream =
-            Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
-        let remote_peer_id = self.remote_peer_id;
-
-        async move {
-            substream.send(msg).await?;
-            let proto::HopMessage {
-                type_pb,
-                peer: _,
-                reservation: _,
-                limit,
-                status,
-            } = substream
-                .next()
-                .await
-                .ok_or(outbound_hop::FatalUpgradeError::StreamClosed)??;
-
-            match type_pb {
-                proto::HopMessageType::CONNECT => {
-                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeConnect.into())
-                }
-                proto::HopMessageType::RESERVE => {
-                    return Err(outbound_hop::FatalUpgradeError::UnexpectedTypeReserve.into())
-                }
-                proto::HopMessageType::STATUS => {}
-            }
-
-            let limit = limit.map(Into::into);
-
-            match status.ok_or(outbound_hop::UpgradeError::Fatal(
-                outbound_hop::FatalUpgradeError::MissingStatusField,
-            ))? {
-                proto::Status::OK => {}
-                proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                    return Err(outbound_hop::CircuitFailedReason::ResourceLimitExceeded.into())
-                }
-                proto::Status::CONNECTION_FAILED => {
-                    return Err(outbound_hop::CircuitFailedReason::ConnectionFailed.into())
-                }
-                proto::Status::NO_RESERVATION => {
-                    return Err(outbound_hop::CircuitFailedReason::NoReservation.into())
-                }
-                proto::Status::PERMISSION_DENIED => {
-                    return Err(outbound_hop::CircuitFailedReason::PermissionDenied.into())
-                }
-                s => return Err(outbound_hop::FatalUpgradeError::UnexpectedStatus(s).into()),
-            }
-
-            let FramedParts {
-                io,
-                read_buffer,
-                write_buffer,
-                ..
-            } = substream.into_parts();
-            assert!(
-                write_buffer.is_empty(),
-                "Expect a flushed Framed to have empty write buffer."
-            );
-
-            let output = match con_command.send_back.send(Ok(super::Connection {
-                state: super::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
-            })) {
-                Ok(()) => Some(outbound_hop::Output::Circuit { limit }),
-                Err(_) => {
-                    debug!(
-                        "Oneshot to `client::transport::Dial` future dropped. \
-                         Dropping established relayed connection to {:?}.",
-                        remote_peer_id,
-                    );
-
-                    None
-                }
-            };
-
-            Ok(output)
-        }
-        .boxed()
-    }
 }
 
 impl ConnectionHandler for Handler {
@@ -409,10 +310,7 @@ impl ConnectionHandler for Handler {
                 dst_peer_id,
             } => {
                 self.wait_for_connection_outbound_stream
-                    .push_back(ConnectionCommand {
-                        dst_peer_id,
-                        send_back,
-                    });
+                    .push_back(outbound_hop::ConnectionCommand::new(dst_peer_id, send_back));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
@@ -656,8 +554,19 @@ impl ConnectionHandler for Handler {
                 let con_command = self.wait_for_connection_outbound_stream.pop_front().expect(
                     "opened a stream without a pending connection command or a reserve listener",
                 );
-                self.circuit_connection_futs
-                    .push(self.send_connection_message_and_process_response(stream, con_command))
+
+                let (tx, rx) = oneshot::channel();
+                self.alive_lend_out_substreams.push(rx);
+
+                self.circuit_connection_futs.push(
+                    outbound_hop::send_connection_message_and_process_response(
+                        stream,
+                        self.remote_peer_id,
+                        con_command,
+                        tx,
+                    )
+                    .boxed(),
+                )
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
@@ -668,11 +577,6 @@ impl ConnectionHandler for Handler {
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
     }
-}
-
-struct ConnectionCommand {
-    dst_peer_id: PeerId,
-    send_back: oneshot::Sender<Result<super::Connection, ()>>,
 }
 
 enum Reservation {
