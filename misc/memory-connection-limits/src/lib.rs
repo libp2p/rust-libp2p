@@ -61,7 +61,7 @@ use std::{
 /// }
 /// ```
 pub struct Behaviour {
-    max_allowed_bytes: Option<usize>,
+    max_allowed_bytes: usize,
     process_physical_memory_bytes: usize,
     last_refreshed: Instant,
     refresh_interval: Duration,
@@ -71,51 +71,11 @@ impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
-    pub fn with_max_bytes(bytes: usize) -> Self {
-        let mut b = Self::new();
-        b.update_max_bytes(bytes);
-        b
-    }
-
-    /// Sets the process memory usage threshold in the percentage of the total physical memory,
-    ///
-    /// New inbound and outbound connections will be denied when the threshold is reached.
-    pub fn with_max_percentage(percentage: f64) -> Self {
-        let mut b = Self::new();
-        b.update_max_percentage(percentage);
-        b
-    }
-
-    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms
-    pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
-        self.refresh_interval = interval;
-        self
-    }
-
-    /// Updates the process memory usage threshold in bytes
-    pub fn update_max_bytes(&mut self, bytes: usize) {
-        self.max_allowed_bytes = Some(bytes);
-    }
-
-    /// Updates the process memory usage threshold in the percentage of the total physical memory
-    pub fn update_max_percentage(&mut self, percentage: f64) {
-        use sysinfo::{RefreshKind, SystemExt};
-
-        let system_memory_bytes =
-            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
-        self.max_allowed_bytes = Some((system_memory_bytes as f64 * percentage).round() as usize);
-    }
-
-    /// Gets the process memory usage threshold in bytes
-    pub fn max_allowed_bytes(&self) -> Option<usize> {
-        self.max_allowed_bytes
-    }
-
-    fn new() -> Self {
+    pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
         const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
 
         Self {
-            max_allowed_bytes: None,
+            max_allowed_bytes,
             process_physical_memory_bytes: memory_stats::memory_stats()
                 .map(|s| s.physical_mem)
                 .unwrap_or_default(),
@@ -124,15 +84,37 @@ impl Behaviour {
         }
     }
 
+    /// Sets the process memory usage threshold in the percentage of the total physical memory,
+    ///
+    /// New inbound and outbound connections will be denied when the threshold is reached.
+    pub fn with_max_percentage(percentage: f64) -> Self {
+        use sysinfo::{RefreshKind, SystemExt};
+
+        let system_memory_bytes =
+            sysinfo::System::new_with_specifics(RefreshKind::new().with_memory()).total_memory();
+
+        Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
+    }
+
+    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms
+    pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
+        self.refresh_interval = interval;
+        self
+    }
+
+    /// Gets the process memory usage threshold in bytes
+    pub fn max_allowed_bytes(&self) -> usize {
+        self.max_allowed_bytes
+    }
+
     fn check_limit(&mut self) -> Result<(), ConnectionDenied> {
-        if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
-            self.refresh_memory_stats_if_needed();
-            if self.process_physical_memory_bytes > max_allowed_bytes {
-                return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
-                    process_physical_memory_bytes: self.process_physical_memory_bytes,
-                    max_allowed_bytes,
-                }));
-            }
+        self.refresh_memory_stats_if_needed();
+
+        if self.process_physical_memory_bytes > self.max_allowed_bytes {
+            return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
+                process_physical_memory_bytes: self.process_physical_memory_bytes,
+                max_allowed_bytes: self.max_allowed_bytes,
+            }));
         }
 
         Ok(())
