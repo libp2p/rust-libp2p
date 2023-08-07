@@ -61,8 +61,6 @@ where
 
     let info = noise.protocol_info().next().unwrap();
 
-    log::debug!("Outbound noise upgrade info {:?}", info);
-
     // Server must start the Noise handshake. Browsers cannot initiate
     // noise.upgrade_inbound has into_responder(), so that's the one we need
     let (peer_id, mut channel) = match noise.upgrade_inbound(stream, info).await {
@@ -70,7 +68,7 @@ where
         Err(e) => return Err(Error::Noise(e)),
     };
 
-    log::debug!("Outbound noise upgrade peer_id {:?}", peer_id);
+    log::trace!("Outbound noise upgrade peer_id {:?}", peer_id);
     channel.close().await?; // uses AsyncWriteExt to close the EphermalKeyExchange channel?
 
     Ok(peer_id)
