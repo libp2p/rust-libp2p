@@ -12,8 +12,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-const HANDSHAKE_TIMEOUT_MS: u64 = 10_000;
-
 /// Config for the [`Transport`].
 #[derive(Clone)]
 pub struct Config {
