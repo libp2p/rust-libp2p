@@ -67,7 +67,10 @@ pub struct Behaviour {
     last_refreshed: Instant,
 }
 
-const REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+/// The maximum duration for which the retrieved memory-stats of the process are allowed to be stale.
+///
+/// Once exceeded, we will retrieve new stats.
+const MAX_STALE_DURATION: Duration = Duration::from_millis(100);
 
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
@@ -116,7 +119,7 @@ impl Behaviour {
     fn refresh_memory_stats_if_needed(&mut self) {
         let now = Instant::now();
 
-        if self.last_refreshed + REFRESH_INTERVAL > now {
+        if self.last_refreshed + MAX_STALE_DURATION > now {
             // Memory stats are reasonably recent, don't refresh.
             return;
         }
