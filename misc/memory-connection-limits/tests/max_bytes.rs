@@ -43,10 +43,8 @@ fn max_bytes() {
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
     let max_allowed_bytes_plus_base_usage = max_allowed_bytes + current_mem;
-    network
-        .behaviour_mut()
-        .connection_limits
-        .update_max_bytes(max_allowed_bytes_plus_base_usage);
+    network.behaviour_mut().connection_limits =
+        Behaviour::with_max_bytes(max_allowed_bytes_plus_base_usage);
 
     let addr: Multiaddr = "/memory/1234".parse().unwrap();
     let target = PeerId::random();

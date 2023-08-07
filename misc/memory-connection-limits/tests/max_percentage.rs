@@ -44,10 +44,9 @@ fn max_percentage() {
     // Adds current mem usage to the limit and update
     let current_mem = memory_stats::memory_stats().unwrap().physical_mem;
     let max_allowed_bytes = current_mem + CONNECTION_LIMIT * 1024 * 1024;
-    network
-        .behaviour_mut()
-        .connection_limits
-        .update_max_percentage(max_allowed_bytes as f64 / system_info.total_memory() as f64);
+    network.behaviour_mut().connection_limits = Behaviour::with_max_percentage(
+        max_allowed_bytes as f64 / system_info.total_memory() as f64,
+    );
 
     let addr: Multiaddr = "/memory/1234".parse().unwrap();
     let target = PeerId::random();
