@@ -1,3 +1,10 @@
+## 0.43.3 - unreleased
+
+- Implement `Display` for `ConnectionId`.
+  See [PR 4278].
+
+[PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
+
 ## 0.43.2
 - Display the cause of a `ListenError::Denied`.
   See [PR 4232]
