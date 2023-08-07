@@ -263,7 +263,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: thomaseizinger/cargo-semver-checks-action@b266e63c6c2823106f61fd9ee4805ac6ce0a2783
         with:
-          version: "foobar"
+          version: "baz"
 
   rustfmt:
     runs-on: ubuntu-latest
