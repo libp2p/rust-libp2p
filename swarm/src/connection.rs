@@ -53,6 +53,7 @@ use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
@@ -79,6 +80,12 @@ impl ConnectionId {
     /// Returns the next available [`ConnectionId`].
     pub(crate) fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+impl Display for ConnectionId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
