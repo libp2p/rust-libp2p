@@ -44,7 +44,8 @@ use std::{
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
 ///
-/// Note: Note: `fn xx_max_bytes` and `fn xx_max_percentage` are mutually exclusive
+/// [Behaviour::with_max_bytes] and [Behaviour::with_max_percentage] are mutually exclusive.
+/// If you need to employ both of them, compose two instances of [Behaviour] into your custom behaviour.
 ///
 /// # Example
 ///
@@ -84,7 +85,7 @@ impl Behaviour {
         }
     }
 
-    /// Sets the process memory usage threshold in the percentage of the total physical memory,
+    /// Sets the process memory usage threshold in the percentage of the total physical memory.
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
     pub fn with_max_percentage(percentage: f64) -> Self {
@@ -96,7 +97,7 @@ impl Behaviour {
         Self::with_max_bytes((system_memory_bytes as f64 * percentage).round() as usize)
     }
 
-    /// Gets the process memory usage threshold in bytes
+    /// Gets the process memory usage threshold in bytes.
     pub fn max_allowed_bytes(&self) -> usize {
         self.max_allowed_bytes
     }
