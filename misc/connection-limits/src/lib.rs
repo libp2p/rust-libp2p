@@ -470,14 +470,14 @@ mod tests {
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
         limits: super::Behaviour,
-        keep_alive: libp2p_swarm::keep_alive::Behaviour,
+        dummy_behaviour: libp2p_swarm::dummy::Behaviour,
     }
 
     impl Behaviour {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
+                dummy_behaviour: libp2p_swarm::dummy::Behaviour,
             }
         }
     }

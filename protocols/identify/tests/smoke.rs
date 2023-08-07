@@ -1,6 +1,6 @@
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
-use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
+use libp2p_swarm::{dummy, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::iter;
 
@@ -195,14 +195,14 @@ async fn discover_peer_after_disconnect() {
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     identify: identify::Behaviour,
-    keep_alive: keep_alive::Behaviour,
+    dummy_behaviour: dummy::Behaviour,
 }
 
 impl Behaviour {
     fn new(config: identify::Config) -> Self {
         Self {
             identify: identify::Behaviour::new(config),
-            keep_alive: keep_alive::Behaviour,
+            dummy_behaviour: dummy::Behaviour,
         }
     }
 }
