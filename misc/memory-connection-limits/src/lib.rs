@@ -65,23 +65,21 @@ pub struct Behaviour {
     max_allowed_bytes: usize,
     process_physical_memory_bytes: usize,
     last_refreshed: Instant,
-    refresh_interval: Duration,
 }
+
+const REFRESH_INTERVAL: Duration = Duration::from_millis(100);
 
 impl Behaviour {
     /// Sets the process memory usage threshold in absolute bytes.
     ///
     /// New inbound and outbound connections will be denied when the threshold is reached.
     pub fn with_max_bytes(max_allowed_bytes: usize) -> Self {
-        const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
-
         Self {
             max_allowed_bytes,
             process_physical_memory_bytes: memory_stats::memory_stats()
                 .map(|s| s.physical_mem)
                 .unwrap_or_default(),
             last_refreshed: Instant::now(),
-            refresh_interval: DEFAULT_REFRESH_INTERVAL,
         }
     }
 
@@ -117,12 +115,12 @@ impl Behaviour {
 
     fn refresh_memory_stats_if_needed(&mut self) {
         let now = Instant::now();
-        if self.last_refreshed + self.refresh_interval < now {
+        if self.last_refreshed + REFRESH_INTERVAL < now {
             self.last_refreshed = now;
             if let Some(stats) = memory_stats::memory_stats() {
                 self.process_physical_memory_bytes = stats.physical_mem;
             } else {
-                log::warn!("Failed to retrive process memory stats");
+                log::warn!("Failed to retrieve process memory stats");
             }
         }
     }
