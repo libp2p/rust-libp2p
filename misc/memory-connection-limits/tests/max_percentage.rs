@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod util;
+use std::time::Duration;
+
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
@@ -34,7 +36,8 @@ fn max_percentage() {
     let system_info = sysinfo::System::new_with_specifics(RefreshKind::new().with_memory());
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_percentage(0.1),
+        connection_limits: Behaviour::with_max_percentage(0.1)
+            .with_refresh_interval(Duration::from_millis(0)),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 

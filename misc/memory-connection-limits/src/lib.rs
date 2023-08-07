@@ -29,6 +29,7 @@ use void::Void;
 use std::{
     fmt,
     task::{Context, Poll},
+    time::{Duration, Instant},
 };
 
 /// A [`NetworkBehaviour`] that enforces a set of memory usage based limits.
@@ -61,6 +62,9 @@ use std::{
 /// ```
 pub struct Behaviour {
     max_allowed_bytes: Option<usize>,
+    process_physical_memory_bytes: usize,
+    last_refreshed: Instant,
+    refresh_interval: Duration,
 }
 
 impl Behaviour {
@@ -80,6 +84,12 @@ impl Behaviour {
         let mut b = Self::new();
         b.update_max_percentage(percentage);
         b
+    }
+
+    /// Sets a custom refresh interval of the process memory usage, the default interval is 100ms
+    pub fn with_refresh_interval(mut self, interval: Duration) -> Self {
+        self.refresh_interval = interval;
+        self
     }
 
     /// Updates the process memory usage threshold in bytes
@@ -102,26 +112,42 @@ impl Behaviour {
     }
 
     fn new() -> Self {
+        const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_millis(100);
+
         Self {
             max_allowed_bytes: None,
+            process_physical_memory_bytes: memory_stats::memory_stats()
+                .map(|s| s.physical_mem)
+                .unwrap_or_default(),
+            last_refreshed: Instant::now(),
+            refresh_interval: DEFAULT_REFRESH_INTERVAL,
         }
     }
 
-    fn check_limit(&self) -> Result<(), ConnectionDenied> {
+    fn check_limit(&mut self) -> Result<(), ConnectionDenied> {
         if let Some(max_allowed_bytes) = self.max_allowed_bytes() {
-            if let Some(stats) = memory_stats::memory_stats() {
-                if stats.physical_mem > max_allowed_bytes {
-                    return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
-                        process_physical_memory_bytes: stats.physical_mem,
-                        max_allowed_bytes,
-                    }));
-                }
-            } else {
-                log::warn!("Failed to retrive process memory stats");
+            self.refresh_memory_stats_if_needed();
+            if self.process_physical_memory_bytes > max_allowed_bytes {
+                return Err(ConnectionDenied::new(MemoryUsageLimitExceeded {
+                    process_physical_memory_bytes: self.process_physical_memory_bytes,
+                    max_allowed_bytes,
+                }));
             }
         }
 
         Ok(())
+    }
+
+    fn refresh_memory_stats_if_needed(&mut self) {
+        let now = Instant::now();
+        if self.last_refreshed + self.refresh_interval < now {
+            self.last_refreshed = now;
+            if let Some(stats) = memory_stats::memory_stats() {
+                self.process_physical_memory_bytes = stats.physical_mem;
+            } else {
+                log::warn!("Failed to retrive process memory stats");
+            }
+        }
     }
 }
 

@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod util;
+use std::time::Duration;
+
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_memory_connection_limits::*;
@@ -33,7 +35,8 @@ fn max_bytes() {
     let max_allowed_bytes = CONNECTION_LIMIT * 1024 * 1024;
 
     let mut network = Swarm::new_ephemeral(|_| TestBehaviour {
-        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes),
+        connection_limits: Behaviour::with_max_bytes(max_allowed_bytes)
+            .with_refresh_interval(Duration::from_millis(0)),
         mem_consumer: ConsumeMemoryBehaviour1MBPending0Established::default(),
     });
 
