@@ -18,12 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
-use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
-
-use asynchronous_codec::{Framed, FramedParts};
+use crate::priv_client::transport;
+use crate::{HOP_PROTOCOL_NAME, proto, STOP_PROTOCOL_NAME};
+use crate::protocol::{self, inbound_stop, MAX_MESSAGE_SIZE, outbound_hop};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
@@ -31,25 +28,20 @@ use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use log::debug;
-
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol,
-};
-
-use crate::priv_client::transport;
-use crate::protocol::inbound_stop::{open_circuit, Circuit};
-use crate::protocol::outbound_hop::{Output, UpgradeError};
-use crate::protocol::{self, inbound_stop, outbound_hop, MAX_MESSAGE_SIZE};
-use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol};
+use log::debug;
+use std::collections::{HashMap, VecDeque};
+use std::fmt;
+use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime};
+use asynchronous_codec::{Framed, FramedParts};
+use libp2p_core::upgrade::ReadyUpgrade;
 
 /// The maximum number of circuits being denied concurrently.
 ///
@@ -136,11 +128,11 @@ pub struct Handler {
     >,
 
     wait_for_reserve_outbound_stream: VecDeque<mpsc::Sender<transport::ToListenerMsg>>,
-    reserve_futs: FuturesUnordered<BoxFuture<'static, Result<Output, UpgradeError>>>,
+    reserve_futs: FuturesUnordered<BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>>,
 
     wait_for_connection_outbound_stream: VecDeque<ConnectionCommand>,
     circuit_connection_futs:
-        FuturesUnordered<BoxFuture<'static, Result<Option<Output>, UpgradeError>>>,
+        FuturesUnordered<BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>>,
 
     reservation: Reservation,
 
@@ -155,7 +147,7 @@ pub struct Handler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     open_circuit_futs:
-        FuturesUnordered<BoxFuture<'static, Result<Circuit, inbound_stop::FatalUpgradeError>>>,
+        FuturesUnordered<BoxFuture<'static, Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>>,
 
     circuit_deny_futs: HashMap<PeerId, BoxFuture<'static, Result<(), inbound_stop::UpgradeError>>>,
 
@@ -257,7 +249,7 @@ impl Handler {
             ));
     }
 
-    fn insert_to_deny_futs(&mut self, circuit: Circuit) {
+    fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
         let src_peer_id = circuit.src_peer_id();
 
         if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
@@ -283,7 +275,7 @@ impl Handler {
         &self,
         protocol: Stream,
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
-    ) -> BoxFuture<'static, Result<Output, UpgradeError>> {
+    ) -> BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::RESERVE,
             peer: None,
@@ -320,7 +312,7 @@ impl Handler {
 
             let limit = limit.map(Into::into);
 
-            match status.ok_or(UpgradeError::Fatal(
+            match status.ok_or(outbound_hop::UpgradeError::Fatal(
                 outbound_hop::FatalUpgradeError::MissingStatusField,
             ))? {
                 proto::Status::OK => {}
@@ -363,7 +355,7 @@ impl Handler {
 
             substream.close().await?;
 
-            let output = Output::Reservation {
+            let output = outbound_hop::Output::Reservation {
                 renewal_timeout,
                 addrs,
                 limit,
@@ -379,7 +371,7 @@ impl Handler {
         &self,
         protocol: Stream,
         con_command: ConnectionCommand,
-    ) -> BoxFuture<'static, Result<Option<Output>, UpgradeError>> {
+    ) -> BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::CONNECT,
             peer: Some(proto::Peer {
@@ -423,7 +415,7 @@ impl Handler {
 
             let limit = limit.map(Into::into);
 
-            match status.ok_or(UpgradeError::Fatal(
+            match status.ok_or(outbound_hop::UpgradeError::Fatal(
                 outbound_hop::FatalUpgradeError::MissingStatusField,
             ))? {
                 proto::Status::OK => {}
@@ -456,7 +448,7 @@ impl Handler {
             let output = match con_command.send_back.send(Ok(super::Connection {
                 state: super::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
             })) {
-                Ok(()) => Some(Output::Circuit { limit }),
+                Ok(()) => Some(outbound_hop::Output::Circuit { limit }),
                 Err(_) => {
                     debug!(
                         "Oneshot to `client::transport::Dial` future dropped. \
@@ -539,7 +531,7 @@ impl ConnectionHandler for Handler {
         // Reservations
         if let Poll::Ready(Some(result)) = self.reserve_futs.poll_next_unpin(cx) {
             let event = match result {
-                Ok(Output::Reservation {
+                Ok(outbound_hop::Output::Reservation {
                     renewal_timeout,
                     addrs,
                     limit,
@@ -552,7 +544,7 @@ impl ConnectionHandler for Handler {
                     limit,
                 )),
                 Err(err) => match err {
-                    UpgradeError::ReservationFailed(e) => {
+                    outbound_hop::UpgradeError::ReservationFailed(e) => {
                         let renewal = self.reservation.failed();
                         return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                             Event::ReservationReqFailed {
@@ -561,10 +553,10 @@ impl ConnectionHandler for Handler {
                             },
                         ));
                     }
-                    UpgradeError::Fatal(e) => {
+                    outbound_hop::UpgradeError::Fatal(e) => {
                         ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(e)))
                     }
-                    UpgradeError::CircuitFailed(_) => {
+                    outbound_hop::UpgradeError::CircuitFailed(_) => {
                         unreachable!("do not emit `CircuitFailed` for reservation")
                     }
                 },
@@ -577,7 +569,7 @@ impl ConnectionHandler for Handler {
         // Circuit connections
         if let Poll::Ready(Some(res)) = self.circuit_connection_futs.poll_next_unpin(cx) {
             let opt = match res {
-                Ok(Some(Output::Circuit { limit })) => {
+                Ok(Some(outbound_hop::Output::Circuit { limit })) => {
                     Some(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::OutboundCircuitEstablished { limit },
                     ))
@@ -585,15 +577,15 @@ impl ConnectionHandler for Handler {
                 Ok(None) => None,
                 Err(err) => {
                     let res = match err {
-                        UpgradeError::CircuitFailed(e) => ConnectionHandlerEvent::NotifyBehaviour(
+                        outbound_hop::UpgradeError::CircuitFailed(e) => ConnectionHandlerEvent::NotifyBehaviour(
                             Event::OutboundCircuitReqFailed {
                                 error: StreamUpgradeError::Apply(e),
                             },
                         ),
-                        UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
+                        outbound_hop::UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
                             StreamUpgradeError::Apply(Either::Right(e)),
                         ),
-                        UpgradeError::ReservationFailed(_) => {
+                        outbound_hop::UpgradeError::ReservationFailed(_) => {
                             unreachable!("do not emit `ReservationFailed` for connection")
                         }
                     };
@@ -727,7 +719,7 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.open_circuit_futs.push(open_circuit(stream).boxed());
+                self.open_circuit_futs.push(inbound_stop::open_circuit(stream).boxed());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
