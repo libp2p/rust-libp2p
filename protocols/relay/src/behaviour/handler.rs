@@ -18,11 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::collections::VecDeque;
-use std::fmt;
-use std::task::{Context, Poll};
-use std::time::Duration;
-
+use crate::behaviour::CircuitId;
+use crate::copy_future::CopyFuture;
+use crate::{HOP_PROTOCOL_NAME, proto, STOP_PROTOCOL_NAME};
+use crate::protocol::{inbound_hop, outbound_stop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot::{self, Canceled};
@@ -31,22 +30,17 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-
-use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
-    StreamUpgradeError, SubstreamProtocol,
+use libp2p_swarm::handler::{
+    ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-
-use crate::behaviour::CircuitId;
-use crate::copy_future::CopyFuture;
-use crate::proto::Status;
-use crate::protocol::outbound_stop::CircuitFailedReason;
-use crate::protocol::{inbound_hop, outbound_stop};
-use crate::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol};
+use std::collections::VecDeque;
+use std::fmt;
+use std::task::{Context, Poll};
+use std::time::Duration;
+use libp2p_core::upgrade::ReadyUpgrade;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -62,12 +56,12 @@ pub enum In {
     },
     DenyReservationReq {
         inbound_reservation_req: inbound_hop::ReservationReq,
-        status: Status,
+        status: proto::Status,
     },
     DenyCircuitReq {
         circuit_id: Option<CircuitId>,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
+        status: proto::Status,
     },
     NegotiateOutboundConnect {
         circuit_id: CircuitId,
@@ -205,8 +199,8 @@ pub enum Event {
         src_peer_id: PeerId,
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
-        status: Status,
-        error: StreamUpgradeError<CircuitFailedReason>,
+        status: proto::Status,
+        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
