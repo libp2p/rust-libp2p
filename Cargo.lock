@@ -3244,7 +3244,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "webpki 0.22.0",
- "x509-parser 0.15.0",
+ "x509-parser 0.15.1",
  "yasna",
 ]
 
@@ -6712,9 +6712,9 @@ dependencies = [
 
 [[package]]
 name = "x509-parser"
-version = "0.15.0"
+version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bab0c2f54ae1d92f4fcb99c0b7ccf0b1e3451cbd395e5f115ccbdbcb18d4f634"
+checksum = "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
 dependencies = [
  "asn1-rs 0.5.2",
  "data-encoding",
