@@ -22,12 +22,13 @@ use std::time::{Duration, SystemTime};
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
+use either::Either;
 use futures::prelude::*;
 use thiserror::Error;
 
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::Stream;
+use libp2p_swarm::{ConnectionHandlerEvent, Stream, StreamUpgradeError};
 
 use crate::behaviour::handler;
 use crate::proto;
@@ -187,8 +188,16 @@ pub(crate) async fn process_inbound_request(
     max_circuit_bytes: u64,
     endpoint: ConnectedPoint,
     renewed: bool,
-) -> Result<handler::Event, FatalUpgradeError> {
+) -> handler::CHEvent {
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+
+    let res = substream.next().await;
+
+    if let None | Some(Err(_)) = res {
+        return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Left(
+            FatalUpgradeError::StreamClosed,
+        )));
+    }
 
     let proto::HopMessage {
         type_pb,
@@ -196,10 +205,7 @@ pub(crate) async fn process_inbound_request(
         reservation: _,
         limit: _,
         status: _,
-    } = substream
-        .next()
-        .await
-        .ok_or(FatalUpgradeError::StreamClosed)??;
+    } = res.unwrap().expect("should be ok");
 
     let event = match type_pb {
         Type::RESERVE => {
@@ -217,8 +223,24 @@ pub(crate) async fn process_inbound_request(
             }
         }
         Type::CONNECT => {
-            let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+            let peer_id_res = match peer {
+                Some(r) => PeerId::from_bytes(&r.id),
+                None => {
+                    return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Left(
+                        FatalUpgradeError::MissingPeer,
+                    )))
+                }
+            };
+
+            let dst = match peer_id_res {
+                Ok(res) => res,
+                Err(_) => {
+                    return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Left(
+                        FatalUpgradeError::ParsePeerId,
+                    )))
+                }
+            };
+
             let req = CircuitReq { dst, substream };
 
             handler::Event::CircuitReqReceived {
@@ -226,8 +248,12 @@ pub(crate) async fn process_inbound_request(
                 endpoint,
             }
         }
-        Type::STATUS => return Err(FatalUpgradeError::UnexpectedTypeStatus),
+        Type::STATUS => {
+            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Left(
+                FatalUpgradeError::UnexpectedTypeStatus,
+            )))
+        }
     };
 
-    Ok(event)
+    ConnectionHandlerEvent::NotifyBehaviour(event)
 }

@@ -21,12 +21,13 @@
 use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
+use either::Either;
 use futures::channel::oneshot::{self};
 use futures::prelude::*;
 use thiserror::Error;
 
 use libp2p_identity::PeerId;
-use libp2p_swarm::{ConnectionId, Stream, StreamUpgradeError};
+use libp2p_swarm::{ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError};
 
 use crate::behaviour::handler;
 use crate::behaviour::handler::Config;
@@ -77,7 +78,7 @@ pub(crate) async fn send_stop_message_and_process_result(
     io: Stream,
     stop_command: StopCommand,
     tx: oneshot::Sender<()>,
-) -> Result<handler::Event, FatalUpgradeError> {
+) -> handler::CHEvent {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
         peer: Some(proto::Peer {
@@ -99,21 +100,33 @@ pub(crate) async fn send_stop_message_and_process_result(
 
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
-    substream.send(msg).await?;
+    let send_res = substream.send(msg).await;
+    if send_res.is_err() {
+        return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+            FatalUpgradeError::StreamClosed,
+        )));
+    }
+
+    let res = substream.next().await;
+
+    if let None | Some(Err(_)) = res {
+        return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+            FatalUpgradeError::StreamClosed,
+        )));
+    }
 
     let proto::StopMessage {
         type_pb,
         peer: _,
         limit: _,
         status,
-    } = substream
-        .next()
-        .await
-        .ok_or(FatalUpgradeError::StreamClosed)??;
+    } = res.unwrap().expect("should be ok");
 
     match type_pb {
         proto::StopMessageType::CONNECT => {
-            return Err(FatalUpgradeError::UnexpectedTypeConnect);
+            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+                FatalUpgradeError::UnexpectedTypeConnect,
+            )))
         }
         proto::StopMessageType::STATUS => {}
     }
@@ -122,29 +135,41 @@ pub(crate) async fn send_stop_message_and_process_result(
         Some(proto_status) => match proto_status {
             proto::Status::OK => {}
             proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                return Ok(handler::Event::OutboundConnectNegotiationFailed {
-                    circuit_id: stop_command.circuit_id,
-                    src_peer_id: stop_command.src_peer_id,
-                    src_connection_id: stop_command.src_connection_id,
-                    inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto_status,
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
-                })
+                return ConnectionHandlerEvent::NotifyBehaviour(
+                    handler::Event::OutboundConnectNegotiationFailed {
+                        circuit_id: stop_command.circuit_id,
+                        src_peer_id: stop_command.src_peer_id,
+                        src_connection_id: stop_command.src_connection_id,
+                        inbound_circuit_req: stop_command.inbound_circuit_req,
+                        status: proto_status,
+                        error: StreamUpgradeError::Apply(
+                            CircuitFailedReason::ResourceLimitExceeded,
+                        ),
+                    },
+                )
             }
             proto::Status::PERMISSION_DENIED => {
-                return Ok(handler::Event::OutboundConnectNegotiationFailed {
-                    circuit_id: stop_command.circuit_id,
-                    src_peer_id: stop_command.src_peer_id,
-                    src_connection_id: stop_command.src_connection_id,
-                    inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto_status,
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
-                })
+                return ConnectionHandlerEvent::NotifyBehaviour(
+                    handler::Event::OutboundConnectNegotiationFailed {
+                        circuit_id: stop_command.circuit_id,
+                        src_peer_id: stop_command.src_peer_id,
+                        src_connection_id: stop_command.src_connection_id,
+                        inbound_circuit_req: stop_command.inbound_circuit_req,
+                        status: proto_status,
+                        error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
+                    },
+                )
             }
-            s => return Err(FatalUpgradeError::UnexpectedStatus(s)),
+            s => {
+                return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+                    FatalUpgradeError::UnexpectedStatus(s),
+                )))
+            }
         },
         None => {
-            return Err(FatalUpgradeError::MissingStatusField);
+            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+                FatalUpgradeError::MissingStatusField,
+            )))
         }
     }
 
@@ -159,7 +184,7 @@ pub(crate) async fn send_stop_message_and_process_result(
         "Expect a flushed Framed to have an empty write buffer."
     );
 
-    Ok(handler::Event::OutboundConnectNegotiated {
+    ConnectionHandlerEvent::NotifyBehaviour(handler::Event::OutboundConnectNegotiated {
         circuit_id: stop_command.circuit_id,
         src_peer_id: stop_command.src_peer_id,
         src_connection_id: stop_command.src_connection_id,

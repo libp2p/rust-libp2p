@@ -384,11 +384,8 @@ pub struct Handler {
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
-    inbound_requests_futs:
-        FuturesUnordered<BoxFuture<'static, Result<Event, inbound_hop::FatalUpgradeError>>>,
     stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
-    outbound_stop_futs:
-        FuturesUnordered<BoxFuture<'static, Result<Event, outbound_stop::FatalUpgradeError>>>,
+    protocol_futs: FuturesUnordered<BoxFuture<'static, CHEvent>>,
 }
 
 impl Handler {
@@ -405,9 +402,8 @@ impl Handler {
             circuits: Default::default(),
             active_reservation: Default::default(),
             keep_alive: KeepAlive::Yes,
-            inbound_requests_futs: Default::default(),
             stop_requested_streams: Default::default(),
-            outbound_stop_futs: Default::default(),
+            protocol_futs: Default::default(),
         }
     }
 }
@@ -418,6 +414,13 @@ enum ReservationRequestFuture {
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
+
+pub(crate) type CHEvent = ConnectionHandlerEvent<
+    <Handler as ConnectionHandler>::OutboundProtocol,
+    <Handler as ConnectionHandler>::OutboundOpenInfo,
+    <Handler as ConnectionHandler>::ToBehaviour,
+    <Handler as ConnectionHandler>::Error,
+>;
 
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
@@ -575,27 +578,8 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        // Process inbound requests
-        if let Poll::Ready(Some(result)) = self.inbound_requests_futs.poll_next_unpin(cx) {
-            let event = match result {
-                Ok(event) => ConnectionHandlerEvent::NotifyBehaviour(event),
-                Err(err) => {
-                    ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Left(err)))
-                }
-            };
-
-            return Poll::Ready(event);
-        }
-
-        // Send stop commands
-        if let Poll::Ready(Some(result)) = self.outbound_stop_futs.poll_next_unpin(cx) {
-            let event = match result {
-                Ok(event) => ConnectionHandlerEvent::NotifyBehaviour(event),
-                Err(e) => {
-                    ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(e)))
-                }
-            };
-
+        // Process protocol requests
+        if let Poll::Ready(Some(event)) = self.protocol_futs.poll_next_unpin(cx) {
             return Poll::Ready(event);
         }
 
@@ -783,7 +767,7 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.inbound_requests_futs.push(
+                self.protocol_futs.push(
                     inbound_hop::process_inbound_request(
                         stream,
                         self.config.reservation_duration,
@@ -807,7 +791,7 @@ impl ConnectionHandler for Handler {
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
 
-                self.outbound_stop_futs.push(
+                self.protocol_futs.push(
                     outbound_stop::send_stop_message_and_process_result(stream, stop_command, tx)
                         .boxed(),
                 );
