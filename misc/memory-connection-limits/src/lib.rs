@@ -115,13 +115,17 @@ impl Behaviour {
 
     fn refresh_memory_stats_if_needed(&mut self) {
         let now = Instant::now();
-        if self.last_refreshed + REFRESH_INTERVAL < now {
-            self.last_refreshed = now;
-            if let Some(stats) = memory_stats::memory_stats() {
-                self.process_physical_memory_bytes = stats.physical_mem;
-            } else {
-                log::warn!("Failed to retrieve process memory stats");
-            }
+
+        if self.last_refreshed + REFRESH_INTERVAL > now {
+            // Memory stats are reasonably recent, don't refresh.
+            return;
+        }
+
+        self.last_refreshed = now;
+        if let Some(stats) = memory_stats::memory_stats() {
+            self.process_physical_memory_bytes = stats.physical_mem;
+        } else {
+            log::warn!("Failed to retrieve process memory stats");
         }
     }
 }
