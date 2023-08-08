@@ -156,7 +156,13 @@ impl<P: Provider> GenTransport<P> {
                     return false;
                 }
                 SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
-                    && l.is_loopback == socket_addr.ip().is_loopback()
+            })
+            .filter(|l| {
+                if socket_addr.ip().is_loopback() {
+                    l.is_loopback
+                } else {
+                    true
+                }
             })
             .collect();
         match listeners.len() {
