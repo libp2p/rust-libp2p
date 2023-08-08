@@ -196,10 +196,10 @@ pub(crate) async fn handle_stop_message_response(
 }
 
 pub(crate) struct StopCommand {
-    circuit_id: CircuitId,
-    inbound_circuit_req: inbound_hop::CircuitReq,
-    src_peer_id: PeerId,
-    src_connection_id: ConnectionId,
+    pub(crate) circuit_id: CircuitId,
+    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
+    pub(crate) src_peer_id: PeerId,
+    pub(crate) src_connection_id: ConnectionId,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
 }

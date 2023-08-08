@@ -33,7 +33,9 @@ use instant::Instant;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
@@ -428,6 +430,49 @@ impl Handler {
         self.protocol_futs
             .push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed());
     }
+
+    fn on_dial_upgrade_error(
+        &mut self,
+        DialUpgradeError { error, .. }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
+    ) {
+        let (non_fatal_error, status) = match error {
+            StreamUpgradeError::Timeout => (
+                StreamUpgradeError::Timeout,
+                proto::Status::CONNECTION_FAILED,
+            ),
+            StreamUpgradeError::NegotiationFailed => {
+                // The remote has previously done a reservation. Doing a reservation but not
+                // supporting the stop protocol is pointless, thus disconnecting.
+                self.pending_error = Some(StreamUpgradeError::NegotiationFailed);
+                return;
+            }
+            StreamUpgradeError::Io(e) => {
+                self.pending_error = Some(StreamUpgradeError::Io(e));
+                return;
+            }
+            StreamUpgradeError::Apply(_) => unreachable!("Should not emit handle errors"),
+        };
+
+        let stop_command = self
+            .stop_requested_streams
+            .pop_front()
+            .expect("failed to open a stream without a pending stop command");
+
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                Event::OutboundConnectNegotiationFailed {
+                    circuit_id: stop_command.circuit_id,
+                    src_peer_id: stop_command.src_peer_id,
+                    src_connection_id: stop_command.src_connection_id,
+                    inbound_circuit_req: stop_command.inbound_circuit_req,
+                    status,
+                    error: non_fatal_error,
+                },
+            ));
+    }
 }
 
 enum ReservationRequestFuture {
@@ -797,9 +842,11 @@ impl ConnectionHandler for Handler {
             }) => {
                 self.on_fully_negotiated_outbound(stream);
             }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error);
+            }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::DialUpgradeError(_)
             | ConnectionEvent::LocalProtocolsChange(_)
             | ConnectionEvent::RemoteProtocolsChange(_) => {}
         }
