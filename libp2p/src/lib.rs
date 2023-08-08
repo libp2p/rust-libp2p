@@ -78,6 +78,11 @@ pub use libp2p_kad as kad;
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "memory-connection-limits")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory-connection-limits")))]
+#[doc(inline)]
+pub use libp2p_memory_connection_limits as memory_connection_limits;
 #[cfg(feature = "metrics")]
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
