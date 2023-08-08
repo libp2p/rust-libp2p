@@ -159,7 +159,7 @@ impl<P: Provider> GenTransport<P> {
             })
             .filter(|l| {
                 if socket_addr.ip().is_loopback() {
-                    l.is_loopback
+                    l.supports_loopback
                 } else {
                     true
                 }
@@ -435,7 +435,7 @@ struct Listener<P: Provider> {
     close_listener_waker: Option<Waker>,
 
     /// `true` if a listener supports loopback interface
-    is_loopback: bool,
+    supports_loopback: bool,
 }
 
 impl<P: Provider> Listener<P> {
@@ -448,7 +448,7 @@ impl<P: Provider> Listener<P> {
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
-        let mut is_loopback = false;
+        let mut supports_loopback = false;
         let local_addr = socket.local_addr()?;
         if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
@@ -457,7 +457,7 @@ impl<P: Provider> Listener<P> {
             if_watcher = None;
             let ma = socketaddr_to_multiaddr(&local_addr, version);
             if local_addr.ip().is_loopback() {
-                is_loopback = true
+                supports_loopback = true
             }
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
@@ -479,7 +479,7 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             close_listener_waker: None,
-            is_loopback,
+            supports_loopback,
         })
     }
 
@@ -528,7 +528,7 @@ impl<P: Provider> Listener<P> {
                     {
                         log::debug!("New listen address: {listen_addr}");
                         if inet.addr().is_loopback() {
-                            self.is_loopback = true;
+                            self.supports_loopback = true;
                         }
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
