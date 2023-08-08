@@ -155,9 +155,8 @@ impl<P: Provider> GenTransport<P> {
                 if l.is_closed {
                     return false;
                 }
-                let listen_addr = l.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+                SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
+                    && l.is_loopback == socket_addr.ip().is_loopback()
             })
             .collect();
         match listeners.len() {
@@ -428,6 +427,9 @@ struct Listener<P: Provider> {
 
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
+
+    /// `true` if a listener supports loopback interface
+    is_loopback: bool,
 }
 
 impl<P: Provider> Listener<P> {
@@ -440,6 +442,7 @@ impl<P: Provider> Listener<P> {
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
+        let mut is_loopback = false;
         let local_addr = socket.local_addr()?;
         if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
@@ -447,6 +450,9 @@ impl<P: Provider> Listener<P> {
         } else {
             if_watcher = None;
             let ma = socketaddr_to_multiaddr(&local_addr, version);
+            if local_addr.ip().is_loopback() {
+                is_loopback = true
+            }
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -467,6 +473,7 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             close_listener_waker: None,
+            is_loopback,
         })
     }
 
@@ -514,6 +521,7 @@ impl<P: Provider> Listener<P> {
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
                         log::debug!("New listen address: {}", listen_addr);
+                        self.is_loopback = true;
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
