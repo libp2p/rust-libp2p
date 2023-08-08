@@ -520,8 +520,10 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("New listen address: {}", listen_addr);
-                        self.is_loopback = true;
+                        log::debug!("New listen address: {listen_addr}");
+                        if inet.addr().is_loopback() {
+                            self.is_loopback = true;
+                        }
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -532,7 +534,7 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("Expired listen address: {}", listen_addr);
+                        log::debug!("Expired listen address: {listen_addr}");
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,
