@@ -18,6 +18,7 @@ members = [
     "misc/allow-block-list",
     "misc/connection-limits",
     "misc/keygen",
+    "misc/memory-connection-limits",
     "misc/metrics",
     "misc/multistream-select",
     "misc/quick-protobuf-codec",
@@ -75,6 +76,7 @@ libp2p-identify = { version = "0.43.0", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.2" }
 libp2p-kad = { version = "0.44.4", path = "protocols/kad" }
 libp2p-mdns = { version = "0.44.0", path = "protocols/mdns" }
+libp2p-memory-connection-limits = { version = "0.1.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.13.1", path = "misc/metrics" }
 libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
