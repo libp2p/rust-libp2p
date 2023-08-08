@@ -1,3 +1,10 @@
+## 0.9.1-alpha - unreleased
+
+- Allow listening on ipv4 and ipv6 separately.
+  See [PR 4289].
+
+[PR 4289]: https://github.com/libp2p/rust-libp2p/pull/4289
+
 ## 0.9.0-alpha
 
 - Use `quinn` instead of `quinn-proto`.
