@@ -27,7 +27,7 @@ pub struct PollDataChannel {
     rx_onmessage: channel::mpsc::Receiver<Vec<u8>>,
     /// Receive onopen event from the RtcDataChannel callback
     /// oneshot since only one onopen event is sent
-    rx_onopen: channel::oneshot::Receiver<()>,
+    rx_onopen: channel::mpsc::Receiver<()>,
     /// Receieve onbufferedamountlow event from the RtcDataChannel callback
     /// mpsc since multiple onbufferedamountlow events may be sent
     rx_onbufferedamountlow: channel::mpsc::Receiver<()>,
@@ -44,29 +44,28 @@ impl PollDataChannel {
         /*
          * On Open
          */
-        let (tx_onopen, rx_onopen) = channel::oneshot::channel();
+        let (mut tx_onopen, rx_onopen) = channel::mpsc::channel(2);
 
-        let onopen_callback = Closure::once_into_js(move |_ev: RtcDataChannelEvent| {
+        let onopen_callback = Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
             log::debug!("Data Channel opened");
-            if let Err(e) = tx_onopen.send(()) {
+            if let Err(e) = tx_onopen.try_send(()) {
                 log::error!("Error sending onopen event {:?}", e);
             }
         });
 
         data_channel.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));
-        // note: `once_into_js` does NOT call `forget()`, see the wasm_bindgen::Closure docs
+        onopen_callback.forget();
 
         /*
          * On Message Stream
          */
-        let (mut tx_onmessage, rx_onmessage) = channel::mpsc::channel(8); // TODO: How big should this be?
+        let (mut tx_onmessage, rx_onmessage) = channel::mpsc::channel(2); // TODO: How big should this be?
 
         let onmessage_callback = Closure::<dyn FnMut(_)>::new(move |ev: MessageEvent| {
             let data = ev.data();
             // Convert from Js ArrayBuffer to Vec<u8>
             let data = js_sys::Uint8Array::new(&data).to_vec();
-            log::trace!("onmessage data: {:?}", data);
-            if let Err(e) = tx_onmessage.start_send(data) {
+            if let Err(e) = tx_onmessage.try_send(data) {
                 log::error!("Error sending onmessage event {:?}", e)
             }
         });
@@ -86,16 +85,16 @@ impl PollDataChannel {
         });
 
         data_channel.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
+        // Note: `once_into_js` Closure does NOT call `forget()`, see the wasm_bindgen::Closure docs for more info
 
         /*
          * Convert `RTCDataChannel: bufferedamountlow event` Low Event Callback to Future
          */
-        let (mut tx_onbufferedamountlow, rx_onbufferedamountlow) = channel::mpsc::channel(1);
+        let (mut tx_onbufferedamountlow, rx_onbufferedamountlow) = channel::mpsc::channel(2);
 
         let onbufferedamountlow_callback =
             Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
-                log::debug!("bufferedamountlow event");
-                if let Err(e) = tx_onbufferedamountlow.start_send(()) {
+                if let Err(e) = tx_onbufferedamountlow.try_send(()) {
                     log::error!("Error sending onbufferedamountlow event {:?}", e)
                 }
             });
@@ -136,7 +135,6 @@ impl PollDataChannel {
 
     /// Send data buffer
     pub fn send(&self, data: &[u8]) -> Result<(), Error> {
-        log::trace!("send: {:?}", data);
         self.data_channel.send_with_u8_array(data)?;
         Ok(())
     }
@@ -167,7 +165,7 @@ impl AsyncRead for PollDataChannel {
             Some(data) => {
                 let data_len = data.len();
                 let buf_len = buf.len();
-                log::debug!("poll_read [{:?} of {} bytes]", data_len, buf_len);
+                log::trace!("poll_read [{:?} of {} bytes]", data_len, buf_len);
                 let len = std::cmp::min(data_len, buf_len);
                 buf[..len].copy_from_slice(&data[..len]);
                 Poll::Ready(Ok(len))
@@ -183,11 +181,15 @@ impl AsyncWrite for PollDataChannel {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        log::debug!("poll_write: [{:?}]", buf.len());
+        log::trace!(
+            "poll_write: [{:?}], state: {:?}",
+            buf.len(),
+            self.data_channel.ready_state()
+        );
         // If the data channel is not open,
         // poll on open future until the channel is open
         if self.data_channel.ready_state() != RtcDataChannelState::Open {
-            ready!(self.rx_onopen.poll_unpin(cx)).unwrap();
+            ready!(self.rx_onopen.poll_next_unpin(cx)).unwrap();
         }
 
         // Now that the channel is open, send the data
@@ -211,10 +213,6 @@ impl AsyncWrite for PollDataChannel {
     /// We can therefore create a callback future called `onbufferedamountlow_fut` to listen for `bufferedamountlow` event and wake the task
     /// The default `bufferedAmountLowThreshold` value is 0.
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        log::debug!(
-            "poll_flush buffered_amount is {:?}",
-            self.data_channel.buffered_amount()
-        );
         // if bufferedamountlow empty, return ready
         if self.data_channel.buffered_amount() == 0 {
             return Poll::Ready(Ok(()));
@@ -229,14 +227,11 @@ impl AsyncWrite for PollDataChannel {
 
     /// Initiates or attempts to shut down this writer,
     /// returning success when the connection callback returns has completely shut down.
-    fn poll_close(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::result::Result<(), std::io::Error>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         log::trace!("poll_close");
         self.data_channel.close();
-        // TODO: polling onclose 'should' be done here but it Errors went sent, as data channals can be closed by either end
-        // ready!(self.rx_onclose.poll_unpin(cx));
+        // TODO: Confirm that channels are closing properyl. Poll onclose 'should' be done here but it Errors when sent, as data channals can be closed by either end
+        let _ = ready!(self.rx_onclose.poll_unpin(cx));
         log::trace!("close complete");
         Poll::Ready(Ok(()))
     }
