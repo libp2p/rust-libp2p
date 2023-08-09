@@ -16,6 +16,7 @@ bytes = "1"
 either = "1.9.0"
 futures = "0.3.28"
 futures-timer = "3"
+futures-bounded = { workspace = true }
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }

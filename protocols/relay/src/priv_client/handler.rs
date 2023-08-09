@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::priv_client::transport;
+use crate::priv_client::{transport, Config};
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use either::Either;
@@ -130,8 +130,9 @@ pub struct Handler {
     >,
 
     wait_for_reserve_outbound_stream: VecDeque<mpsc::Sender<transport::ToListenerMsg>>,
-    reserve_futs: FuturesUnordered<
-        BoxFuture<'static, Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
+    reserve_futs: futures_bounded::WorkerFutures<
+        (),
+        Result<outbound_hop::Output, outbound_hop::UpgradeError>,
     >,
 
     wait_for_connection_outbound_stream: VecDeque<outbound_hop::Command>,
@@ -165,7 +166,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(local_peer_id: PeerId, remote_peer_id: PeerId, remote_addr: Multiaddr) -> Self {
+    pub fn new(
+        config: Config,
+        local_peer_id: PeerId,
+        remote_peer_id: PeerId,
+        remote_addr: Multiaddr,
+    ) -> Self {
         Self {
             local_peer_id,
             remote_peer_id,
@@ -173,7 +179,10 @@ impl Handler {
             queued_events: Default::default(),
             pending_error: Default::default(),
             wait_for_reserve_outbound_stream: Default::default(),
-            reserve_futs: Default::default(),
+            reserve_futs: futures_bounded::WorkerFutures::new(
+                config.substream_timeout,
+                config.max_concurrent_streams,
+            ),
             wait_for_connection_outbound_stream: Default::default(),
             circuit_connection_futs: Default::default(),
             reservation: Reservation::None,
@@ -341,7 +350,14 @@ impl ConnectionHandler for Handler {
         }
 
         // Reservations
-        if let Poll::Ready(Some(result)) = self.reserve_futs.poll_next_unpin(cx) {
+        if let Poll::Ready((_, worker_res)) = self.reserve_futs.poll_unpin(cx) {
+            let result = match worker_res {
+                Ok(r) => r,
+                Err(futures_bounded::Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
+
             let event = match result {
                 Ok(outbound_hop::Output::Reservation {
                     renewal_timeout,
@@ -541,13 +557,17 @@ impl ConnectionHandler for Handler {
                 ..
             }) => {
                 if let Some(to_listener) = self.wait_for_reserve_outbound_stream.pop_front() {
-                    self.reserve_futs.push(
-                        outbound_hop::send_reserve_message_and_process_response(
-                            stream,
-                            to_listener,
+                    if self
+                        .reserve_futs
+                        .try_push(
+                            (),
+                            outbound_hop::handle_reserve_message_response(stream, to_listener)
+                                .boxed(),
                         )
-                        .boxed(),
-                    );
+                        .is_some()
+                    {
+                        log::warn!("Dropping outbound stream because we are at capacity")
+                    }
                     return;
                 }
 

@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {:?}", local_peer_id);
 
-    let (relay_transport, client) = relay::client::new(local_peer_id);
+    let (relay_transport, client) = relay::client::new(local_peer_id, Default::default());
 
     let transport = {
         let relay_tcp_quic_transport = relay_transport

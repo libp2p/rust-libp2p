@@ -111,7 +111,7 @@ pub(crate) enum Output {
     },
 }
 
-pub(crate) async fn send_reserve_message_and_process_response(
+pub(crate) async fn handle_reserve_message_response(
     protocol: Stream,
     to_listener: mpsc::Sender<transport::ToListenerMsg>,
 ) -> Result<Output, UpgradeError> {

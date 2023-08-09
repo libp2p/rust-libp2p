@@ -47,6 +47,7 @@ use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use transport::Transport;
 use void::Void;
 
@@ -88,9 +89,26 @@ pub enum Event {
     },
 }
 
+#[derive(Debug, Clone)]
+pub struct Config {
+    pub substream_timeout: Duration,
+    pub max_concurrent_streams: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            substream_timeout: Duration::from_secs(10),
+            max_concurrent_streams: 100,
+        }
+    }
+}
+
 /// [`NetworkBehaviour`] implementation of the relay client
 /// functionality of the circuit relay v2 protocol.
 pub struct Behaviour {
+    config: Config,
+
     local_peer_id: PeerId,
 
     from_transport: Receiver<transport::TransportToBehaviourMsg>,
@@ -105,11 +123,12 @@ pub struct Behaviour {
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
-pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
+pub fn new(local_peer_id: PeerId, config: Config) -> (Transport, Behaviour) {
     let (transport, from_transport) = Transport::new();
     let behaviour = Behaviour {
         local_peer_id,
         from_transport,
+        config,
         directly_connected_peers: Default::default(),
         queued_actions: Default::default(),
         pending_handler_commands: Default::default(),
@@ -163,8 +182,12 @@ impl NetworkBehaviour for Behaviour {
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
-
-        let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
+        let mut handler = Handler::new(
+            self.config.clone(),
+            self.local_peer_id,
+            peer,
+            remote_addr.clone(),
+        );
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)
@@ -184,7 +207,7 @@ impl NetworkBehaviour for Behaviour {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
-        let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
+        let mut handler = Handler::new(self.config.clone(), self.local_peer_id, peer, addr.clone());
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)

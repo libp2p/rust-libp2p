@@ -76,7 +76,7 @@ pub mod json;
 pub use codec::Codec;
 pub use handler::ProtocolSupport;
 
-use crate::handler::protocol::RequestProtocol;
+use crate::handler::OutboundMessage;
 use futures::channel::oneshot;
 use handler::Handler;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
@@ -285,6 +285,7 @@ impl fmt::Display for RequestId {
 pub struct Config {
     request_timeout: Duration,
     connection_keep_alive: Duration,
+    max_concurrent_streams: usize,
 }
 
 impl Default for Config {
@@ -292,20 +293,41 @@ impl Default for Config {
         Self {
             connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
+            max_concurrent_streams: 100,
         }
     }
 }
 
 impl Config {
     /// Sets the keep-alive timeout of idle connections.
+    #[deprecated(note = "Use `Config::with_connection_keep_alive` for one-liner constructions.")]
     pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
         self.connection_keep_alive = v;
         self
     }
 
     /// Sets the timeout for inbound and outbound requests.
+    #[deprecated(note = "Use `Config::with_request_timeout` for one-liner constructions.")]
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
+        self
+    }
+
+    /// Sets the keep-alive timeout of idle connections.
+    pub fn with_connection_keep_alive(mut self, v: Duration) -> Self {
+        self.connection_keep_alive = v;
+        self
+    }
+
+    /// Sets the timeout for inbound and outbound requests.
+    pub fn with_request_timeout(mut self, v: Duration) -> Self {
+        self.request_timeout = v;
+        self
+    }
+
+    /// Sets the upper bound for the number of concurrent inbound + outbound streams.
+    pub fn with_max_concurrent_streams(mut self, num_streams: usize) -> Self {
+        self.max_concurrent_streams = num_streams;
         self
     }
 }
@@ -329,7 +351,7 @@ where
     codec: TCodec,
     /// Pending events to return from `poll`.
     pending_events:
-        VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, RequestProtocol<TCodec>>>,
+        VecDeque<ToSwarm<Event<TCodec::Request, TCodec::Response>, OutboundMessage<TCodec>>>,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
@@ -337,7 +359,7 @@ where
     addresses: HashMap<PeerId, SmallVec<[Multiaddr; 6]>>,
     /// Requests that have not yet been sent and are waiting for a connection
     /// to be established.
-    pending_outbound_requests: HashMap<PeerId, SmallVec<[RequestProtocol<TCodec>; 10]>>,
+    pending_outbound_requests: HashMap<PeerId, SmallVec<[OutboundMessage<TCodec>; 10]>>,
 }
 
 impl<TCodec> Behaviour<TCodec>
@@ -401,11 +423,10 @@ where
     /// > [`Behaviour::remove_address`].
     pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> RequestId {
         let request_id = self.next_request_id();
-        let request = RequestProtocol {
+        let request = OutboundMessage {
             request_id,
-            codec: self.codec.clone(),
-            protocols: self.outbound_protocols.clone(),
             request,
+            protocols: self.outbound_protocols.clone(),
         };
 
         if let Some(request) = self.try_send_request(peer, request) {
@@ -519,8 +540,8 @@ where
     fn try_send_request(
         &mut self,
         peer: &PeerId,
-        request: RequestProtocol<TCodec>,
-    ) -> Option<RequestProtocol<TCodec>> {
+        request: OutboundMessage<TCodec>,
+    ) -> Option<OutboundMessage<TCodec>> {
         if let Some(connections) = self.connected.get_mut(peer) {
             if connections.is_empty() {
                 return Some(request);
@@ -723,6 +744,7 @@ where
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
+            self.config.max_concurrent_streams,
         ))
     }
 
@@ -762,6 +784,7 @@ where
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
+            self.config.max_concurrent_streams,
         ))
     }
 
