@@ -1,3 +1,4 @@
+#![allow(non_upper_case_globals)]
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -104,14 +105,7 @@ async fn open_in_browser() -> Result<(Child, WebDriver)> {
     // currently only the chromedriver is supported as firefox doesn't
     // have support yet for the certhashes
 
-    // windows needs to append `.cmd` to the command
-    let chromedriver = if cfg!(windows) {
-        "chromedriver.cmd"
-    } else {
-        "chromedriver"
-    };
-
-    let mut chrome = tokio::process::Command::new(chromedriver)
+    let mut chrome = tokio::process::Command::new("chromedriver")
         .arg("--port=45782")
         .stdout(Stdio::piped())
         .spawn()?;
