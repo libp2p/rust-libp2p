@@ -167,7 +167,6 @@ pub(crate) mod wasm {
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
     use libp2p_webrtc_websys as webrtc_websys;
-    use std::net::IpAddr;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
@@ -202,7 +201,7 @@ pub(crate) mod wasm {
                 webrtc_websys::Transport::new(webrtc_websys::Config::new(&local_key)).boxed(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             )),
-            _ => bail!("Only webtransport and webrtc are supported with wasm"),
+            _ => bail!("Only webtransport and webrtc-direct are supported with wasm"),
         }
     }
 
