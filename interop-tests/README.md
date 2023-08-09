@@ -26,7 +26,7 @@ Firefox is not yet supported as it doesn't support all required features yet
 
 1. Build the wasm package: `wasm-pack build --target web`
 2. Run the webtransport dialer: `redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webtransport is_dialer=true cargo run --bin wasm_ping`
-3. Run the webrtc-direct dialer: `RUST_LOG=debug,hyper=off redis_addr=127.0.0.1:6379 ip=0.0.0.0 transport=webrtc-direct is_dialer=true cargo run --bin wasm_ping`
+3. Run the webrtc-direct dialer: `RUST_LOG=debug,hyper=off redis_addr="127.0.0.1:6379" ip="0.0.0.0" transport=webrtc-direct is_dialer=true cargo run --bin wasm_ping` with the webrtc-direct listener `RUST_LOG=debug,webrtc=off,webrtc_sctp=off redis_addr="127.0.0.1:6379" ip="::1" transport=webrtc-direct is_dialer="false" cargo run --bin native_ping`
 
 # Running all interop tests locally with Compose
 
