@@ -217,7 +217,7 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        log::debug!("poll_closing");
+        log::trace!("poll_closing");
 
         loop {
             match self.state.close_write_barrier()? {

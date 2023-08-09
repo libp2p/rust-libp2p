@@ -48,8 +48,12 @@ impl ConnectionInner {
             Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
                 let dc2 = ev.channel();
                 log::trace!("ondatachannel_callback triggered");
-                if let Err(err_msg) = tx_ondatachannel.try_send(dc2) {
-                    log::error!("Error sending ondatachannel event: {:?}", err_msg);
+                match tx_ondatachannel.try_send(dc2) {
+                    Ok(_) => log::trace!("ondatachannel_callback sent data channel"),
+                    Err(e) => log::error!(
+                        "ondatachannel_callback: failed to send data channel: {:?}",
+                        e
+                    ),
                 }
             });
 
@@ -69,6 +73,7 @@ impl ConnectionInner {
     /// Takes the RtcPeerConnection and creates a regular DataChannel
     fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Result<Stream, Error>> {
         // Create Regular Data Channel
+        log::trace!("Creating outbound data channel");
         let dc = RtcDataChannelBuilder::default().build_with(&self.peer_connection);
         let channel = Stream::new(dc);
         Poll::Ready(Ok(channel))
