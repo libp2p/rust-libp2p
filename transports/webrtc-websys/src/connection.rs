@@ -41,19 +41,20 @@ struct ConnectionInner {
 impl ConnectionInner {
     fn new(peer_connection: RtcPeerConnection) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
-        let (mut tx_ondatachannel, rx_ondatachannel) = channel::mpsc::channel(1); // we may get more than one data channel opened on a single peer connection
+        let (mut tx_ondatachannel, rx_ondatachannel) = channel::mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
         // Wake the Future in the ondatachannel callback
         let ondatachannel_callback =
             Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
                 let dc2 = ev.channel();
-                log::debug!("ondatachannel. Label (if any): {:?}", dc2.label());
-                if let Err(err_msg) = tx_ondatachannel.start_send(dc2) {
+                log::trace!("ondatachannel_callback triggered");
+                if let Err(err_msg) = tx_ondatachannel.try_send(dc2) {
                     log::error!("Error sending ondatachannel event: {:?}", err_msg);
                 }
             });
 
         peer_connection.set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
+        ondatachannel_callback.forget();
 
         Self {
             peer_connection,
@@ -83,6 +84,7 @@ impl ConnectionInner {
             Some(dc) => {
                 // Create a WebRTC Stream from the Data Channel
                 let channel = Stream::new(dc);
+                log::trace!("connection::poll_ondatachannel ready");
                 Poll::Ready(Ok(channel))
             }
             None => {
