@@ -1,68 +1,66 @@
 [package]
-name = "libp2p-webrtc-websys"
-version = "0.1.0"
 authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
+categories = [
+    "asynchronous",
+    "browser",
+    "libp2p",
+    "network",
+    "network-programming",
+    "networking",
+    "p2p",
+    "peer",
+    "peer-to-peer",
+    "wasm",
+    "web",
+    "webassembly",
+    "webrtc",
+]
 description = "WebRTC for libp2p under WASM environment"
-repository = "https://github.com/libp2p/rust-libp2p"
-license = "MIT"
 edition = "2021"
+keywords = ["libp2p", "networking", "peer-to-peer"]
+license = "MIT"
+name = "libp2p-webrtc-websys"
+repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
-keywords = ["peer-to-peer", "libp2p", "networking"]
-categories = ["network-programming", "asynchronous"]
+version = "0.1.0-alpha"
 
 [dependencies]
-async-trait = "0.1"
 asynchronous-codec = "0.6.2"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
+getrandom = { version = "0.2.9", features = ["js"] }
 hex = "0.4"
+js-sys = { version = "0.3" }
 libp2p-core = { workspace = true }
-libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
-sha2 = "0.10.7"
-multihash = { workspace = true }
+log = "0.4.19"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
-rcgen = "0.10.0"
+send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde = { version = "1.0", features = ["derive"] }
+sha2 = "0.10.7"
 thiserror = "1"
 tinytemplate = "1.2"
-log = "0.4.19"
-
-js-sys = { version = "0.3" }
-getrandom = { version = "0.2.9", features = ["js"] }
-regex = { version = "1.9" }
-send_wrapper = { version = "0.6.0", features = ["futures"] }
 wasm-bindgen = { version = "0.2.87" }
 wasm-bindgen-futures = { version = "0.4.37" }
 web-sys = { version = "0.3.64", features = [
     "MessageEvent",
+    "RtcCertificate",
+    "RtcConfiguration",
+    "RtcDataChannel",
+    "RtcDataChannelEvent",
+    "RtcDataChannelInit",
+    "RtcDataChannelState",
+    "RtcDataChannelType",
     "RtcPeerConnection",
-    "RtcSignalingState",
+    "RtcPeerConnectionIceEvent",
     "RtcSdpType",
     "RtcSessionDescription",
     "RtcSessionDescriptionInit",
-    "RtcPeerConnectionIceEvent",
-    "RtcIceCandidate",
-    "RtcDataChannel",
-    "RtcDataChannelEvent",
-    "RtcCertificate",
-    "RtcConfiguration",
-    "RtcDataChannelInit",
-    "RtcDataChannelType",
-    "RtcDataChannelState",
-    "RtcCertificateExpiration",
-    "RtcIceCandidate",           # so we can set ufrag
-    "RtcIceCandidateInit",
 ] }
 
 [dev-dependencies]
-anyhow = "1.0"
 hex-literal = "0.4"
-libp2p-swarm = { workspace = true, features = ["macros"] }
-libp2p-ping = { workspace = true }
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1"
-quickcheck = "1.0.3"
