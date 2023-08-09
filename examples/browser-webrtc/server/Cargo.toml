@@ -1,0 +1,30 @@
+[package]
+authors = ["Doug Anderson <douganderson444@peerpiper.io>"]
+edition = "2021"
+license = "MIT"
+name = "webrtc-example-server"
+version = "0.1.0"
+
+[[bin]]
+name = "webrtc-example-server-bin"
+path = "src/bin/main.rs"
+
+[dependencies]
+anyhow = "1.0.72"
+axum = "0.6.19"
+env_logger = "0.10"
+futures = "0.3.28"
+libp2p-core = { workspace = true, features = [] }
+libp2p-identify = { workspace = true }
+libp2p-identity = { workspace = true, features = ["ed25519", "peerid"] }
+libp2p-ping = { workspace = true }
+libp2p-relay = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
+libp2p-webrtc = { workspace = true, features = ["tokio"] }
+multiaddr = { workspace = true }
+rand = "0.8"
+tokio = { version = "1.29", features = ["macros", "net", "rt", "signal"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["compat"] }
+tower-http = { version = "0.4.0", features = ["cors"] }                    # axum middleware
+void = "1"
