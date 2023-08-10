@@ -25,6 +25,7 @@ use core::cmp;
 use core::fmt;
 use core::hash;
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
+#[cfg(feature = "rand")]
 use rand::RngCore;
 use std::convert::TryFrom;
 use zeroize::Zeroize;
@@ -34,6 +35,7 @@ pub struct Keypair(ed25519::Keypair);
 
 impl Keypair {
     /// Generate a new random Ed25519 keypair.
+    #[cfg(feature = "rand")]
     pub fn generate() -> Keypair {
         Keypair::from(SecretKey::generate())
     }
@@ -202,6 +204,7 @@ impl fmt::Debug for SecretKey {
 
 impl SecretKey {
     /// Generate a new Ed25519 secret key.
+    #[cfg(feature = "rand")]
     pub fn generate() -> SecretKey {
         let mut bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut bytes);
@@ -235,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_keypair_encode_decode() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
@@ -246,6 +250,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_keypair_from_secret() {
         fn prop() -> bool {
             let kp1 = Keypair::generate();
@@ -257,6 +262,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn ed25519_signature() {
         let kp = Keypair::generate();
         let pk = kp.public();
