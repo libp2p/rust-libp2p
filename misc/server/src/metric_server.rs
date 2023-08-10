@@ -3,7 +3,10 @@ use prometheus_client::registry::Registry;
 
 use std::sync::{Arc, Mutex};
 
-pub async fn run(registry: Registry, path: String) -> std::result::Result<(), std::io::Error> {
+pub(crate) async fn run(
+    registry: Registry,
+    path: String,
+) -> std::result::Result<(), std::io::Error> {
     // tide::log::start();
 
     let mut app = tide::with_state(State {

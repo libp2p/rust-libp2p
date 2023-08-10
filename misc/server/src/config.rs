@@ -5,30 +5,30 @@ use std::path::Path;
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Config {
-    pub identity: Identity,
-    pub addresses: Addresses,
+pub(crate) struct Config {
+    pub(crate) identity: Identity,
+    pub(crate) addresses: Addresses,
 }
 
 impl Config {
-    pub fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
+    pub(crate) fn from_file(path: &Path) -> Result<Self, Box<dyn Error>> {
         Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
     }
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Identity {
+pub(crate) struct Identity {
     #[serde(rename = "PeerID")]
-    pub peer_id: String,
-    pub priv_key: String,
+    pub(crate) peer_id: String,
+    pub(crate) priv_key: String,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Addresses {
-    pub swarm: Vec<Multiaddr>,
-    pub append_announce: Vec<Multiaddr>,
+pub(crate) struct Addresses {
+    pub(crate) swarm: Vec<Multiaddr>,
+    pub(crate) append_announce: Vec<Multiaddr>,
 }
 
 impl zeroize::Zeroize for Config {

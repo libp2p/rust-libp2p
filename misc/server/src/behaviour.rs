@@ -17,16 +17,20 @@ const BOOTNODES: [&str; 4] = [
 
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "Event", event_process = false)]
-pub struct Behaviour {
+pub(crate) struct Behaviour {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-    pub kademlia: Toggle<Kademlia<MemoryStore>>,
+    pub(crate) kademlia: Toggle<Kademlia<MemoryStore>>,
     autonat: Toggle<autonat::Behaviour>,
 }
 
 impl Behaviour {
-    pub fn new(pub_key: identity::PublicKey, enable_kademlia: bool, enable_autonat: bool) -> Self {
+    pub(crate) fn new(
+        pub_key: identity::PublicKey,
+        enable_kademlia: bool,
+        enable_autonat: bool,
+    ) -> Self {
         let kademlia = if enable_kademlia {
             let mut kademlia_config = KademliaConfig::default();
             // Instantly remove records and provider records.
@@ -75,7 +79,7 @@ impl Behaviour {
 }
 
 #[derive(Debug)]
-pub enum Event {
+pub(crate) enum Event {
     Ping(ping::Event),
     Identify(Box<identify::Event>),
     Relay(relay::Event),
