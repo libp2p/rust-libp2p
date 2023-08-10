@@ -148,7 +148,7 @@ pub struct Handler {
     /// Tracks the state of our handler.
     state: State,
     /// The peer we are connected to.
-    peer: PeerId,
+    _peer: PeerId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,7 +168,7 @@ impl Handler {
     /// Builds a new [`Handler`] with the given configuration.
     pub fn new(config: Config, peer: PeerId) -> Self {
         Handler {
-            peer,
+            _peer: peer,
             config,
             interval: Delay::new(Duration::new(0, 0)),
             pending_errors: VecDeque::with_capacity(2),
@@ -262,7 +262,7 @@ impl ConnectionHandler for Handler {
                     self.inbound = None;
                 }
                 Poll::Ready(Ok(stream)) => {
-                    tracing::trace!("answered inbound ping from {}", self.peer);
+                    tracing::trace!("answered inbound ping from peer");
 
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
@@ -295,7 +295,7 @@ impl ConnectionHandler for Handler {
                         break;
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
-                        tracing::event!(tracing::Level::TRACE, peer = %self.peer, ?rtt);
+                        tracing::event!(tracing::Level::TRACE, ?rtt);
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
