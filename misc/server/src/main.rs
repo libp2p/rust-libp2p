@@ -1,4 +1,5 @@
 use base64::Engine;
+use clap::Parser;
 use futures::executor::block_on;
 use futures::future::Either;
 use futures::stream::StreamExt;
@@ -28,7 +29,6 @@ use std::str::FromStr;
 use std::task::Poll;
 use std::thread;
 use std::time::Duration;
-use structopt::StructOpt;
 use zeroize::Zeroizing;
 
 mod behaviour;
@@ -37,30 +37,30 @@ mod metric_server;
 
 const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p server", about = "A rust-libp2p server binary.")]
-struct Opt {
+#[derive(Debug, Parser)]
+#[clap(name = "libp2p server", about = "A rust-libp2p server binary.")]
+struct Opts {
     /// Path to IPFS config file.
-    #[structopt(long)]
+    #[clap(long)]
     config: PathBuf,
 
     /// Metric endpoint path.
-    #[structopt(long, default_value = "/metrics")]
+    #[clap(long, default_value = "/metrics")]
     metrics_path: String,
 
     /// Whether to run the libp2p Kademlia protocol and join the IPFS DHT.
-    #[structopt(long)]
+    #[clap(long)]
     enable_kademlia: bool,
 
     /// Whether to run the libp2p Autonat protocol.
-    #[structopt(long)]
+    #[clap(long)]
     enable_autonat: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let opt = Opt::from_args();
+    let opt = Opts::parse();
 
     let config = Zeroizing::new(config::Config::from_file(opt.config.as_path())?);
 
