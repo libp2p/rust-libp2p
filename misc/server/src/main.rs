@@ -12,12 +12,10 @@ use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::multiaddr::Protocol;
 use libp2p::noise;
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp;
 use libp2p::yamux;
-use libp2p::Multiaddr;
 use libp2p::Transport;
 use log::{debug, info};
 use prometheus_client::metrics::info::Info;
@@ -118,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if config.addresses.swarm.is_empty() {
         log::warn!("No listen addresses configured.");
     }
-    for address in config.addresses.swarm.iter().filter(filter_out_ipv6_quic) {
+    for address in &config.addresses.swarm {
         match swarm.listen_on(address.clone()) {
             Ok(_) => {}
             Err(e @ libp2p::TransportError::MultiaddrNotSupported(_)) => {
@@ -130,12 +128,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if config.addresses.append_announce.is_empty() {
         log::warn!("No external addresses configured.");
     }
-    for address in config
-        .addresses
-        .append_announce
-        .iter()
-        .filter(filter_out_ipv6_quic)
-    {
+    for address in &config.addresses.append_announce {
         swarm.add_external_address(address.clone())
     }
     log::info!(
@@ -217,24 +210,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-}
-
-fn filter_out_ipv6_quic(m: &&Multiaddr) -> bool {
-    let mut iter = m.iter();
-
-    let is_ipv6_quic = matches!(
-        (iter.next(), iter.next(), iter.next()),
-        (
-            Some(Protocol::Ip6(_)),
-            Some(Protocol::Udp(_)),
-            Some(Protocol::Quic | Protocol::QuicV1)
-        )
-    );
-
-    if is_ipv6_quic {
-        log::warn!("Ignoring IPv6 QUIC address {m}. Currently unsupported. See https://github.com/libp2p/rust-libp2p/issues/4165.");
-        return false;
-    }
-
-    true
 }
