@@ -54,6 +54,7 @@ use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
@@ -83,8 +84,8 @@ impl ConnectionId {
     }
 }
 
-impl fmt::Display for ConnectionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ConnectionId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
 }

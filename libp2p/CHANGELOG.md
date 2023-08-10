@@ -6,8 +6,12 @@
 - Add `json` feature which exposes `request_response::json`.
   See [PR 4188].
 
+- Add `libp2p-memory-connection-limits` providing memory usage based connection limit configurations.
+  See [PR 4281].
+
 [PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
 [PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+[PR 4281]: https://github.com/libp2p/rust-libp2p/pull/4281
 
 ## 0.52.1
 
