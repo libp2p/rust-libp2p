@@ -11,18 +11,18 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = "1.12.0"
 base64 = "0.21"
 clap = { version = "4.3.12", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3"
 futures-timer = "3"
-libp2p = { path = "../../libp2p", features = ["autonat", "dns", "async-std", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros"] }
-libp2p-quic = { workspace = true, features = ["async-std"] }
+hyper = { version = "0.14", features = ["server", "tcp", "http1"] }
+libp2p = { path = "../../libp2p", features = ["autonat", "dns", "tokio", "noise", "tcp", "yamux", "identify", "kad", "ping", "relay", "metrics", "rsa", "macros"] }
+libp2p-quic = { workspace = true, features = ["tokio"] }
 log = "0.4"
 prometheus-client = "0.21.2"
 serde = "1.0.183"
 serde_derive = "1.0.125"
 serde_json = "1.0"
-tide = "0.16"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 zeroize = "1"
