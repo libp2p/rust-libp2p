@@ -295,7 +295,7 @@ impl ConnectionHandler for Handler {
                         break;
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
-                        tracing::event!(tracing::Level::TRACE, peer = %self.peer, ms = rtt.as_millis());
+                        tracing::event!(tracing::Level::TRACE, peer = %self.peer, ?rtt);
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));

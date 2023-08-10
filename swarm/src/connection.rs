@@ -156,7 +156,7 @@ where
 
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
-    error_span: Span,
+    span: Span,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -184,7 +184,7 @@ where
         mut handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
-        error_span: Span,
+        span: Span,
     ) -> Self {
         let initial_protocols = gather_supported_protocols(&handler);
 
@@ -204,7 +204,7 @@ where
             requested_substreams: Default::default(),
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
-            error_span,
+            span,
         }
     }
 
@@ -236,10 +236,10 @@ where
             substream_upgrade_protocol_override,
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
-            error_span,
+            span,
         } = self.get_mut();
 
-        let _guard = error_span.enter();
+        let _guard = span.enter();
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
@@ -716,7 +716,7 @@ mod tests {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
             let alive_substream_counter = Arc::new(());
-            let span = tracing::error_span!("test");
+            let span = tracing::Span::none();
             let mut connection = Connection::new(
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
@@ -742,7 +742,7 @@ mod tests {
 
     #[test]
     fn outbound_stream_timeout_starts_on_request() {
-        let span = tracing::error_span!("test");
+        let span = tracing::Span::none();
         let upgrade_timeout = Duration::from_secs(1);
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
@@ -767,7 +767,7 @@ mod tests {
 
     #[test]
     fn propagates_changes_to_supported_inbound_protocols() {
-        let span = tracing::error_span!("test");
+        let span = tracing::Span::none();
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
@@ -807,7 +807,7 @@ mod tests {
 
     #[test]
     fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
-        let span = tracing::error_span!("test");
+        let span = tracing::Span::none();
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),

@@ -27,6 +27,7 @@ use libp2p::{
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
+use tracing::log;
 use std::error::Error;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
@@ -41,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    log::info!("Local peer id: {:?}", local_peer_id);
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
@@ -62,13 +63,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {addr}")
+        log::info!("Dialed {}", addr);
     }
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(event) => println!("{event:?}"),
+            SwarmEvent::NewListenAddr { address, .. } => log::info!("Listening on {}", address),
+            SwarmEvent::Behaviour(event) => log::info!("{:?}", event),
             _ => {}
         }
     }
