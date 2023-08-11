@@ -1,3 +1,10 @@
+## 0.9.2-alpha
+
+- Add support for reusing an existing socket when dialing localhost address.
+  See [PR 4304].
+
+[PR 4304]: https://github.com/libp2p/rust-libp2p/pull/4304
+
 ## 0.9.1-alpha
 
 - Allow listening on ipv4 and ipv6 separately.
