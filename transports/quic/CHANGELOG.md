@@ -1,4 +1,4 @@
-## 0.9.1-alpha - unreleased
+## 0.9.1-alpha
 
 - Allow listening on ipv4 and ipv6 separately.
   See [PR 4289].
