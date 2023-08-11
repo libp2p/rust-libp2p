@@ -432,7 +432,7 @@ async fn test_local_listener_reuse() {
         .unwrap();
 
     // wait until a listener reports a loopback address
-    let a_addr = 'outer: loop {
+    let a_listen_addr = 'outer: loop {
         let ev = a_transport.next().await.unwrap();
         let listen_addr = ev.into_new_address().unwrap();
         for proto in listen_addr.iter() {
@@ -447,14 +447,14 @@ async fn test_local_listener_reuse() {
     // below will panic due to an unexpected event.
     poll_fn(|cx| {
         let mut pinned = Pin::new(&mut a_transport);
-        while let Poll::Ready(e) = pinned.as_mut().poll(cx) {}
+        while let Poll::Ready(_) = pinned.as_mut().poll(cx) {}
         Poll::Ready(())
     })
     .await;
 
     let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
-    assert_eq!(send_back_addr, a_addr);
+    assert_eq!(send_back_addr, a_listen_addr);
 }
 
 async fn smoke<P: Provider>() {
