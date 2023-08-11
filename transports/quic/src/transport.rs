@@ -39,7 +39,7 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
@@ -159,7 +159,9 @@ impl<P: Provider> GenTransport<P> {
             })
             .filter(|l| {
                 if socket_addr.ip().is_loopback() {
-                    l.supports_loopback
+                    l.listening_addresses
+                        .iter()
+                        .any(|ip_addr| ip_addr.is_loopback())
                 } else {
                     true
                 }
@@ -434,8 +436,7 @@ struct Listener<P: Provider> {
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
 
-    /// `true` if a listener supports loopback interface
-    supports_loopback: bool,
+    listening_addresses: HashSet<IpAddr>,
 }
 
 impl<P: Provider> Listener<P> {
@@ -448,17 +449,15 @@ impl<P: Provider> Listener<P> {
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
-        let mut supports_loopback = false;
+        let mut listening_addresses = HashSet::new();
         let local_addr = socket.local_addr()?;
         if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
             if_watcher = None;
+            listening_addresses.insert(local_addr.ip());
             let ma = socketaddr_to_multiaddr(&local_addr, version);
-            if local_addr.ip().is_loopback() {
-                supports_loopback = true
-            }
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -479,7 +478,7 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             close_listener_waker: None,
-            supports_loopback,
+            listening_addresses,
         })
     }
 
@@ -527,9 +526,7 @@ impl<P: Provider> Listener<P> {
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
                         log::debug!("New listen address: {listen_addr}");
-                        if inet.addr().is_loopback() {
-                            self.supports_loopback = true;
-                        }
+                        self.listening_addresses.insert(inet.addr());
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -541,6 +538,7 @@ impl<P: Provider> Listener<P> {
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
                         log::debug!("Expired listen address: {listen_addr}");
+                        self.listening_addresses.remove(&inet.addr());
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,

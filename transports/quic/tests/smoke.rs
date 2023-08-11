@@ -447,7 +447,7 @@ async fn test_local_listener_reuse() {
     // below will panic due to an unexpected event.
     poll_fn(|cx| {
         let mut pinned = Pin::new(&mut a_transport);
-        while let Poll::Ready(_) = pinned.as_mut().poll(cx) {}
+        while pinned.as_mut().poll(cx).is_ready() {}
         Poll::Ready(())
     })
     .await;
