@@ -103,6 +103,22 @@ impl<P> TcpTlsBuilder<P> {
     }
 }
 
+// Shortcuts
+#[cfg(all(feature = "tcp", feature = "noise", feature = "async-std"))]
+impl TcpTlsBuilder<AsyncStd> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
+        self.without_tls().with_noise()
+    }
+}
+#[cfg(all(feature = "tcp", feature = "noise", feature = "tokio"))]
+impl TcpTlsBuilder<Tokio> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
+        self.without_tls().with_noise()
+    }
+}
+
 #[cfg(feature = "tcp")]
 pub struct TcpNoiseBuilder<P, A> {
     config: libp2p_tcp::Config,
@@ -110,6 +126,7 @@ pub struct TcpNoiseBuilder<P, A> {
     phantom: PhantomData<(P, A)>,
 }
 
+#[cfg(feature = "tcp")]
 macro_rules! construct_relay_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
         RelayBuilder {
@@ -263,6 +280,34 @@ impl<P, T> RelayTlsBuilder<P, T> {
             keypair: self.keypair,
             phantom: PhantomData,
         }
+    }
+}
+
+// Shortcuts
+#[cfg(all(feature = "relay", feature = "noise", feature = "async-std"))]
+impl<T: AuthenticatedMultiplexedTransport> RelayTlsBuilder<AsyncStd, T> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(
+        self,
+    ) -> OtherTransportBuilder<
+        AsyncStd,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_relay::client::Behaviour,
+    > {
+        self.without_tls().with_noise()
+    }
+}
+#[cfg(all(feature = "relay", feature = "noise", feature = "tokio"))]
+impl<T: AuthenticatedMultiplexedTransport> RelayTlsBuilder<Tokio, T> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(
+        self,
+    ) -> OtherTransportBuilder<
+        Tokio,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_relay::client::Behaviour,
+    > {
+        self.without_tls().with_noise()
     }
 }
 
