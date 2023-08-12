@@ -21,13 +21,10 @@
 #![doc = include_str!("../README.md")]
 
 use async_std::io;
-use futures::{future::Either, prelude::*, select};
+use futures::{prelude::*, select};
 use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity, mdns, noise,
-    swarm::NetworkBehaviour,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    core::muxing::StreamMuxerBox, gossipsub, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent,
+    Transport,
 };
 use libp2p_quic as quic;
 use std::collections::hash_map::DefaultHasher;
@@ -44,58 +41,54 @@ struct MyBehaviour {
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Create a random PeerId
-    let id_keys = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(id_keys.public());
-    println!("Local peer id: {local_peer_id}");
-
-    // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
-        .upgrade(upgrade::Version::V1Lazy)
-        .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
-        .multiplex(yamux::Config::default())
-        .timeout(std::time::Duration::from_secs(20))
-        .boxed();
-    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_async_std()
+        .with_tcp()
+        .without_tls()
+        .with_noise()
+        .with_other_transport(|key| {
+            quic::async_std::Transport::new(quic::Config::new(&key))
+                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .boxed();
+        .without_any_other_transports()
+        .with_behaviour(|key| {
+            // To content-address message, we can take the hash of message and use it as an ID.
+            let message_id_fn = |message: &gossipsub::Message| {
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                gossipsub::MessageId::from(s.finish().to_string())
+            };
 
-    // To content-address message, we can take the hash of message and use it as an ID.
-    let message_id_fn = |message: &gossipsub::Message| {
-        let mut s = DefaultHasher::new();
-        message.data.hash(&mut s);
-        gossipsub::MessageId::from(s.finish().to_string())
-    };
+            // Set a custom gossipsub configuration
+            let gossipsub_config = gossipsub::ConfigBuilder::default()
+                .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+                .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+                .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
+                .build()
+                .expect("Valid config");
 
-    // Set a custom gossipsub configuration
-    let gossipsub_config = gossipsub::ConfigBuilder::default()
-        .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
-        .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
-        .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
-        .build()
-        .expect("Valid config");
+            // build a gossipsub network behaviour
+            let gossipsub = gossipsub::Behaviour::new(
+                gossipsub::MessageAuthenticity::Signed(key.clone()),
+                gossipsub_config,
+            )
+            .expect("Correct configuration");
 
-    // build a gossipsub network behaviour
-    let mut gossipsub = gossipsub::Behaviour::new(
-        gossipsub::MessageAuthenticity::Signed(id_keys),
-        gossipsub_config,
-    )
-    .expect("Correct configuration");
+            let mdns =
+                mdns::async_io::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())
+                    // TODO: How could one handle the unwrap here? The closure does not allow returning an error.
+                    .unwrap();
+            MyBehaviour { gossipsub, mdns }
+        })
+        .build();
+
     // Create a Gossipsub topic
     let topic = gossipsub::IdentTopic::new("test-net");
     // subscribes to our topic
-    gossipsub.subscribe(&topic)?;
+    swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
 
-    // Create a Swarm to manage peers and events
-    let mut swarm = {
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let behaviour = MyBehaviour { gossipsub, mdns };
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
-    };
+    println!("Local peer id: {:?}", swarm.local_peer_id());
 
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
