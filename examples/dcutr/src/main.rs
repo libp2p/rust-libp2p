@@ -125,15 +125,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::builder::SwarmBuilder::new()
         .with_existing_identity(generate_ed25519(opts.secret_key_seed))
         .with_async_std()
-        .with_custom_tcp(tcp::Config::default().port_reuse(true).nodelay(true))
+        .with_tcp_config(tcp::Config::default().port_reuse(true).nodelay(true))
+        // TODO: shortcut
+        .without_tls()
+        .with_noise()
         .with_relay()
+        // TODO: shortcut
+        .without_tls()
+        .with_noise()
         .with_other_transport(|keypair| {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .no_more_other_transports()
+        .without_any_other_transports()
         .with_dns()
         .await
+        // TODO: shortcut
+        .without_websocket()
         .with_behaviour(|keypair, relay_behaviour| Behaviour {
             relay_client: relay_behaviour,
             ping: ping::Behaviour::new(ping::Config::new()),
