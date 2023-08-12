@@ -780,6 +780,11 @@ impl PeerScore {
         }
     }
 
+    /// Returns a scoring parameters for a topic if existent.
+    pub(crate) fn get_topic_params(&self, topic_hash: &TopicHash) -> Option<&TopicScoreParams> {
+        self.params.topics.get(topic_hash)
+    }
+
     /// Increments the "invalid message deliveries" counter for all scored topics the message
     /// is published in.
     fn mark_invalid_message_delivery(&mut self, peer_id: &PeerId, topic_hash: &TopicHash) {
