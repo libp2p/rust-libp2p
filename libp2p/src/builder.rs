@@ -430,8 +430,8 @@ pub struct DnsBuilder<P, T, R> {
 
 #[cfg(all(feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<AsyncStd, T, R> {
-    pub async fn with_dns(self) -> BehaviourBuilder<AsyncStd, R> {
-        BehaviourBuilder {
+    pub async fn with_dns(self) -> WebsocketBuilder<AsyncStd, R> {
+        WebsocketBuilder {
             keypair: self.keypair,
             relay_behaviour: self.relay_behaviour,
             // TODO: Timeout needed?
@@ -446,8 +446,8 @@ impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<AsyncStd, T, R> {
 
 #[cfg(all(feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<Tokio, T, R> {
-    pub fn with_dns(self) -> BehaviourBuilder<Tokio, R> {
-        BehaviourBuilder {
+    pub fn with_dns(self) -> WebsocketBuilder<Tokio, R> {
+        WebsocketBuilder {
             keypair: self.keypair,
             relay_behaviour: self.relay_behaviour,
             // TODO: Timeout needed?
@@ -459,13 +459,186 @@ impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<Tokio, T, R> {
     }
 }
 
-impl<P, T: AuthenticatedMultiplexedTransport, R> DnsBuilder<P, T, R> {
-    pub fn without_dns(self) -> BehaviourBuilder<P, R> {
+impl<P, T, R> DnsBuilder<P, T, R> {
+    pub fn without_dns(self) -> WebsocketBuilder<P, T, R> {
+        WebsocketBuilder {
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            // TODO: Timeout needed?
+            transport: self.transport,
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct WebsocketBuilder<P, T, R> {
+    transport: T,
+    relay_behaviour: R,
+    keypair: libp2p_identity::Keypair,
+    phantom: PhantomData<P>,
+}
+
+impl<P, T, R> WebsocketBuilder<P, T, R> {
+    pub fn with_websocket(self) -> WebsocketTlsBuilder<P, T, R> {
+        WebsocketTlsBuilder {
+            transport: self.transport,
+            relay_behaviour: self.relay_behaviour,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<P, T: AuthenticatedMultiplexedTransport, R> WebsocketBuilder<P, T, R> {
+    // TODO: This would allow one to build a faulty transport.
+    pub fn without_websocket(self) -> BehaviourBuilder<P, R> {
         BehaviourBuilder {
             keypair: self.keypair,
             relay_behaviour: self.relay_behaviour,
             // TODO: Timeout needed?
             transport: self.transport.boxed(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct WebsocketTlsBuilder<P, T, R> {
+    transport: T,
+    relay_behaviour: R,
+    keypair: libp2p_identity::Keypair,
+    phantom: PhantomData<P>,
+}
+
+#[cfg(feature = "relay")]
+impl<P, T> WebsocketTlsBuilder<P, T> {
+    #[cfg(feature = "tls")]
+    pub fn with_tls(self) -> WebsocketNoiseBuilder<P, T, Tls> {
+        WebsocketNoiseBuilder {
+            relay_behaviour: self.relay_behaviour,
+            transport: self.transport,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn without_tls(self) -> WebsocketNoiseBuilder<P, T, WithoutTls> {
+        WebsocketNoiseBuilder {
+            relay_behaviour: self.relay_behaviour,
+            transport: self.transport,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct WebsocketNoiseBuilder<P, T, R> {
+    transport: T,
+    relay_behaviour: R,
+    keypair: libp2p_identity::Keypair,
+    phantom: PhantomData<P>,
+}
+
+// TODO: This is for asyncstd only thus far.
+
+#[cfg(all(feature = "websocket", feature = "tls"))]
+impl<P, T: AuthenticatedMultiplexedTransport> WebsocketNoiseBuilder<P, T, Tls> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(
+        self,
+    ) -> BehaviourBuilder<
+        P,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_websocket::client::Behaviour,
+    > {
+        let websocket_transport = libp2p_websocket::WsConfig::new(
+            block_on(libp2p_dns::DnsConfig::system(
+                libp2p::tcp_async_io::Transport::new(libp2p_tcp::Config::default()),
+            ))
+            .unwrap(),
+        )
+        .upgrade(upgrade::Version::V1)
+        .authenticate(libp2p_core::upgrade::Map::new(
+            libp2p_core::upgrade::SelectUpgrade::new(
+                libp2p_tls::Config::new(&self.keypair).unwrap(),
+                libp2p_noise::Config::new(&self.keypair).unwrap(),
+            ),
+            |upgrade| match upgrade {
+                futures::future::Either::Left((peer_id, upgrade)) => {
+                    (peer_id, futures::future::Either::Left(upgrade))
+                }
+                futures::future::Either::Right((peer_id, upgrade)) => {
+                    (peer_id, futures::future::Either::Right(upgrade))
+                }
+            },
+        ))
+        .multiplex(libp2p_yamux::Config::default())
+        .timeout(Duration::from_secs(20));
+
+        BehaviourBuilder {
+            transport: websocket_transport
+                .or_transport(self.transport)
+                .map(|either, _| either.into_inner()),
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            phantom: PhantomData,
+        }
+    }
+    pub fn without_noise(
+        self,
+    ) -> BehaviourBuilder<
+        P,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_websocket::client::Behaviour,
+    > {
+        let websocket_transport = libp2p_websocket::WsConfig::new(
+            block_on(libp2p_dns::DnsConfig::system(
+                libp2p::tcp_async_io::Transport::new(libp2p_tcp::Config::default()),
+            ))
+            .unwrap(),
+        )
+        .upgrade(upgrade::Version::V1)
+        .authenticate(libp2p_tls::Config::new(&self.keypair).unwrap())
+        .multiplex(libp2p_yamux::Config::default())
+        .timeout(Duration::from_secs(20));
+
+        BehaviourBuilder {
+            transport: websocket_transport
+                .or_transport(self.transport)
+                .map(|either, _| either.into_inner()),
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "websocket")]
+impl<P, T: AuthenticatedMultiplexedTransport> WebsocketNoiseBuilder<P, T, WithoutTls> {
+    #[cfg(feature = "noise")]
+    pub fn with_noise(
+        self,
+    ) -> BehaviourBuilder<
+        P,
+        impl AuthenticatedMultiplexedTransport,
+        libp2p_websocket::client::Behaviour,
+    > {
+        let websocket_transport = libp2p_websocket::WsConfig::new(
+            block_on(libp2p_dns::DnsConfig::system(
+                libp2p::tcp_async_io::Transport::new(libp2p_tcp::Config::default()),
+            ))
+            .unwrap(),
+        )
+        .upgrade(upgrade::Version::V1)
+        .authenticate(libp2p_noise::Config::new(&self.keypair).unwrap())
+        .multiplex(libp2p_yamux::Config::default())
+        .timeout(Duration::from_secs(20));
+
+        BehaviourBuilder {
+            transport: websocket_transport
+                .or_transport(self.transport)
+                .map(|either, _| either.into_inner()),
+            keypair: self.keypair,
+            relay_behaviour: self.relay_behaviour,
             phantom: PhantomData,
         }
     }
