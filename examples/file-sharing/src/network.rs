@@ -45,18 +45,13 @@ pub(crate) async fn new(
     };
     let peer_id = id_keys.public().to_peer_id();
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&id_keys)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    // Build the Swarm, connecting the lower layer transport logic with the
-    // higher layer network behaviour logic.
-    let mut swarm = SwarmBuilder::with_async_std_executor(
-        transport,
-        ComposedBehaviour {
-            kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_existing_identity(id_keys)
+        .with_async_std()
+        .with_tcp()
+        .with_noise()
+        .with_behaviour(|key| ComposedBehaviour {
+            kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
             request_response: request_response::cbor::Behaviour::new(
                 [(
                     StreamProtocol::new("/file-exchange/1"),
@@ -64,10 +59,8 @@ pub(crate) async fn new(
                 )],
                 request_response::Config::default(),
             ),
-        },
-        peer_id,
-    )
-    .build();
+        })
+        .build();
 
     swarm
         .behaviour_mut()
