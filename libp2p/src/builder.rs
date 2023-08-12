@@ -1,4 +1,6 @@
 // TODO: Rename runtime to provider
+// TODO: Should we have a timeout on transport?
+
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
 
@@ -96,29 +98,30 @@ pub struct TcpNoiseBuilder<P, A> {
 }
 
 macro_rules! construct_relay_builder {
-    ($tcp:path, $auth:expr) => {
+    ($self:ident, $tcp:ident, $auth:expr) => {
         RelayBuilder {
-            transport: $tcp::Transport::new(Default::default())
+            transport: libp2p_tcp::$tcp::Transport::new(Default::default())
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 // TODO: Handle unwrap?
                 .authenticate($auth)
                 .multiplex(libp2p_yamux::Config::default())
                 .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
-            keypair: self.keypair,
+            keypair: $self.keypair,
             phantom: PhantomData,
         }
     };
 }
 
 macro_rules! impl_tcp_noise_builder {
-    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:path) => {
-        #[cfg(all(feature = "$runtimeKebabCase", feature = "tls"))]
+    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:ident) => {
+        #[cfg(all(feature = $runtimeKebabCase, feature = "tls"))]
         impl TcpNoiseBuilder<$runtimeCamelCase, Tls> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
                 self,
             ) -> RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport> {
                 construct_relay_builder!(
+                    self,
                     $tcp,
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
@@ -140,7 +143,11 @@ macro_rules! impl_tcp_noise_builder {
             pub fn without_noise(
                 self,
             ) -> RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport> {
-                construct_relay_builder!($tcp, libp2p_tls::Config::new(&self.keypair).unwrap())
+                construct_relay_builder!(
+                    self,
+                    $tcp,
+                    libp2p_tls::Config::new(&self.keypair).unwrap()
+                )
             }
         }
 
@@ -150,14 +157,18 @@ macro_rules! impl_tcp_noise_builder {
             pub fn with_noise(
                 self,
             ) -> RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport> {
-                construct_relay_builder!($tcp, libp2p_noise::Config::new(&self.keypair).unwrap())
+                construct_relay_builder!(
+                    self,
+                    $tcp,
+                    libp2p_noise::Config::new(&self.keypair).unwrap()
+                )
             }
         }
     };
 }
 
-impl_tcp_noise_builder!("async-std", AsyncStd, libp2p_tcp::async_io);
-impl_tcp_noise_builder!("tokio", Tokio, libp2p_tcp::tokio);
+impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
+impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
 pub enum Tls {}
 pub enum WithoutTls {}
@@ -229,12 +240,12 @@ pub struct RelayNoiseBuilder<P, T, A> {
 }
 
 macro_rules! construct_other_transport_builder {
-    ($auth:expr) => {
+    ($self:ident, $auth:expr) => {{
         let (relay_transport, relay_behaviour) =
-            libp2p_relay::client::new(self.keypair.public().to_peer_id());
+            libp2p_relay::client::new($self.keypair.public().to_peer_id());
 
         OtherTransportBuilder {
-            transport: self
+            transport: $self
                 .transport
                 .or_transport(
                     relay_transport
@@ -244,11 +255,11 @@ macro_rules! construct_other_transport_builder {
                         .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
                 )
                 .map(|either, _| either.into_inner()),
-            keypair: self.keypair,
+            keypair: $self.keypair,
             relay_behaviour,
             phantom: PhantomData,
         }
-    };
+    }};
 }
 
 #[cfg(all(feature = "relay", feature = "tls"))]
@@ -262,20 +273,23 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, Tls> {
         libp2p_relay::client::Behaviour,
     > {
         // TODO: Handle unwrap?
-        construct_other_transport_builder!(libp2p_core::upgrade::Map::new(
-            libp2p_core::upgrade::SelectUpgrade::new(
-                libp2p_tls::Config::new(&self.keypair).unwrap(),
-                libp2p_noise::Config::new(&self.keypair).unwrap(),
-            ),
-            |upgrade| match upgrade {
-                futures::future::Either::Left((peer_id, upgrade)) => {
-                    (peer_id, futures::future::Either::Left(upgrade))
-                }
-                futures::future::Either::Right((peer_id, upgrade)) => {
-                    (peer_id, futures::future::Either::Right(upgrade))
-                }
-            },
-        ))
+        construct_other_transport_builder!(
+            self,
+            libp2p_core::upgrade::Map::new(
+                libp2p_core::upgrade::SelectUpgrade::new(
+                    libp2p_tls::Config::new(&self.keypair).unwrap(),
+                    libp2p_noise::Config::new(&self.keypair).unwrap(),
+                ),
+                |upgrade| match upgrade {
+                    futures::future::Either::Left((peer_id, upgrade)) => {
+                        (peer_id, futures::future::Either::Left(upgrade))
+                    }
+                    futures::future::Either::Right((peer_id, upgrade)) => {
+                        (peer_id, futures::future::Either::Right(upgrade))
+                    }
+                },
+            )
+        )
     }
     pub fn without_noise(
         self,
@@ -284,7 +298,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, Tls> {
         impl AuthenticatedMultiplexedTransport,
         libp2p_relay::client::Behaviour,
     > {
-        construct_other_transport_builder!(libp2p_tls::Config::new(&self.keypair).unwrap())
+        construct_other_transport_builder!(self, libp2p_tls::Config::new(&self.keypair).unwrap())
     }
 }
 
@@ -298,7 +312,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayNoiseBuilder<P, T, WithoutTls
         impl AuthenticatedMultiplexedTransport,
         libp2p_relay::client::Behaviour,
     > {
-        construct_other_transport_builder!(libp2p_noise::Config::new(&self.keypair).unwrap())
+        construct_other_transport_builder!(self, libp2p_noise::Config::new(&self.keypair).unwrap())
     }
 }
 
@@ -347,15 +361,16 @@ pub struct DnsBuilder<P, T, R> {
 
 #[cfg(all(feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<AsyncStd, T, R> {
-    pub async fn with_dns(self) -> WebsocketBuilder<AsyncStd, R> {
+    pub async fn with_dns(
+        self,
+    ) -> WebsocketBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport, R> {
         WebsocketBuilder {
             keypair: self.keypair,
             relay_behaviour: self.relay_behaviour,
             // TODO: Timeout needed?
             transport: libp2p_dns::DnsConfig::system(self.transport)
                 .await
-                .expect("TODO: Handle")
-                .boxed(),
+                .expect("TODO: Handle"),
             phantom: PhantomData,
         }
     }
@@ -363,14 +378,12 @@ impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<AsyncStd, T, R> {
 
 #[cfg(all(feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport, R> DnsBuilder<Tokio, T, R> {
-    pub fn with_dns(self) -> WebsocketBuilder<Tokio, R> {
+    pub fn with_dns(self) -> WebsocketBuilder<Tokio, impl AuthenticatedMultiplexedTransport, R> {
         WebsocketBuilder {
             keypair: self.keypair,
             relay_behaviour: self.relay_behaviour,
             // TODO: Timeout needed?
-            transport: libp2p_dns::TokioDnsConfig::system(self.transport)
-                .expect("TODO: Handle")
-                .boxed(),
+            transport: libp2p_dns::TokioDnsConfig::system(self.transport).expect("TODO: Handle"),
             phantom: PhantomData,
         }
     }
@@ -426,9 +439,9 @@ pub struct WebsocketTlsBuilder<P, T, R> {
 }
 
 #[cfg(feature = "relay")]
-impl<P, T> WebsocketTlsBuilder<P, T> {
+impl<P, T, R> WebsocketTlsBuilder<P, T, R> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> WebsocketNoiseBuilder<P, T, Tls> {
+    pub fn with_tls(self) -> WebsocketNoiseBuilder<P, T, R, Tls> {
         WebsocketNoiseBuilder {
             relay_behaviour: self.relay_behaviour,
             transport: self.transport,
@@ -437,7 +450,7 @@ impl<P, T> WebsocketTlsBuilder<P, T> {
         }
     }
 
-    pub fn without_tls(self) -> WebsocketNoiseBuilder<P, T, WithoutTls> {
+    pub fn without_tls(self) -> WebsocketNoiseBuilder<P, T, R, WithoutTls> {
         WebsocketNoiseBuilder {
             relay_behaviour: self.relay_behaviour,
             transport: self.transport,
@@ -447,52 +460,53 @@ impl<P, T> WebsocketTlsBuilder<P, T> {
     }
 }
 
-pub struct WebsocketNoiseBuilder<P, T, R> {
+pub struct WebsocketNoiseBuilder<P, T, R, A> {
     transport: T,
     relay_behaviour: R,
     keypair: libp2p_identity::Keypair,
-    phantom: PhantomData<P>,
+    phantom: PhantomData<(P, A)>,
 }
 
 macro_rules! construct_behaviour_builder {
-    ($tcp:path, $auth:expr) => {
+    ($self:ident, $tcp:ident, $auth:expr) => {{
         let websocket_transport = libp2p_websocket::WsConfig::new(
-            block_on(libp2p_dns::DnsConfig::system($tcp::Transport::new(
-                libp2p_tcp::Config::default(),
-            )))
+            futures::executor::block_on(libp2p_dns::DnsConfig::system(
+                libp2p_tcp::$tcp::Transport::new(libp2p_tcp::Config::default()),
+            ))
             .unwrap(),
         )
-        .upgrade(upgrade::Version::V1)
+        .upgrade(libp2p_core::upgrade::Version::V1)
         .authenticate($auth)
         .multiplex(libp2p_yamux::Config::default())
-        .timeout(Duration::from_secs(20));
+        .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
 
         BehaviourBuilder {
             transport: websocket_transport
-                .or_transport(self.transport)
-                .map(|either, _| either.into_inner()),
-            keypair: self.keypair,
-            relay_behaviour: self.relay_behaviour,
+                .or_transport($self.transport)
+                .map(|either, _| either.into_inner())
+                .boxed(),
+            keypair: $self.keypair,
+            relay_behaviour: $self.relay_behaviour,
             phantom: PhantomData,
         }
-    };
+    }};
 }
 
 macro_rules! impl_websocket_noise_builder {
-    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:path) => {
-        #[cfg(all(feature = "$runtimeKebabCase", feature = "websocket", feature = "tls"))]
-        impl<T: AuthenticatedMultiplexedTransport>
-            WebsocketNoiseBuilder<$runtimeCamelCase, T, Tls>
+    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:ident) => {
+        #[cfg(all(
+                                                                    feature = $runtimeKebabCase,
+                                                                    feature = "dns",
+                                                                    feature = "websocket",
+                                                                    feature = "tls"
+                                                                ))]
+        impl<T: AuthenticatedMultiplexedTransport, R>
+            WebsocketNoiseBuilder<$runtimeCamelCase, T, R, Tls>
         {
             #[cfg(feature = "noise")]
-            pub fn with_noise(
-                self,
-            ) -> BehaviourBuilder<
-                P,
-                impl AuthenticatedMultiplexedTransport,
-                libp2p_websocket::client::Behaviour,
-            > {
+            pub fn with_noise(self) -> BehaviourBuilder<$runtimeCamelCase, R> {
                 construct_behaviour_builder!(
+                    self,
                     $tcp,
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
@@ -510,28 +524,23 @@ macro_rules! impl_websocket_noise_builder {
                     )
                 )
             }
-            pub fn without_noise(
-                self,
-            ) -> BehaviourBuilder<
-                P,
-                impl AuthenticatedMultiplexedTransport,
-                libp2p_websocket::client::Behaviour,
-            > {
-                construct_behaviour_builder!($tcp, libp2p_tls::Config::new(&self.keypair).unwrap())
+            pub fn without_noise(self) -> BehaviourBuilder<$runtimeCamelCase, R> {
+                construct_behaviour_builder!(
+                    self,
+                    $tcp,
+                    libp2p_tls::Config::new(&self.keypair).unwrap()
+                )
             }
         }
 
-        #[cfg(all(feature = "$runtimeKebabCase", feature = "websocket"))]
-        impl<P, T: AuthenticatedMultiplexedTransport> WebsocketNoiseBuilder<P, T, WithoutTls> {
+        #[cfg(all(feature = "$runtimeKebabCase", feature = "dns", feature = "websocket"))]
+        impl<T: AuthenticatedMultiplexedTransport, R>
+            WebsocketNoiseBuilder<$runtimeCamelCase, T, R, WithoutTls>
+        {
             #[cfg(feature = "noise")]
-            pub fn with_noise(
-                self,
-            ) -> BehaviourBuilder<
-                P,
-                impl AuthenticatedMultiplexedTransport,
-                libp2p_websocket::client::Behaviour,
-            > {
+            pub fn with_noise(self) -> BehaviourBuilder<$runtimeCamelCase, R> {
                 construct_behaviour_builder!(
+                    self,
                     $tcp,
                     libp2p_noise::Config::new(&self.keypair).unwrap(),
                 )
@@ -540,8 +549,8 @@ macro_rules! impl_websocket_noise_builder {
     };
 }
 
-impl_websocket_noise_builder!("async-std", AsyncStd, libp2p_tcp::async_io);
-impl_websocket_noise_builder!("tokio", Tokio, libp2p_tcp::tokio);
+impl_websocket_noise_builder!("async-std", AsyncStd, async_io);
+impl_websocket_noise_builder!("tokio", Tokio, tokio);
 
 pub struct BehaviourBuilder<P, R> {
     keypair: libp2p_identity::Keypair,
@@ -659,6 +668,7 @@ mod tests {
             .without_relay()
             .without_any_other_transports()
             .without_dns()
+            .without_websocket()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
     }
@@ -690,6 +700,7 @@ mod tests {
             .with_noise()
             .without_any_other_transports()
             .without_dns()
+            .without_websocket()
             .with_behaviour(|_, relay| Behaviour {
                 dummy: libp2p_swarm::dummy::Behaviour,
                 relay,
@@ -715,6 +726,7 @@ mod tests {
             .without_relay()
             .without_any_other_transports()
             .with_dns()
+            .without_websocket()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
     }
@@ -735,6 +747,33 @@ mod tests {
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .without_any_other_transports()
             .without_dns()
+            .without_websocket()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "dns",
+        feature = "websocket",
+    ))]
+    fn tcp_websocket() {
+        let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .with_tls()
+            .with_noise()
+            .without_relay()
+            .without_any_other_transports()
+            .without_dns()
+            .with_websocket()
+            .with_tls()
+            .with_noise()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .build();
     }
