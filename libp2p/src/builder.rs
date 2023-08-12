@@ -218,6 +218,27 @@ impl<P, T> RelayBuilder<P, T> {
     }
 }
 
+// Shortcuts
+impl<P, T: AuthenticatedMultiplexedTransport> RelayBuilder<P, T> {
+    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
+    ) -> OtherTransportBuilder<P, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour> {
+        self.without_relay().with_other_transport(constructor)
+    }
+
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
+    ) -> Builder<P, B> {
+        self.without_relay()
+            .without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+
 #[cfg(feature = "relay")]
 pub struct RelayTlsBuilder<P, T> {
     transport: T,
@@ -252,6 +273,7 @@ pub struct RelayNoiseBuilder<P, T, A> {
     phantom: PhantomData<(P, A)>,
 }
 
+#[cfg(feature = "relay")]
 macro_rules! construct_other_transport_builder {
     ($self:ident, $auth:expr) => {{
         let (relay_transport, relay_behaviour) =
@@ -414,6 +436,29 @@ impl<P, T, R> DnsBuilder<P, T, R> {
     }
 }
 
+// Shortcuts
+#[cfg(feature = "relay")]
+impl<P, T: AuthenticatedMultiplexedTransport> DnsBuilder<P, T, libp2p_relay::client::Behaviour> {
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
+    ) -> Builder<P, B> {
+        self.without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+impl<P, T: AuthenticatedMultiplexedTransport> DnsBuilder<P, T, NoRelayBehaviour> {
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
+    ) -> Builder<P, B> {
+        self.without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+
 pub struct WebsocketBuilder<P, T, R> {
     transport: T,
     relay_behaviour: R,
@@ -421,6 +466,7 @@ pub struct WebsocketBuilder<P, T, R> {
     phantom: PhantomData<P>,
 }
 
+#[cfg(feature = "websocket")]
 impl<P, T, R> WebsocketBuilder<P, T, R> {
     pub fn with_websocket(self) -> WebsocketTlsBuilder<P, T, R> {
         WebsocketTlsBuilder {
@@ -444,6 +490,7 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> WebsocketBuilder<P, T, R> {
     }
 }
 
+#[cfg(feature = "websocket")]
 pub struct WebsocketTlsBuilder<P, T, R> {
     transport: T,
     relay_behaviour: R,
@@ -451,7 +498,7 @@ pub struct WebsocketTlsBuilder<P, T, R> {
     phantom: PhantomData<P>,
 }
 
-#[cfg(feature = "relay")]
+#[cfg(feature = "websocket")]
 impl<P, T, R> WebsocketTlsBuilder<P, T, R> {
     #[cfg(feature = "tls")]
     pub fn with_tls(self) -> WebsocketNoiseBuilder<P, T, R, Tls> {
@@ -473,6 +520,7 @@ impl<P, T, R> WebsocketTlsBuilder<P, T, R> {
     }
 }
 
+#[cfg(feature = "websocket")]
 pub struct WebsocketNoiseBuilder<P, T, R, A> {
     transport: T,
     relay_behaviour: R,
@@ -480,6 +528,7 @@ pub struct WebsocketNoiseBuilder<P, T, R, A> {
     phantom: PhantomData<(P, A)>,
 }
 
+#[cfg(feature = "websocket")]
 macro_rules! construct_behaviour_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {{
         let websocket_transport = libp2p_websocket::WsConfig::new(
@@ -509,6 +558,7 @@ macro_rules! impl_websocket_noise_builder {
     ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:ident) => {
         #[cfg(all(
                                                                     feature = $runtimeKebabCase,
+                                                                    feature = "websocket",
                                                                     feature = "dns",
                                                                     feature = "websocket",
                                                                     feature = "tls"
@@ -592,6 +642,9 @@ impl<P> BehaviourBuilder<P, NoRelayBehaviour> {
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
     ) -> Builder<P, B> {
+        // Discard `NoRelayBehaviour`.
+        let _ = self.relay_behaviour;
+
         Builder {
             behaviour: constructor(&self.keypair),
             keypair: self.keypair,
