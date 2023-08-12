@@ -47,9 +47,15 @@ pub struct TcpBuilder<P> {
     phantom: PhantomData<P>,
 }
 
+#[cfg(feature = "tcp")]
 impl<P> TcpBuilder<P> {
     pub fn with_tcp(self) -> TcpTlsBuilder<P> {
+        self.with_tcp_config(Default::default())
+    }
+
+    pub fn with_tcp_config(self, config: libp2p_tcp::Config) -> TcpTlsBuilder<P> {
         TcpTlsBuilder {
+            config,
             keypair: self.keypair,
             phantom: PhantomData,
         }
@@ -70,15 +76,19 @@ impl<P> TcpBuilder<P> {
     }
 }
 
+#[cfg(feature = "tcp")]
 pub struct TcpTlsBuilder<P> {
+    config: libp2p_tcp::Config,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<P>,
 }
 
+#[cfg(feature = "tcp")]
 impl<P> TcpTlsBuilder<P> {
     #[cfg(feature = "tls")]
     pub fn with_tls(self) -> TcpNoiseBuilder<P, Tls> {
         TcpNoiseBuilder {
+            config: self.config,
             keypair: self.keypair,
             phantom: PhantomData,
         }
@@ -86,13 +96,16 @@ impl<P> TcpTlsBuilder<P> {
 
     pub fn without_tls(self) -> TcpNoiseBuilder<P, WithoutTls> {
         TcpNoiseBuilder {
+            config: self.config,
             keypair: self.keypair,
             phantom: PhantomData,
         }
     }
 }
 
+#[cfg(feature = "tcp")]
 pub struct TcpNoiseBuilder<P, A> {
+    config: libp2p_tcp::Config,
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<(P, A)>,
 }
@@ -100,7 +113,7 @@ pub struct TcpNoiseBuilder<P, A> {
 macro_rules! construct_relay_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
         RelayBuilder {
-            transport: libp2p_tcp::$tcp::Transport::new(Default::default())
+            transport: libp2p_tcp::$tcp::Transport::new($self.config)
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 // TODO: Handle unwrap?
                 .authenticate($auth)
@@ -114,7 +127,7 @@ macro_rules! construct_relay_builder {
 
 macro_rules! impl_tcp_noise_builder {
     ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:ident) => {
-        #[cfg(all(feature = $runtimeKebabCase, feature = "tls"))]
+        #[cfg(all(feature = $runtimeKebabCase, feature = "tcp", feature = "tls"))]
         impl TcpNoiseBuilder<$runtimeCamelCase, Tls> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
