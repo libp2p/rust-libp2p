@@ -20,10 +20,9 @@
 
 use futures::StreamExt;
 use libp2p::{
-    core::transport::upgrade::Version,
-    identity, noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    ping, rendezvous,
+    swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
+    Multiaddr,
 };
 use std::time::Duration;
 
@@ -31,26 +30,22 @@ use std::time::Duration;
 async fn main() {
     env_logger::init();
 
-    let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
     let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
         .parse()
         .unwrap();
 
-    let mut swarm = SwarmBuilder::with_tokio_executor(
-        tcp::tokio::Transport::default()
-            .upgrade(Version::V1Lazy)
-            .authenticate(noise::Config::new(&key_pair).unwrap())
-            .multiplex(yamux::Config::default())
-            .boxed(),
-        MyBehaviour {
-            rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_tokio()
+        .with_tcp()
+        .with_noise()
+        .with_behaviour(|key| MyBehaviour {
+            rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
-        },
-        PeerId::from(key_pair.public()),
-    )
-    .build();
+        })
+        .build();
 
     // In production the external address should be the publicly facing IP address of the rendezvous point.
     // This address is recorded in the registration entry by the rendezvous point.
