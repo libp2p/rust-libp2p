@@ -23,11 +23,7 @@
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
-use libp2p::{
-    development_transport, identity,
-    swarm::{SwarmBuilder, SwarmEvent},
-    PeerId,
-};
+use libp2p::{swarm::SwarmEvent, PeerId};
 use std::{env, error::Error, time::Duration};
 
 const BOOTNODES: [&str; 4] = [
@@ -41,30 +37,33 @@ const BOOTNODES: [&str; 4] = [
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    // Create a random key for ourselves.
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_async_std()
+        .with_tcp()
+        .with_noise()
+        .without_relay()
+        .without_any_other_transports()
+        .with_dns()
+        .await
+        .without_websocket()
+        .with_behaviour(|key| {
+            // Create a Kademlia behaviour.
+            let mut cfg = KademliaConfig::default();
+            cfg.set_query_timeout(Duration::from_secs(5 * 60));
+            let store = MemoryStore::new(key.public().to_peer_id());
+            Kademlia::with_config(key.public().to_peer_id(), store, cfg)
+        })
+        .build();
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
-    let transport = development_transport(local_key).await?;
-
-    // Create a swarm to manage peers and events.
-    let mut swarm = {
-        // Create a Kademlia behaviour.
-        let mut cfg = KademliaConfig::default();
-        cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let store = MemoryStore::new(local_peer_id);
-        let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
-
-        // Add the bootnodes to the local routing table. `libp2p-dns` built
-        // into the `transport` resolves the `dnsaddr` when Kademlia tries
-        // to dial these nodes.
-        for peer in &BOOTNODES {
-            behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
-        }
-
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
-    };
+    // Add the bootnodes to the local routing table. `libp2p-dns` built
+    // into the `transport` resolves the `dnsaddr` when Kademlia tries
+    // to dial these nodes.
+    for peer in &BOOTNODES {
+        swarm
+            .behaviour_mut()
+            .add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
+    }
 
     // Order Kademlia to search for a peer.
     let to_search = env::args()

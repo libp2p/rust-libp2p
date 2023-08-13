@@ -1,6 +1,7 @@
 // TODO: Rename runtime to provider
 // TODO: Should we have a timeout on transport?
 // TODO: Be able to address `SwarmBuilder` configuration methods.
+// TODO: Shortcut WebsocketBuidler --with_behaviour--> BehaviourBuilder
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
@@ -606,7 +607,6 @@ macro_rules! impl_websocket_noise_builder {
                                                                     feature = $runtimeKebabCase,
                                                                     feature = "websocket",
                                                                     feature = "dns",
-                                                                    feature = "websocket",
                                                                     feature = "tls"
                                                                 ))]
         impl<T: AuthenticatedMultiplexedTransport, R>
@@ -642,16 +642,15 @@ macro_rules! impl_websocket_noise_builder {
             }
         }
 
-        #[cfg(all(feature = "$runtimeKebabCase", feature = "dns", feature = "websocket"))]
+        #[cfg(all(feature = $runtimeKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
         impl<T: AuthenticatedMultiplexedTransport, R>
             WebsocketNoiseBuilder<$runtimeCamelCase, T, R, WithoutTls>
         {
-            #[cfg(feature = "noise")]
             pub fn with_noise(self) -> BehaviourBuilder<$runtimeCamelCase, R> {
                 construct_behaviour_builder!(
                     self,
                     $tcp,
-                    libp2p_noise::Config::new(&self.keypair).unwrap(),
+                    libp2p_noise::Config::new(&self.keypair).unwrap()
                 )
             }
         }
