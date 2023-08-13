@@ -40,6 +40,7 @@ async fn main() {
         .with_tokio()
         .with_tcp()
         .with_noise()
+        .unwrap()
         .with_behaviour(|key| MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),

@@ -2558,6 +2558,7 @@ dependencies = [
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
+ "thiserror",
  "tokio",
 ]
 

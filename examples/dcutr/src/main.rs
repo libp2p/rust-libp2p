@@ -126,15 +126,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_existing_identity(generate_ed25519(opts.secret_key_seed))
         .with_async_std()
         .with_tcp_config(tcp::Config::default().port_reuse(true).nodelay(true))
-        .with_noise()
+        .with_noise()?
         .with_relay()
-        .with_noise()
+        .with_noise()?
         .with_other_transport(|keypair| {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
         .with_dns()
-        .await
+        .await?
         .with_behaviour(|keypair, relay_behaviour| Behaviour {
             relay_client: relay_behaviour,
             ping: ping::Behaviour::new(ping::Config::new()),

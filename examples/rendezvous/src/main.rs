@@ -25,17 +25,18 @@ use libp2p::{
     identify, ping, rendezvous,
     swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
 };
+use std::error::Error;
 use std::time::Duration;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let mut swarm = libp2p::SwarmBuilder::new()
         .with_new_identity()
         .with_tokio()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_behaviour(|key| MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
@@ -85,6 +86,8 @@ async fn main() {
             }
         }
     }
+
+    Ok(())
 }
 
 #[derive(NetworkBehaviour)]

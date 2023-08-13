@@ -25,12 +25,13 @@ use libp2p::{
     swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
     Multiaddr,
 };
+use std::error::Error;
 use std::time::Duration;
 
 const NAMESPACE: &str = "rendezvous";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
@@ -42,7 +43,7 @@ async fn main() {
         .with_new_identity()
         .with_tokio()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_behaviour(|key| MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),

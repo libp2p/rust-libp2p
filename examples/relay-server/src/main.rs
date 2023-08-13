@@ -51,8 +51,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_existing_identity(local_key)
         .with_async_std()
         .with_tcp()
-        .with_noise()
-        .without_relay()
+        .with_noise()?
         .with_other_transport(|keypair| {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))

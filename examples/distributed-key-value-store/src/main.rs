@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_new_identity()
         .with_async_std()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_behaviour(|key| MyBehaviour {
             kademlia: Kademlia::new(
                 key.public().to_peer_id(),

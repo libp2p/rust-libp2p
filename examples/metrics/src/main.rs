@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_new_identity()
         .with_async_std()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_behaviour(|key| Behaviour::new(key.public()))
         .build();
 

@@ -41,9 +41,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_new_identity()
         .with_async_std()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_dns()
-        .await
+        .await?
         .with_behaviour(|key| {
             // Create a Kademlia behaviour.
             let mut cfg = KademliaConfig::default();

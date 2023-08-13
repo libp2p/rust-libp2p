@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
         .with_dns()
-        .await
+        .await?
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)

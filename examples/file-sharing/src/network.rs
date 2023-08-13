@@ -47,7 +47,7 @@ pub(crate) async fn new(
         .with_existing_identity(id_keys)
         .with_async_std()
         .with_tcp()
-        .with_noise()
+        .with_noise()?
         .with_behaviour(|key| ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
             request_response: request_response::cbor::Behaviour::new(
