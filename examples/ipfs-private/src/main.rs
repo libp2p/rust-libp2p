@@ -24,38 +24,15 @@ use async_std::io;
 use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
-    core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
-    gossipsub, identify, identity,
+    core::{muxing::StreamMuxerBox, transport::upgrade::Version},
+    gossipsub, identify,
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Multiaddr, Transport,
 };
-use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
-
-/// Builds the transport that serves as a common ground for all connections.
-pub fn build_transport(
-    key_pair: identity::Keypair,
-    psk: Option<PreSharedKey>,
-) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_config = noise::Config::new(&key_pair).unwrap();
-    let yamux_config = yamux::Config::default();
-
-    let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
-    let maybe_encrypted = match psk {
-        Some(psk) => Either::Left(
-            base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
-        ),
-        None => Either::Right(base_transport),
-    };
-    maybe_encrypted
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise_config)
-        .multiplex(yamux_config)
-        .timeout(Duration::from_secs(20))
-        .boxed()
-}
+use std::{env, error::Error, fs, path::Path, str::FromStr};
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
 /// from the default $HOME/.ipfs
@@ -118,76 +95,77 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|text| PreSharedKey::from_str(&text))
         .transpose()?;
 
-    // Create a random PeerId
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("using random peer id: {local_peer_id:?}");
     if let Some(psk) = psk {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
     }
-
-    // Set up a an encrypted DNS-enabled TCP Transport over and Yamux protocol
-    let transport = build_transport(local_key.clone(), psk);
 
     // Create a Gosspipsub topic
     let gossipsub_topic = gossipsub::IdentTopic::new("chat");
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: gossipsub::Behaviour,
         identify: identify::Behaviour,
         ping: ping::Behaviour,
     }
 
-    enum MyBehaviourEvent {
-        Gossipsub(gossipsub::Event),
-        Identify(identify::Event),
-        Ping(ping::Event),
-    }
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_async_std()
+        .without_tcp()
+        .without_relay()
+        .with_other_transport(|key| {
+            let noise_config = noise::Config::new(&key).unwrap();
+            let yamux_config = yamux::Config::default();
 
-    impl From<gossipsub::Event> for MyBehaviourEvent {
-        fn from(event: gossipsub::Event) -> Self {
-            MyBehaviourEvent::Gossipsub(event)
-        }
-    }
+            let base_transport =
+                tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
+            let maybe_encrypted = match psk {
+                Some(psk) => Either::Left(
+                    base_transport
+                        .and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
+                ),
+                None => Either::Right(base_transport),
+            };
+            maybe_encrypted
+                .upgrade(Version::V1Lazy)
+                .authenticate(noise_config)
+                .multiplex(yamux_config)
+                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
+        })
+        .without_any_other_transports()
+        .with_dns()
+        .await
+        .without_websocket()
+        .with_behaviour(|key| {
+            let gossipsub_config = gossipsub::ConfigBuilder::default()
+                .max_transmit_size(262144)
+                .build()
+                .expect("valid config");
+            MyBehaviour {
+                gossipsub: gossipsub::Behaviour::new(
+                    gossipsub::MessageAuthenticity::Signed(key.clone()),
+                    gossipsub_config,
+                )
+                .expect("Valid configuration"),
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/ipfs/0.1.0".into(),
+                    key.public(),
+                )),
+                ping: ping::Behaviour::new(ping::Config::new()),
+            }
+        })
+        .build();
 
-    impl From<identify::Event> for MyBehaviourEvent {
-        fn from(event: identify::Event) -> Self {
-            MyBehaviourEvent::Identify(event)
-        }
-    }
+    println!("using random peer id: {:?}", swarm.local_peer_id());
 
-    impl From<ping::Event> for MyBehaviourEvent {
-        fn from(event: ping::Event) -> Self {
-            MyBehaviourEvent::Ping(event)
-        }
-    }
-
-    // Create a Swarm to manage peers and events
-    let mut swarm = {
-        let gossipsub_config = gossipsub::ConfigBuilder::default()
-            .max_transmit_size(262144)
-            .build()
-            .expect("valid config");
-        let mut behaviour = MyBehaviour {
-            gossipsub: gossipsub::Behaviour::new(
-                gossipsub::MessageAuthenticity::Signed(local_key.clone()),
-                gossipsub_config,
-            )
-            .expect("Valid configuration"),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/ipfs/0.1.0".into(),
-                local_key.public(),
-            )),
-            ping: ping::Behaviour::new(ping::Config::new()),
-        };
-
-        println!("Subscribing to {gossipsub_topic:?}");
-        behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
-    };
+    println!("Subscribing to {gossipsub_topic:?}");
+    swarm
+        .behaviour_mut()
+        .gossipsub
+        .subscribe(&gossipsub_topic)
+        .unwrap();
 
     // Reach out to other nodes if specified
     for to_dial in std::env::args().skip(1) {
