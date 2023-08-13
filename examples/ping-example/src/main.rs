@@ -36,9 +36,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_tcp()
         .without_tls()
         .with_noise()
-        .without_relay()
-        .without_any_other_transports()
-        .without_dns()
         .with_behaviour(|_| Behaviour::default())
         .build();
 

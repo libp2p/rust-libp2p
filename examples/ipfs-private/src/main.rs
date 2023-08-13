@@ -134,7 +134,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .multiplex(yamux_config)
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .without_any_other_transports()
         .with_dns()
         .await
         .with_behaviour(|key| {

@@ -42,8 +42,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()
-        .without_relay()
-        .without_any_other_transports()
         .with_dns()
         .await
         .with_behaviour(|key| {

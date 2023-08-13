@@ -51,7 +51,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             quic::async_std::Transport::new(quic::Config::new(&key))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .without_any_other_transports()
         .with_behaviour(|key| {
             // To content-address message, we can take the hash of message and use it as an ID.
             let message_id_fn = |message: &gossipsub::Message| {

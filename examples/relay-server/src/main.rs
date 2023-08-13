@@ -57,8 +57,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .without_any_other_transports()
-        .without_dns()
         .with_behaviour(|key| Behaviour {
             relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
             ping: ping::Behaviour::new(ping::Config::new()),

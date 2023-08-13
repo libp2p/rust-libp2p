@@ -1,6 +1,7 @@
 // TODO: Rename runtime to provider
 // TODO: Should we have a timeout on transport?
 // TODO: Be able to address `SwarmBuilder` configuration methods.
+// TODO: Consider moving with_relay after with_other_transport.
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
@@ -258,6 +259,28 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayBuilder<P, T> {
             .with_behaviour(constructor)
     }
 }
+// Shortcuts
+#[cfg(all(feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> RelayBuilder<AsyncStd, T> {
+    pub async fn with_dns(
+        self,
+    ) -> WebsocketBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour> {
+        self.without_relay()
+            .without_any_other_transports()
+            .with_dns()
+            .await
+    }
+}
+#[cfg(all(feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> RelayBuilder<Tokio, T> {
+    pub fn with_dns(
+        self,
+    ) -> WebsocketBuilder<Tokio, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour> {
+        self.without_relay()
+            .without_any_other_transports()
+            .with_dns()
+    }
+}
 
 #[cfg(feature = "relay")]
 pub struct RelayTlsBuilder<P, T> {
@@ -432,6 +455,47 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<P, T, R> 
             keypair: self.keypair,
             phantom: PhantomData,
         }
+    }
+}
+
+// Shortcuts
+#[cfg(all(feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<AsyncStd, T, R> {
+    pub async fn with_dns(
+        self,
+    ) -> WebsocketBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport, R> {
+        self.without_any_other_transports().with_dns().await
+    }
+}
+#[cfg(all(feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport, R> OtherTransportBuilder<Tokio, T, R> {
+    pub fn with_dns(self) -> WebsocketBuilder<Tokio, impl AuthenticatedMultiplexedTransport, R> {
+        self.without_any_other_transports().with_dns()
+    }
+}
+#[cfg(feature = "relay")]
+impl<P, T: AuthenticatedMultiplexedTransport>
+    OtherTransportBuilder<P, T, libp2p_relay::client::Behaviour>
+{
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
+    ) -> Builder<P, B> {
+        self.without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+impl<P, T: AuthenticatedMultiplexedTransport> OtherTransportBuilder<P, T, NoRelayBehaviour> {
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
+    ) -> Builder<P, B> {
+        self.without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
     }
 }
 
