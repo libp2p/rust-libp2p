@@ -1,5 +1,6 @@
 // TODO: Rename runtime to provider
 // TODO: Should we have a timeout on transport?
+// TODO: Be able to address `SwarmBuilder` configuration methods.
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;

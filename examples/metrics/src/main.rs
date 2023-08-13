@@ -21,13 +21,11 @@
 #![doc = include_str!("../README.md")]
 
 use env_logger::Env;
-use futures::executor::block_on;
-use futures::stream::StreamExt;
-use libp2p::core::{upgrade::Version, Multiaddr, Transport};
-use libp2p::identity::PeerId;
+use futures::{executor::block_on, StreamExt};
+use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{identify, identity, noise, ping, tcp, yamux};
+use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
+use libp2p::{identify, identity, ping};
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -38,21 +36,15 @@ mod http_service;
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    let local_pub_key = local_key.public();
-    info!("Local peer id: {local_peer_id:?}");
+    let mut swarm = libp2p::builder::SwarmBuilder::new()
+        .with_new_identity()
+        .with_async_std()
+        .with_tcp()
+        .with_noise()
+        .with_behaviour(|key| Behaviour::new(key.public()))
+        .build();
 
-    let mut swarm = SwarmBuilder::without_executor(
-        tcp::async_io::Transport::default()
-            .upgrade(Version::V1Lazy)
-            .authenticate(noise::Config::new(&local_key)?)
-            .multiplex(yamux::Config::default())
-            .boxed(),
-        Behaviour::new(local_pub_key),
-        local_peer_id,
-    )
-    .build();
+    info!("Local peer id: {:?}", swarm.local_peer_id());
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
