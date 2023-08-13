@@ -136,8 +136,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .without_any_other_transports()
         .with_dns()
         .await
-        // TODO: shortcut
-        .without_websocket()
         .with_behaviour(|keypair, relay_behaviour| Behaviour {
             relay_client: relay_behaviour,
             ping: ping::Behaviour::new(ping::Config::new()),

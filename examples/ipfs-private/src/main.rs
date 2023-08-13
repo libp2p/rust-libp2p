@@ -137,7 +137,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .without_any_other_transports()
         .with_dns()
         .await
-        .without_websocket()
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)

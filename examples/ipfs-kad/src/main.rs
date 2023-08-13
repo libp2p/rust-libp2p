@@ -46,7 +46,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .without_any_other_transports()
         .with_dns()
         .await
-        .without_websocket()
         .with_behaviour(|key| {
             // Create a Kademlia behaviour.
             let mut cfg = KademliaConfig::default();

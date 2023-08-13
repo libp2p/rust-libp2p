@@ -1,7 +1,6 @@
 // TODO: Rename runtime to provider
 // TODO: Should we have a timeout on transport?
 // TODO: Be able to address `SwarmBuilder` configuration methods.
-// TODO: Shortcut WebsocketBuidler --with_behaviour--> BehaviourBuilder
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
@@ -534,6 +533,27 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> WebsocketBuilder<P, T, R> {
             transport: self.transport.boxed(),
             phantom: PhantomData,
         }
+    }
+}
+
+// Shortcuts
+#[cfg(feature = "relay")]
+impl<P, T: AuthenticatedMultiplexedTransport>
+    WebsocketBuilder<P, T, libp2p_relay::client::Behaviour>
+{
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
+    ) -> Builder<P, B> {
+        self.without_websocket().with_behaviour(constructor)
+    }
+}
+impl<P, T: AuthenticatedMultiplexedTransport> WebsocketBuilder<P, T, NoRelayBehaviour> {
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
+    ) -> Builder<P, B> {
+        self.without_websocket().with_behaviour(constructor)
     }
 }
 
