@@ -139,7 +139,9 @@ pub use libp2p_webtransport_websys as webtransport_websys;
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
-pub mod builder;
+mod builder;
+pub use builder::SwarmBuilder;
+
 mod transport_ext;
 
 pub mod bandwidth;

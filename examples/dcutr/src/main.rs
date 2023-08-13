@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_existing_identity(generate_ed25519(opts.secret_key_seed))
         .with_async_std()
         .with_tcp_config(tcp::Config::default().port_reuse(true).nodelay(true))

@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_existing_identity(local_key)
         .with_async_std()
         .with_tcp()

@@ -11,13 +11,11 @@ use libp2p::{
         QueryResult,
     },
     multiaddr::Protocol,
-    noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
-    swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
+    PeerId,
 };
 
-use libp2p::core::upgrade::Version;
 use libp2p::StreamProtocol;
 use serde::{Deserialize, Serialize};
 use std::collections::{hash_map, HashMap, HashSet};
@@ -45,7 +43,7 @@ pub(crate) async fn new(
     };
     let peer_id = id_keys.public().to_peer_id();
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_existing_identity(id_keys)
         .with_async_std()
         .with_tcp()

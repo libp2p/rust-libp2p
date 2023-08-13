@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: mdns::async_io::Behaviour,
     }
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_new_identity()
         .with_async_std()
         .with_tcp()

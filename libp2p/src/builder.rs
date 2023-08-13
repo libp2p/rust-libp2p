@@ -201,7 +201,9 @@ macro_rules! impl_tcp_noise_builder {
 impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
 impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
+#[cfg(feature = "tls")]
 pub enum Tls {}
+
 pub enum WithoutTls {}
 
 pub struct RelayBuilder<P, T> {

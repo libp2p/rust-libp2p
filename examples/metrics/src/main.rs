@@ -36,7 +36,7 @@ mod http_service;
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_new_identity()
         .with_async_std()
         .with_tcp()

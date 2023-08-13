@@ -31,7 +31,7 @@ use std::time::Duration;
 async fn main() {
     env_logger::init();
 
-    let mut swarm = libp2p::builder::SwarmBuilder::new()
+    let mut swarm = libp2p::SwarmBuilder::new()
         .with_new_identity()
         .with_tokio()
         .with_tcp()
