@@ -1,4 +1,4 @@
-## 0.45.1 - unreleased
+## 0.45.1
 
 - Add getter function to obtain `TopicScoreParams`.
   See [PR 4231].

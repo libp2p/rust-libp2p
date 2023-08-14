@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.19"
+log = "0.4.20"
 futures = "0.3.28"
 async-std-resolver = { version = "0.22", optional = true }
 parking_lot = "0.12.0"
