@@ -249,7 +249,7 @@ jobs:
       - name: Run ipfs-kad example
         run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
 
-  examples:
+  examples-and-tools:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -268,6 +268,10 @@ jobs:
           set -e;
 
           for toml in examples/**/Cargo.toml; do
+            cargo check --manifest-path "$toml";
+          done
+
+          for toml in misc/**/Cargo.toml; do
             cargo check --manifest-path "$toml";
           done
 
