@@ -159,9 +159,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
 
         match swarm.next().await.expect("Swarm not to terminate.") {
-            SwarmEvent::Behaviour(behaviour::Event::Identify(e)) => {
+            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Identify(e)) => {
                 info!("{:?}", e);
-                metrics.record(&*e);
+                metrics.record(&e);
 
                 if let identify::Event::Received {
                     peer_id,
@@ -171,7 +171,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             protocols,
                             ..
                         },
-                } = *e
+                } = e
                 {
                     if protocols.iter().any(|p| *p == kad::PROTOCOL_NAME) {
                         for addr in listen_addrs {
@@ -184,19 +184,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            SwarmEvent::Behaviour(behaviour::Event::Ping(e)) => {
+            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Ping(e)) => {
                 debug!("{:?}", e);
                 metrics.record(&e);
             }
-            SwarmEvent::Behaviour(behaviour::Event::Kademlia(e)) => {
+            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Kademlia(e)) => {
                 debug!("{:?}", e);
                 metrics.record(&e);
             }
-            SwarmEvent::Behaviour(behaviour::Event::Relay(e)) => {
+            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Relay(e)) => {
                 info!("{:?}", e);
                 metrics.record(&e)
             }
-            SwarmEvent::Behaviour(behaviour::Event::Autonat(e)) => {
+            SwarmEvent::Behaviour(behaviour::BehaviourEvent::Autonat(e)) => {
                 info!("{:?}", e);
                 // TODO: Add metric recording for `NatStatus`.
                 // metrics.record(&e)

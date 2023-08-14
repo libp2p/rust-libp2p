@@ -1,6 +1,6 @@
 use libp2p::autonat;
 use libp2p::identify;
-use libp2p::kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent};
+use libp2p::kad::{record::store::MemoryStore, Kademlia, KademliaConfig};
 use libp2p::ping;
 use libp2p::relay;
 use libp2p::swarm::behaviour::toggle::Toggle;
@@ -16,7 +16,6 @@ const BOOTNODES: [&str; 4] = [
 ];
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "Event", event_process = false)]
 pub(crate) struct Behaviour {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
@@ -75,44 +74,5 @@ impl Behaviour {
             kademlia,
             autonat,
         }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum Event {
-    Ping(ping::Event),
-    Identify(Box<identify::Event>),
-    Relay(relay::Event),
-    Kademlia(KademliaEvent),
-    Autonat(autonat::Event),
-}
-
-impl From<ping::Event> for Event {
-    fn from(event: ping::Event) -> Self {
-        Event::Ping(event)
-    }
-}
-
-impl From<identify::Event> for Event {
-    fn from(event: identify::Event) -> Self {
-        Event::Identify(Box::new(event))
-    }
-}
-
-impl From<relay::Event> for Event {
-    fn from(event: relay::Event) -> Self {
-        Event::Relay(event)
-    }
-}
-
-impl From<KademliaEvent> for Event {
-    fn from(event: KademliaEvent) -> Self {
-        Event::Kademlia(event)
-    }
-}
-
-impl From<autonat::Event> for Event {
-    fn from(event: autonat::Event) -> Self {
-        Event::Autonat(event)
     }
 }
