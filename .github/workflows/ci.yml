@@ -249,7 +249,7 @@ jobs:
       - name: Run ipfs-kad example
         run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
 
-  examples-and-tools:
+  examples:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -270,6 +270,24 @@ jobs:
           for toml in examples/**/Cargo.toml; do
             cargo check --manifest-path "$toml";
           done
+
+  misc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: Swatinem/rust-cache@b8a6852b4f997182bdea832df3f9e153038b5191 # v2.6.0
+        with:
+          shared-key: stable-cache
+          save-if: false
+
+      - name: Compile all tools in misc
+        run: |
+          set -e;
 
           for toml in misc/**/Cargo.toml; do
             cargo check --manifest-path "$toml";
