@@ -831,7 +831,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-quic",
 ]
 
 [[package]]
@@ -1309,7 +1308,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "libp2p-quic",
  "log",
 ]
 
@@ -2354,7 +2352,6 @@ dependencies = [
  "instant",
  "libp2p",
  "libp2p-mplex",
- "libp2p-quic",
  "libp2p-webrtc",
  "log",
  "mime_guess",
@@ -2512,7 +2509,7 @@ checksum = "7fc7aa29613bd6a620df431842069224d8bc9011086b1db4c0e0cd47fa03ec9a"
 
 [[package]]
 name = "libp2p"
-version = "0.52.2"
+version = "0.52.3"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2543,6 +2540,7 @@ dependencies = [
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
+ "libp2p-quic",
  "libp2p-relay",
  "libp2p-rendezvous",
  "libp2p-request-response",
@@ -3058,7 +3056,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.9.2-alpha"
+version = "0.9.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -4610,7 +4608,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-quic",
 ]
 
 [[package]]
