@@ -1,4 +1,4 @@
-## 0.52.2 - unreleased
+## 0.52.2
 
 - Include gossipsub when compiling for wasm.
   See [PR 4217].

@@ -1,4 +1,4 @@
-## 0.44.4 - unreleased
+## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.
   See [PR 4270].

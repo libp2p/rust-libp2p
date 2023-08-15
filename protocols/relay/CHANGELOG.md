@@ -1,4 +1,4 @@
-## 0.16.1 - unreleased
+## 0.16.1
 
 - Export `RateLimiter` type.
   See [PR 3742].
