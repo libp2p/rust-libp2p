@@ -1351,12 +1351,15 @@ mod tests {
                 test::<async_io::Tcp>(3001);
             })
         }
-        let rt = ::tokio::runtime::Builder::new_current_thread()
-            .enable_io()
-            .build()
-            .unwrap();
-        rt.block_on(async {
-            test::<async_io::Tcp>(4001);
-        });
+        #[cfg(feature = "tokio")]
+        {
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                test::<async_io::Tcp>(4001);
+            });
+        }
     }
 }
