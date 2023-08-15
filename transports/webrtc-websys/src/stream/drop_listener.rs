@@ -35,8 +35,7 @@ pub(crate) struct DropListener {
 
 impl DropListener {
     pub(crate) fn new(stream: FramedDc, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
-        // Note: Added Pin::new() to the stream to make it compatible with the new futures version.
-        let substream_id = Pin::new(&stream).get_ref().stream_identifier();
+        let substream_id = stream.stream_identifier();
 
         Self {
             state: State::Idle {
