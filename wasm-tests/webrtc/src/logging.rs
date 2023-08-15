@@ -13,8 +13,11 @@ pub fn set_up_logging() {
     fern::Dispatch::new()
         .format(move |out, message, record| {
             out.finish(format_args!(
-                "[{date} {level} {target}] {message}\x1B[0m",
-                date = chrono::Local::now().format("%T%.3f"),
+                "[{stamp} {level} {target}] {message}\x1B[0m",
+                stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos(),
                 target = record.target(),
                 level = colors_level.color(record.level()),
                 message = message,

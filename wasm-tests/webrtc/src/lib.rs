@@ -1,14 +1,13 @@
 use libp2p_core::transport::Transport; // So we can use the Traits that come with it
 use libp2p_identity::Keypair;
-use libp2p_webrtc_websys::{Config, Connection, Transport as WebRTCTransport}; // So we can dial the server
+use libp2p_webrtc_websys::{Config, Transport as WebRTCTransport}; // So we can dial the server
 use multiaddr::Multiaddr;
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 use web_sys::{window, Response};
 
-mod logging;
+pub mod logging;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -22,7 +21,7 @@ async fn dial_webrtc_server() {
     let keypair = Keypair::generate_ed25519();
 
     let mut transport = WebRTCTransport::new(Config::new(&keypair));
-    let connection = match transport.dial(addr) {
+    let _connection = match transport.dial(addr) {
         Ok(fut) => fut.await.expect("dial failed"),
         Err(e) => panic!("dial failed: {:?}", e),
     };
