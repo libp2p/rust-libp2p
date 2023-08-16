@@ -81,5 +81,3 @@
 //! certificate verification off.
 #[cfg(feature = "tokio")]
 pub mod tokio;
-
-use libp2p_webrtc_utils as utils;

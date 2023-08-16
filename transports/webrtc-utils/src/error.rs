@@ -24,6 +24,7 @@ use thiserror::Error;
 /// Error in WebRTC.
 #[derive(Error, Debug)]
 pub enum Error {
+    #[cfg(feature = "tokio")]
     #[error(transparent)]
     WebRTC(#[from] webrtc::Error),
     #[error("IO error")]

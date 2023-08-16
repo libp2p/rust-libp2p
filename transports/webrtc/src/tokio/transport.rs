@@ -18,6 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use super::Error;
+use crate::tokio::{
+    certificate::Certificate,
+    connection::Connection,
+    udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
+    upgrade,
+};
 use futures::{future::BoxFuture, prelude::*, stream::SelectAll, stream::Stream};
 use if_watch::{tokio::IfWatcher, IfEvent};
 use libp2p_core::{
@@ -26,8 +33,7 @@ use libp2p_core::{
 };
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use webrtc::peer_connection::configuration::RTCConfiguration;
-
+use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use std::net::IpAddr;
 use std::{
     io,
@@ -35,15 +41,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll, Waker},
 };
-
-use crate::tokio::{
-    certificate::Certificate,
-    connection::Connection,
-    error::Error,
-    fingerprint::Fingerprint,
-    udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
-    upgrade,
-};
+use webrtc::peer_connection::configuration::RTCConfiguration;
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct Transport {

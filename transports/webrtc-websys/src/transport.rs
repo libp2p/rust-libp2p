@@ -1,4 +1,3 @@
-use super::fingerprint::Fingerprint;
 use super::upgrade;
 use super::Connection;
 use super::Error;
@@ -7,6 +6,7 @@ use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
 use libp2p_identity::{Keypair, PeerId};
+use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;

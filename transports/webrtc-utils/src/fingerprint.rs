@@ -22,6 +22,10 @@ use libp2p_core::multihash;
 use sha2::Digest as _;
 use std::fmt;
 
+// feat tokio
+#[cfg(feature = "tokio")]
+use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
+
 const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
@@ -42,6 +46,19 @@ impl Fingerprint {
     /// Creates a fingerprint from a raw certificate.
     pub fn from_certificate(bytes: &[u8]) -> Self {
         Fingerprint(sha2::Sha256::digest(bytes).into())
+    }
+
+    /// Converts [`RTCDtlsFingerprint`] to [`Fingerprint`].
+    #[cfg(feature = "tokio")]
+    pub fn try_from_rtc_dtls(fp: &RTCDtlsFingerprint) -> Option<Self> {
+        if fp.algorithm != SHA256 {
+            return None;
+        }
+
+        let mut buf = [0; 32];
+        hex::decode_to_slice(fp.value.replace(':', ""), &mut buf).ok()?;
+
+        Some(Self(buf))
     }
 
     /// Converts [`Multihash`](multihash::Multihash) to [`Fingerprint`].

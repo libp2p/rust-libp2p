@@ -32,8 +32,8 @@ use std::{
 };
 
 use crate::tokio::stream::{drop_listener::GracefullyClosed, framed_dc::FramedDc};
-use crate::utils::proto::{Flag, Message};
-use crate::utils::stream::{
+use libp2p_webrtc_utils::proto::{Flag, Message};
+use libp2p_webrtc_utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
@@ -238,7 +238,7 @@ fn io_poll_next(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::stream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
+    use libp2p_webrtc_utils::stream::{MAX_MSG_LEN, PROTO_OVERHEAD, VARINT_LEN};
 
     use super::*;
     use asynchronous_codec::Encoder;
@@ -251,8 +251,8 @@ mod tests {
         // Largest possible message.
         let message = [0; MAX_DATA_LEN];
 
-        let protobuf = crate::utils::proto::Message {
-            flag: Some(crate::utils::proto::Flag::FIN),
+        let protobuf = libp2p_webrtc_utils::proto::Message {
+            flag: Some(libp2p_webrtc_utils::proto::Flag::FIN),
             message: Some(message.to_vec()),
         };
 

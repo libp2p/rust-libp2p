@@ -21,7 +21,7 @@
 use rand::{distributions::DistString, CryptoRng, Rng};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
-use crate::tokio::fingerprint::Fingerprint;
+use libp2p_webrtc_utils::fingerprint::Fingerprint;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Certificate {

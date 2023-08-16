@@ -1,3 +1,4 @@
+// Copyright 2023 Doug Anderson
 // Copyright 2022 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -17,67 +18,89 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+#[cfg(feature = "wasm-bindgen")]
+pub mod wasm;
+#[cfg(feature = "tokio")]
+pub mod tokio;
 
-use super::fingerprint::Fingerprint;
-use js_sys::Reflect;
+use crate::fingerprint::Fingerprint;
 use serde::Serialize;
 use std::net::{IpAddr, SocketAddr};
 use tinytemplate::TinyTemplate;
-use wasm_bindgen::JsValue;
-use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
-/// Creates the SDP answer used by the client.
-pub(crate) fn answer(
-    addr: SocketAddr,
-    server_fingerprint: &Fingerprint,
-    client_ufrag: &str,
-) -> RtcSessionDescriptionInit {
-    let mut answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-    answer_obj.sdp(&render_description(
-        SESSION_DESCRIPTION,
-        addr,
-        server_fingerprint,
-        client_ufrag,
-    ));
-    answer_obj
-}
+// An SDP message that constitutes the offer.
+//
+// Main RFC: <https://datatracker.ietf.org/doc/html/rfc8866>
+// `sctp-port` and `max-message-size` attrs RFC: <https://datatracker.ietf.org/doc/html/rfc8841>
+// `group` and `mid` attrs RFC: <https://datatracker.ietf.org/doc/html/rfc9143>
+// `ice-ufrag`, `ice-pwd` and `ice-options` attrs RFC: <https://datatracker.ietf.org/doc/html/rfc8839>
+// `setup` attr RFC: <https://datatracker.ietf.org/doc/html/rfc8122>
+//
+// Short description:
+//
+// v=<protocol-version> -> always 0
+// o=<username> <sess-id> <sess-version> <nettype> <addrtype> <unicast-address>
+//
+//     <username> identifies the creator of the SDP document. We are allowed to use dummy values
+//     (`-` and `0.0.0.0` as <addrtype>) to remain anonymous, which we do. Note that "IN" means
+//     "Internet".
+//
+// s=<session name>
+//
+//     We are allowed to pass a dummy `-`.
+//
+// c=<nettype> <addrtype> <connection-address>
+//
+//     Indicates the IP address of the remote.
+//     Note that "IN" means "Internet".
+//
+// t=<start-time> <stop-time>
+//
+//     Start and end of the validity of the session. `0 0` means that the session never expires.
+//
+// m=<media> <port> <proto> <fmt> ...
+//
+//     A `m=` line describes a request to establish a certain protocol. The protocol in this line
+//     (i.e. `TCP/DTLS/SCTP` or `UDP/DTLS/SCTP`) must always be the same as the one in the offer.
+//     We know that this is true because we tweak the offer to match the protocol. The `<fmt>`
+//     component must always be `webrtc-datachannel` for WebRTC.
+//     RFCs: 8839, 8866, 8841
+//
+// a=mid:<MID>
+//
+//     Media ID - uniquely identifies this media stream (RFC9143).
+//
+// a=ice-options:ice2
+//
+//     Indicates that we are complying with RFC8839 (as oppposed to the legacy RFC5245).
+//
+// a=ice-ufrag:<ICE user>
+// a=ice-pwd:<ICE password>
+//
+//     ICE username and password, which are used for establishing and
+//     maintaining the ICE connection. (RFC8839)
+//     MUST match ones used by the answerer (server).
+//
+// a=fingerprint:sha-256 <fingerprint>
+//
+//     Fingerprint of the certificate that the remote will use during the TLS
+//     handshake. (RFC8122)
+//
+// a=setup:actpass
+//
+//     The endpoint that is the offerer MUST use the setup attribute value of setup:actpass and be
+//     prepared to receive a client_hello before it receives the answer.
+//
+// a=sctp-port:<value>
+//
+//     The SCTP port (RFC8841)
+//     Note it's different from the "m=" line port value, which indicates the port of the
+//     underlying transport-layer protocol (UDP or TCP).
+//
+// a=max-message-size:<value>
+//
+//     The maximum SCTP user message size (in bytes). (RFC8841)
 
-/// Creates the SDP offer.
-///
-/// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescriptionInit {
-    //JsValue to String
-    let offer = Reflect::get(&offer, &JsValue::from_str("sdp")).unwrap();
-    let offer = offer.as_string().unwrap();
-
-    let lines = offer.split("\r\n");
-
-    // find line and replace a=ice-ufrag: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
-    // find line andreplace a=ice-pwd: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
-
-    let mut munged_offer_sdp = String::new();
-
-    for line in lines {
-        if line.starts_with("a=ice-ufrag:") {
-            munged_offer_sdp.push_str(&format!("a=ice-ufrag:{}\r\n", client_ufrag));
-        } else if line.starts_with("a=ice-pwd:") {
-            munged_offer_sdp.push_str(&format!("a=ice-pwd:{}\r\n", client_ufrag));
-        } else if !line.is_empty() {
-            munged_offer_sdp.push_str(&format!("{}\r\n", line));
-        }
-    }
-
-    // remove any double \r\n
-    let munged_offer_sdp = munged_offer_sdp.replace("\r\n\r\n", "\r\n");
-
-    log::trace!("munged_offer_sdp: {}", munged_offer_sdp);
-
-    // setLocalDescription
-    let mut offer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-    offer_obj.sdp(&munged_offer_sdp);
-
-    offer_obj
-}
 
 // See [`CLIENT_SESSION_DESCRIPTION`].
 //
@@ -153,22 +176,6 @@ pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescription
 // a=sctp-port:5000
 // a=max-message-size:100000
 // a=candidate:1467250027 1 UDP 1467250027 ${host} ${port} typ host\r\n
-const SESSION_DESCRIPTION: &str = "v=0
-o=- 0 0 IN {ip_version} {target_ip}
-s=-
-c=IN {ip_version} {target_ip}
-t=0 0
-a=ice-lite
-m=application {target_port} UDP/DTLS/SCTP webrtc-datachannel
-a=mid:0
-a=setup:passive
-a=ice-ufrag:{ufrag}
-a=ice-pwd:{pwd}
-a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
-a=sctp-port:5000
-a=max-message-size:16384
-a=candidate:1467250027 1 UDP 1467250027 {target_ip} {target_port} typ host
-";
 
 /// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
 #[derive(Serialize)]

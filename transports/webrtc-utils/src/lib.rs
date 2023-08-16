@@ -6,4 +6,10 @@ pub mod proto {
     pub use self::webrtc::pb::{mod_Message::Flag, Message};
 }
 
+pub mod fingerprint;
+pub mod noise;
+pub mod sdp;
 pub mod stream;
+pub mod error;
+
+pub use error::Error;

@@ -20,10 +20,7 @@
 
 pub mod certificate;
 mod connection;
-mod error;
-mod fingerprint;
 mod req_res_chan;
-mod sdp;
 mod stream;
 mod transport;
 mod udp_mux;
@@ -31,6 +28,5 @@ mod upgrade;
 
 pub use certificate::Certificate;
 pub use connection::Connection;
-pub use error::Error;
-pub use fingerprint::Fingerprint;
+pub use libp2p_webrtc_utils::error::Error;
 pub use transport::Transport;

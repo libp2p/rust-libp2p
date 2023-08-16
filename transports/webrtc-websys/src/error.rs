@@ -7,9 +7,9 @@ pub enum Error {
     #[error("Invalid multiaddr: {0}")]
     InvalidMultiaddr(&'static str),
 
-    /// Noise authentication failed
-    #[error("Noise authentication failed")]
-    Noise(#[from] libp2p_noise::Error),
+    /// Noise upgrade authentication failed
+    #[error("WebRTC Utilities failure")]
+    Utils(#[from] libp2p_webrtc_utils::Error),
 
     #[error("JavaScript error: {0}")]
     JsError(String),
