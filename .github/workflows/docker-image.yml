@@ -31,6 +31,6 @@ jobs:
         uses: docker/build-push-action@v3
         with:
           context: .
-          file: ./Dockerfile
+          file: ./misc/server/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}-server:${{ steps.ref-name.outputs.ref }}
