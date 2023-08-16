@@ -12,7 +12,6 @@ use libp2p_webrtc as webrtc;
 use multiaddr::{Multiaddr, Protocol};
 use rand::thread_rng;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 use void::Void;
 
