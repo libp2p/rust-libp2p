@@ -1331,7 +1331,11 @@ mod tests {
 
     #[test]
     fn test_listens_ipv4_ipv6_separately() {
-        fn test<T: Provider>(port: u16) {
+        fn test<T: Provider>() {
+            let port = {
+                let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                listener.local_addr().unwrap().port()
+            };
             let mut tcp = Transport::<T>::default().boxed();
             let listener_id = ListenerId::next();
             tcp.listen_on(
@@ -1348,7 +1352,7 @@ mod tests {
         #[cfg(feature = "async-io")]
         {
             async_std::task::block_on(async {
-                test::<async_io::Tcp>(3001);
+                test::<async_io::Tcp>();
             })
         }
         #[cfg(feature = "tokio")]
@@ -1358,7 +1362,7 @@ mod tests {
                 .build()
                 .unwrap();
             rt.block_on(async {
-                test::<async_io::Tcp>(4001);
+                test::<async_io::Tcp>();
             });
         }
     }
