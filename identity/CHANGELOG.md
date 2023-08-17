@@ -1,8 +1,8 @@
 ## 0.2.3
 
-- Update `ed25519-dalek` to `2.0` [PR XXXX]
+- Update `ed25519-dalek` to `2.0` [PR 4337]
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4337]: https://github.com/libp2p/rust-libp2p/pull/4337
 
 ## 0.2.2
 
