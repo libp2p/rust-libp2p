@@ -924,7 +924,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-quic",
 ]
 
 [[package]]
@@ -1516,7 +1515,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "libp2p-quic",
  "log",
 ]
 
@@ -2693,7 +2691,6 @@ dependencies = [
  "instant",
  "libp2p",
  "libp2p-mplex",
- "libp2p-quic",
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
  "log",
@@ -3010,7 +3007,7 @@ checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 
 [[package]]
 name = "libp2p"
-version = "0.52.2"
+version = "0.52.3"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3035,11 +3032,13 @@ dependencies = [
  "libp2p-identity",
  "libp2p-kad",
  "libp2p-mdns",
+ "libp2p-memory-connection-limits",
  "libp2p-metrics",
  "libp2p-noise",
  "libp2p-ping",
  "libp2p-plaintext",
  "libp2p-pnet",
+ "libp2p-quic",
  "libp2p-relay",
  "libp2p-rendezvous",
  "libp2p-request-response",
@@ -3091,7 +3090,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-connection-limits"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-std",
  "libp2p-core",
@@ -3221,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-gossipsub"
-version = "0.45.0"
+version = "0.45.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -3310,7 +3309,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.44.3"
+version = "0.44.4"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -3365,6 +3364,24 @@ dependencies = [
  "socket2 0.5.3",
  "tokio",
  "trust-dns-proto",
+ "void",
+]
+
+[[package]]
+name = "libp2p-memory-connection-limits"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "libp2p-core",
+ "libp2p-identify",
+ "libp2p-identity",
+ "libp2p-swarm",
+ "libp2p-swarm-derive",
+ "libp2p-swarm-test",
+ "log",
+ "memory-stats",
+ "rand 0.8.5",
+ "sysinfo",
  "void",
 ]
 
@@ -3537,7 +3554,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-quic"
-version = "0.8.0-alpha"
+version = "0.9.2"
 dependencies = [
  "async-std",
  "bytes",
@@ -3555,9 +3572,10 @@ dependencies = [
  "log",
  "parking_lot",
  "quickcheck",
- "quinn-proto",
+ "quinn",
  "rand 0.8.5",
  "rustls 0.21.6",
+ "socket2 0.5.3",
  "thiserror",
  "tokio",
 ]
@@ -3647,7 +3665,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.2"
+version = "0.43.3"
 dependencies = [
  "async-std",
  "either",
@@ -3793,7 +3811,6 @@ dependencies = [
  "multihash",
  "quick-protobuf",
  "quick-protobuf-codec",
- "quickcheck",
  "rand 0.8.5",
  "rcgen 0.10.0",
  "serde",
@@ -3875,7 +3892,7 @@ dependencies = [
  "rw-stream-sink",
  "soketto",
  "url",
- "webpki-roots 0.24.0",
+ "webpki-roots 0.25.2",
 ]
 
 [[package]]
@@ -4072,6 +4089,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a634b1c61a95585bd15607c6ab0c4e5b226e695ff2800ba0cdccddf208c406c"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "memory-stats"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34f79cf9964c5c9545493acda1263f1912f8d2c56c8a2ffee2606cb960acaacc"
+dependencies = [
+ "libc",
+ "winapi",
 ]
 
 [[package]]
@@ -4302,6 +4329,15 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "ntapi"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8a3895c6391c39d7fe7ebc444a87eb2991b2a0bc718fdabd071eec617fc68e4"
+dependencies = [
+ "winapi",
 ]
 
 [[package]]
@@ -4949,6 +4985,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "quinn"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8cc2c5017e4b43d5995dcea317bc46c1e09404c0a9664d2908f7f02dfe943d75"
+dependencies = [
+ "async-io",
+ "async-std",
+ "bytes",
+ "futures-io",
+ "pin-project-lite 0.2.12",
+ "quinn-proto",
+ "quinn-udp",
+ "rustc-hash",
+ "rustls 0.21.6",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "quinn-proto"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4963,6 +5019,19 @@ dependencies = [
  "thiserror",
  "tinyvec",
  "tracing",
+]
+
+[[package]]
+name = "quinn-udp"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6df19e284d93757a9fb91d63672f7741b129246a669db09d1c0063071debc0c0"
+dependencies = [
+ "bytes",
+ "libc",
+ "socket2 0.5.3",
+ "tracing",
+ "windows-sys",
 ]
 
 [[package]]
@@ -5186,7 +5255,6 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
- "libp2p-quic",
 ]
 
 [[package]]
@@ -6200,6 +6268,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysinfo"
+version = "0.29.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d10ed79c22663a35a255d289a7fdcb43559fc77ff15df5ce6c341809e7867528"
+dependencies = [
+ "cfg-if 1.0.0",
+ "core-foundation-sys",
+ "libc",
+ "ntapi",
+ "once_cell",
+ "rayon",
+ "winapi",
+]
+
+[[package]]
 name = "system-configuration"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7061,12 +7144,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.24.0"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b291546d5d9d1eab74f069c77749f2cb8504a12caa20f0f2de93ddbf6f411888"
-dependencies = [
- "rustls-webpki",
-]
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
 
 [[package]]
 name = "webrtc"

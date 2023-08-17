@@ -33,6 +33,7 @@ libp2p = { path = "../libp2p", features = [
     "websocket",
     "yamux",
 ] }
+libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 mime_guess = "2.0"
 redis = { version = "0.23.0", default-features = false, features = [
