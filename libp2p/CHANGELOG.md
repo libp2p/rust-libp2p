@@ -2,6 +2,8 @@
 
 - Add `libp2p-quic` stable release.
 
+- Update `libp2p-identity` to `0.2.3`.
+
 ## 0.52.2
 
 - Include gossipsub when compiling for wasm.
