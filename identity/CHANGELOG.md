@@ -1,4 +1,4 @@
-## 0.2.3 - unreleased
+## 0.2.3
 
 - Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.
   See [PR 4337]
