@@ -28,9 +28,8 @@ pub(crate) mod native {
     use libp2p::multiaddr::Protocol;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::websocket::WsConfig;
-    use libp2p::{noise, tcp, tls, yamux, Multiaddr, PeerId, Transport as _};
+    use libp2p::{noise, quic, tcp, tls, yamux, Multiaddr, PeerId, Transport as _};
     use libp2p_mplex as mplex;
-    use libp2p_quic as quic;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 

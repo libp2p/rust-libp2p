@@ -7,7 +7,8 @@ use libp2p::{
     core::Multiaddr,
     identity,
     kad::{
-        record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult,
+        self, record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId,
+        QueryResult,
     },
     multiaddr::Protocol,
     noise,
@@ -52,7 +53,7 @@ pub(crate) async fn new(
 
     // Build the Swarm, connecting the lower layer transport logic with the
     // higher layer network behaviour logic.
-    let swarm = SwarmBuilder::with_async_std_executor(
+    let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
         ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -67,6 +68,11 @@ pub(crate) async fn new(
         peer_id,
     )
     .build();
+
+    swarm
+        .behaviour_mut()
+        .kademlia
+        .set_mode(Some(kad::Mode::Server));
 
     let (command_sender, command_receiver) = mpsc::channel(0);
     let (event_sender, event_receiver) = mpsc::channel(0);

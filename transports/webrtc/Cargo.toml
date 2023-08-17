@@ -45,7 +45,6 @@ env_logger = "0.10"
 hex-literal = "0.4"
 libp2p-ping = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
-quickcheck = "1.0.3"
 tokio = { version = "1.31", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
