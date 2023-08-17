@@ -26,7 +26,7 @@ use libp2p_identity::PublicKey;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     ConnectionDenied, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent, ToSwarm,
+    NotifyHandler, PollParameters, StreamProtocol, StreamUpgradeError, THandlerInEvent, ToSwarm,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
@@ -309,6 +309,10 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Error { peer_id, error }));
             }
+            handler::Event::LocalProtocolsChanged(protocols) => {
+                self.events
+                    .push_back(ToSwarm::GenerateEvent(Event::LocalProtocolsChanged { peer_id, protocols }));
+            }
         }
     }
 
@@ -438,6 +442,13 @@ pub enum Event {
         peer_id: PeerId,
         /// The error that occurred.
         error: StreamUpgradeError<UpgradeError>,
+    },
+    /// Local protocols have changed.
+    LocalProtocolsChanged {
+        /// The peer we are advertising protocols to.
+        peer_id: PeerId,
+        /// The list of local supported protocols we are advertising to the peer.
+        protocols: Vec<StreamProtocol>,
     },
 }
 
