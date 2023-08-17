@@ -19,7 +19,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-
 use clap::Parser;
 use futures::stream::StreamExt;
 use futures::{executor::block_on, future::Either};
@@ -35,19 +34,22 @@ use libp2p::{
     tcp,
 };
 use libp2p_quic as quic;
+use log::{info, LevelFilter};
 use std::error::Error;
 use std::net::IpAddr;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(LevelFilter::Info)
+        .parse_default_env()
+        .init();
 
     let opt = Opt::parse();
-    println!("opt: {opt:?}");
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    info!("Local peer id: {local_peer_id}");
 
     let tcp_transport = tcp::async_io::Transport::default();
 
@@ -103,10 +105,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                         swarm.add_external_address(observed_addr.clone());
                     }
 
-                    println!("{event:?}")
+                    info!("{event:?}")
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {address:?}");
+                    info!("Listening on {address:?}");
                 }
                 _ => {}
             }

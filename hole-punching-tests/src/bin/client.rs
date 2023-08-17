@@ -38,7 +38,7 @@ use libp2p::{
     tcp, yamux, PeerId,
 };
 use libp2p_quic as quic;
-use log::info;
+use log::{info, LevelFilter};
 use std::error::Error;
 use std::str::FromStr;
 
@@ -80,13 +80,16 @@ impl FromStr for Mode {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    env_logger::builder()
+        .filter_level(LevelFilter::Info)
+        .parse_default_env()
+        .init();
 
     let opts = Opts::parse();
 
     let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
+    info!("Local peer id: {local_peer_id}");
 
     let (relay_transport, client) = relay::client::new(local_peer_id);
 
@@ -270,13 +273,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("{:?}", event)
                 }
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::ConnectionEstablished {
-                    peer_id, endpoint, ..
-                } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    if let Some(remote_peer) = opts.remote_peer_id {
+                        if peer_id == remote_peer {
+                            info!("Successfully hole-punched to {remote_peer}");
+                            return Ok(());
+                        }
+                    }
                 }
-                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                SwarmEvent::OutgoingConnectionError { error, .. } => {
+                    return Err(Box::new(error) as Box<dyn Error>)
                 }
                 _ => {}
             }
