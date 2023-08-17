@@ -1,5 +1,6 @@
 [package]
 edition = "2021"
+license = "MIT"
 name = "libp2p-webrtc-utils"
 rust-version.workspace = true
 version = "0.1.0"
