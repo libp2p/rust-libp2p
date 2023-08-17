@@ -30,11 +30,17 @@ pub fn App(cx: Scope) -> impl IntoView {
 
     // update number of pings signal each time out receiver receives an update
     spawn_local(async move {
+        let window = web_sys::window().expect("should have a window in this context");
+        let performance = window
+            .performance()
+            .expect("performance should be available");
+
         loop {
             match recvr.recv().await {
                 Ok(rtt) => {
                     // set rtt and date time stamp
-                    let now = chrono::Utc::now().timestamp();
+                    // use leptos performance now
+                    let now = performance.now() as u64;
                     log::info!("[{now:?}] Got RTT: {rtt:?} ms");
                     set_number_of_pings.update(move |pings| pings.insert(0, (now, rtt)));
                 }
@@ -55,12 +61,7 @@ pub fn App(cx: Scope) -> impl IntoView {
                 view=move |cx, (stamp, rtt)| {
                     view! { cx,
                         <li>
-                        <span>{
-                            chrono::NaiveDateTime::from_timestamp_opt(stamp, 0)
-                                .expect("timestamp is valid")
-                                .format("%Y-%m-%d %H:%M:%S")
-                                .to_string()
-                            }</span>" in "
+                        <span>{stamp}</span>" in "
                            {rtt} "ms"
                         </li>
                     }

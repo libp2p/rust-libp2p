@@ -9,7 +9,6 @@ version = "0.1.0"
 [dependencies]
 async-channel = "1.9.0"
 cfg-if = "0.1"
-chrono = { version = "0.4.26", features = ["wasmbind"] }
 console_log = { version = "0.2", optional = true }
 fern = { version = "0.6.2", features = ["colored"], optional = true }
 futures = "0.3.28"
@@ -24,7 +23,12 @@ libp2p-webrtc-websys = { workspace = true }
 log = "0.4"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = ["Response", "Window"] }
+web-sys = { version = "0.3.64", features = [
+    "Response",
+    "Window",
+    'Performance',
+    'PerformanceTiming',
+] }
 
 [features]
 default = ["console_log", "fern"]
