@@ -1,4 +1,4 @@
-## 0.52.3
+## 0.52.3 - unreleased
 
 - Add `libp2p-quic` stable release.
 
