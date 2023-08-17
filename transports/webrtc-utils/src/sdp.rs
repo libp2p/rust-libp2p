@@ -18,10 +18,10 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-#[cfg(feature = "wasm-bindgen")]
-pub mod wasm;
 #[cfg(feature = "tokio")]
 pub mod tokio;
+#[cfg(feature = "wasm-bindgen")]
+pub mod wasm;
 
 use crate::fingerprint::Fingerprint;
 use serde::Serialize;
@@ -100,7 +100,6 @@ use tinytemplate::TinyTemplate;
 // a=max-message-size:<value>
 //
 //     The maximum SCTP user message size (in bytes). (RFC8841)
-
 
 // See [`CLIENT_SESSION_DESCRIPTION`].
 //
