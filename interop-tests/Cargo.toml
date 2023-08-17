@@ -58,7 +58,7 @@ libp2p = { path = "../libp2p", features = [
     "webtransport-websys",
 ] }
 libp2p-webrtc-websys = { workspace = true }
-reqwest = { version = "0.11", features = ["identify", "json"] }
+reqwest = { version = "0.11", features = ["json"] }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }
 wasm-logger = { version = "0.2.0" }
