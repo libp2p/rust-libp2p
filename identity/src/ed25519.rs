@@ -50,11 +50,10 @@ impl Keypair {
     ///
     /// Note that this binary format is the same as `ed25519_dalek`'s and `ed25519_zebra`'s.
     pub fn try_from_bytes(kp: &mut [u8]) -> Result<Keypair, DecodingError> {
-        let bytes = kp[0..64]
-            .try_into()
+        let bytes = <[u8; 64]>::try_from(&kp[..])
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 keypair", e))?;
 
-        ed25519::SigningKey::from_keypair_bytes(bytes)
+        ed25519::SigningKey::from_keypair_bytes(&bytes)
             .map(|k| {
                 kp.zeroize();
                 Keypair(k)
@@ -155,10 +154,9 @@ impl PublicKey {
 
     /// Try to parse a public key from a byte array containing the actual key as produced by `to_bytes`.
     pub fn try_from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let k = k[0..32]
-            .try_into()
+        let k = <[u8; 32]>::try_from(k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))?;
-        ed25519::VerifyingKey::from_bytes(k)
+        ed25519::VerifyingKey::from_bytes(&k)
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 public key", e))
             .map(PublicKey)
     }
@@ -194,8 +192,7 @@ impl SecretKey {
     /// returned.
     pub fn try_from_bytes(mut sk_bytes: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk_bytes.as_mut();
-        let secret = sk_bytes[0..32]
-            .try_into()
+        let secret = <[u8; 32]>::try_from(&sk_bytes[..])
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 secret key", e))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
