@@ -1,3 +1,9 @@
+## 0.2.3
+
+- Update `ed25519-dalek` to `2.0` [PR XXXX]
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.2.2
 
 - Implement `from_protobuf_encoding` for RSA `Keypair`.
