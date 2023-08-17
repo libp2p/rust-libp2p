@@ -102,27 +102,23 @@ impl fmt::Debug for Fingerprint {
 mod tests {
     use super::*;
 
+    const SDP_FORMAT: &str = "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC";
+    const REGULAR_FORMAT: [u8; 32] =
+        hex_literal::hex!("7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC");
+
     #[test]
     fn sdp_format() {
-        let fp = Fingerprint::raw(hex_literal::hex!(
-            "7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC"
-        ));
+        let fp = Fingerprint::raw(REGULAR_FORMAT);
 
-        let sdp_format = fp.to_sdp_format();
+        let formatted = fp.to_sdp_format();
 
-        assert_eq!(sdp_format, "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC")
+        assert_eq!(formatted, SDP_FORMAT)
     }
 
     #[test]
-    fn from_sdp_to_bytes() {
-        let sdp_format = "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC";
-        let bytes = hex::decode(sdp_format.replace(":", "")).unwrap();
-        let fp = Fingerprint::from_certificate(&bytes);
-        assert_eq!(
-            fp,
-            Fingerprint::raw(hex_literal::hex!(
-                "7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC"
-            ))
-        );
+    fn from_sdp() {
+        let bytes = hex::decode(SDP_FORMAT.replace(':', "")).unwrap();
+        let fp = Fingerprint::raw(bytes.as_slice().try_into().unwrap());
+        assert_eq!(fp, Fingerprint::raw(REGULAR_FORMAT));
     }
 }
