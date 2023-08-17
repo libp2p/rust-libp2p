@@ -1,6 +1,7 @@
 ## 0.2.3 - unreleased
 
-- Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0` [PR 4337]
+- Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.
+  See [PR 4337]
 
 [RUSTSEC-2022-0093]: https://rustsec.org/advisories/RUSTSEC-2022-0093
 [PR 4337]: https://github.com/libp2p/rust-libp2p/pull/4337
