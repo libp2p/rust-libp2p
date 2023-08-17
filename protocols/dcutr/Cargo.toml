@@ -1,24 +1,24 @@
 [package]
-name = "libp2p-dcutr"
-edition = "2021"
-rust-version = { workspace = true }
-description = "Direct connection upgrade through relay"
-version = "0.10.0"
 authors = ["Max Inden <mail@max-inden.de>"]
+categories = ["asynchronous", "network-programming"]
+description = "Direct connection upgrade through relay"
+edition = "2021"
+keywords = ["libp2p", "networking", "peer-to-peer"]
 license = "MIT"
+name = "libp2p-dcutr"
 repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking"]
-categories = ["network-programming", "asynchronous"]
+rust-version = { workspace = true }
+version = "0.10.0"
 
 [dependencies]
-asynchronous-codec = "0.6"
+asynchronous-codec = "0.6.2"
 either = "1.9.0"
 futures = "0.3.28"
 futures-timer = "3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
-libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
+libp2p-swarm = { workspace = true }
 log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
@@ -45,5 +45,5 @@ rand = "0.8"
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]

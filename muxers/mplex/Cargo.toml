@@ -1,19 +1,19 @@
 [package]
-name = "libp2p-mplex"
-edition = "2021"
-rust-version = { workspace = true }
-description = "Mplex multiplexing protocol for libp2p"
-version = "0.40.0"
 authors = ["Parity Technologies <admin@parity.io>"]
+categories = ["asynchronous", "network-programming"]
+description = "Mplex multiplexing protocol for libp2p"
+edition = "2021"
+keywords = ["libp2p", "networking", "peer-to-peer"]
 license = "MIT"
+name = "libp2p-mplex"
 repository = "https://github.com/libp2p/rust-libp2p"
-keywords = ["peer-to-peer", "libp2p", "networking"]
-categories = ["network-programming", "asynchronous"]
+rust-version = { workspace = true }
+version = "0.40.0"
 
 [dependencies]
+asynchronous-codec = "0.6.2"
 bytes = "1"
 futures = "0.3.28"
-asynchronous-codec = "0.6"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4"
@@ -34,12 +34,12 @@ libp2p-tcp = { workspace = true, features = ["async-io"] }
 quickcheck = { workspace = true }
 
 [[bench]]
-name = "split_send_size"
 harness = false
+name = "split_send_size"
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs"]
