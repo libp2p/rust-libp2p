@@ -113,7 +113,7 @@ impl TcpTlsBuilder<AsyncStd> {
     #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
-    ) -> Result<RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport>, AuthenticationError>
+    ) -> Result<QuicBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport>, AuthenticationError>
     {
         self.without_tls().with_noise()
     }
@@ -123,7 +123,7 @@ impl TcpTlsBuilder<Tokio> {
     #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
-    ) -> Result<RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport>, AuthenticationError>
+    ) -> Result<QuicBuilder<Tokio, impl AuthenticatedMultiplexedTransport>, AuthenticationError>
     {
         self.without_tls().with_noise()
     }
@@ -137,9 +137,9 @@ pub struct TcpNoiseBuilder<P, A> {
 }
 
 #[cfg(feature = "tcp")]
-macro_rules! construct_relay_builder {
+macro_rules! construct_quic_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
-        Ok(RelayBuilder {
+        Ok(QuicBuilder {
             transport: libp2p_tcp::$tcp::Transport::new($self.config)
                 .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                 .authenticate($auth)
@@ -159,10 +159,10 @@ macro_rules! impl_tcp_noise_builder {
             pub fn with_noise(
                 self,
             ) -> Result<
-                RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
+                QuicBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
                 AuthenticationError,
             > {
-                construct_relay_builder!(
+                construct_quic_builder!(
                     self,
                     $tcp,
                     libp2p_core::upgrade::Map::new(
@@ -185,10 +185,10 @@ macro_rules! impl_tcp_noise_builder {
             pub fn without_noise(
                 self,
             ) -> Result<
-                RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
+                QuicBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
                 AuthenticationError,
             > {
-                construct_relay_builder!(self, $tcp, libp2p_tls::Config::new(&self.keypair)?)
+                construct_quic_builder!(self, $tcp, libp2p_tls::Config::new(&self.keypair)?)
             }
         }
 
@@ -198,10 +198,10 @@ macro_rules! impl_tcp_noise_builder {
             pub fn with_noise(
                 self,
             ) -> Result<
-                RelayBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
+                QuicBuilder<$runtimeCamelCase, impl AuthenticatedMultiplexedTransport>,
                 AuthenticationError,
             > {
-                construct_relay_builder!(self, $tcp, libp2p_noise::Config::new(&self.keypair)?)
+                construct_quic_builder!(self, $tcp, libp2p_noise::Config::new(&self.keypair)?)
             }
         }
     };
@@ -223,6 +223,127 @@ pub enum AuthenticationError {
     #[error("Noise")]
     #[cfg(feature = "noise")]
     Noise(#[from] libp2p_noise::Error),
+}
+
+pub struct QuicBuilder<P, T> {
+    transport: T,
+    keypair: libp2p_identity::Keypair,
+    phantom: PhantomData<P>,
+}
+
+#[cfg(all(feature = "quic", feature = "async-std"))]
+impl<T> QuicBuilder<AsyncStd, T> {
+    pub fn with_quic(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
+        RelayBuilder {
+            transport: self
+                .transport
+                .or(
+                    quic::async_std::Transport::new(quic::Config::new(&self.keypair))
+                        .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
+                ),
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[cfg(all(feature = "quic", feature = "tokio"))]
+impl<T> QuicBuilder<Tokio, T> {
+    pub fn with_quic(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
+        RelayBuilder {
+            transport: self
+                .transport
+                .or(
+                    quic::tokio::Transport::new(quic::Config::new(&self.keypair))
+                        .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
+                ),
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<P, T> QuicBuilder<P, T> {
+    pub fn without_quic(self) -> RelayBuilder<P, T> {
+        RelayBuilder {
+            transport: self.transport,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
+
+// Shortcuts
+impl<P, T: AuthenticatedMultiplexedTransport> QuicBuilder<P, T> {
+    pub fn with_relay(self) -> RelayTlsBuilder<P, T> {
+        RelayTlsBuilder {
+            transport: self.transport,
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
+    ) -> OtherTransportBuilder<P, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour> {
+        self.without_quic()
+            .without_relay()
+            .with_other_transport(constructor)
+    }
+
+    #[cfg(feature = "websocket")]
+    pub fn with_websocket(
+        self,
+    ) -> WebsocketTlsBuilder<P, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour> {
+        self.without_quic()
+            .without_relay()
+            .without_any_other_transports()
+            .without_dns()
+            .with_websocket()
+    }
+
+    pub fn with_behaviour<B>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
+        self.without_quic()
+            .without_relay()
+            .without_any_other_transports()
+            .without_dns()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+// Shortcuts
+#[cfg(all(feature = "async-std", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> QuicBuilder<AsyncStd, T> {
+    pub async fn with_dns(
+        self,
+    ) -> Result<
+        WebsocketBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+        std::io::Error,
+    > {
+        self.without_quic()
+            .without_relay()
+            .without_any_other_transports()
+            .with_dns()
+            .await
+    }
+}
+#[cfg(all(feature = "tokio", feature = "dns"))]
+impl<T: AuthenticatedMultiplexedTransport> QuicBuilder<Tokio, T> {
+    pub fn with_dns(
+        self,
+    ) -> Result<
+        WebsocketBuilder<Tokio, impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+        std::io::Error,
+    > {
+        self.without_quic()
+            .without_relay()
+            .without_any_other_transports()
+            .with_dns()
+    }
 }
 
 pub struct RelayBuilder<P, T> {
@@ -945,7 +1066,24 @@ mod tests {
             .with_tls()
             .with_noise()
             .unwrap()
-            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour))
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise", feature = "quic"))]
+    fn tcp_quic() {
+        let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
+            .with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .with_tls()
+            .with_noise()
+            .unwrap()
+            .with_quic()
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour))
+            .unwrap()
             .build();
     }
 
@@ -981,7 +1119,8 @@ mod tests {
                     dummy: libp2p_swarm::dummy::Behaviour,
                     relay,
                 })
-            }).unwrap()
+            })
+            .unwrap()
             .build();
     }
 
@@ -1003,7 +1142,8 @@ mod tests {
             .unwrap()
             .with_dns()
             .unwrap()
-            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour))
+            .unwrap()
             .build();
     }
 
@@ -1021,7 +1161,8 @@ mod tests {
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
-            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour))
+            .unwrap()
             .build();
     }
 
@@ -1047,7 +1188,8 @@ mod tests {
             .with_noise()
             .await
             .unwrap()
-            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour))
+            .unwrap()
             .build();
     }
 }
