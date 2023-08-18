@@ -2,6 +2,8 @@
 
 - Emit `ModeChanged` event whenever we automatically reconfigure the mode.
 
+[PR 4341]: https://github.com/libp2p/rust-libp2p/pull/4341
+
 ## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.
