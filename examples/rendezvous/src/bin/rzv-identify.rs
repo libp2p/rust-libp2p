@@ -41,15 +41,20 @@ async fn main() {
         .with_tcp()
         .with_noise()
         .unwrap()
-        .with_behaviour(|key| MyBehaviour {
-            identify: identify::Behaviour::new(identify::Config::new(
-                "rendezvous-example/1.0.0".to_string(),
-                key.public(),
-            )),
-            rendezvous: rendezvous::client::Behaviour::new(key.clone()),
-            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
+        .with_behaviour(|key| {
+            Ok(MyBehaviour {
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "rendezvous-example/1.0.0".to_string(),
+                    key.public(),
+                )),
+                rendezvous: rendezvous::client::Behaviour::new(key.clone()),
+                ping: ping::Behaviour::new(
+                    ping::Config::new().with_interval(Duration::from_secs(1)),
+                ),
+                keep_alive: keep_alive::Behaviour,
+            })
         })
+        .unwrap()
         .build();
 
     log::info!("Local peer id: {}", swarm.local_peer_id());

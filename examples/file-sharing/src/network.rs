@@ -48,7 +48,7 @@ pub(crate) async fn new(
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| ComposedBehaviour {
+        .with_behaviour(|key| Ok(ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
             request_response: request_response::cbor::Behaviour::new(
                 [(
@@ -57,7 +57,7 @@ pub(crate) async fn new(
                 )],
                 request_response::Config::default(),
             ),
-        })
+        }))?
         .build();
 
     swarm

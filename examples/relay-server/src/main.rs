@@ -56,14 +56,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .with_behaviour(|key| Behaviour {
+        .with_behaviour(|key| Ok(Behaviour {
             relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
             ping: ping::Behaviour::new(ping::Config::new()),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/TODO/0.0.1".to_string(),
                 key.public(),
             )),
-        })
+        }))?
         .build();
 
     // Listen on all interfaces

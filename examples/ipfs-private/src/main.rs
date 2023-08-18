@@ -139,9 +139,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)
-                .build()
-                .expect("valid config");
-            MyBehaviour {
+                .build()?;
+            Ok(MyBehaviour {
                 gossipsub: gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),
                     gossipsub_config,
@@ -152,8 +151,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     key.public(),
                 )),
                 ping: ping::Behaviour::new(ping::Config::new()),
-            }
-        })
+            })
+        })?
         .build();
 
     println!("using random peer id: {:?}", swarm.local_peer_id());

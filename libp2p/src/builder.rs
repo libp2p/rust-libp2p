@@ -2,6 +2,8 @@
 // TODO: Should we have a timeout on transport?
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider moving with_relay after with_other_transport.
+// TODO: Consider making with_other_transport fallible.
+// TODO: Add with_quic
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
@@ -276,8 +278,8 @@ impl<P, T: AuthenticatedMultiplexedTransport> RelayBuilder<P, T> {
 
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_relay()
             .without_any_other_transports()
             .without_dns()
@@ -529,8 +531,11 @@ impl<P, T: AuthenticatedMultiplexedTransport>
 {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(
+            &libp2p_identity::Keypair,
+            libp2p_relay::client::Behaviour,
+        ) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()
@@ -540,8 +545,8 @@ impl<P, T: AuthenticatedMultiplexedTransport>
 impl<P, T: AuthenticatedMultiplexedTransport> OtherTransportBuilder<P, T, NoRelayBehaviour> {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_any_other_transports()
             .without_dns()
             .without_websocket()
@@ -603,8 +608,11 @@ impl<P, T, R> DnsBuilder<P, T, R> {
 impl<P, T: AuthenticatedMultiplexedTransport> DnsBuilder<P, T, libp2p_relay::client::Behaviour> {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(
+            &libp2p_identity::Keypair,
+            libp2p_relay::client::Behaviour,
+        ) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_dns()
             .without_websocket()
             .with_behaviour(constructor)
@@ -613,8 +621,8 @@ impl<P, T: AuthenticatedMultiplexedTransport> DnsBuilder<P, T, libp2p_relay::cli
 impl<P, T: AuthenticatedMultiplexedTransport> DnsBuilder<P, T, NoRelayBehaviour> {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_dns()
             .without_websocket()
             .with_behaviour(constructor)
@@ -659,16 +667,19 @@ impl<P, T: AuthenticatedMultiplexedTransport>
 {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(
+            &libp2p_identity::Keypair,
+            libp2p_relay::client::Behaviour,
+        ) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
 impl<P, T: AuthenticatedMultiplexedTransport> WebsocketBuilder<P, T, NoRelayBehaviour> {
     pub fn with_behaviour<B>(
         self,
-        constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
-    ) -> Builder<P, B> {
+        constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
@@ -825,31 +836,34 @@ pub struct BehaviourBuilder<P, R> {
 impl<P> BehaviourBuilder<P, libp2p_relay::client::Behaviour> {
     pub fn with_behaviour<B>(
         self,
-        mut constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> B,
-    ) -> Builder<P, B> {
-        Builder {
-            behaviour: constructor(&self.keypair, self.relay_behaviour),
+        mut constructor: impl FnMut(
+            &libp2p_identity::Keypair,
+            libp2p_relay::client::Behaviour,
+        ) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
+        Ok(Builder {
+            behaviour: constructor(&self.keypair, self.relay_behaviour)?,
             keypair: self.keypair,
             transport: self.transport,
             phantom: PhantomData,
-        }
+        })
     }
 }
 
 impl<P> BehaviourBuilder<P, NoRelayBehaviour> {
     pub fn with_behaviour<B>(
         self,
-        mut constructor: impl FnMut(&libp2p_identity::Keypair) -> B,
-    ) -> Builder<P, B> {
+        mut constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
+    ) -> Result<Builder<P, B>, Box<dyn std::error::Error>> {
         // Discard `NoRelayBehaviour`.
         let _ = self.relay_behaviour;
 
-        Builder {
-            behaviour: constructor(&self.keypair),
+        Ok(Builder {
+            behaviour: constructor(&self.keypair)?,
             keypair: self.keypair,
             transport: self.transport,
             phantom: PhantomData,
-        }
+        })
     }
 }
 
@@ -931,7 +945,7 @@ mod tests {
             .with_tls()
             .with_noise()
             .unwrap()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
             .build();
     }
 
@@ -962,10 +976,12 @@ mod tests {
             .with_tls()
             .with_noise()
             .unwrap()
-            .with_behaviour(|_, relay| Behaviour {
-                dummy: libp2p_swarm::dummy::Behaviour,
-                relay,
-            })
+            .with_behaviour(|_, relay| {
+                Ok(Behaviour {
+                    dummy: libp2p_swarm::dummy::Behaviour,
+                    relay,
+                })
+            }).unwrap()
             .build();
     }
 
@@ -987,7 +1003,7 @@ mod tests {
             .unwrap()
             .with_dns()
             .unwrap()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
             .build();
     }
 
@@ -1005,7 +1021,7 @@ mod tests {
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
             .build();
     }
 
@@ -1031,7 +1047,7 @@ mod tests {
             .with_noise()
             .await
             .unwrap()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .with_behaviour(|_| Ok(libp2p_swarm::dummy::Behaviour)).unwrap()
             .build();
     }
 }

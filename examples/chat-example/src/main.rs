@@ -63,22 +63,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
                 .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
                 .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
-                .build()
-                .expect("Valid config");
+                .build()?;
 
             // build a gossipsub network behaviour
             let gossipsub = gossipsub::Behaviour::new(
                 gossipsub::MessageAuthenticity::Signed(key.clone()),
                 gossipsub_config,
-            )
-            .expect("Correct configuration");
+            )?;
 
             let mdns =
-                mdns::async_io::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())
-                    // TODO: How could one handle the unwrap here? The closure does not allow returning an error.
-                    .unwrap();
-            MyBehaviour { gossipsub, mdns }
-        })
+                mdns::async_io::Behaviour::new(mdns::Config::default(), key.public().to_peer_id())?;
+            Ok(MyBehaviour { gossipsub, mdns })
+        })?
         .build();
 
     // Create a Gossipsub topic

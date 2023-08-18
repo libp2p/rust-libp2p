@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| MyBehaviour {
+        .with_behaviour(|key| Ok(MyBehaviour {
             kademlia: Kademlia::new(
                 key.public().to_peer_id(),
                 MemoryStore::new(key.public().to_peer_id()),
@@ -58,10 +58,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             mdns: mdns::async_io::Behaviour::new(
                 mdns::Config::default(),
                 key.public().to_peer_id(),
-            )
-            // TODO: How to handle this error. The closure doesn't allow returning an error.
-            .unwrap(),
-        })
+            )?
+        }))?
         .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
