@@ -1,3 +1,7 @@
+## 0.45.0
+
+- Added ModeChanged behaviour event.
+
 ## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.
