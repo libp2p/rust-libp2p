@@ -1045,11 +1045,6 @@ where
                         },
                     }),
             );
-
-        self.queued_events
-            .push_back(ToSwarm::GenerateEvent(KademliaEvent::ModeChanged {
-                mode: self.mode,
-            }));
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
