@@ -101,11 +101,9 @@ pub enum Event {
     /// We replied to an identification request from the remote.
     Identification,
     /// We actively pushed our identification information to the remote.
-    IdentificationPushed,
+    IdentificationPushed(Info),
     /// Failed to identify the remote, or to reply to an identification request.
     IdentificationError(StreamUpgradeError<UpgradeError>),
-    /// Local supported protocols changed
-    LocalProtocolsChanged(Vec<StreamProtocol>),
 }
 
 impl Handler {
@@ -184,9 +182,12 @@ impl Handler {
                         remote_info,
                     )));
             }
-            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::IdentificationPushed,
-            )),
+            future::Either::Right(()) => {
+                let local_info = self.build_info();
+                self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationPushed(local_info),
+                ));
+            }
         }
     }
 
@@ -372,27 +373,20 @@ impl ConnectionHandler for Handler {
                     .then(|| self.local_protocols_to_string())
                     .unwrap_or_default();
 
-                if protocols_changed {
+                if protocols_changed && self.exchanged_one_periodic_identify {
+                    log::debug!(
+                        "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
+                        self.remote_peer_id
+                    );
+
+                    let info = self.build_info();
                     self.events
-                        .push(ConnectionHandlerEvent::NotifyBehaviour(Event::LocalProtocolsChanged(
-                            Vec::from_iter(self.local_supported_protocols.iter().cloned())
-                        )));
-
-                    if self.exchanged_one_periodic_identify {
-                        log::debug!(
-                            "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
-                            self.remote_peer_id
-                        );
-
-                        let info = self.build_info();
-                        self.events
-                            .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                                protocol: SubstreamProtocol::new(
-                                    Either::Right(Push::outbound(info)),
-                                    (),
-                                ),
-                            });
-                    }
+                        .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                            protocol: SubstreamProtocol::new(
+                                Either::Right(Push::outbound(info)),
+                                (),
+                            ),
+                        });
                 }
             }
         }
