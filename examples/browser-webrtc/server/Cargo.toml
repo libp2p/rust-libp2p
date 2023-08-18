@@ -3,12 +3,13 @@ authors = ["Doug Anderson <douganderson444@peerpiper.io>"]
 edition = "2021"
 license = "MIT"
 name = "webrtc-example-server"
+publish = false
 rust-version = { workspace = true }
 version = "0.1.0"
 
 [[bin]]
 name = "webrtc-example-server-bin"
-path = "src/bin/main.rs"
+path = "src/bin/webrtc-example-server.rs"
 
 [dependencies]
 anyhow = "1.0.72"
@@ -22,6 +23,7 @@ libp2p-ping = { workspace = true }
 libp2p-relay = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
+log = "0.4"
 multiaddr = { workspace = true }
 rand = "0.8"
 tokio = { version = "1.29", features = ["macros", "net", "rt", "signal"] }

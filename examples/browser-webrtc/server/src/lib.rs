@@ -44,7 +44,7 @@ pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
     if let Some(addr) = remote {
-        println!("Dialing {addr}");
+        log::info!("Dialing {addr}");
         swarm.dial(addr)?;
     }
 
