@@ -103,4 +103,3 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
-- [Ursa](https://github.com/fleek-network/ursa) - Decentralized Content Delivery & Edge Compute.
