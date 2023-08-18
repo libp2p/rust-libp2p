@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-kad"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = { workspace = true }
 description = "Kademlia protocol for libp2p"
 version = "0.44.4"
 authors = ["Parity Technologies <admin@parity.io>"]
