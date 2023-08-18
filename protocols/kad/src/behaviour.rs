@@ -1045,6 +1045,11 @@ where
                         },
                     }),
             );
+
+        self.queued_events
+            .push_back(ToSwarm::GenerateEvent(KademliaEvent::ModeChanged {
+                mode: self.mode,
+            }));
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
@@ -2674,6 +2679,12 @@ pub enum KademliaEvent {
     /// See [`Kademlia::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
+
+    /// This peer's mode has been updated and this event reports the new mode.
+    ///
+    /// This usually happens in response to an address change or a new external
+    /// address being added or removed.
+    ModeChanged { mode: Mode },
 }
 
 /// Information about progress events.
