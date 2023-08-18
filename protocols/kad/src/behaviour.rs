@@ -2684,7 +2684,7 @@ pub enum KademliaEvent {
     ///
     /// This usually happens in response to an address change or a new external
     /// address being added or removed.
-    ModeChanged { mode: Mode },
+    ModeChanged { new_mode: Mode },
 }
 
 /// Information about progress events.
