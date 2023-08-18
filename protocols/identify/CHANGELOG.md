@@ -1,4 +1,4 @@
-## 0.44.0
+## 0.44.0 - unreleased
 
 - Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
 
