@@ -104,4 +104,3 @@ used and maintained by [Actyx](https://www.actyx.com).
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
 - [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).
-- [Ursa](https://github.com/fleek-network/ursa) - Decentralized Content Delivery & Edge Compute.

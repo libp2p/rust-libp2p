@@ -1,3 +1,7 @@
+## 0.52.3 - unreleased
+
+- Add `libp2p-quic` stable release.
+
 ## 0.52.2
 
 - Include gossipsub when compiling for wasm.

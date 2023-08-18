@@ -31,11 +31,10 @@ use libp2p::{
     core::{Multiaddr, Transport},
     identify, identity,
     identity::PeerId,
-    noise, ping, relay,
+    noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp,
 };
-use libp2p_quic as quic;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
