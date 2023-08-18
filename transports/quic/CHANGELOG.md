@@ -1,3 +1,7 @@
+## 0.9.2 - unreleased
+
+- Cut stable release.
+
 ## 0.9.2-alpha
 
 - Add support for reusing an existing socket when dialing localhost address.

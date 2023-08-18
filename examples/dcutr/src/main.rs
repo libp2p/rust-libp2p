@@ -32,7 +32,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, PeerId,
 };
-use libp2p_quic as quic;
 use log::info;
 use std::error::Error;
 use std::str::FromStr;

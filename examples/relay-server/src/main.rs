@@ -33,7 +33,6 @@ use libp2p::{
     ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
 };
-use libp2p_quic as quic;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 

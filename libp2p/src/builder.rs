@@ -232,15 +232,16 @@ pub struct QuicBuilder<P, T> {
 }
 
 #[cfg(all(feature = "quic", feature = "async-std"))]
-impl<T> QuicBuilder<AsyncStd, T> {
+impl<T: AuthenticatedMultiplexedTransport> QuicBuilder<AsyncStd, T> {
     pub fn with_quic(self) -> RelayBuilder<AsyncStd, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
             transport: self
                 .transport
-                .or(
-                    quic::async_std::Transport::new(quic::Config::new(&self.keypair))
+                .or_transport(
+                    libp2p_quic::async_std::Transport::new(libp2p_quic::Config::new(&self.keypair))
                         .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
-                ),
+                )
+                .map(|either, _| either.into_inner()),
             keypair: self.keypair,
             phantom: PhantomData,
         }
@@ -248,15 +249,16 @@ impl<T> QuicBuilder<AsyncStd, T> {
 }
 
 #[cfg(all(feature = "quic", feature = "tokio"))]
-impl<T> QuicBuilder<Tokio, T> {
+impl<T: AuthenticatedMultiplexedTransport> QuicBuilder<Tokio, T> {
     pub fn with_quic(self) -> RelayBuilder<Tokio, impl AuthenticatedMultiplexedTransport> {
         RelayBuilder {
             transport: self
                 .transport
-                .or(
-                    quic::tokio::Transport::new(quic::Config::new(&self.keypair))
+                .or_transport(
+                    libp2p_quic::tokio::Transport::new(libp2p_quic::Config::new(&self.keypair))
                         .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
-                ),
+                )
+                .map(|either, _| either.into_inner()),
             keypair: self.keypair,
             phantom: PhantomData,
         }
@@ -1072,7 +1074,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise", feature = "quic"))]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "quic"
+    ))]
     fn tcp_quic() {
         let _: libp2p_swarm::Swarm<libp2p_swarm::dummy::Behaviour> = SwarmBuilder::new()
             .with_new_identity()

@@ -26,7 +26,6 @@ use libp2p::{
     core::muxing::StreamMuxerBox, gossipsub, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent,
     Transport,
 };
-use libp2p_quic as quic;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
