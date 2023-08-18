@@ -37,12 +37,13 @@ use libp2p_core::{
     Transport,
 };
 use libp2p_identity::PeerId;
+use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::HashMap;
-use std::fmt;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
+use std::{fmt, io};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -154,9 +155,16 @@ impl<P: Provider> GenTransport<P> {
                 if l.is_closed {
                     return false;
                 }
-                let listen_addr = l.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+                SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
+            })
+            .filter(|l| {
+                if socket_addr.ip().is_loopback() {
+                    l.listening_addresses
+                        .iter()
+                        .any(|ip_addr| ip_addr.is_loopback())
+                } else {
+                    true
+                }
             })
             .collect();
         match listeners.len() {
@@ -171,6 +179,21 @@ impl<P: Provider> GenTransport<P> {
                 Some(listeners.swap_remove(index))
             }
         }
+    }
+
+    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<UdpSocket> {
+        let socket = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+
+        socket.bind(&socket_addr.into())?;
+
+        Ok(socket.into())
     }
 }
 
@@ -188,7 +211,8 @@ impl<P: Provider> Transport for GenTransport<P> {
         let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
         let endpoint_config = self.quinn_config.endpoint_config.clone();
         let server_config = self.quinn_config.server_config.clone();
-        let socket = UdpSocket::bind(socket_addr).map_err(Self::Error::from)?;
+        let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
+
         let socket_c = socket.try_clone().map_err(Self::Error::from)?;
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
         let listener = Listener::new(
@@ -411,6 +435,8 @@ struct Listener<P: Provider> {
 
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
+
+    listening_addresses: HashSet<IpAddr>,
 }
 
 impl<P: Provider> Listener<P> {
@@ -423,12 +449,14 @@ impl<P: Provider> Listener<P> {
     ) -> Result<Self, Error> {
         let if_watcher;
         let pending_event;
+        let mut listening_addresses = HashSet::new();
         let local_addr = socket.local_addr()?;
         if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
             if_watcher = None;
+            listening_addresses.insert(local_addr.ip());
             let ma = socketaddr_to_multiaddr(&local_addr, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
@@ -450,6 +478,7 @@ impl<P: Provider> Listener<P> {
             is_closed: false,
             pending_event,
             close_listener_waker: None,
+            listening_addresses,
         })
     }
 
@@ -496,7 +525,8 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("New listen address: {}", listen_addr);
+                        log::debug!("New listen address: {listen_addr}");
+                        self.listening_addresses.insert(inet.addr());
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -507,7 +537,8 @@ impl<P: Provider> Listener<P> {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
                     {
-                        log::debug!("Expired listen address: {}", listen_addr);
+                        log::debug!("Expired listen address: {listen_addr}");
+                        self.listening_addresses.remove(&inet.addr());
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -713,7 +744,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
-mod test {
+mod tests {
     use futures::future::poll_fn;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -887,5 +918,30 @@ mod test {
             )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+    }
+
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_listens_ipv4_ipv6_separately() {
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::tokio::Transport::new(config);
+        let port = {
+            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+            socket.local_addr().unwrap().port()
+        };
+
+        transport
+            .listen_on(
+                ListenerId::next(),
+                format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse().unwrap(),
+            )
+            .unwrap();
+        transport
+            .listen_on(
+                ListenerId::next(),
+                format!("/ip6/::/udp/{port}/quic-v1").parse().unwrap(),
+            )
+            .unwrap();
     }
 }

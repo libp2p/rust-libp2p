@@ -19,7 +19,7 @@ js-sys = "0.3.64"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-noise = { workspace = true }
-log = "0.4.19"
+log = "0.4.20"
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }

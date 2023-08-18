@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-metrics"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = { workspace = true }
 description = "Metrics for libp2p"
 version = "0.13.1"
 authors = ["Max Inden <mail@max-inden.de>"]
