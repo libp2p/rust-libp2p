@@ -1,11 +1,13 @@
 [package]
+authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
+categories = ["libp2p", "webrtc"]
+description = "Utilities for WebRTC in libp2p"
 edition = "2021"
 license = "MIT"
 name = "libp2p-webrtc-utils"
-rust-version.workspace = true
+repository = "https://github.com/libp2p/rust-libp2p"
+rust-version = { workspace = true }
 version = "0.1.0"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bytes = "1"

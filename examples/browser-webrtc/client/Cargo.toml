@@ -3,7 +3,7 @@ authors = ["Doug Anderson <douganderson444@peerpiper.io>"]
 edition = "2021"
 license = "MIT"
 name = "browser-webrtc-example-client"
-rust-version.workspace = true
+rust-version = { workspace = true }
 version = "0.1.0"
 
 [dependencies]
