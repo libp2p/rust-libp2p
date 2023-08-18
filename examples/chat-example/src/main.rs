@@ -22,10 +22,7 @@
 
 use async_std::io;
 use futures::{prelude::*, select};
-use libp2p::{
-    core::muxing::StreamMuxerBox, gossipsub, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent,
-    Transport,
-};
+use libp2p::{gossipsub, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -45,10 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_other_transport(|key| {
-            quic::async_std::Transport::new(quic::Config::new(&key))
-                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
-        })
+        .with_quic()
         .with_behaviour(|key| {
             // To content-address message, we can take the hash of message and use it as an ID.
             let message_id_fn = |message: &gossipsub::Message| {

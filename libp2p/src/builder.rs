@@ -3,7 +3,6 @@
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider moving with_relay after with_other_transport.
 // TODO: Consider making with_other_transport fallible.
-// TODO: Add with_quic
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
@@ -277,6 +276,7 @@ impl<P, T> QuicBuilder<P, T> {
 
 // Shortcuts
 impl<P, T: AuthenticatedMultiplexedTransport> QuicBuilder<P, T> {
+    #[cfg(feature = "relay")]
     pub fn with_relay(self) -> RelayTlsBuilder<P, T> {
         RelayTlsBuilder {
             transport: self.transport,
