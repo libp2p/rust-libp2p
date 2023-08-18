@@ -926,17 +926,21 @@ mod tests {
         let keypair = libp2p_identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
         let mut transport = crate::tokio::Transport::new(config);
+        let port = {
+            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+            socket.local_addr().unwrap().port()
+        };
 
         transport
             .listen_on(
                 ListenerId::next(),
-                "/ip4/0.0.0.0/udp/4001/quic-v1".parse().unwrap(),
+                format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse().unwrap(),
             )
             .unwrap();
         transport
             .listen_on(
                 ListenerId::next(),
-                "/ip6/::/udp/4001/quic-v1".parse().unwrap(),
+                format!("/ip6/::/udp/{port}/quic-v1").parse().unwrap(),
             )
             .unwrap();
     }
