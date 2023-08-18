@@ -1,4 +1,4 @@
-//! The Substream over the Connection
+//! The WebRTC [Stream] over the Connection
 use self::framed_dc::FramedDc;
 use bytes::Bytes;
 use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
@@ -18,15 +18,6 @@ mod framed_dc;
 mod poll_data_channel;
 
 pub(crate) use drop_listener::DropListener;
-
-// Max message size that can be sent to the DataChannel
-// const MAX_MESSAGE_SIZE: u32 = 16 * 1024;
-
-// How much can be buffered to the DataChannel at once
-// const MAX_BUFFERED_AMOUNT: u32 = 16 * 1024 * 1024;
-
-// How long time we wait for the 'bufferedamountlow' event to be emitted
-// const BUFFERED_AMOUNT_LOW_TIMEOUT: u32 = 30 * 1000;
 
 /// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
 const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
@@ -68,8 +59,11 @@ impl RtcDataChannelBuilder {
 
 /// Substream over the Connection
 pub struct Stream {
+    /// Wrapper for the inner stream to make it Send
     inner: SendWrapper<StreamInner>,
+    /// State of the Stream
     state: State,
+    /// Buffer for incoming data
     read_buffer: Bytes,
 }
 
@@ -82,11 +76,6 @@ impl Stream {
             state: State::Open,
         }
     }
-
-    /// Return the underlying RtcDataChannel
-    pub fn channel(&self) -> &RtcDataChannel {
-        self.inner.io.as_ref()
-    }
 }
 
 /// Inner Stream to make Sendable
@@ -94,6 +83,7 @@ struct StreamInner {
     io: FramedDc,
 }
 
+/// Inner Stream to make Sendable
 impl StreamInner {
     pub fn new(channel: RtcDataChannel) -> Self {
         Self {
@@ -156,13 +146,6 @@ impl AsyncWrite for Stream {
     /// arranges for the current task (via cx.waker().wake_by_ref())
     /// to receive a notification when the object becomes writable
     /// or is closed.
-    ///
-    /// In WebRTC DataChannels, we can always write to the channel
-    /// so we don't need to poll the channel for writability
-    /// as long as the channel is open
-    ///
-    /// So we need access to the channel or peer_connection,
-    /// and the State of the Channel (DataChannel.readyState)
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
@@ -239,7 +222,7 @@ impl AsyncWrite for Stream {
 
                     self.state.write_closed();
 
-                    // TODO: implement drop_notifier?
+                    // TODO: implement drop_notifier? Drop notifier built into the Browser as 'onclose' event
                     // let _ = self
                     //     .drop_notifier
                     //     .take()

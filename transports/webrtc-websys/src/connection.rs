@@ -1,5 +1,6 @@
 //! Websys WebRTC Peer Connection
 //!
+//! Creates and manages the [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection)
 use crate::stream::RtcDataChannelBuilder;
 
 use super::{Error, Stream};
@@ -14,6 +15,7 @@ use std::task::{ready, Context, Poll};
 use wasm_bindgen::prelude::*;
 use web_sys::{RtcDataChannel, RtcDataChannelEvent, RtcPeerConnection};
 
+/// A WebRTC Connection
 pub struct Connection {
     // Swarm needs all types to be Send. WASM is single-threaded
     // and it is safe to use SendWrapper.
@@ -21,24 +23,32 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Create a new Connection
+    /// Create a new WebRTC Connection
     pub(crate) fn new(peer_connection: RtcPeerConnection) -> Self {
         Self {
             inner: SendWrapper::new(ConnectionInner::new(peer_connection)),
         }
     }
 }
+
+/// Inner Connection that is wrapped in [SendWrapper]
 struct ConnectionInner {
+    /// The [RtcPeerConnection] that is used for the WebRTC Connection
     peer_connection: RtcPeerConnection,
+    /// Whether the connection is closed
     closed: bool,
+    /// A channel that signals incoming data channels
     rx_ondatachannel: channel::mpsc::Receiver<RtcDataChannel>,
 
     /// A list of futures, which, once completed, signal that a [`WebRTCStream`] has been dropped.
+    /// Currently unimplemented, will be implemented in a future PR.
     drop_listeners: FuturesUnordered<super::stream::DropListener>,
+    /// Currently unimplemented, will be implemented in a future PR.
     no_drop_listeners_waker: Option<Waker>,
 }
 
 impl ConnectionInner {
+    /// Create a new inner WebRTC Connection
     fn new(peer_connection: RtcPeerConnection) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = channel::mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
@@ -139,9 +149,10 @@ impl Drop for ConnectionInner {
 /// WebRTC native multiplexing
 /// Allows users to open substreams
 impl StreamMuxer for Connection {
-    type Substream = Stream; // A Substream of a WebRTC PeerConnection is a Data Channel
+    type Substream = Stream; // A Stream of a WebRTC PeerConnection is a Data Channel
     type Error = Error;
 
+    /// Polls for inbound connections by waiting for the ondatachannel callback to be triggered
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -159,6 +170,7 @@ impl StreamMuxer for Connection {
         self.inner.poll_create_data_channel(cx)
     }
 
+    /// Closes the Peer Connection.
     fn poll_close(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -169,6 +181,7 @@ impl StreamMuxer for Connection {
         Poll::Ready(Ok(()))
     }
 
+    /// Polls the connection
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

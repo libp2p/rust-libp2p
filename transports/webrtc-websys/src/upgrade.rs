@@ -15,6 +15,8 @@ use web_sys::{RtcConfiguration, RtcPeerConnection};
 const SHA2_256: u64 = 0x12;
 const SHA2_512: u64 = 0x13;
 
+/// Upgrades an outbound WebRTC connection by creating the data channel
+/// and conducting a Noise handshake
 pub(crate) async fn outbound(
     sock_addr: SocketAddr,
     remote_fingerprint: Fingerprint,
@@ -24,6 +26,7 @@ pub(crate) async fn outbound(
     fut.await
 }
 
+/// Inner outbound function that is wrapped in [SendWrapper]
 async fn outbound_inner(
     sock_addr: SocketAddr,
     remote_fingerprint: Fingerprint,
@@ -110,6 +113,7 @@ async fn outbound_inner(
     Ok((peer_id, Connection::new(peer_connection)))
 }
 
+/// Generates a random ufrag of the given length
 fn gen_ufrag(len: usize) -> String {
     let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

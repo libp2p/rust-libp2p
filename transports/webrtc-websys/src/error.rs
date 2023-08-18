@@ -45,7 +45,6 @@ impl std::convert::From<wasm_bindgen::JsValue> for Error {
     }
 }
 
-// impl From String
 impl From<String> for Error {
     fn from(value: String) -> Self {
         Error::JsError(value)
