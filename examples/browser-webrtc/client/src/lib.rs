@@ -55,13 +55,13 @@ pub fn App(cx: Scope) -> impl IntoView {
         <h2>"Pinging every 15 seconds. Open Browser console for more logging details."</h2>
         <ul>
             <For
-                each=number_of_pings
+                each={move || number_of_pings.get()}
                 // the key is the timestamp
-                key=|ping| ping.0
+                key={|ping| ping.0}
                 view=move |cx, (stamp, rtt)| {
                     view! { cx,
                         <li>
-                        <span>{stamp}</span>" in "
+                        <span>{stamp/1000}</span>" seconds later in "
                            {rtt} "ms"
                         </li>
                     }

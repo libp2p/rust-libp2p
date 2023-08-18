@@ -2,8 +2,7 @@ use super::fetch_server_addr;
 use async_channel::Sender;
 use futures::StreamExt;
 use libp2p::core::Multiaddr;
-use libp2p::identity;
-use libp2p::identity::PeerId;
+use libp2p::identity::{Keypair, PeerId};
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{multiaddr, swarm};
@@ -12,7 +11,7 @@ use std::convert::From;
 pub async fn start_pinger(sendr: Sender<f32>) -> Result<(), PingerError> {
     let addr_fut = fetch_server_addr();
 
-    let local_key = identity::Keypair::generate_ed25519();
+    let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
     let mut swarm = SwarmBuilder::with_wasm_executor(

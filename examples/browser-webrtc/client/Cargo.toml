@@ -12,7 +12,7 @@ cfg-if = "0.1"
 console_log = { version = "0.2", optional = true }
 fern = { version = "0.6.2", features = ["colored"], optional = true }
 futures = "0.3.28"
-leptos = { version = "0.4.8", features = ["csr", "nightly"] }
+leptos = { version = "0.4.8", features = ["csr"] }
 libp2p = { path = "../../../libp2p", features = [
     "ed25519",
     "macros",
