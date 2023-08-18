@@ -1,6 +1,6 @@
 ## 0.45.0 - unreleased
 
-- Added ModeChanged behaviour event.
+- Emit `ModeChanged` event whenever we automatically reconfigure the mode.
 
 ## 0.44.4
 
