@@ -26,8 +26,6 @@ macro_rules! console_log {
 
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
-    console_log!("Starting main()");
-
     match console_log::init_with_level(log::Level::Info) {
         Ok(_) => log::info!("Console logging initialized"),
         Err(_) => log::info!("Console logging already initialized"),
@@ -46,14 +44,12 @@ pub fn run() -> Result<(), JsValue> {
     body.append_child(&val)?;
 
     // create a mpsc channel to get pings to from the pinger
-    let (sendr, mut recvr) = channel::mpsc::unbounded::<Result<f32, PingerError>>();
+    let (sendr, mut recvr) = channel::mpsc::channel::<Result<f32, PingerError>>(2);
 
     log::info!("Spawn a pinger");
-    console_log!("Spawn a pinger main()");
 
     // start the pinger, pass in our sender
     spawn_local(async move {
-        log::info!("Spawning pinger");
         match start_pinger(sendr).await {
             Ok(_) => log::info!("Pinger finished"),
             Err(e) => log::info!("Pinger error: {:?}", e),
