@@ -22,7 +22,6 @@ use libp2p_core::multihash;
 use sha2::Digest as _;
 use std::fmt;
 
-// feat tokio
 #[cfg(feature = "tokio")]
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
