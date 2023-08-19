@@ -1,6 +1,11 @@
 <html>
     <head>
         <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+        <link
+            rel="icon"
+            href="https://docs.libp2p.io/logos/libp2p_color_symbol.svg"
+            sizes="any"
+        />
     </head>
 
     <body>
@@ -10,7 +15,6 @@
 
         <script type="module" defer>
             import * as wasm from "./pkg/browser_webrtc_example_client.js"
-            console.log({ wasm })
             wasm.default().then(() => {
                 console.log("WASM loaded")
             })
