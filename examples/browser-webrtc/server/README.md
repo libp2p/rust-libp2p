@@ -1,8 +1,12 @@
 # Websys RTC Test Server
 
 -   Runs a Rust-Libp2p WebRTC Node
--   Serves the multiaddr for testing on http://localhost:3000/
+-   Serves the multiaddr for testing on http://localhost:4455/
 
 # Run
 
-From this directory, run `cargo run`
+From this directory, run:
+
+```sh
+cargo run
+```

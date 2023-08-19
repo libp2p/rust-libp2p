@@ -48,22 +48,26 @@ pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
         swarm.dial(addr)?;
     }
 
+    let mut addr = None; // We only need 1 address
+
     loop {
         tokio::select! {
             evt = swarm.select_next_some() => {
                 match evt {
-                    SwarmEvent::NewListenAddr { address, .. } => {
+                    SwarmEvent::NewListenAddr { address, .. } if addr.is_none() => {
 
-                        let addr = address
+                        addr = Some(address
                                 .with(Protocol::P2p(*swarm.local_peer_id()))
                                 .clone()
-                                .to_string();
+                                .to_string());
 
-                        eprintln!("Listening on {}", addr);
+                        let address = addr.as_ref().unwrap().clone();
 
                         tokio::spawn(async move {
 
-                            let app = Router::new().route("/", get(|| async { addr }))
+                            log::info!("Serving the Multiaddr we are listening on: {}", address);
+
+                            let app = Router::new().route("/", get(|| async { address }))
                             .layer(
                                 // allow cors
                                 CorsLayer::new()
@@ -77,7 +81,7 @@ pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
                                 .unwrap();
                         });
 
-                        eprintln!("Server spawned");
+                        log::debug!("Server spawned");
                     }
                     SwarmEvent::Behaviour(Event::Ping(ping::Event {
                         peer,
@@ -85,10 +89,10 @@ pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
                         ..
                     })) => {
                         let id = peer.to_string().to_owned();
-                        eprintln!("🏓 Pinged {id} ({rtt:?})")
+                        log::info!("🏓 Pinged {id} ({rtt:?})")
                     }
                     evt => {
-                        eprintln!("SwarmEvent: {:?}", evt);
+                        log::debug!("SwarmEvent: {:?}", evt);
                     },
                 }
             },
