@@ -1,7 +1,19 @@
-# Use rust-libp2p in the Browser
+## Example Client Usage of `libp2p-webrtc-websys`
 
-## Run Leptos App
+A simple demo usage of `libp2p-webrtc-websys`.
 
-Ensure you have `trunk` [installed](https://trunkrs.dev/).
+## 🚴 Usage
 
-From this directory, run `trunk serve --open`
+### 🛠️ Build with `wasm-pack`
+
+```
+wasm-pack build --release --target web
+```
+
+### 🎁 Serve webpage
+
+The static site at `index.html` can be served with any static HTTP server, such as [`http-server`](https://github.com/http-party/http-server):
+
+```
+npx http-server
+```

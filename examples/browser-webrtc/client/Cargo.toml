@@ -6,13 +6,16 @@ name = "browser-webrtc-example-client"
 rust-version = { workspace = true }
 version = "0.1.0"
 
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
 [dependencies]
-async-channel = "1.9.0"
-cfg-if = "0.1"
-console_log = { version = "0.2", optional = true }
-fern = { version = "0.6.2", features = ["colored"], optional = true }
+console_log = { version = "1.0", features = ["wasm-bindgen"] }
 futures = "0.3.28"
-leptos = { version = "0.4.8", features = ["csr"] }
+js-sys = "0.3.64"
 libp2p = { path = "../../../libp2p", features = [
     "ed25519",
     "macros",
@@ -21,14 +24,15 @@ libp2p = { path = "../../../libp2p", features = [
 ] }
 libp2p-webrtc-websys = { workspace = true }
 log = "0.4"
-wasm-bindgen = "0.2.87"
+wasm-bindgen = "0.2.84"
 wasm-bindgen-futures = "0.4.37"
-web-sys = { version = "0.3.64", features = [
-    "Response",
-    "Window",
-    'Performance',
-    'PerformanceTiming',
-] }
 
-[features]
-default = ["console_log", "fern"]
+# The `console_error_panic_hook` crate provides better debugging of panics by
+# logging them with `console.error`. This is great for development, but requires
+# all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
+# code size when deploying.
+console_error_panic_hook = { version = "0.1.7", optional = true }
+
+[dependencies.web-sys]
+features = ['Document', 'Element', 'HtmlElement', 'Node', 'Response', 'Window']
+version = "0.3"

@@ -1,119 +1,86 @@
-use async_channel::bounded;
-use leptos::*;
+mod error;
+mod pinger;
+mod utils;
+
+use crate::error::PingerError;
+use futures::channel;
+use futures::StreamExt;
+use js_sys::Date;
 use pinger::start_pinger;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{window, Response};
 
-pub mod pinger;
+#[wasm_bindgen]
+extern "C" {
+    // Use `js_namespace` here to bind `console.log(..)` instead of just
+    // `log(..)`
+    #[wasm_bindgen(js_namespace = console)]
+    fn log(s: &str);
+}
 
-// The PORT that the server serves their Multiaddr
-pub const PORT: u16 = 4455;
+macro_rules! console_log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
 
-/// Our main Leptos App component
-#[component]
-pub fn App(cx: Scope) -> impl IntoView {
+#[wasm_bindgen(start)]
+pub fn run() -> Result<(), JsValue> {
+    console_log!("Starting main()");
+
+    match console_log::init_with_level(log::Level::Info) {
+        Ok(_) => log::info!("Console logging initialized"),
+        Err(_) => log::info!("Console logging already initialized"),
+    };
+
+    // Use `web_sys`'s global `window` function to get a handle on the global
+    // window object.
+    let window = web_sys::window().expect("no global `window` exists");
+    let document = window.document().expect("should have a document on window");
+    let body = document.body().expect("document should have a body");
+
+    // Manufacture the element we're gonna append
+    let val = document.create_element("p")?;
+    val.set_text_content(Some("Let's ping the WebRTC Server!"));
+
+    body.append_child(&val)?;
+
     // create a mpsc channel to get pings to from the pinger
-    let (sendr, recvr) = bounded::<f32>(2);
+    let (sendr, mut recvr) = channel::mpsc::unbounded::<Result<f32, PingerError>>();
 
-    // create Leptos signal to update the Pings diplayed
-    let (number_of_pings, set_number_of_pings) = create_signal(cx, Vec::new());
+    log::info!("Spawn a pinger");
+    console_log!("Spawn a pinger main()");
 
     // start the pinger, pass in our sender
     spawn_local(async move {
+        log::info!("Spawning pinger");
         match start_pinger(sendr).await {
             Ok(_) => log::info!("Pinger finished"),
-            Err(e) => log::error!("Pinger error: {:?}", e),
+            Err(e) => log::info!("Pinger error: {:?}", e),
         };
     });
 
-    // update number of pings signal each time out receiver receives an update
+    // loop on recvr await, appending to the DOM with date and RTT when we get it
     spawn_local(async move {
-        let window = web_sys::window().expect("should have a window in this context");
-        let performance = window
-            .performance()
-            .expect("performance should be available");
-
         loop {
-            match recvr.recv().await {
-                Ok(rtt) => {
-                    // set rtt and date time stamp
-                    // use leptos performance now
-                    let now = performance.now() as u64;
-                    log::info!("[{now:?}] Got RTT: {rtt:?} ms");
-                    set_number_of_pings.update(move |pings| pings.insert(0, (now, rtt)));
+            match recvr.next().await {
+                Some(Ok(rtt)) => {
+                    log::info!("Got RTT: {}", rtt);
+                    let val = document
+                        .create_element("p")
+                        .expect("should create a p elem");
+                    val.set_text_content(Some(&format!(
+                        "RTT: {}ms at {}",
+                        rtt,
+                        Date::new_0().to_string()
+                    )));
+                    body.append_child(&val).expect("should append body elem");
                 }
-                Err(e) => log::error!("Pinger channel closed: {:?}", e),
+                Some(Err(e)) => log::info!("Error: {:?}", e),
+                None => log::info!("Recvr channel closed"),
             }
         }
     });
 
-    // Build our DOM HTML
-    view! { cx,
-        <h1>"Rust Libp2p WebRTC Demo"</h1>
-        <h2>"Pinging every 15 seconds. Open Browser console for more logging details."</h2>
-        <ul>
-            <For
-                each={move || number_of_pings.get()}
-                // the key is the timestamp
-                key={|ping| ping.0}
-                view=move |cx, (stamp, rtt)| {
-                    view! { cx,
-                        <li>
-                        <span>{stamp/1000}</span>" seconds later in "
-                           {rtt} "ms"
-                        </li>
-                    }
-                }
-            />
-        </ul>
-    }
-}
-
-/// Helper that returns the multiaddress of echo-server
-///
-/// It fetches the multiaddress via HTTP request to
-/// 127.0.0.1:4455.
-pub async fn fetch_server_addr() -> String {
-    let url = format!("http://127.0.0.1:{}/", PORT);
-    let window = window().expect("no global `window` exists");
-
-    let value = match JsFuture::from(window.fetch_with_str(&url)).await {
-        Ok(value) => value,
-        Err(err) => {
-            log::error!("fetch failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-    let resp = match value.dyn_into::<Response>() {
-        Ok(resp) => resp,
-        Err(err) => {
-            log::error!("fetch response failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-
-    let text = match resp.text() {
-        Ok(text) => text,
-        Err(err) => {
-            log::error!("fetch text failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-    let text = match JsFuture::from(text).await {
-        Ok(text) => text,
-        Err(err) => {
-            log::error!("convert future failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-
-    match text.as_string().filter(|s| !s.is_empty()) {
-        Some(text) => text,
-        None => {
-            log::error!("fetch text is empty");
-            "".to_string()
-        }
-    }
+    Ok(())
 }

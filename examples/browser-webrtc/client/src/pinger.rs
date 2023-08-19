@@ -1,16 +1,23 @@
-use super::fetch_server_addr;
-use async_channel::Sender;
-use futures::StreamExt;
+use crate::error::PingerError;
+use futures::{channel, SinkExt, StreamExt};
 use libp2p::core::Multiaddr;
 use libp2p::identity::{Keypair, PeerId};
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::{multiaddr, swarm};
 use std::convert::From;
+use wasm_bindgen::JsCast;
+use wasm_bindgen_futures::JsFuture;
 
-pub async fn start_pinger(sendr: Sender<f32>) -> Result<(), PingerError> {
-    let addr_fut = fetch_server_addr();
+// The PORT that the server serves their Multiaddr
+pub const PORT: u16 = 4455;
 
+pub(crate) async fn start_pinger(
+    mut sendr: channel::mpsc::UnboundedSender<Result<f32, PingerError>>,
+) -> Result<(), PingerError> {
+    log::info!("start_pinger");
+    let addr = fetch_server_addr().await;
+
+    log::trace!("Got addr {} from server", addr);
     let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
@@ -26,8 +33,6 @@ pub async fn start_pinger(sendr: Sender<f32>) -> Result<(), PingerError> {
 
     log::info!("Running pinger with peer_id: {}", swarm.local_peer_id());
 
-    let addr = addr_fut.await;
-
     log::info!("Dialing {}", addr);
 
     swarm.dial(addr.parse::<Multiaddr>()?)?;
@@ -36,16 +41,15 @@ pub async fn start_pinger(sendr: Sender<f32>) -> Result<(), PingerError> {
         match swarm.next().await.unwrap() {
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(e), .. })) => {
                 log::error!("Ping failed: {:?}", e);
-                let _result = sendr.send(-1.).await;
+                sendr.send(Err(e.into())).await?;
             }
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                 peer,
                 result: Ok(rtt),
                 ..
             })) => {
-                log::info!("Ping successful: {rtt:?}, {peer}");
-                let _result = sendr.send(rtt.as_micros() as f32 / 1000.).await;
-                log::debug!("RTT Sent");
+                log::info!("Ping successful: RTT: {rtt:?}, from {peer}");
+                sendr.send(Ok(rtt.as_secs_f32())).await?;
             }
             evt => log::info!("Swarm event: {:?}", evt),
         }
@@ -58,21 +62,49 @@ struct Behaviour {
     keep_alive: keep_alive::Behaviour,
 }
 
-#[derive(Debug)]
-pub enum PingerError {
-    AddrParse(std::net::AddrParseError),
-    MultiaddrParse(multiaddr::Error),
-    Dial(swarm::DialError),
-}
+/// Helper that returns the multiaddress of echo-server
+///
+/// It fetches the multiaddress via HTTP request to
+/// 127.0.0.1:4455.
+pub async fn fetch_server_addr() -> String {
+    let url = format!("http://127.0.0.1:{}/", PORT);
+    let window = web_sys::window().expect("no global `window` exists");
 
-impl From<libp2p::multiaddr::Error> for PingerError {
-    fn from(err: libp2p::multiaddr::Error) -> Self {
-        PingerError::MultiaddrParse(err)
-    }
-}
+    let value = match JsFuture::from(window.fetch_with_str(&url)).await {
+        Ok(value) => value,
+        Err(err) => {
+            log::error!("fetch failed: {:?}", err);
+            return "".to_string();
+        }
+    };
+    let resp = match value.dyn_into::<web_sys::Response>() {
+        Ok(resp) => resp,
+        Err(err) => {
+            log::error!("fetch response failed: {:?}", err);
+            return "".to_string();
+        }
+    };
 
-impl From<libp2p::swarm::DialError> for PingerError {
-    fn from(err: libp2p::swarm::DialError) -> Self {
-        PingerError::Dial(err)
+    let text = match resp.text() {
+        Ok(text) => text,
+        Err(err) => {
+            log::error!("fetch text failed: {:?}", err);
+            return "".to_string();
+        }
+    };
+    let text = match JsFuture::from(text).await {
+        Ok(text) => text,
+        Err(err) => {
+            log::error!("convert future failed: {:?}", err);
+            return "".to_string();
+        }
+    };
+
+    match text.as_string().filter(|s| !s.is_empty()) {
+        Some(text) => text,
+        None => {
+            log::error!("fetch text is empty");
+            "".to_string()
+        }
     }
 }
