@@ -17,13 +17,15 @@ import (
 
 // This provides a way for test cases to discover the WebTransport address
 func addrReporter(ma multiaddr.Multiaddr) {
+    fmt.Println(ma)
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         h := w.Header()
         h.Add("Access-Control-Allow-Origin", "*")
         h.Add("Cross-Origin-Resource-Policy", "cross-origin")
         h.Add("Content-Type", "text/plain; charset=utf-8")
 
-        fmt.Fprint(w, ma.String())
+        fmt.Fprint(w, "/ip6/::1/udp/4433/quic-v1/webtransport/certhash/uEiBXLQJRE5AxMMO35cvj8mstOhnVem8zALKI6uP8URQCng/certhash/uEiCUNmVivYLh1oAejkCyYz2rbw4edcXAs1SNBhdYXAo80w/p2p/12D3KooWQLcKqKE33CbaNGQSQakEW6sAYnVxAMvnZDxTKmFFrmK9")
+
     })
 
     http.ListenAndServe(":4455", nil)
