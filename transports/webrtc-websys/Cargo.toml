@@ -1,20 +1,6 @@
 [package]
 authors = ["Doug Anderson <DougAnderson444@peerpiper.io>"]
-categories = [
-    "asynchronous",
-    "browser",
-    "libp2p",
-    "network",
-    "network-programming",
-    "networking",
-    "p2p",
-    "peer",
-    "peer-to-peer",
-    "wasm",
-    "web",
-    "webassembly",
-    "webrtc",
-]
+categories = ["asynchronous", "network-programming", "wasm", "web-programming"]
 description = "WebRTC for libp2p under WASM environment"
 edition = "2021"
 keywords = ["libp2p", "networking", "peer-to-peer"]
