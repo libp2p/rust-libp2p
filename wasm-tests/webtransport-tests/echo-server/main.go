@@ -24,7 +24,7 @@ func addrReporter(ma multiaddr.Multiaddr) {
         h.Add("Cross-Origin-Resource-Policy", "cross-origin")
         h.Add("Content-Type", "text/plain; charset=utf-8")
 
-        fmt.Fprint(w, "/ip6/::1/udp/4433/quic-v1/webtransport/certhash/uEiBXLQJRE5AxMMO35cvj8mstOhnVem8zALKI6uP8URQCng/certhash/uEiCUNmVivYLh1oAejkCyYz2rbw4edcXAs1SNBhdYXAo80w/p2p/12D3KooWQLcKqKE33CbaNGQSQakEW6sAYnVxAMvnZDxTKmFFrmK9")
+        fmt.Fprint(w, "/ip6/::1/udp/4433/quic-v1/webtransport/certhash/uEiBAOgXcfExykedZKTU4zp3TRdt_qsaOepASE_sE92D1Cw/p2p/12D3KooWN4H4urugWTvubDGpEMH21VZsiZGWXUzLZ3SQUEjfmD1y")
 
     })
 

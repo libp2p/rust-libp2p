@@ -2,9 +2,11 @@ use futures::{future::BoxFuture, ready, FutureExt, SinkExt, StreamExt};
 use h3::{error::ErrorLevel, ext::Protocol};
 use libp2p_core::{muxing::StreamMuxerBox, transport::TransportEvent};
 use libp2p_identity::PeerId;
-use std::{sync::Arc, task::Poll};
+use std::{net::SocketAddr, sync::Arc, task::Poll};
 
 use rustls::{Certificate, PrivateKey};
+
+mod fingerprint;
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
 
@@ -13,9 +15,24 @@ pub struct Transport(
 );
 
 impl Transport {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(peer_id: PeerId) -> Result<Self, Box<dyn std::error::Error>> {
         let cert = Certificate(std::fs::read("server.cert")?);
+        let fingerprint = fingerprint::Fingerprint::from_certificate(cert.as_ref());
         let key = PrivateKey(std::fs::read("server.key")?);
+
+        let socket_addr: SocketAddr = "[::1]:4433".parse().unwrap();
+
+        let addr = libp2p::core::Multiaddr::empty()
+            .with(socket_addr.ip().into())
+            .with(libp2p::core::multiaddr::Protocol::Udp(socket_addr.port()))
+            .with(libp2p::core::multiaddr::Protocol::QuicV1)
+            .with(libp2p::core::multiaddr::Protocol::WebTransport)
+            .with(libp2p::core::multiaddr::Protocol::Certhash(
+                fingerprint.to_multihash(),
+            ))
+            .with(libp2p::core::multiaddr::Protocol::P2p(peer_id));
+
+        println!("Listening on: {addr:?}");
 
         let mut tls_config = rustls::ServerConfig::builder()
             .with_safe_default_cipher_suites()
@@ -36,7 +53,7 @@ impl Transport {
         tls_config.alpn_protocols = alpn;
 
         let server_config = quinn::ServerConfig::with_crypto(Arc::new(tls_config));
-        let endpoint = quinn::Endpoint::server(server_config, "[::1]:4433".parse().unwrap())?;
+        let endpoint = quinn::Endpoint::server(server_config, socket_addr)?;
 
         let (sender, receiver) = futures::channel::mpsc::channel(0);
 
