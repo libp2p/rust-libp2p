@@ -95,7 +95,10 @@ impl PollDataChannel {
         let onbufferedamountlow_callback =
             Closure::<dyn FnMut(_)>::new(move |_ev: RtcDataChannelEvent| {
                 if let Err(e) = tx_onbufferedamountlow.try_send(()) {
-                    log::error!("Error sending onbufferedamountlow event {:?}", e)
+                    log::warn!(
+                        "Sending onbufferedamountlow failed, channel is probably closed {:?}",
+                        e
+                    )
                 }
             });
 
