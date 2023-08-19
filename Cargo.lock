@@ -3352,7 +3352,7 @@ dependencies = [
  "log",
  "parking_lot",
  "quicksink",
- "rcgen 0.9.3",
+ "rcgen 0.10.0",
  "rw-stream-sink",
  "soketto",
  "url",
