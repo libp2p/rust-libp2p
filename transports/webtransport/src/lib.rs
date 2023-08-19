@@ -16,9 +16,22 @@ pub struct Transport(
 
 impl Transport {
     pub fn new(peer_id: PeerId) -> Result<Self, Box<dyn std::error::Error>> {
-        let cert = Certificate(std::fs::read("server.cert")?);
+        let mut params = rcgen::CertificateParams::new(vec![
+            "hello.world.example".to_string(),
+            "localhost".to_string(),
+        ]);
+
+        // Set not_before and not_after
+        params.not_before = time::OffsetDateTime::now_utc();
+        // TODO: Obviously we can do better.
+        params.not_after =
+            time::OffsetDateTime::now_utc() + std::time::Duration::from_secs(60 * 60 * 24);
+
+        let x = rcgen::Certificate::from_params(params).unwrap();
+        let cert = Certificate(x.serialize_der().unwrap());
+
         let fingerprint = fingerprint::Fingerprint::from_certificate(cert.as_ref());
-        let key = PrivateKey(std::fs::read("server.key")?);
+        let key = PrivateKey(x.serialize_private_key_der());
 
         let socket_addr: SocketAddr = "[::1]:4433".parse().unwrap();
 

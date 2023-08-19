@@ -320,20 +320,7 @@ async fn new_connection_to_echo_server() -> Connection {
 /// It fetches the multiaddress via HTTP request to
 /// 127.0.0.1:4455.
 async fn fetch_server_addr() -> Multiaddr {
-    let url = "http://127.0.0.1:4455/";
-    let window = window().expect("failed to get browser window");
-
-    let value = JsFuture::from(window.fetch_with_str(url))
-        .await
-        .expect("fetch failed");
-    let resp = value.dyn_into::<Response>().expect("cast failed");
-
-    let text = resp.text().expect("text failed");
-    let text = JsFuture::from(text).await.expect("text promise failed");
-
-    text.as_string()
-        .filter(|s| !s.is_empty())
-        .expect("response not a text")
+    "/ip6/::1/udp/4433/quic-v1/webtransport/certhash/uEiC2fS1kSZDhvit28_w7FwEtRuL5W0hRUrPKCi414xFFVg/p2p/12D3KooWL6cCLH7Y6SEHFhgfRtWMRpJG5vhsz7SYGMgT5znXAASJ"
         .parse()
         .unwrap()
 }

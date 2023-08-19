@@ -35,6 +35,9 @@ h3-quinn = { git = "https://github.com/hyperium/h3" }
 h3-webtransport = { git = "https://github.com/hyperium/h3" }
 http = "0.2.9"
 env_logger = "0.10.0"
+# TODO
+rcgen = "*"
+time = "0.3"
 
 [features]
 tokio = ["if-watch/tokio", "quinn/runtime-tokio"]

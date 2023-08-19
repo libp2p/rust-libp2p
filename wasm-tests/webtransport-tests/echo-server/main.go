@@ -17,7 +17,6 @@ import (
 
 // This provides a way for test cases to discover the WebTransport address
 func addrReporter(ma multiaddr.Multiaddr) {
-    fmt.Println(ma)
     http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
         h := w.Header()
         h.Add("Access-Control-Allow-Origin", "*")

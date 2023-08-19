@@ -3426,10 +3426,12 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
+ "rcgen 0.10.0",
  "rustls 0.21.5",
  "sha2 0.10.7",
  "socket2 0.5.3",
  "thiserror",
+ "time",
  "tokio",
 ]
 
