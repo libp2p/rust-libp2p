@@ -2,5 +2,5 @@
 
 Tools that are common to more than one WebRTC component.
 
--   [Protobuf Generated Code](generated)
--   [Stream State](substream/state.rs)
+-   [Protobuf Generated Code](src/generated)
+-   [Stream State](src/substream/state.rs)

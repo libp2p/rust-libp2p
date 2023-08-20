@@ -1,14 +1,14 @@
 [package]
-authors = ["Parity Technologies <admin@parity.io>"]
-categories = ["asynchronous", "network-programming"]
-description = "WebRTC transport for libp2p"
-edition = "2021"
-keywords = ["libp2p", "networking", "peer-to-peer"]
-license = "MIT"
 name = "libp2p-webrtc"
+version = "0.7.0-alpha"
+authors = ["Parity Technologies <admin@parity.io>"]
+description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
+license = "MIT"
+edition = "2021"
 rust-version = { workspace = true }
-version = "0.6.0-alpha"
+keywords = ["libp2p", "networking", "peer-to-peer"]
+categories = ["asynchronous", "network-programming"]
 
 [dependencies]
 async-trait = "0.1"
@@ -19,6 +19,7 @@ futures-timer = "3"
 hex = "0.4"
 if-watch = "3.0"
 libp2p-core = { workspace = true }
+libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true, features = ["tokio"] }
 log = "0.4"
