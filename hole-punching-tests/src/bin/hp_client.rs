@@ -33,44 +33,20 @@ use libp2p::{
     tcp, yamux, PeerId,
 };
 use log::{info, LevelFilter};
+use redis::AsyncCommands;
 use std::pin::pin;
 use std::str::FromStr;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p DCUtR client")]
 struct Opts {
-    /// The mode (client-listen, client-dial).
+    /// The mode (listening or dialing).
     #[clap(long)]
     mode: Mode,
 
-    /// Fixed value to generate deterministic peer id.
+    /// The transport (tcp or quic).
     #[clap(long)]
-    secret_key_seed: u8,
-
-    /// The listening address
-    #[clap(long)]
-    relay_address: Multiaddr,
-
-    /// Peer ID of the remote peer to hole punch to.
-    #[clap(long)]
-    remote_peer_id: Option<PeerId>,
-}
-
-#[derive(Clone, Debug, PartialEq, Parser)]
-enum Mode {
-    Dial,
-    Listen,
-}
-
-impl FromStr for Mode {
-    type Err = String;
-    fn from_str(mode: &str) -> Result<Self, Self::Err> {
-        match mode {
-            "dial" => Ok(Mode::Dial),
-            "listen" => Ok(Mode::Listen),
-            _ => Err("Expected either 'dial' or 'listen'".to_string()),
-        }
-    }
+    transport: TransportProtocol,
 }
 
 #[tokio::main]
@@ -82,7 +58,7 @@ async fn main() -> Result<()> {
 
     let opts = Opts::parse();
 
-    let local_key = generate_ed25519(opts.secret_key_seed);
+    let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {local_peer_id}");
 
@@ -124,7 +100,16 @@ async fn main() -> Result<()> {
         dcutr: dcutr::Behaviour::new(local_peer_id),
     };
 
+    let client = redis::Client::open("redis://10.0.0.2:6379")?;
+    let mut connection = client.get_async_connection().await?;
+
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
+
+    if opts.mode == Mode::Listen {
+        connection
+            .rpush("LISTEN_CLIENT_PEER_ID", swarm.local_peer_id().to_string())
+            .await?;
+    }
 
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -149,9 +134,19 @@ async fn main() -> Result<()> {
         }
     }
 
+    let redis_key = match opts.transport {
+        TransportProtocol::Tcp => "RELAY_TCP_ADDRESS",
+        TransportProtocol::Quic => "RELAY_QUIC_ADDRESS",
+    };
+
+    let relay_address = connection
+        .blpop::<_, String>(redis_key, 10)
+        .await?
+        .parse::<Multiaddr>()?;
+
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public address.
-    swarm.dial(opts.relay_address.clone())?;
+    swarm.dial(relay_address.clone())?;
     let mut learned_observed_addr = false;
     let mut told_relay_observed_addr = false;
 
@@ -183,14 +178,19 @@ async fn main() -> Result<()> {
 
     match opts.mode {
         Mode::Dial => {
+            let remote_peer_id = connection
+                .blpop::<_, String>("LISTEN_CLIENT_PEER_ID", 10)
+                .await?
+                .parse()?;
+
             swarm.dial(
-                opts.relay_address
+                relay_address
                     .with(Protocol::P2pCircuit)
-                    .with(Protocol::P2p(opts.remote_peer_id.unwrap())),
+                    .with(Protocol::P2p(remote_peer_id)),
             )?;
         }
         Mode::Listen => {
-            swarm.listen_on(opts.relay_address.with(Protocol::P2pCircuit))?;
+            swarm.listen_on(relay_address.with(Protocol::P2pCircuit))?;
         }
     }
 
@@ -208,20 +208,18 @@ async fn main() -> Result<()> {
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                 info!("{:?}", event)
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(event)) => {
-                info!("{:?}", event)
+            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
+                dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
+            )) => {
+                info!("Successfully hole-punched to {remote_peer_id}");
+                return Ok(());
             }
             SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                 info!("{:?}", event)
             }
             SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                if let Some(remote_peer) = opts.remote_peer_id {
-                    if peer_id == remote_peer {
-                        info!("Successfully hole-punched to {remote_peer}");
-                        return Ok(());
-                    }
-                }
+                info!("Connected to {peer_id}");
             }
             SwarmEvent::OutgoingConnectionError { error, .. } => {
                 anyhow::bail!(error)
@@ -231,9 +229,36 @@ async fn main() -> Result<()> {
     }
 }
 
-fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
-    let mut bytes = [0u8; 32];
-    bytes[0] = secret_key_seed;
+#[derive(Clone, Debug, PartialEq, Parser)]
+enum Mode {
+    Dial,
+    Listen,
+}
 
-    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
+impl FromStr for Mode {
+    type Err = String;
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "dial" => Ok(Mode::Dial),
+            "listen" => Ok(Mode::Listen),
+            _ => Err("Expected either 'dial' or 'listen'".to_string()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Parser)]
+enum TransportProtocol {
+    Tcp,
+    Quic,
+}
+
+impl FromStr for TransportProtocol {
+    type Err = String;
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "tcp" => Ok(TransportProtocol::Tcp),
+            "quic" => Ok(TransportProtocol::Quic),
+            _ => Err("Expected either 'tcp' or 'quic'".to_string()),
+        }
+    }
 }

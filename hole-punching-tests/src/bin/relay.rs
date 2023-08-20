@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use anyhow::Context;
 use clap::Parser;
 use futures::future::Either;
 use futures::stream::StreamExt;
@@ -34,6 +35,7 @@ use libp2p::{
     tcp, yamux,
 };
 use log::{info, LevelFilter};
+use redis::AsyncCommands;
 use std::error::Error;
 use std::net::IpAddr;
 
@@ -46,8 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let opt = Opt::parse();
 
-    // Create a static known PeerId based on given secret
-    let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
+    let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {local_peer_id}");
 
@@ -80,14 +81,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Listen on all interfaces
     let listen_addr_tcp = Multiaddr::empty()
         .with(opt.listen_addr.into())
-        .with(Protocol::Tcp(opt.port));
-    swarm.listen_on(listen_addr_tcp)?;
+        .with(Protocol::Tcp(0));
+    let tcp_listener_id = swarm.listen_on(listen_addr_tcp)?;
 
     let listen_addr_quic = Multiaddr::empty()
         .with(opt.listen_addr.into())
-        .with(Protocol::Udp(opt.port))
+        .with(Protocol::Udp(0))
         .with(Protocol::QuicV1);
-    swarm.listen_on(listen_addr_quic)?;
+    let quic_listener_id = swarm.listen_on(listen_addr_quic)?;
+
+    let client = redis::Client::open("redis://10.0.0.2:6379/")?;
+    let mut connection = client
+        .get_async_connection()
+        .await
+        .context("Failed to connect to redis server")?;
 
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
@@ -102,8 +109,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 info!("{event:?}")
             }
-            SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {address:?}");
+            SwarmEvent::NewListenAddr {
+                address,
+                listener_id,
+            } => {
+                info!("Listening on {address}");
+
+                let address = address
+                    .with(Protocol::P2p(*swarm.local_peer_id()))
+                    .to_string();
+
+                // Push each address twice because we need to connect two clients.
+
+                if listener_id == tcp_listener_id {
+                    connection.rpush("RELAY_TCP_ADDRESS", &address).await?;
+                    connection.rpush("RELAY_TCP_ADDRESS", &address).await?;
+                }
+                if listener_id == quic_listener_id {
+                    connection.rpush("RELAY_QUIC_ADDRESS", &address).await?;
+                    connection.rpush("RELAY_QUIC_ADDRESS", &address).await?;
+                }
             }
             _ => {}
         }
@@ -117,25 +142,10 @@ struct Behaviour {
     identify: identify::Behaviour,
 }
 
-fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
-    let mut bytes = [0u8; 32];
-    bytes[0] = secret_key_seed;
-
-    identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
-}
-
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p relay")]
 struct Opt {
     /// Which local address to listen on
     #[clap(long)]
     listen_addr: IpAddr,
-
-    /// Fixed value to generate deterministic peer id
-    #[clap(long)]
-    secret_key_seed: u8,
-
-    /// The port used to listen on all interfaces
-    #[clap(long)]
-    port: u16,
 }

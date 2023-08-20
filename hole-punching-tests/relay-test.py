@@ -40,17 +40,22 @@ class RelayTestTopo(Topo):
         host = self.addHost('hrelay', ip='10.0.0.1/24')
         self.addLink(host, inetSwitch, cls=TCLink, delay = '30ms')
 
+        host = self.addHost('hredis', ip='10.0.0.2/24')
+        self.addLink(host, inetSwitch)
+
 
 def tcpHolepunch(mininet: Mininet, hRelay, hClient):
     relay = mininet.getNodeByName('hrelay')
     alice = mininet.getNodeByName('halice')
     bob = mininet.getNodeByName('hbob')
+    redis = mininet.getNodeByName('hredis')
 
-    relay.cmdPrint(f"{hRelay} --port 8080 --secret-key-seed 1 --listen-addr {relay.IP()} &")
-    alice.cmdPrint(f"{hClient} --mode listen --secret-key-seed 2 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X &")
+    redis.cmdPrint("docker run --rm -p 6739:6739 host redis &")
+    time.sleep(1)
 
-    time.sleep(5)
-    bob.cmdPrint(f"{hClient} --mode dial --secret-key-seed 3 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X --remote-peer-id 12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3")
+    relay.cmdPrint(f"{hRelay} --listen-addr {relay.IP()}")
+    alice.cmdPrint(f"{hClient} --mode listen --transport tcp")
+    bob.cmdPrint(f"{hClient} --mode dial --transport tcp")
 
 
 if __name__ == '__main__':
