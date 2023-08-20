@@ -110,8 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ping: ping::Behaviour,
     }
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .without_tcp()
         .without_relay()

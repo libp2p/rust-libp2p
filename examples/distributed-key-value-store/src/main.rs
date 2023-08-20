@@ -45,21 +45,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: mdns::async_io::Behaviour,
     }
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| Ok(MyBehaviour {
-            kademlia: Kademlia::new(
-                key.public().to_peer_id(),
-                MemoryStore::new(key.public().to_peer_id()),
-            ),
-            mdns: mdns::async_io::Behaviour::new(
-                mdns::Config::default(),
-                key.public().to_peer_id(),
-            )?
-        }))?
+        .with_behaviour(|key| {
+            Ok(MyBehaviour {
+                kademlia: Kademlia::new(
+                    key.public().to_peer_id(),
+                    MemoryStore::new(key.public().to_peer_id()),
+                ),
+                mdns: mdns::async_io::Behaviour::new(
+                    mdns::Config::default(),
+                    key.public().to_peer_id(),
+                )?,
+            })
+        })?
         .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));

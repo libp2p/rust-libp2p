@@ -46,8 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_existing_identity(local_key)
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
         .with_async_std()
         .with_tcp()
         .with_noise()?
@@ -55,14 +54,16 @@ fn main() -> Result<(), Box<dyn Error>> {
             quic::async_std::Transport::new(quic::Config::new(&keypair))
                 .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })
-        .with_behaviour(|key| Ok(Behaviour {
-            relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
-            ping: ping::Behaviour::new(ping::Config::new()),
-            identify: identify::Behaviour::new(identify::Config::new(
-                "/TODO/0.0.1".to_string(),
-                key.public(),
-            )),
-        }))?
+        .with_behaviour(|key| {
+            Ok(Behaviour {
+                relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),
+                ping: ping::Behaviour::new(ping::Config::new()),
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/TODO/0.0.1".to_string(),
+                    key.public(),
+                )),
+            })
+        })?
         .build();
 
     // Listen on all interfaces

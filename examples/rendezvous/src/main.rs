@@ -32,20 +32,25 @@ use std::time::Duration;
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| Ok(MyBehaviour {
-            identify: identify::Behaviour::new(identify::Config::new(
-                "rendezvous-example/1.0.0".to_string(),
-                key.public(),
-            )),
-            rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
-        }))?
+        .with_behaviour(|key| {
+            Ok(MyBehaviour {
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "rendezvous-example/1.0.0".to_string(),
+                    key.public(),
+                )),
+                rendezvous: rendezvous::server::Behaviour::new(
+                    rendezvous::server::Config::default(),
+                ),
+                ping: ping::Behaviour::new(
+                    ping::Config::new().with_interval(Duration::from_secs(1)),
+                ),
+                keep_alive: keep_alive::Behaviour,
+            })
+        })?
         .build();
 
     log::info!("Local peer id: {}", swarm.local_peer_id());

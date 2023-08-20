@@ -37,8 +37,7 @@ const BOOTNODES: [&str; 4] = [
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .with_tcp()
         .with_noise()?

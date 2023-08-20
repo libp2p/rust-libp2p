@@ -35,8 +35,7 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_new_identity()
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
         .with_tcp()
         .with_noise()

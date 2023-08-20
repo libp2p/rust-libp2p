@@ -43,21 +43,22 @@ pub(crate) async fn new(
     };
     let peer_id = id_keys.public().to_peer_id();
 
-    let mut swarm = libp2p::SwarmBuilder::new()
-        .with_existing_identity(id_keys)
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(id_keys)
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| Ok(ComposedBehaviour {
-            kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
-            request_response: request_response::cbor::Behaviour::new(
-                [(
-                    StreamProtocol::new("/file-exchange/1"),
-                    ProtocolSupport::Full,
-                )],
-                request_response::Config::default(),
-            ),
-        }))?
+        .with_behaviour(|key| {
+            Ok(ComposedBehaviour {
+                kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
+                request_response: request_response::cbor::Behaviour::new(
+                    [(
+                        StreamProtocol::new("/file-exchange/1"),
+                        ProtocolSupport::Full,
+                    )],
+                    request_response::Config::default(),
+                ),
+            })
+        })?
         .build();
 
     swarm
