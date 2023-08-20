@@ -20,8 +20,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use clap::Parser;
+use futures::future::Either;
 use futures::stream::StreamExt;
-use futures::{executor::block_on, future::Either};
 use libp2p::{
     core::multiaddr::Protocol,
     core::muxing::StreamMuxerBox,
@@ -31,13 +31,14 @@ use libp2p::{
     identity::PeerId,
     noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp,
+    tcp, yamux,
 };
 use log::{info, LevelFilter};
 use std::error::Error;
 use std::net::IpAddr;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::builder()
         .filter_level(LevelFilter::Info)
         .parse_default_env()
@@ -50,18 +51,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {local_peer_id}");
 
-    let tcp_transport = tcp::async_io::Transport::default();
-
-    let tcp_transport = tcp_transport
+    let tcp_transport = tcp::tokio::Transport::default()
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(
             noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
         )
-        .multiplex(libp2p::yamux::Config::default());
+        .multiplex(yamux::Config::default());
 
-    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&local_key));
-
-    let transport = quic_transport
+    let transport = quic::tokio::Transport::new(quic::Config::new(&local_key))
         .or_transport(tcp_transport)
         .map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -78,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
     };
 
-    let mut swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
 
     // Listen on all interfaces
     let listen_addr_tcp = Multiaddr::empty()
@@ -92,27 +89,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     swarm.listen_on(listen_addr_quic)?;
 
-    block_on(async {
-        loop {
-            match swarm.next().await.expect("Infinite Stream.") {
-                SwarmEvent::Behaviour(event) => {
-                    if let BehaviourEvent::Identify(identify::Event::Received {
-                        info: identify::Info { observed_addr, .. },
-                        ..
-                    }) = &event
-                    {
-                        swarm.add_external_address(observed_addr.clone());
-                    }
+    loop {
+        match swarm.next().await.expect("Infinite Stream.") {
+            SwarmEvent::Behaviour(event) => {
+                if let BehaviourEvent::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
+                    ..
+                }) = &event
+                {
+                    swarm.add_external_address(observed_addr.clone());
+                }
 
-                    info!("{event:?}")
-                }
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("Listening on {address:?}");
-                }
-                _ => {}
+                info!("{event:?}")
             }
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("Listening on {address:?}");
+            }
+            _ => {}
         }
-    })
+    }
 }
 
 #[derive(NetworkBehaviour)]

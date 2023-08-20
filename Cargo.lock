@@ -2121,13 +2121,14 @@ dependencies = [
 name = "hole-punching-tests"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "env_logger 0.10.0",
  "futures",
- "futures-timer",
  "libp2p",
  "log",
  "redis",
+ "tokio",
 ]
 
 [[package]]
