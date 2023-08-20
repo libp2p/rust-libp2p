@@ -13,3 +13,4 @@ futures-timer = "3.0"
 libp2p = { path = "../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 libp2p-quic = { path = "../transports/quic", features = ["async-std"] }
 log = "0.4"
+redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
