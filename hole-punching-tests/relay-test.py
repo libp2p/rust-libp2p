@@ -1,14 +1,15 @@
 #!/usr/bin/env python
+import sys
 import time
 
 from mininet.link import TCLink
-from mininet.log import setLogLevel
 from mininet.net import Mininet
 from mininet.nodelib import NAT
 from mininet.topo import Topo
 
-class RelayTstTopo(Topo):
-    def build(self, **_kwargs ):
+
+class RelayTestTopo(Topo):
+    def build(self):
         # set up inet switch
         inetSwitch = self.addSwitch('s0')
 
@@ -39,16 +40,23 @@ class RelayTstTopo(Topo):
         host = self.addHost('hrelay', ip='10.0.0.1/24')
         self.addLink(host, inetSwitch, cls=TCLink, delay = '30ms')
 
-mininet.TOPOS['relayTopo'] = RelayTstTopo
-mininet.TESTS['relay'] = True
-
-def relay(mininet: Mininet, hRelay, hAlice, hBob):
+def tcpHolepunch(mininet: Mininet, hRelay, hClient):
     relay = mininet.getNodeByName('hrelay')
     alice = mininet.getNodeByName('halice')
     bob = mininet.getNodeByName('hbob')
 
     relay.cmdPrint(f"{hRelay} --port 8080 --secret-key-seed 1 --listen-addr {relay.IP()} &")
-    alice.cmdPrint(f"{hAlice} --mode listen --secret-key-seed 2 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X &")
+    alice.cmdPrint(f"{hClient} --mode listen --secret-key-seed 2 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X &")
 
     time.sleep(5)
-    bob.cmdPrint(f"{hBob} --mode dial --secret-key-seed 3 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X --remote-peer-id 12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3")
+    bob.cmdPrint(f"{hClient} --mode dial --secret-key-seed 3 --relay-address /ip4/{relay.IP()}/tcp/8080/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X --remote-peer-id 12D3KooWH3uVF6wv47WnArKHk5p6cvgCJEb74UTmxztmQDc298L3")
+
+if __name__ == '__main__':
+    from mininet.net import Mininet
+    from mininet.log import setLogLevel
+
+    setLogLevel( 'info' )
+
+    net = Mininet(topo=RelayTestTopo())
+
+    net.run(tcpHolepunch, net, sys.argv[1], sys.argv[2])
