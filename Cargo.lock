@@ -2126,7 +2126,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "libp2p-quic",
  "log",
  "redis",
 ]

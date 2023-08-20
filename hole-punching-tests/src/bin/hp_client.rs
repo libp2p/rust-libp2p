@@ -33,11 +33,10 @@ use libp2p::{
     },
     dcutr,
     dns::DnsConfig,
-    identify, identity, noise, ping, relay,
+    identify, identity, noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
 };
-use libp2p_quic as quic;
 use log::{info, LevelFilter};
 use std::error::Error;
 use std::str::FromStr;
