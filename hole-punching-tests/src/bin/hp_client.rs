@@ -28,9 +28,7 @@ use libp2p::{
         transport::Transport,
         upgrade,
     },
-    dcutr,
-    dns::DnsConfig,
-    identify, identity, noise, ping, quic, relay,
+    dcutr, identify, identity, noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
 };
@@ -100,8 +98,7 @@ async fn main() -> Result<()> {
             .multiplex(yamux::Config::default())
             .or_transport(quic::tokio::Transport::new(quic::Config::new(&local_key)));
 
-        DnsConfig::system(relay_tcp_quic_transport)
-            .await?
+        relay_tcp_quic_transport
             .map(|either_output, _| match either_output {
                 Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
                 Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
