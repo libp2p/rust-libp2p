@@ -64,7 +64,8 @@ async fn outbound_inner(
 
     let webrtc_stream = Stream::new(handshake_data_channel);
 
-    let ufrag = format!("libp2p+webrtc+v1/{}", gen_ufrag(32));
+    let ufrag = libp2p_webrtc_utils::sdp::random_ufrag();
+
     /*
      * OFFER
      */
@@ -111,18 +112,4 @@ async fn outbound_inner(
     log::debug!("Remote peer identified as {peer_id}");
 
     Ok((peer_id, Connection::new(peer_connection)))
-}
-
-/// Generates a random ufrag of the given length
-fn gen_ufrag(len: usize) -> String {
-    let charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    let mut ufrag = String::new();
-    let mut buf = vec![0; len];
-    getrandom::getrandom(&mut buf).unwrap();
-    for i in buf {
-        let idx = i as usize % charset.len();
-        ufrag.push(charset.chars().nth(idx).unwrap());
-    }
-    ufrag
 }

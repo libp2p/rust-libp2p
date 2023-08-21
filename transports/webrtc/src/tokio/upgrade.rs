@@ -23,9 +23,7 @@ use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::{fingerprint::Fingerprint, noise};
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use libp2p_webrtc_utils::{fingerprint::Fingerprint, noise, sdp::random_ufrag};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
@@ -151,18 +149,6 @@ async fn new_inbound_connection(
         .await?;
 
     Ok(connection)
-}
-
-/// Generates a random ufrag and adds a prefix according to the spec.
-fn random_ufrag() -> String {
-    format!(
-        "libp2p+webrtc+v1/{}",
-        thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect::<String>()
-    )
 }
 
 fn setting_engine(

@@ -23,6 +23,9 @@ use serde::Serialize;
 use std::net::{IpAddr, SocketAddr};
 use tinytemplate::TinyTemplate;
 
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+
 // An SDP message that constitutes the offer.
 //
 // Main RFC: <https://datatracker.ietf.org/doc/html/rfc8866>
@@ -201,6 +204,18 @@ pub fn fingerprint(sdp: &str) -> Option<Fingerprint> {
         }
     }
     None
+}
+
+/// Generates a random ufrag and adds a prefix according to the spec.
+pub fn random_ufrag() -> String {
+    format!(
+        "libp2p+webrtc+v1/{}",
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect::<String>()
+    )
 }
 
 #[cfg(test)]
