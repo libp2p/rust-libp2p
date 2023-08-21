@@ -159,7 +159,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .map(|k| k.bootstrap());
         }
 
-        match swarm.next().await.expect("Swarm not to terminate.") {
+        let event = swarm.next().await.expect("Swarm not to terminate.");
+        metrics.record(&event);
+        match event {
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Identify(e)) => {
                 info!("{:?}", e);
                 metrics.record(&e);
@@ -202,13 +204,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // TODO: Add metric recording for `NatStatus`.
                 // metrics.record(&e)
             }
-            e => {
-                if let SwarmEvent::NewListenAddr { address, .. } = &e {
-                    println!("Listening on {address:?}");
-                }
-
-                metrics.record(&e)
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening on {address:?}");
             }
+            _ => {}
         }
     }
 }
