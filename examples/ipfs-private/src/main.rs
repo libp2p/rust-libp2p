@@ -112,8 +112,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .without_tcp()
-        .without_relay()
         .with_other_transport(|key| {
             let noise_config = noise::Config::new(&key).unwrap();
             let yamux_config = yamux::Config::default();

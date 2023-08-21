@@ -44,7 +44,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .with_tcp()
-        .without_tls()
         .with_noise()?
         .with_behaviour(|key| Ok(Behaviour::new(key.public())))?
         .build();

@@ -26,8 +26,7 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::{
     core::multiaddr::Protocol,
-    core::muxing::StreamMuxerBox,
-    core::{Multiaddr, Transport},
+    core::Multiaddr,
     identify, identity,
     identity::PeerId,
     ping, relay,
@@ -50,10 +49,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_other_transport(|keypair| {
-            quic::async_std::Transport::new(quic::Config::new(&keypair))
-                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
-        })
+        .with_quic()
         .with_behaviour(|key| {
             Ok(Behaviour {
                 relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),

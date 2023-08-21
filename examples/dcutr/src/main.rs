@@ -23,11 +23,7 @@
 use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
-    core::{
-        multiaddr::{Multiaddr, Protocol},
-        muxing::StreamMuxerBox,
-        transport::Transport,
-    },
+    core::multiaddr::{Multiaddr, Protocol},
     dcutr, identify, identity, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, PeerId,
@@ -126,14 +122,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .with_async_std()
             .with_tcp_config(tcp::Config::default().port_reuse(true).nodelay(true))
             .with_noise()?
-            .with_relay()
-            .with_noise()?
-            .with_other_transport(|keypair| {
-                quic::async_std::Transport::new(quic::Config::new(&keypair))
-                    .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
-            })
+            .with_quic()
             .with_dns()
             .await?
+            .with_relay()
+            .with_noise()?
             .with_behaviour(|keypair, relay_behaviour| {
                 Ok(Behaviour {
                     relay_client: relay_behaviour,
