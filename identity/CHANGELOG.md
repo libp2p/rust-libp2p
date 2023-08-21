@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 ## 0.2.3
 
 - Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.
@@ -52,7 +50,6 @@
 [PR 3928]: https://github.com/libp2p/rust-libp2p/pull/3928
 [protobuf format]: https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md#keys
 
->>>>>>> fb616973 (deps(identity): update ed25519-dalek to 2.0)
 ## 0.1.2
 
 - Add `impl From<ed25519::PublicKey> for PublicKey` so that `PublicKey::from(ed25519::PublicKey)` works.

@@ -55,8 +55,6 @@ members = [
     "transports/websocket",
 ]
 resolver = "2"
-<<<<<<< HEAD
-=======
 
 [workspace.package]
 rust-version = "1.65.0"
@@ -115,4 +113,3 @@ multihash = "0.19.0"
 # we import via `rust-multiaddr`.
 # This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
->>>>>>> fb616973 (deps(identity): update ed25519-dalek to 2.0)

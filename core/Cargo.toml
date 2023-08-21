@@ -16,7 +16,7 @@ fnv = "1.0"
 futures = { version = "0.3.28", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 instant = "0.1.11"
-libp2p-identity = { version = "0.1", path = "../identity", features = ["peerid", "ed25519"] }
+libp2p-identity = { version = "0.2.3", path = "../identity", features = ["peerid", "ed25519"] }
 log = "0.4"
 multiaddr = { version = "0.17.1" }
 multihash = { version = "0.17.0", default-features = false, features = ["std"] }
