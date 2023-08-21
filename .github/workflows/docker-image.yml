@@ -8,7 +8,7 @@ on:
       - 'libp2p-server-**'
 
 jobs:
-  build:
+  server:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
