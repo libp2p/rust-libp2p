@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - unreleased
+
+### Changed
+- Move to tokio and hyper.
+  See [PR 4311].
+- Move to distroless Docker base image.
+  See [PR 4311].
+
+[PR 4311]: https://github.com/libp2p/rust-libp2p/pull/4311
+
 ## [0.8.0]
 ### Changed
 - Remove mplex support.
