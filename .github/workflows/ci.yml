@@ -354,3 +354,16 @@ jobs:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@578b235f6e5f613f7727f1c17bd3305b4d4d4e1f # v2.6.1
       - run: cargo metadata --locked --format-version=1 > /dev/null
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    steps:
+    - uses: actions/checkout@v3
+    - uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        command: check ${{ matrix.checks }}
