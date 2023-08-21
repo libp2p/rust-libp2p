@@ -11,6 +11,6 @@ RUN --mount=type=cache,target=./target \
 RUN --mount=type=cache,target=./target \
     mv ./target/release/libp2p-server /usr/local/bin/libp2p-server
 
-FROM debian:bullseye-slim
+FROM gcr.io/distroless/cc
 COPY --from=builder /usr/local/bin/libp2p-server /usr/local/bin/libp2p-server
 CMD ["libp2p-server"]
