@@ -79,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         (peer_id, keypair)
     };
-    println!("Local peer id: {local_peer_id:?}");
+    println!("Local peer id: {local_peer_id}");
 
     let transport = {
         let tcp_transport =
