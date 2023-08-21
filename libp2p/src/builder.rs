@@ -1,4 +1,3 @@
-// TODO: Rename runtime to provider
 // TODO: Should we have a timeout on transport?
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider making with_other_transport fallible.
@@ -6,9 +5,9 @@
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use std::marker::PhantomData;
 
-pub struct SwarmBuilder<P, Phase> {
+pub struct SwarmBuilder<Provider, Phase> {
     keypair: libp2p_identity::Keypair,
-    phantom: PhantomData<P>,
+    phantom: PhantomData<Provider>,
     phase: Phase,
 }
 
@@ -55,12 +54,15 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 pub struct TcpPhase {}
 
 #[cfg(feature = "tcp")]
-impl<P> SwarmBuilder<P, TcpPhase> {
-    pub fn with_tcp(self) -> SwarmBuilder<P, TcpTlsPhase> {
+impl<Provider> SwarmBuilder<Provider, TcpPhase> {
+    pub fn with_tcp(self) -> SwarmBuilder<Provider, TcpTlsPhase> {
         self.with_tcp_config(Default::default())
     }
 
-    pub fn with_tcp_config(self, config: libp2p_tcp::Config) -> SwarmBuilder<P, TcpTlsPhase> {
+    pub fn with_tcp_config(
+        self,
+        config: libp2p_tcp::Config,
+    ) -> SwarmBuilder<Provider, TcpTlsPhase> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -69,9 +71,11 @@ impl<P> SwarmBuilder<P, TcpPhase> {
     }
 }
 
-impl<P> SwarmBuilder<P, TcpPhase> {
+impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     // TODO: This would allow one to build a faulty transport.
-    fn without_tcp(self) -> SwarmBuilder<P, QuicPhase<impl AuthenticatedMultiplexedTransport>> {
+    fn without_tcp(
+        self,
+    ) -> SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
             // TODO: Is this a good idea in a production environment? Unfortunately I don't know a
             // way around it. One can not define two `with_relay` methods, one with a real transport
@@ -102,11 +106,11 @@ impl SwarmBuilder<Tokio, TcpPhase> {
         self.without_tcp().with_quic()
     }
 }
-impl<P> SwarmBuilder<P, TcpPhase> {
+impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<P, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
         self.without_tcp()
             .without_quic()
             .with_other_transport(constructor)
@@ -119,9 +123,9 @@ pub struct TcpTlsPhase {
 }
 
 #[cfg(feature = "tcp")]
-impl<P> SwarmBuilder<P, TcpTlsPhase> {
+impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<P, TcpNoisePhase<Tls>> {
+    pub fn with_tls(self) -> SwarmBuilder<Provider, TcpNoisePhase<Tls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -132,7 +136,7 @@ impl<P> SwarmBuilder<P, TcpTlsPhase> {
         }
     }
 
-    fn without_tls(self) -> SwarmBuilder<P, TcpNoisePhase<WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<Provider, TcpNoisePhase<WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -194,14 +198,14 @@ macro_rules! construct_quic_builder {
 }
 
 macro_rules! impl_tcp_noise_builder {
-    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $tcp:ident) => {
-        #[cfg(all(feature = $runtimeKebabCase, feature = "tcp", feature = "tls"))]
-        impl SwarmBuilder<$runtimeCamelCase, TcpNoisePhase<Tls>> {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $tcp:ident) => {
+        #[cfg(all(feature = $providerKebabCase, feature = "tcp", feature = "tls"))]
+        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<Tls>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
                 self,
             ) -> Result<
-                SwarmBuilder<$runtimeCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
                 construct_quic_builder!(
@@ -227,20 +231,20 @@ macro_rules! impl_tcp_noise_builder {
             pub fn without_noise(
                 self,
             ) -> Result<
-                SwarmBuilder<$runtimeCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
                 construct_quic_builder!(self, $tcp, libp2p_tls::Config::new(&self.keypair)?)
             }
         }
 
-        #[cfg(feature = $runtimeKebabCase)]
-        impl SwarmBuilder<$runtimeCamelCase, TcpNoisePhase<WithoutTls>> {
+        #[cfg(feature = $providerKebabCase)]
+        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<WithoutTls>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
                 self,
             ) -> Result<
-                SwarmBuilder<$runtimeCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
                 construct_quic_builder!(self, $tcp, libp2p_noise::Config::new(&self.keypair)?)
@@ -317,8 +321,8 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, QuicPhase<T>> {
     }
 }
 
-impl<P, T> SwarmBuilder<P, QuicPhase<T>> {
-    fn without_quic(self) -> SwarmBuilder<P, OtherTransportPhase<T>> {
+impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
+    fn without_quic(self) -> SwarmBuilder<Provider, OtherTransportPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -330,9 +334,9 @@ impl<P, T> SwarmBuilder<P, QuicPhase<T>> {
 }
 
 // Shortcuts
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, QuicPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     #[cfg(feature = "relay")]
-    pub fn with_relay(self) -> SwarmBuilder<P, RelayTlsPhase<T>> {
+    pub fn with_relay(self) -> SwarmBuilder<Provider, RelayTlsPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -345,15 +349,17 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, QuicPhase<T>> {
     pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<P, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
         self.without_quic().with_other_transport(constructor)
     }
 
     #[cfg(feature = "websocket")]
     pub fn with_websocket(
         self,
-    ) -> SwarmBuilder<P, WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>>
-    {
+    ) -> SwarmBuilder<
+        Provider,
+        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
@@ -364,7 +370,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, QuicPhase<T>> {
     pub fn with_behaviour<B>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
@@ -405,11 +411,13 @@ pub struct OtherTransportPhase<T> {
     transport: T,
 }
 
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, OtherTransportPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, OtherTransportPhase<T>>
+{
     pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<P, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
             phase: OtherTransportPhase {
                 transport: self
@@ -426,7 +434,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, OtherTransportPhas
     // TODO: Not the ideal name.
     fn without_any_other_transports(
         self,
-    ) -> SwarmBuilder<P, DnsPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<Provider, DnsPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -461,20 +469,24 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, OtherTransportPha
     }
 }
 #[cfg(feature = "relay")]
-impl<T: AuthenticatedMultiplexedTransport, P> SwarmBuilder<P, OtherTransportPhase<T>> {
+impl<T: AuthenticatedMultiplexedTransport, Provider>
+    SwarmBuilder<Provider, OtherTransportPhase<T>>
+{
     pub fn with_relay(
         self,
-    ) -> SwarmBuilder<P, RelayTlsPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<Provider, RelayTlsPhase<impl AuthenticatedMultiplexedTransport>> {
         self.without_any_other_transports()
             .without_dns()
             .with_relay()
     }
 }
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, OtherTransportPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, OtherTransportPhase<T>>
+{
     pub fn with_behaviour<B>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_any_other_transports()
             .without_dns()
             .without_relay()
@@ -523,8 +535,8 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, DnsPhase<T>> {
     }
 }
 
-impl<P, T> SwarmBuilder<P, DnsPhase<T>> {
-    fn without_dns(self) -> SwarmBuilder<P, RelayPhase<T>> {
+impl<Provider, T> SwarmBuilder<Provider, DnsPhase<T>> {
+    fn without_dns(self) -> SwarmBuilder<Provider, RelayPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -537,11 +549,11 @@ impl<P, T> SwarmBuilder<P, DnsPhase<T>> {
 }
 
 // Shortcuts
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, DnsPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, DnsPhase<T>> {
     pub fn with_behaviour<B>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_dns()
             .without_relay()
             .without_websocket()
@@ -555,9 +567,9 @@ pub struct RelayPhase<T> {
 
 // TODO: Noise feature or tls feature
 #[cfg(feature = "relay")]
-impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
+impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
     // TODO: This should be with_relay_client.
-    pub fn with_relay(self) -> SwarmBuilder<P, RelayTlsPhase<T>> {
+    pub fn with_relay(self) -> SwarmBuilder<Provider, RelayTlsPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -570,8 +582,8 @@ impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
 
 pub struct NoRelayBehaviour;
 
-impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
-    fn without_relay(self) -> SwarmBuilder<P, WebsocketPhase<T, NoRelayBehaviour>> {
+impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
+    fn without_relay(self) -> SwarmBuilder<Provider, WebsocketPhase<T, NoRelayBehaviour>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -584,19 +596,21 @@ impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
 }
 
 // Shortcuts
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     #[cfg(feature = "websocket")]
     pub fn with_websocket(
         self,
-    ) -> SwarmBuilder<P, WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>>
-    {
+    ) -> SwarmBuilder<
+        Provider,
+        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
         self.without_relay().with_websocket()
     }
 
     pub fn with_behaviour<B>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_relay()
             .without_websocket()
             .with_behaviour(constructor)
@@ -609,9 +623,9 @@ pub struct RelayTlsPhase<T> {
 }
 
 #[cfg(feature = "relay")]
-impl<P, T> SwarmBuilder<P, RelayTlsPhase<T>> {
+impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<P, RelayNoisePhase<T, Tls>> {
+    pub fn with_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, Tls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -622,7 +636,7 @@ impl<P, T> SwarmBuilder<P, RelayTlsPhase<T>> {
         }
     }
 
-    fn without_tls(self) -> SwarmBuilder<P, RelayNoisePhase<T, WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -702,13 +716,15 @@ macro_rules! construct_websocket_builder {
 }
 
 #[cfg(all(feature = "relay", feature = "tls"))]
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayNoisePhase<T, Tls>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, RelayNoisePhase<T, Tls>>
+{
     #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
     ) -> Result<
         SwarmBuilder<
-            P,
+            Provider,
             WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         AuthenticationError,
@@ -736,7 +752,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayNoisePhase<T,
         self,
     ) -> Result<
         SwarmBuilder<
-            P,
+            Provider,
             WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         AuthenticationError,
@@ -746,13 +762,15 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayNoisePhase<T,
 }
 
 #[cfg(feature = "relay")]
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayNoisePhase<T, WithoutTls>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, RelayNoisePhase<T, WithoutTls>>
+{
     #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
     ) -> Result<
         SwarmBuilder<
-            P,
+            Provider,
             WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         AuthenticationError,
@@ -767,8 +785,8 @@ pub struct WebsocketPhase<T, R> {
 }
 
 #[cfg(feature = "websocket")]
-impl<P, T, R> SwarmBuilder<P, WebsocketPhase<T, R>> {
-    pub fn with_websocket(self) -> SwarmBuilder<P, WebsocketTlsPhase<T, R>> {
+impl<Provider, T, R> SwarmBuilder<Provider, WebsocketPhase<T, R>> {
+    pub fn with_websocket(self) -> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -780,8 +798,10 @@ impl<P, T, R> SwarmBuilder<P, WebsocketPhase<T, R>> {
     }
 }
 
-impl<P, T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<P, WebsocketPhase<T, R>> {
-    fn without_websocket(self) -> SwarmBuilder<P, BehaviourPhase<R>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport, R>
+    SwarmBuilder<Provider, WebsocketPhase<T, R>>
+{
+    fn without_websocket(self) -> SwarmBuilder<Provider, BehaviourPhase<R>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -796,8 +816,8 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<P, WebsocketPhase<
 
 // Shortcuts
 #[cfg(feature = "relay")]
-impl<P, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<P, WebsocketPhase<T, libp2p_relay::client::Behaviour>>
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, WebsocketPhase<T, libp2p_relay::client::Behaviour>>
 {
     pub fn with_behaviour<B>(
         self,
@@ -805,15 +825,17 @@ impl<P, T: AuthenticatedMultiplexedTransport>
             &libp2p_identity::Keypair,
             libp2p_relay::client::Behaviour,
         ) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
-impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, WebsocketPhase<T, NoRelayBehaviour>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, WebsocketPhase<T, NoRelayBehaviour>>
+{
     pub fn with_behaviour<B>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
@@ -825,9 +847,9 @@ pub struct WebsocketTlsPhase<T, R> {
 }
 
 #[cfg(feature = "websocket")]
-impl<P, T, R> SwarmBuilder<P, WebsocketTlsPhase<T, R>> {
+impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<P, WebsocketNoisePhase<T, R, Tls>> {
+    pub fn with_tls(self) -> SwarmBuilder<Provider, WebsocketNoisePhase<T, R, Tls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -839,7 +861,7 @@ impl<P, T, R> SwarmBuilder<P, WebsocketTlsPhase<T, R>> {
         }
     }
 
-    fn without_tls(self) -> SwarmBuilder<P, WebsocketNoisePhase<T, R, WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<Provider, WebsocketNoisePhase<T, R, WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -903,18 +925,18 @@ macro_rules! construct_behaviour_builder {
 }
 
 macro_rules! impl_websocket_noise_builder {
-    ($runtimeKebabCase:literal, $runtimeCamelCase:ident, $dnsTcp:expr) => {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $dnsTcp:expr) => {
         #[cfg(all(
-                                                                    feature = $runtimeKebabCase,
+                                                                    feature = $providerKebabCase,
                                                                     feature = "websocket",
                                                                     feature = "dns",
                                                                     feature = "tls"
                                                                 ))]
         impl<T: AuthenticatedMultiplexedTransport, R>
-            SwarmBuilder<$runtimeCamelCase, WebsocketNoisePhase< T, R, Tls>>
+            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, Tls>>
         {
             #[cfg(feature = "noise")]
-            pub async fn with_noise(self) -> Result<SwarmBuilder<$runtimeCamelCase,BehaviourPhase<R>>, WebsocketError> {
+            pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase,BehaviourPhase<R>>, WebsocketError> {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
@@ -934,7 +956,7 @@ macro_rules! impl_websocket_noise_builder {
                     )
                 )
             }
-            pub async fn without_noise(self) -> Result<SwarmBuilder<$runtimeCamelCase,BehaviourPhase<R>>, WebsocketError> {
+            pub async fn without_noise(self) -> Result<SwarmBuilder<$providerCamelCase,BehaviourPhase<R>>, WebsocketError> {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
@@ -943,11 +965,11 @@ macro_rules! impl_websocket_noise_builder {
             }
         }
 
-        #[cfg(all(feature = $runtimeKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
+        #[cfg(all(feature = $providerKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
         impl<T: AuthenticatedMultiplexedTransport, R>
-            SwarmBuilder<$runtimeCamelCase, WebsocketNoisePhase< T, R, WithoutTls>>
+            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, WithoutTls>>
         {
-            pub async fn with_noise(self) -> Result<SwarmBuilder<$runtimeCamelCase, BehaviourPhase<R>>, WebsocketError> {
+            pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BehaviourPhase<R>>, WebsocketError> {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
@@ -990,14 +1012,14 @@ pub struct BehaviourPhase<R> {
 }
 
 #[cfg(feature = "relay")]
-impl<P> SwarmBuilder<P, BehaviourPhase<libp2p_relay::client::Behaviour>> {
+impl<Provider> SwarmBuilder<Provider, BehaviourPhase<libp2p_relay::client::Behaviour>> {
     pub fn with_behaviour<B>(
         self,
         mut constructor: impl FnMut(
             &libp2p_identity::Keypair,
             libp2p_relay::client::Behaviour,
         ) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         Ok(SwarmBuilder {
             phase: BuildPhase {
                 behaviour: constructor(&self.keypair, self.phase.relay_behaviour)?,
@@ -1009,11 +1031,11 @@ impl<P> SwarmBuilder<P, BehaviourPhase<libp2p_relay::client::Behaviour>> {
     }
 }
 
-impl<P> SwarmBuilder<P, BehaviourPhase<NoRelayBehaviour>> {
+impl<Provider> SwarmBuilder<Provider, BehaviourPhase<NoRelayBehaviour>> {
     pub fn with_behaviour<B>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair) -> Result<B, Box<dyn std::error::Error>>,
-    ) -> Result<SwarmBuilder<P, BuildPhase<B>>, Box<dyn std::error::Error>> {
+    ) -> Result<SwarmBuilder<Provider, BuildPhase<B>>, Box<dyn std::error::Error>> {
         // Discard `NoRelayBehaviour`.
         let _ = self.phase.relay_behaviour;
 
