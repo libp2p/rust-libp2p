@@ -3175,6 +3175,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-server"
+version = "0.12.1"
+dependencies = [
+ "base64 0.21.2",
+ "clap",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "hyper",
+ "libp2p",
+ "log",
+ "prometheus-client",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "libp2p-swarm"
 version = "0.43.3"
 dependencies = [
