@@ -102,7 +102,7 @@ libp2p-tcp = { version = "0.40.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.2.0", path = "transports/tls" }
 libp2p-uds = { version = "0.39.0", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.40.0", path = "transports/wasm-ext" }
-libp2p-webrtc = { version = "0.6.0-alpha", path = "transports/webrtc" }
+libp2p-webrtc = { version = "0.7.0-alpha", path = "transports/webrtc" }
 libp2p-webrtc-utils = { version = "0.1.0", path = "transports/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.1.0-alpha", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.42.0", path = "transports/websocket" }
