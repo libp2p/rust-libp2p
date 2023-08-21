@@ -54,6 +54,7 @@
 //!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+#![feature(string_leak)]
 
 mod connection;
 mod executor;

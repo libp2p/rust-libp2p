@@ -38,8 +38,10 @@ impl StreamProtocol {
             return Err(InvalidProtocol::missing_forward_slash());
         }
 
+        let protocol = protocol.leak();
+
         Ok(StreamProtocol {
-            inner: Either::Right(Arc::from(protocol)), // FIXME: Can we somehow reuse the allocation from the owned string?
+            inner: Either::Right(unsafe { Arc::from_raw(protocol) }),
         })
     }
 }
@@ -102,3 +104,17 @@ impl fmt::Display for InvalidProtocol {
 }
 
 impl std::error::Error for InvalidProtocol {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_construct_stream_protocol_from_owned_string() {
+        let protocol = String::from("/foobar");
+
+        let protocol = StreamProtocol::try_from_owned(protocol).unwrap();
+
+        assert_eq!(protocol.as_ref(), "/foobar")
+    }
+}
