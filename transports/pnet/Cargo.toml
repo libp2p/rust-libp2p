@@ -27,7 +27,7 @@ libp2p-tcp = { workspace = true, features = ["tokio"] }
 libp2p-websocket = { workspace = true }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
-tokio = { version = "1.31.0", features = ["full"] }
+tokio = { version = "1.32.0", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
