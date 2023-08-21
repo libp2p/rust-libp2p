@@ -10,26 +10,9 @@ use pinger::start_pinger;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-#[wasm_bindgen]
-extern "C" {
-    // Use `js_namespace` here to bind `console.log(..)` instead of just
-    // `log(..)`
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-macro_rules! console_log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
-
 #[wasm_bindgen(start)]
 pub fn run() -> Result<(), JsValue> {
-    match console_log::init_with_level(log::Level::Info) {
-        Ok(_) => log::info!("Console logging initialized"),
-        Err(_) => log::info!("Console logging already initialized"),
-    };
+    wasm_logger::init(wasm_logger::Config::default());
 
     // Use `web_sys`'s global `window` function to get a handle on the global
     // window object.
