@@ -1,12 +1,12 @@
 use super::stream::Stream;
 use super::Error;
+use crate::sdp;
 use crate::stream::RtcDataChannelBuilder;
 use crate::Connection;
 use js_sys::{Object, Reflect};
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use libp2p_webrtc_utils::noise;
-use libp2p_webrtc_utils::sdp;
 use send_wrapper::SendWrapper;
 use std::net::SocketAddr;
 use wasm_bindgen_futures::JsFuture;
@@ -69,7 +69,7 @@ async fn outbound_inner(
      * OFFER
      */
     let offer = JsFuture::from(peer_connection.create_offer()).await?; // Needs to be Send
-    let offer_obj = sdp::wasm::offer(offer, &ufrag);
+    let offer_obj = sdp::offer(offer, &ufrag);
     log::trace!("Offer SDP: {:?}", offer_obj);
     let sld_promise = peer_connection.set_local_description(&offer_obj);
     JsFuture::from(sld_promise)
@@ -80,7 +80,7 @@ async fn outbound_inner(
      * ANSWER
      */
     // TODO: Update SDP Answer format for Browser WebRTC
-    let answer_obj = sdp::wasm::answer(sock_addr, &remote_fingerprint, &ufrag);
+    let answer_obj = sdp::answer(sock_addr, &remote_fingerprint, &ufrag);
     log::trace!("Answer SDP: {:?}", answer_obj);
     let srd_promise = peer_connection.set_remote_description(&answer_obj);
     JsFuture::from(srd_promise)
@@ -92,7 +92,7 @@ async fn outbound_inner(
         Some(description) => description.sdp(),
         None => return Err(Error::JsError("local_description is None".to_string())),
     };
-    let local_fingerprint = match sdp::fingerprint(&local_sdp) {
+    let local_fingerprint = match libp2p_webrtc_utils::sdp::fingerprint(&local_sdp) {
         Some(fingerprint) => fingerprint,
         None => return Err(Error::JsError(format!("No local fingerprint found"))),
     };

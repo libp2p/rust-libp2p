@@ -2,6 +2,7 @@
 
 mod connection;
 mod error;
+mod sdp;
 mod stream;
 mod transport;
 mod upgrade;
