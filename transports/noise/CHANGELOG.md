@@ -1,3 +1,7 @@
+## 0.43.1 - unreleased
+
+- Update dependencies.
+
 ## 0.43.0 
 
 - Raise MSRV to 1.65.
