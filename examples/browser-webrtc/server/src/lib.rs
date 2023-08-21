@@ -17,7 +17,7 @@ use void::Void;
 
 pub const PORT: u16 = 4455;
 
-pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
+pub async fn start() -> Result<()> {
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = id_keys.public().to_peer_id();
     let transport = webrtc::tokio::Transport::new(
@@ -40,13 +40,6 @@ pub async fn start(remote: Option<Multiaddr>) -> Result<()> {
         .with(Protocol::WebRTCDirect);
 
     swarm.listen_on(address_webrtc.clone())?;
-
-    // Dial the peer identified by the multi-address given as the second
-    // command-line argument, if any.
-    if let Some(addr) = remote {
-        log::info!("Dialing {addr}");
-        swarm.dial(addr)?;
-    }
 
     let mut addr = None; // We only need 1 address
 
