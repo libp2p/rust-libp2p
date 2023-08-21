@@ -1,3 +1,4 @@
+// Copyright 2023 Doug Anderson.
 // Copyright 2022 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -22,10 +23,7 @@ use libp2p_core::multihash;
 use sha2::Digest as _;
 use std::fmt;
 
-#[cfg(feature = "tokio")]
-use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
-
-const SHA256: &str = "sha-256";
+pub const SHA256: &str = "sha-256";
 const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
 type Multihash = multihash::Multihash<64>;
@@ -35,29 +33,9 @@ type Multihash = multihash::Multihash<64>;
 pub struct Fingerprint([u8; 32]);
 
 impl Fingerprint {
-    pub(crate) const FF: Fingerprint = Fingerprint([0xFF; 32]);
-
-    // #[cfg(test)]
-    pub fn raw(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    /// Creates a fingerprint from a raw certificate.
-    pub fn from_certificate(bytes: &[u8]) -> Self {
+    /// Creates a new [Fingerprint] from a raw certificate by hashing the given bytes with SHA256.
+    pub fn new(bytes: &[u8]) -> Self {
         Fingerprint(sha2::Sha256::digest(bytes).into())
-    }
-
-    /// Converts [`RTCDtlsFingerprint`] to [`Fingerprint`].
-    #[cfg(feature = "tokio")]
-    pub fn try_from_rtc_dtls(fp: &RTCDtlsFingerprint) -> Option<Self> {
-        if fp.algorithm != SHA256 {
-            return None;
-        }
-
-        let mut buf = [0; 32];
-        hex::decode_to_slice(fp.value.replace(':', ""), &mut buf).ok()?;
-
-        Some(Self(buf))
     }
 
     /// Converts [`Multihash`](multihash::Multihash) to [`Fingerprint`].
@@ -97,6 +75,12 @@ impl fmt::Debug for Fingerprint {
     }
 }
 
+impl From<[u8; 32]> for Fingerprint {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,7 +91,7 @@ mod tests {
 
     #[test]
     fn sdp_format() {
-        let fp = Fingerprint::raw(REGULAR_FORMAT);
+        let fp = Fingerprint::from(REGULAR_FORMAT);
 
         let formatted = fp.to_sdp_format();
 
@@ -116,8 +100,10 @@ mod tests {
 
     #[test]
     fn from_sdp() {
-        let bytes = hex::decode(SDP_FORMAT.replace(':', "")).unwrap();
-        let fp = Fingerprint::raw(bytes.as_slice().try_into().unwrap());
-        assert_eq!(fp, Fingerprint::raw(REGULAR_FORMAT));
+        let mut bytes = [0; 32];
+        bytes.copy_from_slice(&hex::decode(SDP_FORMAT.replace(':', "")).unwrap());
+
+        let fp = Fingerprint::from(bytes);
+        assert_eq!(fp, Fingerprint::from(REGULAR_FORMAT));
     }
 }

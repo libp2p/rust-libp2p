@@ -490,7 +490,7 @@ mod tests {
             maybe_parsed,
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 39901),
-                Fingerprint::raw(hex_literal::hex!(
+                Fingerprint::from(hex_literal::hex!(
                     "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
                 ))
             ))
@@ -509,7 +509,7 @@ mod tests {
             maybe_parsed,
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 39901),
-                Fingerprint::raw(hex_literal::hex!(
+                Fingerprint::from(hex_literal::hex!(
                     "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
                 ))
             ))
@@ -551,7 +551,7 @@ mod tests {
             maybe_parsed,
             Some((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 12345),
-                Fingerprint::raw(hex_literal::hex!(
+                Fingerprint::from(hex_literal::hex!(
                     "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
                 ))
             ))

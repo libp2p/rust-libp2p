@@ -17,14 +17,13 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-use super::Error;
-use crate::tokio::{stream::Substream, Connection};
+
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::{fingerprint::Fingerprint, noise, sdp};
+use libp2p_webrtc_utils::{fingerprint::Fingerprint, noise};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -38,6 +37,8 @@ use webrtc::ice::udp_mux::UDPMux;
 use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
+
+use crate::tokio::{error::Error, sdp, stream::Substream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(
@@ -56,7 +57,7 @@ pub(crate) async fn outbound(
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::tokio::answer(addr, &server_fingerprint, &ufrag);
+    let answer = sdp::answer(addr, &server_fingerprint, &ufrag);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
@@ -88,7 +89,7 @@ pub(crate) async fn inbound(
 
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
 
-    let offer = sdp::tokio::offer(addr, &remote_ufrag);
+    let offer = sdp::offer(addr, &remote_ufrag);
     log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
     peer_connection.set_remote_description(offer).await?;
 
@@ -197,7 +198,7 @@ fn setting_engine(
 async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     let cert_bytes = conn.sctp().transport().get_remote_certificate().await;
 
-    Fingerprint::from_certificate(&cert_bytes)
+    Fingerprint::new(&cert_bytes)
 }
 
 async fn create_substream_for_noise_handshake(

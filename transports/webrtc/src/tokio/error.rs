@@ -19,11 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_identity::PeerId;
+use libp2p_webrtc_utils::Error as UtilsError;
 use thiserror::Error;
 
 /// Error in WebRTC.
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error(transparent)]
+    WebRTC(#[from] webrtc::Error),
     #[error("IO error")]
     Io(#[from] std::io::Error),
     #[error("failed to authenticate peer")]
@@ -36,6 +39,12 @@ pub enum Error {
     #[error("no active listeners, can not dial without a previous listen")]
     NoListeners,
 
+    #[error("UDP mux error: {0}")]
+    UDPMux(std::io::Error),
+
     #[error("internal error: {0} (see debug logs)")]
     Internal(String),
+
+    #[error("WebRTC utils error: {0}")]
+    Utils(#[from] UtilsError),
 }

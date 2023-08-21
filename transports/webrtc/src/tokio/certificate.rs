@@ -21,6 +21,7 @@
 use rand::{distributions::DistString, CryptoRng, Rng};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
+use crate::tokio::fingerprint;
 use libp2p_webrtc_utils::fingerprint::Fingerprint;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -58,7 +59,7 @@ impl Certificate {
             .find(|f| f.algorithm == "sha-256")
             .expect("a SHA-256 fingerprint");
 
-        Fingerprint::try_from_rtc_dtls(sha256_fingerprint).expect("we filtered by sha-256")
+        fingerprint::try_from_rtc_dtls(sha256_fingerprint).expect("we filtered by sha-256")
     }
 
     /// Parses a certificate from the ASCII PEM format.

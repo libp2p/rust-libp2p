@@ -18,11 +18,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-#[cfg(feature = "tokio")]
-pub mod tokio;
-#[cfg(feature = "wasm-bindgen")]
-pub mod wasm;
-
 use crate::fingerprint::Fingerprint;
 use serde::Serialize;
 use std::net::{IpAddr, SocketAddr};
@@ -138,43 +133,6 @@ use tinytemplate::TinyTemplate;
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
 //
 // a=end-of-candidates
-//
-//     Indicate that no more candidates will ever be sent (RFC8838).
-// const SERVER_SESSION_DESCRIPTION: &str = "v=0
-// o=- 0 0 IN {ip_version} {target_ip}
-// s=-
-// t=0 0
-// a=ice-lite
-// m=application {target_port} UDP/DTLS/SCTP webrtc-datachannel
-// c=IN {ip_version} {target_ip}
-// a=mid:0
-// a=ice-options:ice2
-// a=ice-ufrag:{ufrag}
-// a=ice-pwd:{pwd}
-// a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
-
-// a=setup:passive
-// a=sctp-port:5000
-// a=max-message-size:16384
-// a=candidate:1 1 UDP 1 {target_ip} {target_port} typ host
-// a=end-of-candidates";
-
-// Update to this:
-// v=0
-// o=- 0 0 IN ${ipVersion} ${host}
-// s=-
-// c=IN ${ipVersion} ${host}
-// t=0 0
-// a=ice-lite
-// m=application ${port} UDP/DTLS/SCTP webrtc-datachannel
-// a=mid:0
-// a=setup:passive
-// a=ice-ufrag:${ufrag}
-// a=ice-pwd:${ufrag}
-// a=fingerprint:${CERTFP}
-// a=sctp-port:5000
-// a=max-message-size:100000
-// a=candidate:1467250027 1 UDP 1467250027 ${host} ${port} typ host\r\n
 
 /// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
 #[derive(Serialize)]
@@ -197,7 +155,7 @@ struct DescriptionContext {
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
-fn render_description(
+pub fn render_description(
     description: &str,
     addr: SocketAddr,
     fingerprint: &Fingerprint,
@@ -239,7 +197,7 @@ pub fn fingerprint(sdp: &str) -> Option<Fingerprint> {
             let fingerprint = line.split(' ').nth(1).unwrap();
             let bytes = hex::decode(fingerprint.replace(':', "")).unwrap();
             let arr: [u8; 32] = bytes.as_slice().try_into().unwrap();
-            return Some(Fingerprint::raw(arr));
+            return Some(Fingerprint::from(arr));
         }
     }
     None

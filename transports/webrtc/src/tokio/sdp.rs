@@ -1,4 +1,6 @@
-use super::*;
+use crate::tokio::fingerprint::Fingerprint;
+use libp2p_webrtc_utils::sdp::render_description;
+use std::net::SocketAddr;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 /// Creates the SDP answer used by the client.
@@ -23,7 +25,7 @@ pub fn offer(addr: SocketAddr, client_ufrag: &str) -> RTCSessionDescription {
     RTCSessionDescription::offer(render_description(
         CLIENT_SESSION_DESCRIPTION,
         addr,
-        &Fingerprint::FF,
+        &Fingerprint::from([0xFF; 32]),
         client_ufrag,
     ))
     .unwrap()
