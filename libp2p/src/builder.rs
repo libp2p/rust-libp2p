@@ -72,19 +72,35 @@ impl<P> SwarmBuilder<P, TcpPhase> {
 
 impl<P> SwarmBuilder<P, TcpPhase> {
     // TODO: This would allow one to build a faulty transport.
-    pub fn without_tcp(
-        self,
-    ) -> SwarmBuilder<P, RelayPhase<impl AuthenticatedMultiplexedTransport>> {
+    fn without_tcp(self) -> SwarmBuilder<P, QuicPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
             // TODO: Is this a good idea in a production environment? Unfortunately I don't know a
             // way around it. One can not define two `with_relay` methods, one with a real transport
             // using OrTransport, one with a fake transport discarding it right away.
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: RelayPhase {
+            phase: QuicPhase {
                 transport: libp2p_core::transport::dummy::DummyTransport::new(),
             },
         }
+    }
+}
+
+// Shortcuts
+#[cfg(all(feature = "quic", feature = "async-std"))]
+impl SwarmBuilder<AsyncStd, TcpPhase> {
+    pub fn with_quic(
+        self,
+    ) -> SwarmBuilder<AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>> {
+        self.without_tcp().with_quic()
+    }
+}
+#[cfg(all(feature = "quic", feature = "tokio"))]
+impl SwarmBuilder<Tokio, TcpPhase> {
+    pub fn with_quic(
+        self,
+    ) -> SwarmBuilder<Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>> {
+        self.without_tcp().with_quic()
     }
 }
 
@@ -107,7 +123,7 @@ impl<P> SwarmBuilder<P, TcpTlsPhase> {
         }
     }
 
-    pub fn without_tls(self) -> SwarmBuilder<P, TcpNoisePhase<WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<P, TcpNoisePhase<WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -293,7 +309,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, QuicPhase<T>> {
 }
 
 impl<P, T> SwarmBuilder<P, QuicPhase<T>> {
-    pub fn without_quic(self) -> SwarmBuilder<P, RelayPhase<T>> {
+    fn without_quic(self) -> SwarmBuilder<P, RelayPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -412,7 +428,7 @@ impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
 pub struct NoRelayBehaviour;
 
 impl<P, T> SwarmBuilder<P, RelayPhase<T>> {
-    pub fn without_relay(self) -> SwarmBuilder<P, OtherTransportPhase<T, NoRelayBehaviour>> {
+    fn without_relay(self) -> SwarmBuilder<P, OtherTransportPhase<T, NoRelayBehaviour>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -511,7 +527,7 @@ impl<P, T> SwarmBuilder<P, RelayTlsPhase<T>> {
         }
     }
 
-    pub fn without_tls(self) -> SwarmBuilder<P, RelayNoisePhase<T, WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<P, RelayNoisePhase<T, WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -628,6 +644,7 @@ impl<P, T: AuthenticatedMultiplexedTransport> SwarmBuilder<P, RelayNoisePhase<T,
             )
         )
     }
+
     pub fn without_noise(
         self,
     ) -> Result<
@@ -688,7 +705,7 @@ impl<P, T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<P, OtherTransportP
     }
 
     // TODO: Not the ideal name.
-    pub fn without_any_other_transports(
+    fn without_any_other_transports(
         self,
     ) -> SwarmBuilder<P, DnsPhase<impl AuthenticatedMultiplexedTransport, R>> {
         SwarmBuilder {
@@ -800,7 +817,7 @@ impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, DnsPhase<T, R>
 }
 
 impl<P, T, R> SwarmBuilder<P, DnsPhase<T, R>> {
-    pub fn without_dns(self) -> SwarmBuilder<P, WebsocketPhase<T, R>> {
+    fn without_dns(self) -> SwarmBuilder<P, WebsocketPhase<T, R>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -861,7 +878,7 @@ impl<P, T, R> SwarmBuilder<P, WebsocketPhase<T, R>> {
 }
 
 impl<P, T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<P, WebsocketPhase<T, R>> {
-    pub fn without_websocket(self) -> SwarmBuilder<P, BehaviourPhase<R>> {
+    fn without_websocket(self) -> SwarmBuilder<P, BehaviourPhase<R>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -919,7 +936,7 @@ impl<P, T, R> SwarmBuilder<P, WebsocketTlsPhase<T, R>> {
         }
     }
 
-    pub fn without_tls(self) -> SwarmBuilder<P, WebsocketNoisePhase<T, R, WithoutTls>> {
+    fn without_tls(self) -> SwarmBuilder<P, WebsocketNoisePhase<T, R, WithoutTls>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -929,6 +946,22 @@ impl<P, T, R> SwarmBuilder<P, WebsocketTlsPhase<T, R>> {
                 phantom: PhantomData,
             },
         }
+    }
+}
+
+// Shortcuts
+#[cfg(all(feature = "websocket", feature = "noise", feature = "async-std"))]
+impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<AsyncStd, WebsocketTlsPhase<T, R>> {
+    #[cfg(feature = "noise")]
+    pub async fn with_noise(self) -> Result<SwarmBuilder<AsyncStd, BehaviourPhase<R>>, WebsocketError> {
+        self.without_tls().with_noise().await
+    }
+}
+#[cfg(all(feature = "websocket", feature = "noise", feature = "tokio"))]
+impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, WebsocketTlsPhase<T, R>> {
+    #[cfg(feature = "noise")]
+    pub async fn with_noise(self) -> Result<SwarmBuilder<Tokio, BehaviourPhase<R>>, WebsocketError> {
+        self.without_tls().with_noise().await
     }
 }
 
