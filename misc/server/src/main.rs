@@ -13,6 +13,7 @@ use libp2p::identity::PeerId;
 use libp2p::kad;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::noise;
+use libp2p::quic;
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp;
 use libp2p::yamux;
@@ -89,9 +90,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .timeout(Duration::from_secs(20));
 
         let quic_transport = {
-            let mut config = libp2p_quic::Config::new(&local_keypair);
+            let mut config = quic::Config::new(&local_keypair);
             config.support_draft_29 = true;
-            libp2p_quic::tokio::Transport::new(config)
+            quic::tokio::Transport::new(config)
         };
 
         dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(

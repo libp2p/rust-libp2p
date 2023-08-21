@@ -3185,7 +3185,6 @@ dependencies = [
  "futures-timer",
  "hyper",
  "libp2p",
- "libp2p-quic",
  "log",
  "prometheus-client",
  "serde",
