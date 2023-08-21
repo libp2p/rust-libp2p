@@ -93,10 +93,10 @@ mod tests {
 
     #[test]
     fn noise_prologue_tests() {
-        let a = Fingerprint::raw(hex!(
+        let a = Fingerprint::from(hex!(
             "3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870"
         ));
-        let b = Fingerprint::raw(hex!(
+        let b = Fingerprint::from(hex!(
             "30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99"
         ));
 
