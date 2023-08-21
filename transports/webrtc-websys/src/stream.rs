@@ -139,13 +139,6 @@ impl AsyncRead for Stream {
 }
 
 impl AsyncWrite for Stream {
-    /// Attempt to write bytes from buf into the object.
-    /// On success, returns Poll::Ready(Ok(num_bytes_written)).
-    /// If the object is not ready for writing,
-    /// the method returns Poll::Pending and
-    /// arranges for the current task (via cx.waker().wake_by_ref())
-    /// to receive a notification when the object becomes writable
-    /// or is closed.
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
