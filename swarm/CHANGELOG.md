@@ -1,4 +1,4 @@
-## 0.43.3 - unreleased
+## 0.43.3
 
 - Implement `Display` for `ConnectionId`.
   See [PR 4278].
