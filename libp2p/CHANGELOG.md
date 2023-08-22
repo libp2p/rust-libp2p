@@ -1,4 +1,8 @@
-## 0.52.2 - unreleased
+## 0.52.3 - unreleased
+
+- Add `libp2p-quic` stable release.
+
+## 0.52.2
 
 - Include gossipsub when compiling for wasm.
   See [PR 4217].
@@ -9,9 +13,13 @@
 - Add support for UPnP via the IGD protocol.
   See [PR 4156].
 
+- Add `libp2p-memory-connection-limits` providing memory usage based connection limit configurations.
+  See [PR 4281].
+
 [PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
-[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
 [PR 4156]: https://github.com/libp2p/rust-libp2p/pull/4156
+[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+[PR 4281]: https://github.com/libp2p/rust-libp2p/pull/4281
 
 ## 0.52.1
 
