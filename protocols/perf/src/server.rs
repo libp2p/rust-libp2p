@@ -37,15 +37,17 @@ pub struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
+        let mut req_resp_config = request_response::Config::default();
+        req_resp_config.set_connection_keep_alive(Duration::from_secs(60 * 5));
+        req_resp_config.set_request_timeout(Duration::from_secs(60 * 5));
+
         Self {
             request_response: request_response::Behaviour::new(
                 std::iter::once((
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Inbound,
                 )),
-                request_response::Config::default()
-                    .with_connection_keep_alive(Duration::from_secs(60 * 5))
-                    .with_request_timeout(Duration::from_secs(60 * 5)),
+                req_resp_config,
             ),
         }
     }

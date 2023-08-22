@@ -58,6 +58,9 @@ pub struct Behaviour {
 
 impl Default for Behaviour {
     fn default() -> Self {
+        let mut req_resp_config = request_response::Config::default();
+        req_resp_config.set_connection_keep_alive(Duration::from_secs(60 * 5));
+        req_resp_config.set_request_timeout(Duration::from_secs(60 * 5));
         Self {
             connected: Default::default(),
             request_response: request_response::Behaviour::new(
@@ -65,9 +68,7 @@ impl Default for Behaviour {
                     crate::PROTOCOL_NAME,
                     request_response::ProtocolSupport::Outbound,
                 )),
-                request_response::Config::default()
-                    .with_connection_keep_alive(Duration::from_secs(60 * 5))
-                    .with_request_timeout(Duration::from_secs(60 * 5)),
+                req_resp_config,
             ),
         }
     }

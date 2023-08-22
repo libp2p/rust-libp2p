@@ -24,8 +24,6 @@ serde_json = { version = "1.0.100", optional = true }
 smallvec = "1.11.0"
 void = "1.0.2"
 log = "0.4.19"
-futures-timer = "3.0.2"
-futures-bounded = { workspace = true }
 
 [features]
 json = ["dep:serde", "dep:serde_json", "libp2p-swarm/macros"]
