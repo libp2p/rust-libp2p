@@ -138,7 +138,7 @@ pub struct Handler {
     wait_for_connection_outbound_stream: VecDeque<outbound_hop::Command>,
     circuit_connection_futs: futures_bounded::WorkerFutures<
         (),
-        Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>
+        Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>,
     >,
 
     reservation: Reservation,
@@ -589,7 +589,8 @@ impl ConnectionHandler for Handler {
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
 
-                if self.circuit_connection_futs
+                if self
+                    .circuit_connection_futs
                     .try_push(
                         (),
                         outbound_hop::handle_connection_message_response(
@@ -597,8 +598,11 @@ impl ConnectionHandler for Handler {
                             self.remote_peer_id,
                             con_command,
                             tx,
-                        ).boxed()
-                    ).is_some() {
+                        )
+                        .boxed(),
+                    )
+                    .is_some()
+                {
                     log::warn!("Dropping outbound stream because we are at capacity")
                 }
             }

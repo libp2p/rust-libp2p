@@ -410,7 +410,8 @@ impl Handler {
     }
 
     fn on_fully_negotiated_inbound(&mut self, stream: Stream) {
-        if self.protocol_futs
+        if self
+            .protocol_futs
             .try_push(
                 (),
                 inbound_hop::handle_inbound_request(
@@ -421,8 +422,10 @@ impl Handler {
                     self.endpoint.clone(),
                     self.active_reservation.is_some(),
                 )
-                    .boxed(),
-            ).is_some() {
+                .boxed(),
+            )
+            .is_some()
+        {
             log::warn!("Dropping inbound stream because we are at capacity")
         }
     }
@@ -436,11 +439,14 @@ impl Handler {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
-        if self.protocol_futs
+        if self
+            .protocol_futs
             .try_push(
                 (),
                 outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed(),
-            ).is_some() {
+            )
+            .is_some()
+        {
             log::warn!("Dropping outbound stream because we are at capacity")
         }
     }
@@ -662,7 +668,7 @@ impl ConnectionHandler for Handler {
         // Process protocol requests
         if let Poll::Ready((_, worker_res)) = self.protocol_futs.poll_unpin(cx) {
             let event = worker_res
-                .unwrap_or_else(|_|{ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout)});
+                .unwrap_or_else(|_| ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
 
             return Poll::Ready(event);
         }
