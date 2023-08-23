@@ -1,4 +1,11 @@
-## 0.42.0 
+## 0.42.1
+
+- Bump `futures-rustls` to `0.24.0`.
+  See [PR 4378].
+
+[PR 4378]: https://github.com/libp2p/rust-libp2p/pull/4378
+
+## 0.42.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
