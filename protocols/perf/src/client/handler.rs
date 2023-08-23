@@ -24,7 +24,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
+use futures::{
+    future::BoxFuture,
+    stream::{BoxStream, FuturesUnordered, LocalBoxStream, SelectAll},
+    FutureExt, StreamExt, TryFutureExt,
+};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
@@ -37,7 +41,7 @@ use libp2p_swarm::{
 use void::Void;
 
 use super::RunId;
-use crate::{Run, RunDuration, RunParams};
+use crate::{Run, RunDuration, RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Command {
@@ -48,7 +52,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<Run, StreamUpgradeError<Void>>,
+    pub(crate) result: Result<RunUpdate, StreamUpgradeError<Void>>,
 }
 
 pub struct Handler {
@@ -64,7 +68,7 @@ pub struct Handler {
 
     requested_streams: VecDeque<Command>,
 
-    outbound: FuturesUnordered<BoxFuture<'static, Result<Event, std::io::Error>>>,
+    outbound: SelectAll<BoxStream<'static, Result<crate::RunUpdate, std::io::Error>>>,
 
     keep_alive: KeepAlive,
 }
@@ -128,14 +132,8 @@ impl ConnectionHandler for Handler {
                     .requested_streams
                     .pop_front()
                     .expect("opened a stream without a pending command");
-                self.outbound.push(
-                    crate::protocol::send_receive(params, protocol)
-                        .map_ok(move |duration| Event {
-                            id,
-                            result: Ok(Run { params, duration }),
-                        })
-                        .boxed(),
-                );
+                self.outbound
+                    .push(crate::protocol::send_receive(params, protocol));
             }
 
             ConnectionEvent::AddressChange(_)
@@ -180,9 +178,12 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)),
+                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
+                    id: todo!(),
+                    result: Ok(event),
+                })),
                 Err(e) => {
-                    panic!("{e:?}")
+                    todo!("{e:?}")
                 }
             }
         }

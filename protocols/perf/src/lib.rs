@@ -35,6 +35,14 @@ pub mod server;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
 
+#[derive(Debug, Clone, Copy)]
+pub enum RunUpdate {
+    Progressed,
+    Finished {
+        duration: RunDuration,
+    },
+}
+
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
 ///
 /// Property names are from the perspective of the actor. E.g. `to_send` is the amount of data to
