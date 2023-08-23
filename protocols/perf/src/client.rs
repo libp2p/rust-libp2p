@@ -21,9 +21,7 @@
 mod behaviour;
 mod handler;
 
-use instant::Instant;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::RunParams;
 
 pub use behaviour::{Behaviour, Event};
 

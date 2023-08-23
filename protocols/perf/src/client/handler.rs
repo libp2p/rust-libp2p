@@ -25,9 +25,8 @@ use std::{
 };
 
 use futures::{
-    future::BoxFuture,
-    stream::{BoxStream, FuturesUnordered, LocalBoxStream, SelectAll},
-    FutureExt, StreamExt, TryFutureExt,
+    stream::{BoxStream, SelectAll},
+    StreamExt,
 };
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
@@ -41,7 +40,7 @@ use libp2p_swarm::{
 use void::Void;
 
 use super::RunId;
-use crate::{Run, RunDuration, RunParams, RunUpdate};
+use crate::{RunParams, RunUpdate};
 
 #[derive(Debug)]
 pub struct Command {
@@ -68,7 +67,7 @@ pub struct Handler {
 
     requested_streams: VecDeque<Command>,
 
-    outbound: SelectAll<BoxStream<'static, Result<crate::RunUpdate, std::io::Error>>>,
+    outbound: SelectAll<BoxStream<'static, (RunId, Result<crate::RunUpdate, std::io::Error>)>>,
 
     keep_alive: KeepAlive,
 }
@@ -133,7 +132,12 @@ impl ConnectionHandler for Handler {
                     .pop_front()
                     .expect("opened a stream without a pending command");
                 self.outbound
-                    .push(crate::protocol::send_receive(params, protocol));
+                    // TODO: can we get around the box?
+                    .push(
+                        crate::protocol::send_receive(params, protocol)
+                            .map(move |result| (id, result))
+                            .boxed(),
+                    );
             }
 
             ConnectionEvent::AddressChange(_)
@@ -176,16 +180,11 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
-            match result {
-                Ok(event) => return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
-                    id: todo!(),
-                    result: Ok(event),
-                })),
-                Err(e) => {
-                    todo!("{e:?}")
-                }
-            }
+        while let Poll::Ready(Some((id, result))) = self.outbound.poll_next_unpin(cx) {
+            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
+                id,
+                result: result.map_err(|e| todo!("{e:?}")),
+            }));
         }
 
         if self.outbound.is_empty() {

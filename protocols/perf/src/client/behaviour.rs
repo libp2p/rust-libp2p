@@ -34,8 +34,8 @@ use libp2p_swarm::{
 };
 use void::Void;
 
+use crate::RunParams;
 use crate::{client::handler::Handler, RunUpdate};
-use crate::{Run, RunDuration, RunParams};
 
 use super::RunId;
 

@@ -37,10 +37,41 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunUpdate {
-    Progressed,
-    Finished {
-        duration: RunDuration,
-    },
+    Progressed(Progressed),
+    Finished(Finished),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Progressed {
+    pub duration: Duration,
+    pub sent: usize,
+    pub received: usize,
+}
+
+impl Display for Progressed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Progressed {
+            // TODO: A single duration for both up and down is not ideal.
+            duration,
+            sent,
+            received,
+        } = self;
+        write!(
+            f,
+            "{:4} s uploaded {} downloaded {} ({})",
+            duration.as_secs_f64(),
+            format_bytes(*sent),
+            format_bytes(*received),
+            format_bandwidth(*duration, sent + received),
+        )?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Finished {
+    pub duration: RunDuration,
 }
 
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
@@ -66,43 +97,43 @@ pub struct Run {
     pub duration: RunDuration,
 }
 
+const KILO: f64 = 1024.0;
+const MEGA: f64 = KILO * 1024.0;
+const GIGA: f64 = MEGA * 1024.0;
+
+fn format_bytes(bytes: usize) -> String {
+    let bytes = bytes as f64;
+    if bytes >= GIGA {
+        format!("{:.2} GiB", bytes / GIGA)
+    } else if bytes >= MEGA {
+        format!("{:.2} MiB", bytes / MEGA)
+    } else if bytes >= KILO {
+        format!("{:.2} KiB", bytes / KILO)
+    } else {
+        format!("{} B", bytes)
+    }
+}
+
+fn format_bandwidth(duration: Duration, bytes: usize) -> String {
+    const KILO: f64 = 1024.0;
+    const MEGA: f64 = KILO * 1024.0;
+    const GIGA: f64 = MEGA * 1024.0;
+
+    let bandwidth = (bytes as f64 * 8.0) / duration.as_secs_f64();
+
+    if bandwidth >= GIGA {
+        format!("{:.2} Gbit/s", bandwidth / GIGA)
+    } else if bandwidth >= MEGA {
+        format!("{:.2} Mbit/s", bandwidth / MEGA)
+    } else if bandwidth >= KILO {
+        format!("{:.2} Kbit/s", bandwidth / KILO)
+    } else {
+        format!("{:.2} bit/s", bandwidth)
+    }
+}
+
 impl Display for Run {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        const KILO: f64 = 1024.0;
-        const MEGA: f64 = KILO * 1024.0;
-        const GIGA: f64 = MEGA * 1024.0;
-
-        fn format_bytes(bytes: usize) -> String {
-            let bytes = bytes as f64;
-            if bytes >= GIGA {
-                format!("{:.2} GiB", bytes / GIGA)
-            } else if bytes >= MEGA {
-                format!("{:.2} MiB", bytes / MEGA)
-            } else if bytes >= KILO {
-                format!("{:.2} KiB", bytes / KILO)
-            } else {
-                format!("{} B", bytes)
-            }
-        }
-
-        fn format_bandwidth(duration: Duration, bytes: usize) -> String {
-            const KILO: f64 = 1024.0;
-            const MEGA: f64 = KILO * 1024.0;
-            const GIGA: f64 = MEGA * 1024.0;
-
-            let bandwidth = (bytes as f64 * 8.0) / duration.as_secs_f64();
-
-            if bandwidth >= GIGA {
-                format!("{:.2} Gbit/s", bandwidth / GIGA)
-            } else if bandwidth >= MEGA {
-                format!("{:.2} Mbit/s", bandwidth / MEGA)
-            } else if bandwidth >= KILO {
-                format!("{:.2} Kbit/s", bandwidth / KILO)
-            } else {
-                format!("{:.2} bit/s", bandwidth)
-            }
-        }
-
         let Run {
             params: RunParams {
                 to_send,

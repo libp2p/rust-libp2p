@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::server::Event;
-use libp2p_perf::{Run, RunDuration, RunParams, RunUpdate};
+use libp2p_perf::{Finished, Run, RunParams, RunUpdate};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -454,12 +454,20 @@ async fn perf(
 ) -> Result<Run> {
     swarm.behaviour_mut().perf(server_peer_id, params)?;
 
-    let duration = match swarm.next().await.unwrap() {
-        SwarmEvent::Behaviour(libp2p_perf::client::Event {
-            id: _,
-            result: Ok(RunUpdate::Finished { duration }),
-        }) => duration,
-        e => panic!("{e:?}"),
+    let duration = loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::Behaviour(libp2p_perf::client::Event {
+                id: _,
+                result: Ok(RunUpdate::Progressed(progressed)),
+            }) => {
+                info!("{progressed}");
+            }
+            SwarmEvent::Behaviour(libp2p_perf::client::Event {
+                id: _,
+                result: Ok(RunUpdate::Finished(Finished { duration })),
+            }) => break duration,
+            e => panic!("{e:?}"),
+        };
     };
 
     let run = Run { params, duration };

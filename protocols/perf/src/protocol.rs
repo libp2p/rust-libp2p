@@ -22,103 +22,155 @@ use instant::Instant;
 use std::time::Duration;
 
 use futures::{
-    future::LocalBoxFuture,
-    stream::{BoxStream, LocalBoxStream},
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt,
+    future::select, stream::BoxStream, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
+    FutureExt, SinkExt, StreamExt,
 };
 
-use crate::{client, server, Run, RunDuration, RunParams, RunUpdate};
-
-use genawaiter::yield_;
+use crate::{Finished, Progressed, Run, RunDuration, RunParams, RunUpdate};
 
 const BUF: [u8; 1024] = [0; 1024];
 
 pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     params: RunParams,
-    mut stream: S,
+    stream: S,
+    // TODO: Could return impl Stream
 ) -> BoxStream<'static, Result<RunUpdate, std::io::Error>> {
-    let generator = genawaiter::sync::gen!({
-        let mut delay = futures_timer::Delay::new(Duration::from_secs(1));
+    let (sender, receiver) = futures::channel::mpsc::channel(0);
 
-        let RunParams {
-            to_send,
-            to_receive,
-        } = params;
+    let receiver = receiver.fuse();
 
-        let mut receive_buf = vec![0; 1024];
-        let to_receive_bytes = (to_receive as u64).to_be_bytes();
+    // TODO: Do we need the box?
+    let inner = send_receive_inner(params, stream, sender).fuse().boxed();
 
-        let mut write_to_receive = stream.write_all(&to_receive_bytes);
-        loop {
-            match futures::future::select(&mut delay, &mut write_to_receive).await {
+    futures::stream::select(
+        receiver.map(|progressed| Ok(RunUpdate::Progressed(progressed))),
+        inner
+            .map(|finished| finished.map(RunUpdate::Finished))
+            .into_stream(),
+    )
+    .boxed()
+}
+
+async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+    params: RunParams,
+    mut stream: S,
+    mut progress: futures::channel::mpsc::Sender<crate::Progressed>,
+) -> Result<Finished, std::io::Error> {
+    let mut delay = futures_timer::Delay::new(Duration::from_secs(1));
+
+    let RunParams {
+        to_send,
+        to_receive,
+    } = params;
+
+    let mut receive_buf = vec![0; 1024];
+    let to_receive_bytes = (to_receive as u64).to_be_bytes();
+
+    let mut write_to_receive = stream.write_all(&to_receive_bytes);
+    loop {
+        match select(&mut delay, &mut write_to_receive).await {
+            futures::future::Either::Left((_, _)) => {
+                delay = futures_timer::Delay::new(Duration::from_secs(1));
+                progress
+                    .send(Progressed {
+                        duration: Duration::ZERO,
+                        sent: 0,
+                        received: 0,
+                    })
+                    .await
+                    .expect("receiver not to be dropped");
+            }
+            futures::future::Either::Right((result, _)) => break result?,
+        }
+    }
+
+    let write_start = Instant::now();
+    let mut intermittant_start = Instant::now();
+
+    let mut sent = 0;
+    let mut intermittent_sent = 0;
+    while sent < to_send {
+        let n = std::cmp::min(to_send - sent, BUF.len());
+        let buf = &BUF[..n];
+
+        let mut write = stream.write(buf);
+        sent += loop {
+            match select(&mut delay, &mut write).await {
                 futures::future::Either::Left((_, _)) => {
                     delay = futures_timer::Delay::new(Duration::from_secs(1));
-                    // yield_!()
+                    progress
+                        .send(Progressed {
+                            duration: intermittant_start.elapsed(),
+                            sent: sent - intermittent_sent,
+                            received: 0,
+                        })
+                        .await
+                        .expect("receiver not to be dropped");
+                    intermittant_start = Instant::now();
+                    intermittent_sent = sent;
                 }
-                futures::future::Either::Right((Ok(_), _)) => break,
+                futures::future::Either::Right((Ok(n), _)) => break n,
                 futures::future::Either::Right((Err(_), _)) => todo!("yield"),
             }
         }
+    }
 
-        let write_start = Instant::now();
-
-        let mut sent = 0;
-        while sent < to_send {
-            let n = std::cmp::min(to_send - sent, BUF.len());
-            let buf = &BUF[..n];
-
-            let mut write = stream.write(buf);
-            sent += loop {
-                match futures::future::select(&mut delay, &mut write).await {
-                    futures::future::Either::Left((_, _)) => {
-                        delay = futures_timer::Delay::new(Duration::from_secs(1));
-                        // yield_!()
-                    }
-                    futures::future::Either::Right((Ok(n), _)) => break n,
-                    futures::future::Either::Right((Err(_), _)) => todo!("yield"),
-                }
+    loop {
+        match select(&mut delay, stream.close()).await {
+            futures::future::Either::Left((_, _)) => {
+                delay = futures_timer::Delay::new(Duration::from_secs(1));
+                progress
+                    .send(Progressed {
+                        duration: intermittant_start.elapsed(),
+                        sent: sent - intermittent_sent,
+                        received: 0,
+                    })
+                    .await
+                    .expect("receiver not to be dropped");
+                intermittant_start = Instant::now();
+                intermittent_sent = sent;
             }
+            futures::future::Either::Right((Ok(_), _)) => break,
+            futures::future::Either::Right((Err(_), _)) => todo!("yield"),
         }
+    }
 
-        loop {
-            match futures::future::select(&mut delay, stream.close()).await {
+    let write_done = Instant::now();
+
+    let mut received = 0;
+    let mut intermittend_received = 0;
+    while received < to_receive {
+        let mut read = stream.read(&mut receive_buf);
+        received += loop {
+            match select(&mut delay, &mut read).await {
                 futures::future::Either::Left((_, _)) => {
                     delay = futures_timer::Delay::new(Duration::from_secs(1));
-                    // yield_!()
+                    progress
+                        .send(Progressed {
+                            duration: intermittant_start.elapsed(),
+                            sent: sent - intermittent_sent,
+                            received: received - intermittend_received,
+                        })
+                        .await
+                        .expect("receiver not to be dropped");
+                    intermittant_start = Instant::now();
+                    intermittent_sent = sent;
+                    intermittend_received = received;
                 }
-                futures::future::Either::Right((Ok(_), _)) => break,
+                futures::future::Either::Right((Ok(n), _)) => break n,
                 futures::future::Either::Right((Err(_), _)) => todo!("yield"),
             }
         }
+    }
 
-        let write_done = Instant::now();
+    let read_done = Instant::now();
 
-        let mut received = 0;
-        while received < to_receive {
-            let mut read = stream.read(&mut receive_buf);
-            received += loop {
-                match futures::future::select(&mut delay, &mut read).await {
-                    futures::future::Either::Left((_, _)) => {
-                        delay = futures_timer::Delay::new(Duration::from_secs(1));
-                        // yield_!()
-                    }
-                    futures::future::Either::Right((Ok(n), _)) => break n,
-                    futures::future::Either::Right((Err(_), _)) => todo!("yield"),
-                }
-            }
-        }
-
-        let read_done = Instant::now();
-
-        yield_!(Ok(RunUpdate::Finished {
-            duration: RunDuration {
-                upload: write_done.duration_since(write_start),
-                download: read_done.duration_since(write_done),
-            }
-        }));
-    });
-
-    StreamExt::boxed(generator)
+    Ok(Finished {
+        duration: RunDuration {
+            upload: write_done.duration_since(write_start),
+            download: read_done.duration_since(write_done),
+        },
+    })
 }
 
 pub(crate) async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
@@ -168,98 +220,94 @@ pub(crate) async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures::{
-        executor::{block_on, block_on_stream},
-        AsyncRead, AsyncWrite,
-    };
-    use std::{
-        pin::Pin,
-        sync::{Arc, Mutex},
-        task::Poll,
-    };
-
-    #[derive(Clone)]
-    struct DummyStream {
-        inner: Arc<Mutex<DummyStreamInner>>,
-    }
-
-    struct DummyStreamInner {
-        read: Vec<u8>,
-        write: Vec<u8>,
-    }
-
-    impl DummyStream {
-        fn new(read: Vec<u8>) -> Self {
-            Self {
-                inner: Arc::new(Mutex::new(DummyStreamInner {
-                    read,
-                    write: Vec::new(),
-                })),
-            }
-        }
-    }
-
-    impl Unpin for DummyStream {}
-
-    impl AsyncWrite for DummyStream {
-        fn poll_write(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-            buf: &[u8],
-        ) -> std::task::Poll<std::io::Result<usize>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_write(cx, buf)
-        }
-
-        fn poll_flush(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_flush(cx)
-        }
-
-        fn poll_close(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<std::io::Result<()>> {
-            Pin::new(&mut self.inner.lock().unwrap().write).poll_close(cx)
-        }
-    }
-
-    impl AsyncRead for DummyStream {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-            buf: &mut [u8],
-        ) -> std::task::Poll<std::io::Result<usize>> {
-            let amt = std::cmp::min(buf.len(), self.inner.lock().unwrap().read.len());
-            let new = self.inner.lock().unwrap().read.split_off(amt);
-
-            buf[..amt].copy_from_slice(self.inner.lock().unwrap().read.as_slice());
-
-            self.inner.lock().unwrap().read = new;
-            Poll::Ready(Ok(amt))
-        }
-    }
-
-    // #[test]
-    // fn test_client() {
-    //     let stream = DummyStream::new(vec![0]);
-
-    //     block_on_stream(send_receive(
-    //         RunParams {
-    //             to_send: 0,
-    //             to_receive: 0,
-    //         },
-    //         stream.clone(),
-    //     ))
-    //     .collect::<Vec<_>>()
-
-    //     assert_eq!(
-    //         stream.inner.lock().unwrap().write,
-    //         0u64.to_be_bytes().to_vec()
-    //     );
-    // }
-}
+// #[cfg(test)]
+// mod tests {
+//     use futures::{AsyncRead, AsyncWrite};
+//     use std::{
+//         pin::Pin,
+//         sync::{Arc, Mutex},
+//         task::Poll,
+//     };
+//
+//     #[derive(Clone)]
+//     struct DummyStream {
+//         inner: Arc<Mutex<DummyStreamInner>>,
+//     }
+//
+//     struct DummyStreamInner {
+//         read: Vec<u8>,
+//         write: Vec<u8>,
+//     }
+//
+//     impl DummyStream {
+//         fn new(read: Vec<u8>) -> Self {
+//             Self {
+//                 inner: Arc::new(Mutex::new(DummyStreamInner {
+//                     read,
+//                     write: Vec::new(),
+//                 })),
+//             }
+//         }
+//     }
+//
+//     impl Unpin for DummyStream {}
+//
+//     impl AsyncWrite for DummyStream {
+//         fn poll_write(
+//             self: std::pin::Pin<&mut Self>,
+//             cx: &mut std::task::Context<'_>,
+//             buf: &[u8],
+//         ) -> std::task::Poll<std::io::Result<usize>> {
+//             Pin::new(&mut self.inner.lock().unwrap().write).poll_write(cx, buf)
+//         }
+//
+//         fn poll_flush(
+//             self: std::pin::Pin<&mut Self>,
+//             cx: &mut std::task::Context<'_>,
+//         ) -> std::task::Poll<std::io::Result<()>> {
+//             Pin::new(&mut self.inner.lock().unwrap().write).poll_flush(cx)
+//         }
+//
+//         fn poll_close(
+//             self: std::pin::Pin<&mut Self>,
+//             cx: &mut std::task::Context<'_>,
+//         ) -> std::task::Poll<std::io::Result<()>> {
+//             Pin::new(&mut self.inner.lock().unwrap().write).poll_close(cx)
+//         }
+//     }
+//
+//     impl AsyncRead for DummyStream {
+//         fn poll_read(
+//             self: Pin<&mut Self>,
+//             _cx: &mut std::task::Context<'_>,
+//             buf: &mut [u8],
+//         ) -> std::task::Poll<std::io::Result<usize>> {
+//             let amt = std::cmp::min(buf.len(), self.inner.lock().unwrap().read.len());
+//             let new = self.inner.lock().unwrap().read.split_off(amt);
+//
+//             buf[..amt].copy_from_slice(self.inner.lock().unwrap().read.as_slice());
+//
+//             self.inner.lock().unwrap().read = new;
+//             Poll::Ready(Ok(amt))
+//         }
+//     }
+//
+//     // #[test]
+//     // fn test_client() {
+//     //     let stream = DummyStream::new(vec![0]);
+//
+//     //     block_on_stream(send_receive(
+//     //         RunParams {
+//     //             to_send: 0,
+//     //             to_receive: 0,
+//     //         },
+//     //         stream.clone(),
+//     //     ))
+//     //     .collect::<Vec<_>>()
+//
+//     //     assert_eq!(
+//     //         stream.inner.lock().unwrap().write,
+//     //         0u64.to_be_bytes().to_vec()
+//     //     );
+//     // }
+// }

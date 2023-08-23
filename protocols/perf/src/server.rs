@@ -21,6 +21,5 @@
 mod behaviour;
 mod handler;
 
-use instant::Instant;
 
 pub use behaviour::{Behaviour, Event};

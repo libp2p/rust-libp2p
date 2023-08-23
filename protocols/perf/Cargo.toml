@@ -16,7 +16,6 @@ clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
 futures-timer = "3.0"
-genawaiter = { version = "0.99.1", features = ["futures03"] }
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dns = { workspace = true, features = ["tokio"] }
