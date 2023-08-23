@@ -152,8 +152,9 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs: FuturesUnordered<
-        BoxFuture<'static, Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
+    open_circuit_futs: futures_bounded::WorkerFutures<
+        (),
+        Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>,
     >,
 
     circuit_deny_futs: HashMap<PeerId, BoxFuture<'static, Result<(), inbound_stop::UpgradeError>>>,
@@ -188,7 +189,10 @@ impl Handler {
             ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
-            open_circuit_futs: Default::default(),
+            open_circuit_futs: futures_bounded::WorkerFutures::new(
+                config.substream_timeout,
+                config.max_concurrent_streams,
+            ),
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
@@ -353,14 +357,11 @@ impl ConnectionHandler for Handler {
 
         // Reservations
         if let Poll::Ready((_, worker_res)) = self.reserve_futs.poll_unpin(cx) {
-            let result = match worker_res {
-                Ok(r) => r,
-                Err(futures_bounded::Timeout { .. }) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-                }
-            };
+            if worker_res.is_err() {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            }
 
-            let event = match result {
+            let event = match worker_res.unwrap() {
                 Ok(outbound_hop::Output::Reservation {
                     renewal_timeout,
                     addrs,
@@ -398,14 +399,11 @@ impl ConnectionHandler for Handler {
 
         // Circuit connections
         if let Poll::Ready((_, worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
-            let res = match worker_res {
-                Ok(r) => r,
-                Err(futures_bounded::Timeout { .. }) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-                }
-            };
+            if worker_res.is_err() {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            }
 
-            let opt = match res {
+            let opt = match worker_res.unwrap() {
                 Ok(Some(outbound_hop::Output::Circuit { limit })) => {
                     Some(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::OutboundCircuitEstablished { limit },
@@ -444,8 +442,12 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        if let Poll::Ready(Some(circuit_res)) = self.open_circuit_futs.poll_next_unpin(cx) {
-            match circuit_res {
+        if let Poll::Ready((_, worker_res)) = self.open_circuit_futs.poll_unpin(cx) {
+            if worker_res.is_err() {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            }
+
+            match worker_res.unwrap() {
                 Ok(circuit) => match &mut self.reservation {
                     Reservation::Accepted { pending_msgs, .. }
                     | Reservation::Renewing { pending_msgs, .. } => {
@@ -559,8 +561,13 @@ impl ConnectionHandler for Handler {
                 protocol: stream,
                 ..
             }) => {
-                self.open_circuit_futs
-                    .push(inbound_stop::handle_open_circuit(stream).boxed());
+                if self
+                    .open_circuit_futs
+                    .try_push((), inbound_stop::handle_open_circuit(stream).boxed())
+                    .is_some()
+                {
+                    log::warn!("Dropping inbound stream because we are at capacity")
+                }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
