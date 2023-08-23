@@ -1,4 +1,11 @@
-## 0.2.0 
+## 0.2.1 - unreleased
+
+- Switch from webpki to rustls-webpki.
+  See [PR 4381].
+
+[PR 4381]: https://github.com/libp2p/rust-libp2p/pull/4381
+
+## 0.2.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
