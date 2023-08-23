@@ -15,6 +15,12 @@ To run the example, follow these steps:
 
    This command starts the rendezvous server, which will listen for incoming connections and handle peer registrations and discovery.
 
+   Grab the value of `Local peer id` logged in your console and replace the existing value of the `rendezvous_point` variable in the following files:
+   * `bin/rzv-register` line 36
+   * `bin/rzv-discover` line 40
+   * `bin/rzv-identify` line 36
+   `rendezvous_point` denotes the endpoint on the rendezvous server used by peer ids generated in these files.
+
 2. Register a peer by executing the following command:
 
    ```sh
