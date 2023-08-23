@@ -35,13 +35,14 @@ use libp2p_swarm::{
 use void::Void;
 
 use crate::client::handler::Handler;
+use crate::{Run, RunDuration, RunParams};
 
-use super::{RunId, RunParams, RunStats};
+use super::RunId;
 
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub result: Result<Run, StreamUpgradeError<Void>>,
 }
 
 #[derive(Default)]

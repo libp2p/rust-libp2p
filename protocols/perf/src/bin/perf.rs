@@ -30,6 +30,7 @@ use libp2p_core::{
     Transport as _,
 };
 use libp2p_identity::PeerId;
+use libp2p_perf::server::Event;
 use libp2p_perf::{Run, RunDuration, RunParams};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
@@ -135,7 +136,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::Behaviour(()) => {
+                SwarmEvent::Behaviour(Event { .. }) => {
                     info!("Finished run",)
                 }
                 e => panic!("{e:?}"),
@@ -450,18 +451,18 @@ async fn perf(
     swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
     server_peer_id: PeerId,
     params: RunParams,
-) -> Result<RunDuration> {
+) -> Result<Run> {
     swarm.behaviour_mut().perf(server_peer_id, params)?;
 
-    let duration = match swarm.next().await.unwrap() {
+    let run = match swarm.next().await.unwrap() {
         SwarmEvent::Behaviour(libp2p_perf::client::Event {
             id: _,
-            result: Ok(duration),
-        }) => duration,
+            result: Ok(run),
+        }) => run,
         e => panic!("{e:?}"),
     };
 
-    info!("{}", Run { params, duration });
+    info!("{run}");
 
-    Ok(duration)
+    Ok(run)
 }

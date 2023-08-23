@@ -52,6 +52,7 @@ pub struct RunDuration {
     pub download: Duration,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Run {
     pub params: RunParams,
     pub duration: RunDuration,

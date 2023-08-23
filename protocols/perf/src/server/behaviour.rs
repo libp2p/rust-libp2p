@@ -32,13 +32,12 @@ use libp2p_swarm::{
 };
 
 use crate::server::handler::Handler;
-
-use super::RunStats;
+use crate::Run;
 
 #[derive(Debug)]
 pub struct Event {
     pub remote_peer_id: PeerId,
-    pub stats: RunStats,
+    pub stats: Run,
 }
 
 #[derive(Default)]

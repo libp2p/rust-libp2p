@@ -36,7 +36,8 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use super::{RunId, RunParams, RunStats};
+use super::RunId;
+use crate::{Run, RunDuration, RunParams};
 
 #[derive(Debug)]
 pub struct Command {
@@ -47,7 +48,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunStats, StreamUpgradeError<Void>>,
+    pub(crate) result: Result<Run, StreamUpgradeError<Void>>,
 }
 
 pub struct Handler {
@@ -129,9 +130,9 @@ impl ConnectionHandler for Handler {
                     .expect("opened a stream without a pending command");
                 self.outbound.push(
                     crate::protocol::send_receive(params, protocol)
-                        .map_ok(move |timers| Event {
+                        .map_ok(move |duration| Event {
                             id,
-                            result: Ok(RunStats { params, timers }),
+                            result: Ok(Run { params, duration }),
                         })
                         .boxed(),
                 );

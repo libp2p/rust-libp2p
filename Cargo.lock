@@ -2980,7 +2980,6 @@ name = "libp2p-perf"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "clap",
  "env_logger 0.10.0",
  "futures",
@@ -2989,7 +2988,6 @@ dependencies = [
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-quic",
- "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
  "libp2p-tcp",

@@ -9,10 +9,14 @@ RUN --mount=type=cache,target=./target \
     cargo build --release --package libp2p-perf
 
 RUN --mount=type=cache,target=./target \
-    mv ./target/release/perf /usr/local/bin/perf
+    mv ./target/release/perf-server /usr/local/bin/perf-server
+
+RUN --mount=type=cache,target=./target \
+    mv ./target/release/perf-client /usr/local/bin/perf-client
 
 FROM debian:bullseye-slim
 
-COPY --from=builder /usr/local/bin/perf /app/perf
+COPY --from=builder /usr/local/bin/perf-server /usr/local/bin/perf-server
+COPY --from=builder /usr/local/bin/perf-client /usr/local/bin/perf-client
 
-ENTRYPOINT [ "/app/perf" ]
+ENTRYPOINT [ "perf-server"]

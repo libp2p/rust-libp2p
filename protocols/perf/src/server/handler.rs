@@ -35,15 +35,15 @@ use libp2p_swarm::{
 use log::error;
 use void::Void;
 
-use super::RunStats;
+use crate::Run;
 
 #[derive(Debug)]
 pub struct Event {
-    pub stats: RunStats,
+    pub stats: Run,
 }
 
 pub struct Handler {
-    inbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
+    inbound: FuturesUnordered<BoxFuture<'static, Result<Run, std::io::Error>>>,
     keep_alive: KeepAlive,
 }
 
