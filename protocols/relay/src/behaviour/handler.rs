@@ -47,6 +47,8 @@ use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub substream_timeout: Duration,
+    pub max_concurrent_streams: usize,
     pub reservation_duration: Duration,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
@@ -382,12 +384,16 @@ pub struct Handler {
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
     stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
-    protocol_futs: FuturesUnordered<BoxFuture<'static, CHEvent>>,
+    protocol_futs: futures_bounded::WorkerFutures<(), CHEvent>,
 }
 
 impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
+            protocol_futs: futures_bounded::WorkerFutures::new(
+                config.substream_timeout,
+                config.max_concurrent_streams,
+            ),
             endpoint,
             config,
             queued_events: Default::default(),
@@ -400,22 +406,25 @@ impl Handler {
             active_reservation: Default::default(),
             keep_alive: KeepAlive::Yes,
             stop_requested_streams: Default::default(),
-            protocol_futs: Default::default(),
         }
     }
 
-    fn on_fully_negotiated_inbound(&self, stream: Stream) {
-        self.protocol_futs.push(
-            inbound_hop::handle_inbound_request(
-                stream,
-                self.config.reservation_duration,
-                self.config.max_circuit_duration,
-                self.config.max_circuit_bytes,
-                self.endpoint.clone(),
-                self.active_reservation.is_some(),
-            )
-            .boxed(),
-        );
+    fn on_fully_negotiated_inbound(&mut self, stream: Stream) {
+        if self.protocol_futs
+            .try_push(
+                (),
+                inbound_hop::handle_inbound_request(
+                    stream,
+                    self.config.reservation_duration,
+                    self.config.max_circuit_duration,
+                    self.config.max_circuit_bytes,
+                    self.endpoint.clone(),
+                    self.active_reservation.is_some(),
+                )
+                    .boxed(),
+            ).is_some() {
+            log::warn!("Dropping inbound stream because we are at capacity")
+        }
     }
 
     fn on_fully_negotiated_outbound(&mut self, stream: Stream) {
@@ -427,8 +436,13 @@ impl Handler {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
-        self.protocol_futs
-            .push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed());
+        if self.protocol_futs
+            .try_push(
+                (),
+                outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed(),
+            ).is_some() {
+            log::warn!("Dropping outbound stream because we are at capacity")
+        }
     }
 
     fn on_dial_upgrade_error(
@@ -646,7 +660,10 @@ impl ConnectionHandler for Handler {
         }
 
         // Process protocol requests
-        if let Poll::Ready(Some(event)) = self.protocol_futs.poll_next_unpin(cx) {
+        if let Poll::Ready((_, worker_res)) = self.protocol_futs.poll_unpin(cx) {
+            let event = worker_res
+                .unwrap_or_else(|_|{ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout)});
+
             return Poll::Ready(event);
         }
 

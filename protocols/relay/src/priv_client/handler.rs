@@ -136,8 +136,9 @@ pub struct Handler {
     >,
 
     wait_for_connection_outbound_stream: VecDeque<outbound_hop::Command>,
-    circuit_connection_futs: FuturesUnordered<
-        BoxFuture<'static, Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>>,
+    circuit_connection_futs: futures_bounded::WorkerFutures<
+        (),
+        Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>
     >,
 
     reservation: Reservation,
@@ -184,7 +185,10 @@ impl Handler {
                 config.max_concurrent_streams,
             ),
             wait_for_connection_outbound_stream: Default::default(),
-            circuit_connection_futs: Default::default(),
+            circuit_connection_futs: futures_bounded::WorkerFutures::new(
+                config.substream_timeout,
+                config.max_concurrent_streams,
+            ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
             open_circuit_futs: Default::default(),
@@ -395,7 +399,14 @@ impl ConnectionHandler for Handler {
         }
 
         // Circuit connections
-        if let Poll::Ready(Some(res)) = self.circuit_connection_futs.poll_next_unpin(cx) {
+        if let Poll::Ready((_, worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
+            let res = match worker_res {
+                Ok(r) => r,
+                Err(futures_bounded::Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
+
             let opt = match res {
                 Ok(Some(outbound_hop::Output::Circuit { limit })) => {
                     Some(ConnectionHandlerEvent::NotifyBehaviour(
@@ -578,15 +589,18 @@ impl ConnectionHandler for Handler {
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
 
-                self.circuit_connection_futs.push(
-                    outbound_hop::handle_connection_message_response(
-                        stream,
-                        self.remote_peer_id,
-                        con_command,
-                        tx,
-                    )
-                    .boxed(),
-                )
+                if self.circuit_connection_futs
+                    .try_push(
+                        (),
+                        outbound_hop::handle_connection_message_response(
+                            stream,
+                            self.remote_peer_id,
+                            con_command,
+                            tx,
+                        ).boxed()
+                    ).is_some() {
+                    log::warn!("Dropping outbound stream because we are at capacity")
+                }
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
