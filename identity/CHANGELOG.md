@@ -1,3 +1,8 @@
+## 0.1.3
+
+- Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.
+  See [PR 4337]
+
 ## 0.1.2
 
 - Add `impl From<ed25519::PublicKey> for PublicKey` so that `PublicKey::from(ed25519::PublicKey)` works.
