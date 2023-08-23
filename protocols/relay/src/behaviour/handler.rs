@@ -20,6 +20,7 @@
 
 use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
+use crate::protocol::outbound_stop::StopCommand;
 use crate::protocol::{inbound_hop, outbound_stop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use bytes::Bytes;
@@ -383,7 +384,6 @@ pub struct Handler {
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
-    stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
     protocol_futs: futures_bounded::WorkerFutures<(), CHEvent>,
 }
 
@@ -405,7 +405,6 @@ impl Handler {
             circuits: Default::default(),
             active_reservation: Default::default(),
             keep_alive: KeepAlive::Yes,
-            stop_requested_streams: Default::default(),
         }
     }
 
@@ -430,12 +429,7 @@ impl Handler {
         }
     }
 
-    fn on_fully_negotiated_outbound(&mut self, stream: Stream) {
-        let stop_command = self
-            .stop_requested_streams
-            .pop_front()
-            .expect("opened a stream without a pending stop command");
-
+    fn on_fully_negotiated_outbound(&mut self, stream: Stream, stop_command: StopCommand) {
         let (tx, rx) = oneshot::channel();
         self.alive_lend_out_substreams.push(rx);
 
@@ -453,7 +447,7 @@ impl Handler {
 
     fn on_dial_upgrade_error(
         &mut self,
-        DialUpgradeError { error, .. }: DialUpgradeError<
+        DialUpgradeError { error, info }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
@@ -476,18 +470,13 @@ impl Handler {
             StreamUpgradeError::Apply(_) => unreachable!("Should not emit handle errors"),
         };
 
-        let stop_command = self
-            .stop_requested_streams
-            .pop_front()
-            .expect("failed to open a stream without a pending stop command");
-
         self.queued_events
             .push_back(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::OutboundConnectNegotiationFailed {
-                    circuit_id: stop_command.circuit_id,
-                    src_peer_id: stop_command.src_peer_id,
-                    src_connection_id: stop_command.src_connection_id,
-                    inbound_circuit_req: stop_command.inbound_circuit_req,
+                    circuit_id: info.circuit_id,
+                    src_peer_id: info.src_peer_id,
+                    src_connection_id: info.src_connection_id,
+                    inbound_circuit_req: info.inbound_circuit_req,
                     status,
                     error: non_fatal_error,
                 },
@@ -518,7 +507,7 @@ impl ConnectionHandler for Handler {
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
-    type OutboundOpenInfo = ();
+    type OutboundOpenInfo = outbound_stop::StopCommand;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ())
@@ -560,17 +549,18 @@ impl ConnectionHandler for Handler {
                 src_peer_id,
                 src_connection_id,
             } => {
-                self.stop_requested_streams
-                    .push_back(outbound_stop::StopCommand::new(
-                        circuit_id,
-                        inbound_circuit_req,
-                        src_peer_id,
-                        src_connection_id,
-                        &self.config,
-                    ));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ()),
+                        protocol: SubstreamProtocol::new(
+                            ReadyUpgrade::new(STOP_PROTOCOL_NAME),
+                            outbound_stop::StopCommand::new(
+                                circuit_id,
+                                inbound_circuit_req,
+                                src_peer_id,
+                                src_connection_id,
+                                &self.config,
+                            ),
+                        ),
                     });
             }
             In::DenyCircuitReq {
@@ -861,9 +851,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
-                ..
+                info,
             }) => {
-                self.on_fully_negotiated_outbound(stream);
+                self.on_fully_negotiated_outbound(stream, info);
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error);

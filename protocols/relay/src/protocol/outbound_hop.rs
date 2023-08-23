@@ -288,7 +288,12 @@ pub(crate) async fn handle_connection_message_response(
     Ok(output)
 }
 
-pub(crate) struct Command {
+pub enum OutboundStreamState {
+    Reserve(mpsc::Sender<transport::ToListenerMsg>),
+    CircuitConnection(Command),
+}
+
+pub struct Command {
     dst_peer_id: PeerId,
     pub(crate) send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
 }

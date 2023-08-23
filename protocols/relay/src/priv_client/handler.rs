@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::priv_client::{transport, Config};
+use crate::protocol::outbound_hop::OutboundStreamState;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use either::Either;
@@ -129,13 +130,11 @@ pub struct Handler {
         >,
     >,
 
-    wait_for_reserve_outbound_stream: VecDeque<mpsc::Sender<transport::ToListenerMsg>>,
     reserve_futs: futures_bounded::WorkerFutures<
         (),
         Result<outbound_hop::Output, outbound_hop::UpgradeError>,
     >,
 
-    wait_for_connection_outbound_stream: VecDeque<outbound_hop::Command>,
     circuit_connection_futs: futures_bounded::WorkerFutures<
         (),
         Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>,
@@ -179,12 +178,10 @@ impl Handler {
             remote_addr,
             queued_events: Default::default(),
             pending_error: Default::default(),
-            wait_for_reserve_outbound_stream: Default::default(),
             reserve_futs: futures_bounded::WorkerFutures::new(
                 config.substream_timeout,
                 config.max_concurrent_streams,
             ),
-            wait_for_connection_outbound_stream: Default::default(),
             circuit_connection_futs: futures_bounded::WorkerFutures::new(
                 config.substream_timeout,
                 config.max_concurrent_streams,
@@ -200,72 +197,68 @@ impl Handler {
 
     fn on_dial_upgrade_error(
         &mut self,
-        DialUpgradeError { error, .. }: DialUpgradeError<
+        DialUpgradeError { error, info }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        // Try to process the error for a reservation
-        if let Some(mut to_listener) = self.wait_for_reserve_outbound_stream.pop_front() {
-            let non_fatal_error = match error {
-                StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
-                StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
-                StreamUpgradeError::Io(e) => {
-                    self.pending_error = Some(StreamUpgradeError::Io(e));
-                    return;
-                }
-                StreamUpgradeError::Apply(_) => unreachable!("should not update"),
-            };
-
-            if self.pending_error.is_none() {
-                self.send_error_futs.push(
-                    async move {
-                        let _ = to_listener
-                            .send(transport::ToListenerMsg::Reservation(Err(())))
-                            .await;
+        match info {
+            OutboundStreamState::Reserve(mut to_listener) => {
+                let non_fatal_error = match error {
+                    StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
+                    StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
+                    StreamUpgradeError::Io(e) => {
+                        self.pending_error = Some(StreamUpgradeError::Io(e));
+                        return;
                     }
-                    .boxed(),
-                );
-            } else {
-                // Fatal error occurred, thus handler is closing as quickly as possible.
-                // Transport is notified through dropping `to_listener`.
+                    StreamUpgradeError::Apply(_) => unreachable!("should not update"),
+                };
+
+                if self.pending_error.is_none() {
+                    self.send_error_futs.push(
+                        async move {
+                            let _ = to_listener
+                                .send(transport::ToListenerMsg::Reservation(Err(())))
+                                .await;
+                        }
+                        .boxed(),
+                    );
+                } else {
+                    // Fatal error occurred, thus handler is closing as quickly as possible.
+                    // Transport is notified through dropping `to_listener`.
+                }
+
+                let renewal = self.reservation.failed();
+
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqFailed {
+                            renewal,
+                            error: non_fatal_error,
+                        },
+                    ));
             }
+            OutboundStreamState::CircuitConnection(cmd) => {
+                let non_fatal_error = match error {
+                    StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
+                    StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
+                    StreamUpgradeError::Io(e) => {
+                        self.pending_error = Some(StreamUpgradeError::Io(e));
+                        return;
+                    }
+                    StreamUpgradeError::Apply(_) => unreachable!("should not update"),
+                };
 
-            let renewal = self.reservation.failed();
+                let _ = cmd.send_back.send(Err(()));
 
-            self.queued_events
-                .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::ReservationReqFailed {
-                        renewal,
-                        error: non_fatal_error,
-                    },
-                ));
-
-            return;
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitReqFailed {
+                            error: non_fatal_error,
+                        },
+                    ));
+            }
         }
-        // Try to process the error for a connection
-        let cmd = self.wait_for_connection_outbound_stream.pop_front().expect(
-            "got a stream error without a pending connection command or a reserve listener",
-        );
-
-        let non_fatal_error = match error {
-            StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
-            StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
-            StreamUpgradeError::Io(e) => {
-                self.pending_error = Some(StreamUpgradeError::Io(e));
-                return;
-            }
-            StreamUpgradeError::Apply(_) => unreachable!("should not update"),
-        };
-
-        let _ = cmd.send_back.send(Err(()));
-
-        self.queued_events
-            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::OutboundCircuitReqFailed {
-                    error: non_fatal_error,
-                },
-            ));
     }
 
     fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
@@ -303,7 +296,7 @@ impl ConnectionHandler for Handler {
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
-    type OutboundOpenInfo = ();
+    type OutboundOpenInfo = outbound_hop::OutboundStreamState;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ())
@@ -312,21 +305,26 @@ impl ConnectionHandler for Handler {
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::Reserve { to_listener } => {
-                self.wait_for_reserve_outbound_stream.push_back(to_listener);
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
+                        protocol: SubstreamProtocol::new(
+                            ReadyUpgrade::new(HOP_PROTOCOL_NAME),
+                            outbound_hop::OutboundStreamState::Reserve(to_listener),
+                        ),
                     });
             }
             In::EstablishCircuit {
                 send_back,
                 dst_peer_id,
             } => {
-                self.wait_for_connection_outbound_stream
-                    .push_back(outbound_hop::Command::new(dst_peer_id, send_back));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
+                        protocol: SubstreamProtocol::new(
+                            ReadyUpgrade::new(HOP_PROTOCOL_NAME),
+                            outbound_hop::OutboundStreamState::CircuitConnection(
+                                outbound_hop::Command::new(dst_peer_id, send_back),
+                            ),
+                        ),
                     });
             }
         }
@@ -483,10 +481,11 @@ impl ConnectionHandler for Handler {
         }
 
         if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
-            self.wait_for_reserve_outbound_stream.push_back(to_listener);
-
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
+                protocol: SubstreamProtocol::new(
+                    ReadyUpgrade::new(HOP_PROTOCOL_NAME),
+                    outbound_hop::OutboundStreamState::Reserve(to_listener),
+                ),
             });
         }
 
@@ -565,9 +564,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
-                ..
-            }) => {
-                if let Some(to_listener) = self.wait_for_reserve_outbound_stream.pop_front() {
+                info,
+            }) => match info {
+                OutboundStreamState::Reserve(to_listener) => {
                     if self
                         .reserve_futs
                         .try_push(
@@ -579,33 +578,29 @@ impl ConnectionHandler for Handler {
                     {
                         log::warn!("Dropping outbound stream because we are at capacity")
                     }
-                    return;
                 }
+                OutboundStreamState::CircuitConnection(command) => {
+                    let (tx, rx) = oneshot::channel();
+                    self.alive_lend_out_substreams.push(rx);
 
-                let con_command = self.wait_for_connection_outbound_stream.pop_front().expect(
-                    "opened a stream without a pending connection command or a reserve listener",
-                );
-
-                let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-
-                if self
-                    .circuit_connection_futs
-                    .try_push(
-                        (),
-                        outbound_hop::handle_connection_message_response(
-                            stream,
-                            self.remote_peer_id,
-                            con_command,
-                            tx,
+                    if self
+                        .circuit_connection_futs
+                        .try_push(
+                            (),
+                            outbound_hop::handle_connection_message_response(
+                                stream,
+                                self.remote_peer_id,
+                                command,
+                                tx,
+                            )
+                            .boxed(),
                         )
-                        .boxed(),
-                    )
-                    .is_some()
-                {
-                    log::warn!("Dropping outbound stream because we are at capacity")
+                        .is_some()
+                    {
+                        log::warn!("Dropping outbound stream because we are at capacity")
+                    }
                 }
-            }
+            },
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
