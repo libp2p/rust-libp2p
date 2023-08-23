@@ -1,4 +1,4 @@
-## 0.42.1
+## 0.42.1 - unreleased
 
 - Bump `futures-rustls` to `0.24.0`.
   See [PR 4378].
