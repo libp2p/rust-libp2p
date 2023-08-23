@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::server::Event;
-use libp2p_perf::{Finished, Run, RunParams, RunUpdate};
+use libp2p_perf::{Finished, Progressed, Run, RunParams, RunUpdate};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,15 @@ async fn client(
     Ok(())
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomResult {
+    r#type: String,
+    time_seconds: f64,
+    upload_bytes: usize,
+    download_bytes: usize,
+}
+
 async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
     let mut swarm = swarm().await?;
@@ -205,16 +214,13 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 
     perf(&mut swarm, server_peer_id, params).await?;
 
-    #[derive(Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct CustomResult {
-        latency: f64,
-    }
-
     println!(
         "{}",
         serde_json::to_string(&CustomResult {
-            latency: start.elapsed().as_secs_f64(),
+            upload_bytes: params.to_send,
+            download_bytes: params.to_receive,
+            r#type: "final".to_string(),
+            time_seconds: start.elapsed().as_secs_f64(),
         })
         .unwrap()
     );
@@ -461,6 +467,23 @@ async fn perf(
                 result: Ok(RunUpdate::Progressed(progressed)),
             }) => {
                 info!("{progressed}");
+
+                let Progressed {
+                    duration,
+                    sent,
+                    received,
+                } = progressed;
+
+                println!(
+                    "{}",
+                    serde_json::to_string(&CustomResult {
+                        r#type: "intermittent".to_string(),
+                        time_seconds: duration.as_secs_f64(),
+                        upload_bytes: sent,
+                        download_bytes: received,
+                    })
+                    .unwrap()
+                );
             }
             SwarmEvent::Behaviour(libp2p_perf::client::Event {
                 id: _,
