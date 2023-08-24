@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut cfg = KademliaConfig::default();
             cfg.set_query_timeout(Duration::from_secs(5 * 60));
             let store = MemoryStore::new(key.public().to_peer_id());
-            Ok(Kademlia::with_config(key.public().to_peer_id(), store, cfg))
+            Kademlia::with_config(key.public().to_peer_id(), store, cfg)
         })
         .unwrap()
         .build();

@@ -33,10 +33,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_tcp()
         .with_noise()?
         .with_behaviour(|key| {
-            Ok(identify::Behaviour::new(identify::Config::new(
+            identify::Behaviour::new(identify::Config::new(
                 "/ipfs/id/1.0.0".to_string(),
                 key.public(),
-            )))
+            ))
         })
         .unwrap()
         .build();

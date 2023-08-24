@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|_| Ok(Behaviour::default()))
+        .with_behaviour(|_| Behaviour::default())
         .unwrap()
         .build();
 

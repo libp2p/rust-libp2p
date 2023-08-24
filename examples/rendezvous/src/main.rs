@@ -36,20 +36,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_tokio()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| {
-            Ok(MyBehaviour {
-                identify: identify::Behaviour::new(identify::Config::new(
-                    "rendezvous-example/1.0.0".to_string(),
-                    key.public(),
-                )),
-                rendezvous: rendezvous::server::Behaviour::new(
-                    rendezvous::server::Config::default(),
-                ),
-                ping: ping::Behaviour::new(
-                    ping::Config::new().with_interval(Duration::from_secs(1)),
-                ),
-                keep_alive: keep_alive::Behaviour,
-            })
+        .with_behaviour(|key| MyBehaviour {
+            identify: identify::Behaviour::new(identify::Config::new(
+                "rendezvous-example/1.0.0".to_string(),
+                key.public(),
+            )),
+            rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+            keep_alive: keep_alive::Behaviour,
         })?
         .build();
 

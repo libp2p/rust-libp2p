@@ -40,14 +40,10 @@ async fn main() {
         .with_tcp()
         .with_noise()
         .unwrap()
-        .with_behaviour(|key| {
-            Ok(MyBehaviour {
-                rendezvous: rendezvous::client::Behaviour::new(key.clone()),
-                ping: ping::Behaviour::new(
-                    ping::Config::new().with_interval(Duration::from_secs(1)),
-                ),
-                keep_alive: keep_alive::Behaviour,
-            })
+        .with_behaviour(|key| MyBehaviour {
+            rendezvous: rendezvous::client::Behaviour::new(key.clone()),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+            keep_alive: keep_alive::Behaviour,
         })
         .unwrap()
         .build();

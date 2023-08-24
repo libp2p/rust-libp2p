@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
         .with_other_transport(|key| {
-            let noise_config = noise::Config::new(&key).unwrap();
+            let noise_config = noise::Config::new(key).unwrap();
             let yamux_config = yamux::Config::default();
 
             let base_transport =
@@ -136,7 +136,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)
-                .build()?;
+                .build()
+                .map_err(|msg| io::Error::new(io::ErrorKind::Other, msg))?; // Temporary hack because `build` does not return a proper `std::error::Error`.
             Ok(MyBehaviour {
                 gossipsub: gossipsub::Behaviour::new(
                     gossipsub::MessageAuthenticity::Signed(key.clone()),

@@ -127,16 +127,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await?
             .with_relay()
             .with_noise()?
-            .with_behaviour(|keypair, relay_behaviour| {
-                Ok(Behaviour {
-                    relay_client: relay_behaviour,
-                    ping: ping::Behaviour::new(ping::Config::new()),
-                    identify: identify::Behaviour::new(identify::Config::new(
-                        "/TODO/0.0.1".to_string(),
-                        keypair.public(),
-                    )),
-                    dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
-                })
+            .with_behaviour(|keypair, relay_behaviour| Behaviour {
+                relay_client: relay_behaviour,
+                ping: ping::Behaviour::new(ping::Config::new()),
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/TODO/0.0.1".to_string(),
+                    keypair.public(),
+                )),
+                dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
             })?
             .build();
 

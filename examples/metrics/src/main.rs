@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .with_async_std()
         .with_tcp()
         .with_noise()?
-        .with_behaviour(|key| Ok(Behaviour::new(key.public())))?
+        .with_behaviour(|key| Behaviour::new(key.public()))?
         .build();
 
     info!("Local peer id: {:?}", swarm.local_peer_id());
