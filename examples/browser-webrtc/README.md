@@ -15,6 +15,8 @@ cd server
 cargo run
 ```
 
+Behind the scenes, this server serves both the `Multiaddr` that the client will dial, and the `index.html` that the client will load in the browser.
+
 ### WebRTC Client
 
 Then, start the client [`/client`](./client) in a separate terminal:
@@ -24,20 +26,4 @@ cd client
 wasm-pack build --target web
 ```
 
-### Serve webpage
-
-Then serve the `index.html` with a static web server, such as [`http-server`](https://github.com/http-party/http-server):
-
-Using [npx](https://docs.npmjs.com/cli/v9/commands/npx) to run `http-server` without installing it globally, in another terminal, run:
-
-```bash
-npx http-server
-```
-
-or having done `npm install --global http-server`, simply:
-
-```bash
-http-server
-```
-
-Open a Chrome browser (`libp2p-webrtc-websys` has not yet been tested in Firefox or other browsers) where you will see the browser pinging the server. Open the server console logs to see the server pinging the browser.
+Open a Chrome browser (`libp2p-webrtc-websys` has not yet been tested in Firefox or other browsers) where you will see the browser pinging the server. Open the server terminal console logs to see the server pinging the browser.
