@@ -2,18 +2,17 @@
 use anyhow::Result;
 use axum::{http::Method, routing::get, Router};
 use futures::StreamExt;
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::Transport;
-use libp2p_identity as identity;
-use libp2p_ping as ping;
-use libp2p_relay as relay;
-use libp2p_swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::Transport;
+use libp2p::identity;
+use libp2p::ping;
+use libp2p::relay;
+use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_webrtc as webrtc;
 use multiaddr::{Multiaddr, Protocol};
 use rand::thread_rng;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use tower_http::cors::{Any, CorsLayer};
-use void::Void;
 
 pub const PORT: u16 = 4455;
 
@@ -74,18 +73,10 @@ pub async fn start() -> Result<()> {
                                 .unwrap();
                         });
 
-                        log::debug!("Server spawned");
-                    }
-                    SwarmEvent::Behaviour(Event::Ping(ping::Event {
-                        peer,
-                        result: Ok(rtt),
-                        ..
-                    })) => {
-                        let id = peer.to_string().to_owned();
-                        log::info!("🏓 Pinged {id} ({rtt:?})")
+                        log::trace!("Server spawned");
                     }
                     evt => {
-                        log::debug!("SwarmEvent: {:?}", evt);
+                        log::trace!("SwarmEvent: {:?}", evt);
                     },
                 }
             },
@@ -98,34 +89,8 @@ pub async fn start() -> Result<()> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "Event", prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
     relay: relay::Behaviour,
-}
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-enum Event {
-    Ping(ping::Event),
-    Relay(relay::Event),
-}
-
-impl From<ping::Event> for Event {
-    fn from(event: ping::Event) -> Self {
-        Event::Ping(event)
-    }
-}
-
-impl From<Void> for Event {
-    fn from(event: Void) -> Self {
-        void::unreachable(event)
-    }
-}
-
-impl From<relay::Event> for Event {
-    fn from(event: relay::Event) -> Self {
-        Event::Relay(event)
-    }
 }
