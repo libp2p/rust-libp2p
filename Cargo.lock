@@ -3264,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-tls"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures",
  "futures-rustls",
@@ -3277,9 +3277,9 @@ dependencies = [
  "rcgen 0.10.0",
  "ring",
  "rustls 0.21.6",
+ "rustls-webpki",
  "thiserror",
  "tokio",
- "webpki 0.22.0",
  "x509-parser 0.15.1",
  "yasna",
 ]
