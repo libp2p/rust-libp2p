@@ -18,12 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::tokio::fingerprint::Fingerprint;
+use crate::tokio::sdp::random_ufrag;
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::{fingerprint::Fingerprint, noise, sdp::random_ufrag};
+use libp2p_webrtc_utils::noise;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;

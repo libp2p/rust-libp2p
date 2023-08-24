@@ -1,4 +1,5 @@
-pub(crate) use libp2p_webrtc_utils::fingerprint::{Fingerprint, SHA256};
+pub(crate) use libp2p_webrtc_utils::fingerprint::Fingerprint;
+use libp2p_webrtc_utils::fingerprint::SHA256;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
 /// Converts [`RTCDtlsFingerprint`] to [`Fingerprint`].

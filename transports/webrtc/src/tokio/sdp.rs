@@ -1,4 +1,5 @@
 use crate::tokio::fingerprint::Fingerprint;
+pub(crate) use libp2p_webrtc_utils::sdp::random_ufrag;
 use libp2p_webrtc_utils::sdp::render_description;
 use std::net::SocketAddr;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
