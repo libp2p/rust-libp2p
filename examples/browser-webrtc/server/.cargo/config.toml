@@ -1,2 +1,0 @@
-[env]
-RUST_LOG = "debug,libp2p_webrtc,webrtc_sctp=off,webrtc_mdns=off,webrtc_ice=off"
