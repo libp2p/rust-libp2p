@@ -4,7 +4,7 @@ use std::env;
 async fn main() -> anyhow::Result<()> {
     env::set_var(
         "RUST_LOG",
-        "debug,libp2p_webrtc,libp2p_ping=debug,webrtc_sctp=off,webrtc_mdns=off,webrtc_ice=off",
+        "webrtc_example_server=debug,libp2p_webrtc=info,libp2p_ping=debug",
     );
 
     env_logger::init();

@@ -1,6 +1,5 @@
 //! Builds the server, exported so that bin/main.rs can run it
 use anyhow::Result;
-use axum::{http::Method, routing::get, Router};
 use futures::StreamExt;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::Transport;
@@ -11,10 +10,9 @@ use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_webrtc as webrtc;
 use multiaddr::{Multiaddr, Protocol};
 use rand::thread_rng;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use tower_http::cors::{Any, CorsLayer};
+use std::net::Ipv6Addr;
 
-pub const PORT: u16 = 4455;
+mod servers;
 
 pub async fn start() -> Result<()> {
     let id_keys = identity::Keypair::generate_ed25519();
@@ -43,48 +41,42 @@ pub async fn start() -> Result<()> {
     let mut addr = None; // We only need 1 address
 
     loop {
+        if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
+            addr = Some(
+                address
+                    .with(Protocol::P2p(*swarm.local_peer_id()))
+                    .clone()
+                    .to_string(),
+            );
+            break;
+        }
+    }
+
+    let address = addr.as_ref().unwrap().clone();
+
+    log::info!("Listening on: {}", address);
+
+    // Serve the multiaddress over HTTP
+    tokio::spawn(async move {
+        servers::serve_multiaddr(address).await;
+    });
+
+    // Also statically serve the ../client/index.html file for this example
+    tokio::spawn(async {
+        servers::serve_files().await;
+    });
+
+    loop {
         tokio::select! {
-            evt = swarm.select_next_some() => {
-                match evt {
-                    SwarmEvent::NewListenAddr { address, .. } if addr.is_none() => {
-
-                        addr = Some(address
-                                .with(Protocol::P2p(*swarm.local_peer_id()))
-                                .clone()
-                                .to_string());
-
-                        let address = addr.as_ref().unwrap().clone();
-
-                        tokio::spawn(async move {
-
-                            log::info!("Serving the Multiaddr we are listening on: {}", address);
-
-                            let app = Router::new().route("/", get(|| async { address }))
-                            .layer(
-                                // allow cors
-                                CorsLayer::new()
-                                    .allow_origin(Any)
-                                    .allow_methods([Method::GET]),
-                             );
-
-                            axum::Server::bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT))
-                                .serve(app.into_make_service())
-                                .await
-                                .unwrap();
-                        });
-
-                        log::trace!("Server spawned");
-                    }
-                    evt => {
-                        log::trace!("SwarmEvent: {:?}", evt);
-                    },
-                }
+            swarm_event = swarm.next() => {
+                log::trace!("Swarm Event: {:?}", swarm_event)
             },
             _ = tokio::signal::ctrl_c() => {
                 break;
             }
         }
     }
+
     Ok(())
 }
 
