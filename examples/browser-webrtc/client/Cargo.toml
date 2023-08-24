@@ -15,12 +15,7 @@ default = ["console_error_panic_hook"]
 [dependencies]
 futures = "0.3.28"
 js-sys = "0.3.64"
-libp2p = { path = "../../../libp2p", features = [
-    "ed25519",
-    "macros",
-    "ping",
-    "wasm-bindgen",
-] }
+libp2p = { path = "../../../libp2p", features = ["ed25519", "macros", "ping", "wasm-bindgen"] }
 libp2p-webrtc-websys = { workspace = true }
 log = "0.4"
 wasm-bindgen = "0.2.84"
