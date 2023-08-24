@@ -7,10 +7,6 @@ pub enum Error {
     #[error("Invalid multiaddr: {0}")]
     InvalidMultiaddr(&'static str),
 
-    /// Noise upgrade authentication failed
-    #[error("WebRTC Utilities failure")]
-    Utils(#[from] libp2p_webrtc_utils::Error),
-
     #[error("JavaScript error: {0}")]
     JsError(String),
 
@@ -36,6 +32,23 @@ impl Error {
         };
 
         Error::JsError(s)
+    }
+}
+
+/// Ensure the libp2p_webrtc_utils::Error is converted to the WebRTC error so we don't expose it to the user
+/// via our public API.
+impl From<libp2p_webrtc_utils::Error> for Error {
+    fn from(e: libp2p_webrtc_utils::Error) -> Self {
+        match e {
+            libp2p_webrtc_utils::Error::Io(e) => Error::JsError(e.to_string()),
+            libp2p_webrtc_utils::Error::Authentication(e) => Error::JsError(e.to_string()),
+            libp2p_webrtc_utils::Error::InvalidPeerID { expected, got } => Error::JsError(format!(
+                "Invalid peer ID (expected {}, got {})",
+                expected, got
+            )),
+            libp2p_webrtc_utils::Error::NoListeners => Error::JsError("No listeners".to_string()),
+            libp2p_webrtc_utils::Error::Internal(e) => Error::JsError(e),
+        }
     }
 }
 

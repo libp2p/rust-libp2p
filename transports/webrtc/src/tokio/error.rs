@@ -44,7 +44,18 @@ pub enum Error {
 
     #[error("internal error: {0} (see debug logs)")]
     Internal(String),
+}
 
-    #[error("WebRTC utils error: {0}")]
-    Utils(#[from] UtilsError),
+/// Ensure the Utilities error is converted to the WebRTC error so we don't expose it to the user
+/// via our public API.
+impl From<UtilsError> for Error {
+    fn from(e: UtilsError) -> Self {
+        match e {
+            UtilsError::Io(e) => Error::Io(e),
+            UtilsError::Authentication(e) => Error::Authentication(e),
+            UtilsError::InvalidPeerID { expected, got } => Error::InvalidPeerID { expected, got },
+            UtilsError::NoListeners => Error::NoListeners,
+            UtilsError::Internal(e) => Error::Internal(e),
+        }
+    }
 }
