@@ -31,8 +31,9 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::tokio::stream::{drop_listener::GracefullyClosed, framed_dc::FramedDc};
 use libp2p_webrtc_utils::proto::{Flag, Message};
+
+use crate::tokio::stream::{drop_listener::GracefullyClosed, framed_dc::FramedDc};
 use libp2p_webrtc_utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
@@ -46,7 +47,7 @@ pub(crate) use drop_listener::DropListener;
 ///
 /// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
 /// as support a half-closed state which we do by framing messages in a protobuf envelope.
-pub struct Substream {
+pub struct Stream {
     io: FramedDc,
     state: State,
     read_buffer: Bytes,
@@ -54,7 +55,7 @@ pub struct Substream {
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
-impl Substream {
+impl Stream {
     /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
     /// is dropped.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
@@ -99,7 +100,7 @@ impl Substream {
     }
 }
 
-impl AsyncRead for Substream {
+impl AsyncRead for Stream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -143,13 +144,12 @@ impl AsyncRead for Substream {
     }
 }
 
-impl AsyncWrite for Substream {
+impl AsyncWrite for Stream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        // while ReadClosed
         while self.state.read_flags_in_async_write() {
             // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
             // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?

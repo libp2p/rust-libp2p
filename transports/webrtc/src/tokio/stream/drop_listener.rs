@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::tokio::stream::framed_dc::FramedDc;
-
 use futures::channel::oneshot;
 use futures::channel::oneshot::Canceled;
 use futures::{FutureExt, SinkExt};
@@ -30,6 +28,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use libp2p_webrtc_utils::proto::{Flag, Message};
+use crate::tokio::stream::framed_dc::FramedDc;
 
 #[must_use]
 pub(crate) struct DropListener {

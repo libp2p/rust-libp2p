@@ -7,8 +7,8 @@ repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 edition = "2021"
 rust-version = { workspace = true }
-keywords = ["libp2p", "networking", "peer-to-peer"]
-categories = ["asynchronous", "network-programming"]
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
@@ -37,19 +37,19 @@ tokio-util = { version = "0.7", features = ["compat"], optional = true }
 webrtc = { version = "0.8.0", optional = true }
 
 [features]
-pem = ["webrtc?/pem"]
 tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
+pem = ["webrtc?/pem"]
 
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.10"
 hex-literal = "0.4"
-libp2p-ping = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
-quickcheck = "1.0.3"
+libp2p-ping = { workspace = true }
 tokio = { version = "1.31", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
+quickcheck = "1.0.3"
 
 [[test]]
 name = "smoke"

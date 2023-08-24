@@ -1,4 +1,4 @@
-# (rust) libp2p-webrtc-websys
+# Rust `libp2p-webrtc-websys`
 
 Browser Transport made available through `web-sys` bindings.
 

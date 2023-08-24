@@ -1,3 +1,4 @@
+// Copyright 2023 Doug Anderson <douganderson444@peerpiper.io>
 // Copyright 2022 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a

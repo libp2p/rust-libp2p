@@ -18,14 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::tokio::fingerprint::Fingerprint;
-use crate::tokio::sdp::random_ufrag;
+use libp2p_webrtc_utils::noise;
+
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::noise;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
@@ -38,7 +37,9 @@ use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
 
-use crate::tokio::{error::Error, sdp, stream::Substream, Connection};
+use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
+use crate::tokio::fingerprint::Fingerprint;
+use crate::tokio::sdp::random_ufrag;
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(
@@ -189,9 +190,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::new(&cert_bytes)
 }
 
-async fn create_substream_for_noise_handshake(
-    conn: &RTCPeerConnection,
-) -> Result<Substream, Error> {
+async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Result<Stream, Error> {
     // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on both ends.
     let data_channel = conn
         .create_data_channel(
@@ -220,7 +219,7 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    let (substream, drop_listener) = Substream::new(channel);
+    let (substream, drop_listener) = Stream::new(channel);
     drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
 
     Ok(substream)

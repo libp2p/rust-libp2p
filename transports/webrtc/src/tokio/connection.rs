@@ -40,8 +40,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use super::Error;
-use crate::tokio::{stream, stream::Substream};
+use crate::tokio::{error::Error, stream, stream::Stream};
 
 /// Maximum number of unprocessed data channels.
 /// See [`Connection::poll_inbound`].
@@ -148,7 +147,7 @@ impl Connection {
 }
 
 impl StreamMuxer for Connection {
-    type Substream = Substream;
+    type Substream = Stream;
     type Error = Error;
 
     fn poll_inbound(
@@ -159,7 +158,7 @@ impl StreamMuxer for Connection {
             Some(detached) => {
                 log::trace!("Incoming stream {}", detached.stream_identifier());
 
-                let (stream, drop_listener) = Substream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
@@ -229,7 +228,7 @@ impl StreamMuxer for Connection {
 
                 log::trace!("Outbound stream {}", detached.stream_identifier());
 
-                let (stream, drop_listener) = Substream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()

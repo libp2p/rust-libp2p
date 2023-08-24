@@ -18,15 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::Error;
-use crate::fingerprint::Fingerprint;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 
-/// Handle inbound connections from other browsers
+use crate::fingerprint::Fingerprint;
+use crate::Error;
+
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
     stream: T,
@@ -40,49 +40,48 @@ where
         .unwrap()
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    // Note the roles are reversed because it allows the server to initiate
-    let (peer_id, _io) = noise.upgrade_outbound(stream, info).await?;
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
+    let (peer_id, mut channel) = noise.upgrade_outbound(stream, info).await?;
+
+    channel.close().await?;
 
     Ok(peer_id)
 }
 
-/// Handle outbound connections
 pub async fn outbound<T>(
     id_keys: identity::Keypair,
     stream: T,
-    remote_fingerprint: Fingerprint,
-    local_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let noise = noise::Config::new(&id_keys)
         .unwrap()
-        .with_prologue(noise_prologue(local_fingerprint, remote_fingerprint));
-
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
+    let (peer_id, mut channel) = noise.upgrade_inbound(stream, info).await?;
 
-    // Server must start the Noise handshake. Browsers cannot initiate
-    // noise.upgrade_inbound has into_responder(), so that's the one we need
-    let (peer_id, mut channel) = match noise.upgrade_inbound(stream, info).await {
-        Ok((peer_id, channel)) => (peer_id, channel),
-        Err(e) => return Err(Error::Authentication(e)),
-    };
-
-    log::trace!("Outbound noise upgrade peer_id {:?}", peer_id);
     channel.close().await?; // uses AsyncWriteExt to close the EphermalKeyExchange channel?
 
     Ok(peer_id)
 }
 
-fn noise_prologue(local_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
-    let local = local_fingerprint.to_multihash().to_bytes();
-    let remote = remote_fingerprint.to_multihash().to_bytes();
+pub(crate) fn noise_prologue(
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
+) -> Vec<u8> {
+    let client = client_fingerprint.to_multihash().to_bytes();
+    let server = server_fingerprint.to_multihash().to_bytes();
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
-    let mut out = Vec::with_capacity(PREFIX.len() + local.len() + remote.len());
+    let mut out = Vec::with_capacity(PREFIX.len() + client.len() + server.len());
     out.extend_from_slice(PREFIX);
-    out.extend_from_slice(&local);
-    out.extend_from_slice(&remote);
+    out.extend_from_slice(&client);
+    out.extend_from_slice(&server);
     out
 }
 

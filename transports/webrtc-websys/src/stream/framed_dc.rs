@@ -33,8 +33,7 @@ pub(crate) fn new(data_channel: RtcDataChannel) -> FramedDc {
         inner,
         quick_protobuf_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN),
     );
-    // If not set, `Framed` buffers up to 131kB of data before sending, which leads to
-    // "outbound packet larger than maximum message size" error in webrtc-rs.
+    // If not set, `Framed` buffers up to 16384 bytes (16kB) of data before sending
     framed.set_send_high_water_mark(MAX_DATA_LEN);
     framed
 }
