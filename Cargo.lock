@@ -211,9 +211,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.72"
+version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b13c32d80ecc7ab747b80c3784bce54ee8a7a0cc4fbda9bf4cda2cf6fe90854"
+checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
 name = "arbitrary"
@@ -1824,17 +1824,6 @@ dependencies = [
 
 [[package]]
 name = "futures-rustls"
-version = "0.22.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2411eed028cdf8c8034eaf21f9915f956b6c3abec4d4c7949ee67f0721127bd"
-dependencies = [
- "futures-io",
- "rustls 0.20.8",
- "webpki 0.22.0",
-]
-
-[[package]]
-name = "futures-rustls"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35bd3cf68c183738046838e300353e4716c674dc5e56890de4826801a6622a28"
@@ -2951,10 +2940,10 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "bytes",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek 4.0.0",
  "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
@@ -3175,6 +3164,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "libp2p-server"
+version = "0.12.1"
+dependencies = [
+ "base64 0.21.2",
+ "clap",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "hyper",
+ "libp2p",
+ "log",
+ "prometheus-client",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "libp2p-swarm"
 version = "0.43.3"
 dependencies = [
@@ -3258,7 +3267,7 @@ name = "libp2p-tls"
 version = "0.2.0"
 dependencies = [
  "futures",
- "futures-rustls 0.24.0",
+ "futures-rustls",
  "hex",
  "hex-literal",
  "libp2p-core",
@@ -3339,12 +3348,12 @@ dependencies = [
 
 [[package]]
 name = "libp2p-websocket"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
  "futures",
- "futures-rustls 0.22.2",
+ "futures-rustls",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",
@@ -4927,9 +4936,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.2"
+version = "0.101.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "513722fd73ad80a71f72b61009ea1b584bcfa1483ca93949c8f290298837fa59"
+checksum = "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
 dependencies = [
  "ring",
  "untrusted",
@@ -5102,18 +5111,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ac8da02677876d532745a130fc9d8e6edfa81a269b107c5b00829b91d8eb3c"
+checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aafe972d60b0b9bee71a91b92fee2d4fb3c9d7e8f6b179aa99f27203d99a4816"
+checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5523,9 +5532,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.7.1"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc02fddf48964c42031a0b3fe0428320ecf3a73c401040fc0096f97794310651"
+checksum = "cb94d2f3cc536af71caac6b6fcebf65860b347e7ce0cc9ebe8f70d3e521054ef"
 dependencies = [
  "cfg-if 1.0.0",
  "fastrand 2.0.0",

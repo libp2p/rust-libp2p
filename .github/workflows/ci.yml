@@ -63,6 +63,7 @@ jobs:
           crate: ${{ env.CRATE }}
 
       - name: Enforce no dependency on meta crate
+        if: env.CRATE != 'libp2p-server'
         run: |
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
