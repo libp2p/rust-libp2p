@@ -3,6 +3,7 @@ name = "libp2p-server"
 version = "0.12.1"
 authors = ["Max Inden <mail@max-inden.de>"]
 edition = "2021"
+repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
 description = "A rust-libp2p server binary."
 license = "MIT"
