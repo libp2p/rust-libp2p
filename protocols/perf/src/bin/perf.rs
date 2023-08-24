@@ -477,7 +477,7 @@ async fn perf(
                 println!(
                     "{}",
                     serde_json::to_string(&CustomResult {
-                        r#type: "intermittent".to_string(),
+                        r#type: "intermediate".to_string(),
                         time_seconds: duration.as_secs_f64(),
                         upload_bytes: sent,
                         download_bytes: received,
