@@ -10,10 +10,6 @@ A simple demo usage of `libp2p-webrtc-websys`.
 wasm-pack build --release --target web
 ```
 
-### 🎁 Serve webpage
+### 🎁 Navigate to the served `index.html` webpage
 
-The static site at `index.html` can be served with any static HTTP server, such as [`http-server`](https://github.com/http-party/http-server):
-
-```
-npx http-server
-```
+This `rust-libp2p` example comes with a built-in static site server, so all you need to do is run the [../server](../server) example and then open the following URL in your browser [http://localhost:8080](http://localhost:8080).
