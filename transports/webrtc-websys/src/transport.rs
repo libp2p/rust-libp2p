@@ -2,13 +2,11 @@ use super::upgrade;
 use super::Connection;
 use super::Error;
 use futures::future::FutureExt;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::transport::{Boxed, ListenerId, Transport as _, TransportError, TransportEvent};
 use libp2p_identity::{Keypair, PeerId};
-use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use std::future::Future;
-use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -65,7 +63,7 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (sock_addr, server_fingerprint) = parse_webrtc_dial_addr(&addr)
+        let (sock_addr, server_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
@@ -100,38 +98,4 @@ impl libp2p_core::Transport for Transport {
     fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }
-}
-
-/// Parse the given [`Multiaddr`] into a [`SocketAddr`] and a [`Fingerprint`] for dialing.
-fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)> {
-    let mut iter = addr.iter();
-
-    let ip = match iter.next()? {
-        Protocol::Ip4(ip) => IpAddr::from(ip),
-        Protocol::Ip6(ip) => IpAddr::from(ip),
-        _ => return None,
-    };
-
-    let port = iter.next()?;
-    let webrtc = iter.next()?;
-    let certhash = iter.next()?;
-
-    let (port, fingerprint) = match (port, webrtc, certhash) {
-        (Protocol::Udp(port), Protocol::WebRTCDirect, Protocol::Certhash(cert_hash)) => {
-            let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
-
-            (port, fingerprint)
-        }
-        _ => return None,
-    };
-
-    match iter.next() {
-        Some(Protocol::P2p(_)) => {}
-        // peer ID is optional
-        None => {}
-        // unexpected protocol
-        Some(_) => return None,
-    }
-
-    Some((SocketAddr::new(ip, port), fingerprint))
 }

@@ -117,7 +117,7 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (sock_addr, server_fingerprint) = parse_webrtc_dial_addr(&addr)
+        let (sock_addr, server_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -425,40 +425,6 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
     Some(SocketAddr::new(ip, port))
 }
 
-/// Parse the given [`Multiaddr`] into a [`SocketAddr`] and a [`Fingerprint`] for dialing.
-fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)> {
-    let mut iter = addr.iter();
-
-    let ip = match iter.next()? {
-        Protocol::Ip4(ip) => IpAddr::from(ip),
-        Protocol::Ip6(ip) => IpAddr::from(ip),
-        _ => return None,
-    };
-
-    let port = iter.next()?;
-    let webrtc = iter.next()?;
-    let certhash = iter.next()?;
-
-    let (port, fingerprint) = match (port, webrtc, certhash) {
-        (Protocol::Udp(port), Protocol::WebRTCDirect, Protocol::Certhash(cert_hash)) => {
-            let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
-
-            (port, fingerprint)
-        }
-        _ => return None,
-    };
-
-    match iter.next() {
-        Some(Protocol::P2p(_)) => {}
-        // peer ID is optional
-        None => {}
-        // unexpected protocol
-        Some(_) => return None,
-    }
-
-    Some((SocketAddr::new(ip, port), fingerprint))
-}
-
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
@@ -484,7 +450,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let maybe_parsed = parse_webrtc_dial_addr(&addr);
+        let maybe_parsed = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr);
 
         assert_eq!(
             maybe_parsed,
@@ -503,7 +469,7 @@ mod tests {
             .parse()
             .unwrap();
 
-        let maybe_parsed = parse_webrtc_dial_addr(&addr);
+        let maybe_parsed = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr);
 
         assert_eq!(
             maybe_parsed,
@@ -545,7 +511,7 @@ mod tests {
                 .parse()
                 .unwrap();
 
-        let maybe_parsed = parse_webrtc_dial_addr(&addr);
+        let maybe_parsed = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr);
 
         assert_eq!(
             maybe_parsed,

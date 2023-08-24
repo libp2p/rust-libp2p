@@ -11,5 +11,7 @@ pub mod fingerprint;
 pub mod noise;
 pub mod sdp;
 pub mod stream;
+pub mod transport;
 
 pub use error::Error;
+pub use transport::parse_webrtc_dial_addr;

@@ -181,13 +181,6 @@ impl AsyncWrite for Stream {
         Poll::Ready(Ok(n))
     }
 
-    /// Attempt to flush the object, ensuring that any buffered data reach their destination.
-    ///
-    /// On success, returns Poll::Ready(Ok(())).
-    ///
-    /// If flushing cannot immediately complete, this method returns Poll::Pending and
-    /// arranges for the current task (via cx.waker().wake_by_ref()) to receive a
-    /// notification when the object can make progress towards flushing.
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
         self.inner.io.poll_flush_unpin(cx).map_err(Into::into)
     }
