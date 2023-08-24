@@ -1,4 +1,4 @@
-## 0.2.1 - unreleased
+## 0.2.1
 
 - Switch from webpki to rustls-webpki.
   This is a part of the resolution of the [RUSTSEC-2023-0052].
