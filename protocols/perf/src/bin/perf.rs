@@ -411,8 +411,10 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             config.support_draft_29 = true;
 
             // TODO: Revert. But could potentially inform a better default.
-            config.max_connection_data = u32::MAX;
-            config.max_stream_data = u32::MAX;
+            //
+            // see test-plans user-data.sh for rational
+            config.max_connection_data = 200000000;
+            config.max_stream_data = 200000000;
 
             libp2p_quic::tokio::Transport::new(config)
         };
