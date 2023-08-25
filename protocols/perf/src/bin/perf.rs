@@ -414,8 +414,6 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             config.max_connection_data = u32::MAX;
             config.max_stream_data = u32::MAX;
 
-            log::info!("{config:?}");
-
             libp2p_quic::tokio::Transport::new(config)
         };
 
