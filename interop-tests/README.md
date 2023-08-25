@@ -36,7 +36,6 @@ the following (from the root directory of this repository):
 1. Build the image: `docker build -t rust-libp2p-head . -f interop-tests/Dockerfile`.
 1. Build the images for all released versions in `libp2p/test-plans`: `(cd <path to >/libp2p/test-plans/multidim-interop/ && make)`.
 1. Run the test:
-
 ```
 RUST_LIBP2P="$PWD"; (cd <path to >/libp2p/test-plans/multidim-interop/ && npm run test -- --extra-version=$RUST_LIBP2P/interop-tests/ping-version.json --name-filter="rust-libp2p-head")
 ```

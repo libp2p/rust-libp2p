@@ -23,9 +23,7 @@ libp2p = { path = "../libp2p", features = ["ping", "noise", "tls", "rsa", "macro
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 libp2p-mplex = { path = "../muxers/mplex" }
 mime_guess = "2.0"
-redis = { version = "0.23.0", default-features = false, features = [
-    "tokio-comp",
-] }
+redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 rust-embed = "6.8"
 serde_json = "1"
 thirtyfour = "=0.32.0-rc.8" # https://github.com/stevepryde/thirtyfour/issues/169
@@ -44,4 +42,3 @@ instant = "0.1.12"
 reqwest = { version = "0.11", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
 futures-timer = "3.0.2"
-

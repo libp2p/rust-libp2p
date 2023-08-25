@@ -66,7 +66,7 @@ where
     // send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise.upgrade_inbound(stream, info).await?;
 
-    channel.close().await?; // uses AsyncWriteExt to close the EphermalKeyExchange channel?
+    channel.close().await?;
 
     Ok(peer_id)
 }
