@@ -154,7 +154,7 @@ impl Default for Config {
             reservation_rate_limiters,
 
             substream_timeout: Duration::from_secs(10),
-            max_concurrent_streams_per_connection: 100,
+            max_concurrent_streams_per_connection: 10,
             max_circuits: 16,
             max_circuits_per_peer: 4,
             max_circuit_duration: Duration::from_secs(2 * 60),
@@ -307,9 +307,7 @@ impl NetworkBehaviour for Behaviour {
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
                 substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams_per_connection: self
-                    .config
-                    .max_concurrent_streams_per_connection,
+                max_concurrent_streams: self.config.max_concurrent_streams,
             },
             ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
@@ -336,9 +334,7 @@ impl NetworkBehaviour for Behaviour {
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
                 substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams_per_connection: self
-                    .config
-                    .max_concurrent_streams_per_connection,
+                max_concurrent_streams: self.config.max_concurrent_streams,
             },
             ConnectedPoint::Dialer {
                 address: addr.clone(),

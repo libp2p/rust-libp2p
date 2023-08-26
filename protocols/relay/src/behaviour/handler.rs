@@ -502,7 +502,7 @@ enum ReservationRequestFuture {
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
-pub(crate) type CHEvent = ConnectionHandlerEvent<
+pub(crate) type ConnectionHandlerEvent = libp2p_swarm::ConnectionHandlerEvent<
     <Handler as ConnectionHandler>::OutboundProtocol,
     <Handler as ConnectionHandler>::OutboundOpenInfo,
     <Handler as ConnectionHandler>::ToBehaviour,
