@@ -26,6 +26,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
+use futures_bounded::Timeout;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
@@ -357,11 +358,14 @@ impl ConnectionHandler for Handler {
 
         // Circuit connections
         if let Poll::Ready(((), worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
-            if worker_res.is_err() {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-            }
+            let res = match worker_res {
+                Ok(r) => r,
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
 
-            let opt = match worker_res.unwrap() {
+            let opt = match res {
                 Ok(Some(outbound_hop::Output::Circuit { limit })) => {
                     Some(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::OutboundCircuitEstablished { limit },
@@ -397,11 +401,14 @@ impl ConnectionHandler for Handler {
 
         // Reservations
         if let Poll::Ready(((), worker_res)) = self.reserve_futs.poll_unpin(cx) {
-            if worker_res.is_err() {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-            }
+            let res = match worker_res {
+                Ok(r) => r,
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
 
-            let event = match worker_res.unwrap() {
+            let event = match res {
                 Ok(outbound_hop::Output::Reservation {
                     renewal_timeout,
                     addrs,
@@ -443,11 +450,14 @@ impl ConnectionHandler for Handler {
         }
 
         if let Poll::Ready(((), worker_res)) = self.open_circuit_futs.poll_unpin(cx) {
-            if worker_res.is_err() {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-            }
+            let res = match worker_res {
+                Ok(r) => r,
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
 
-            match worker_res.unwrap() {
+            match res {
                 Ok(circuit) => match &mut self.reservation {
                     Reservation::Accepted { pending_msgs, .. }
                     | Reservation::Renewing { pending_msgs, .. } => {
