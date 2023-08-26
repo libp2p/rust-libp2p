@@ -30,50 +30,9 @@
 mod behaviour;
 mod provider;
 
-use std::{
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    time::Duration,
-};
-
 pub use behaviour::Event;
 
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
-
-/// The configuration for UPnP capabilities for libp2p.
-#[derive(Clone, Copy, Debug)]
-pub struct Config {
-    /// Bind address for UDP socket (defaults to all `0.0.0.0`).
-    bind_addr: SocketAddr,
-    /// Broadcast address for discovery packets (defaults to `239.255.255.250:1900`).
-    broadcast_addr: SocketAddr,
-    /// Timeout for a search iteration (defaults to 10s).
-    timeout: Option<Duration>,
-    /// Should the port mappings be temporary (1 hour) or permanent.
-    temporary: bool,
-}
-
-impl Config {
-    /// Creates a new configuration for a UPnP [`libp2p_swarm::NetworkBehaviour`].
-    pub fn new() -> Self {
-        Self {
-            bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)),
-            broadcast_addr: "239.255.255.250:1900".parse().unwrap(),
-            timeout: Some(Duration::from_secs(10)),
-            temporary: true,
-        }
-    }
-
-    /// Configures the port mappings to be temporary (1 hour) or permanent.
-    pub fn temporary(self, temporary: bool) -> Self {
-        Self { temporary, ..self }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self::new()
-    }
-}

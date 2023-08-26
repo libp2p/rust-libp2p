@@ -33,10 +33,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    provider::{Gateway, IpAddr, Provider},
-    Config,
-};
+use crate::provider::{Gateway, IpAddr, Provider};
 use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -55,10 +52,7 @@ const MAPPING_TIMEOUT: u64 = MAPPING_DURATION as u64 / 2;
 /// A [`Gateway`] Request.
 #[derive(Debug)]
 pub(crate) enum GatewayRequest {
-    AddMapping {
-        mapping: Mapping,
-        duration: Option<u32>,
-    },
+    AddMapping { mapping: Mapping, duration: u32 },
     RemoveMapping(Mapping),
 }
 
@@ -129,8 +123,6 @@ enum MappingState {
     Active(Delay),
     /// Port mapping failed, we will try again.
     Failed,
-    /// Port mapping is permanent on the Gateway.
-    Permanent,
 }
 
 /// Current state of the UPnP [`Gateway`].
@@ -175,11 +167,11 @@ impl DerefMut for MappingList {
 impl MappingList {
     /// Queue for renewal the current mapped ports on the `Gateway` that are expiring,
     /// and try to activate the inactive.
-    fn renew(&mut self, config: &Config, gateway: &mut Gateway, cx: &mut Context<'_>) {
+    fn renew(&mut self, gateway: &mut Gateway, cx: &mut Context<'_>) {
         for (mapping, state) in self.iter_mut() {
             match state {
                 MappingState::Inactive | MappingState::Failed => {
-                    let duration = config.temporary.then_some(MAPPING_DURATION);
+                    let duration = MAPPING_DURATION;
                     if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                         mapping: mapping.clone(),
                         duration,
@@ -194,7 +186,7 @@ impl MappingList {
                 }
                 MappingState::Active(timeout) => {
                     if Pin::new(timeout).poll(cx).is_ready() {
-                        let duration = config.temporary.then_some(MAPPING_DURATION);
+                        let duration = MAPPING_DURATION;
                         if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                             mapping: mapping.clone(),
                             duration,
@@ -207,7 +199,7 @@ impl MappingList {
                         }
                     }
                 }
-                MappingState::Pending | MappingState::Permanent => {}
+                MappingState::Pending => {}
             }
         }
     }
@@ -219,8 +211,6 @@ pub struct Behaviour<P>
 where
     P: Provider,
 {
-    /// Gateway config.
-    config: Config,
     /// UPnP interface state.
     state: GatewayState,
 
@@ -239,7 +229,7 @@ where
     P: Provider + 'static,
 {
     fn default() -> Self {
-        Self::new(Config::default())
+        Self::new()
     }
 }
 
@@ -248,10 +238,9 @@ where
     P: Provider + 'static,
 {
     /// Builds a new `UPnP` behaviour.
-    pub fn new(config: Config) -> Self {
+    pub fn new() -> Self {
         Self {
-            config,
-            state: GatewayState::Searching(P::search_gateway(config).boxed()),
+            state: GatewayState::Searching(P::search_gateway().boxed()),
             mappings: Default::default(),
             pending_events: VecDeque::new(),
             provider: PhantomData,
@@ -332,7 +321,7 @@ where
                             multiaddr: multiaddr.clone(),
                         };
 
-                        let duration = self.config.temporary.then_some(MAPPING_DURATION);
+                        let duration = MAPPING_DURATION;
                         if let Err(err) = gateway.sender.try_send(GatewayRequest::AddMapping {
                             mapping: mapping.clone(),
                             duration,
@@ -445,13 +434,9 @@ where
                     if let Poll::Ready(Some(result)) = gateway.receiver.poll_next_unpin(cx) {
                         match result {
                             GatewayEvent::Mapped(mapping) => {
-                                let new_state = if self.config.temporary {
-                                    MappingState::Active(Delay::new(Duration::from_secs(
-                                        MAPPING_TIMEOUT,
-                                    )))
-                                } else {
-                                    MappingState::Permanent
-                                };
+                                let new_state = MappingState::Active(Delay::new(
+                                    Duration::from_secs(MAPPING_TIMEOUT),
+                                ));
 
                                 match self
                                     .mappings
@@ -547,7 +532,7 @@ where
                     }
 
                     // Renew expired and request inactive mappings.
-                    self.mappings.renew(&self.config, gateway, cx);
+                    self.mappings.renew(gateway, cx);
                     return Poll::Pending;
                 }
                 GatewayState::GatewayNotFound => {
