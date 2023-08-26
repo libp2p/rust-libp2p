@@ -154,7 +154,7 @@ impl Default for Config {
             reservation_rate_limiters,
 
             substream_timeout: Duration::from_secs(10),
-            max_concurrent_streams: 100,
+            max_concurrent_streams: 10,
             max_circuits: 16,
             max_circuits_per_peer: 4,
             max_circuit_duration: Duration::from_secs(2 * 60),
