@@ -372,7 +372,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
@@ -478,7 +478,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_any_other_transports()
             .without_dns()
             .without_relay()
@@ -540,7 +540,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, DnsP
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_dns()
             .without_relay()
             .without_websocket()
@@ -597,7 +597,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_relay()
             .without_websocket()
             .with_behaviour(constructor)
@@ -808,7 +808,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
@@ -819,7 +819,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_websocket().with_behaviour(constructor)
     }
 }
@@ -1005,9 +1005,9 @@ impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, libp2p_relay::client:
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         Ok(SwarmBuilder {
-            phase: BuildPhase {
+            phase: SwarmPhase {
                 behaviour: constructor(&self.keypair, self.phase.relay_behaviour)
                     .try_into_behaviour()?,
                 transport: self.phase.transport,
@@ -1022,12 +1022,12 @@ impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, NoRelayBehaviour>> {
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         mut constructor: impl FnMut(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Provider, BuildPhase<T, B>>, R::Error> {
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         // Discard `NoRelayBehaviour`.
         let _ = self.phase.relay_behaviour;
 
         Ok(SwarmBuilder {
-            phase: BuildPhase {
+            phase: SwarmPhase {
                 behaviour: constructor(&self.keypair).try_into_behaviour()?,
                 transport: self.phase.transport,
             },
@@ -1037,37 +1037,75 @@ impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, NoRelayBehaviour>> {
     }
 }
 
-pub struct BuildPhase<T, B> {
+pub struct SwarmPhase<T, B> {
     behaviour: B,
     transport: T,
 }
 
-const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
+    pub fn with_swarm_config(
+        self,
+        config: libp2p_swarm::SwarmConfig,
+    ) -> SwarmBuilder<Provider, BuildPhase<T, B>> {
+        SwarmBuilder {
+            phase: BuildPhase {
+                behaviour: self.phase.behaviour,
+                transport: self.phase.transport,
+                swarm_config: config,
+            },
+            keypair: self.keypair,
+            phantom: PhantomData,
+        }
+    }
+}
 
 #[cfg(feature = "async-std")]
-impl<T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
-    SwarmBuilder<AsyncStd, BuildPhase<T, B>>
-{
-    pub fn build(self) -> libp2p_swarm::Swarm<B> {
-        libp2p_swarm::SwarmBuilder::with_async_std_executor(
-            libp2p_core::transport::timeout::TransportTimeout::new(
-                self.phase.transport,
-                CONNECTION_TIMEOUT,
-            )
-            .boxed(),
-            self.phase.behaviour,
-            self.keypair.public().to_peer_id(),
-        )
-        .build()
+impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<AsyncStd, SwarmPhase<T, B>> {
+    pub fn build(
+        self,
+    ) -> libp2p_swarm::Swarm<B> {
+        SwarmBuilder {
+            phase: BuildPhase {
+                behaviour: self.phase.behaviour,
+                transport: self.phase.transport,
+                swarm_config: libp2p_swarm::SwarmConfig::with_async_std_executor(),
+            },
+            keypair: self.keypair,
+            phantom: PhantomData::<AsyncStd>,
+        }.build()
     }
 }
 
 #[cfg(feature = "tokio")]
-impl<T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
-    SwarmBuilder<Tokio, BuildPhase<T, B>>
+impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<Tokio, SwarmPhase<T, B>> {
+    pub fn build(
+        self,
+    ) -> libp2p_swarm::Swarm<B> {
+        SwarmBuilder {
+            phase: BuildPhase {
+                behaviour: self.phase.behaviour,
+                transport: self.phase.transport,
+                swarm_config: libp2p_swarm::SwarmConfig::with_tokio_executor(),
+            },
+            keypair: self.keypair,
+            phantom: PhantomData::<Tokio>,
+        }.build()
+    }
+}
+
+pub struct BuildPhase<T, B> {
+    behaviour: B,
+    transport: T,
+    swarm_config: libp2p_swarm::SwarmConfig,
+}
+
+const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+impl<Provider, T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
+    SwarmBuilder<Provider, BuildPhase<T, B>>
 {
     pub fn build(self) -> libp2p_swarm::Swarm<B> {
-        libp2p_swarm::SwarmBuilder::with_tokio_executor(
+        libp2p_swarm::Swarm::new_with_config(
             libp2p_core::transport::timeout::TransportTimeout::new(
                 self.phase.transport,
                 CONNECTION_TIMEOUT,
@@ -1075,8 +1113,8 @@ impl<T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
             .boxed(),
             self.phase.behaviour,
             self.keypair.public().to_peer_id(),
+            self.phase.swarm_config,
         )
-        .build()
     }
 }
 

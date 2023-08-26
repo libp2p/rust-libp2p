@@ -356,6 +356,26 @@ impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
+    /// Creates a new [`Swarm`] from the given [`Transport`], [`NetworkBehaviour`], [`PeerId`] and
+    /// [`SwarmConfig`].
+    pub fn new_with_config(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+        config: SwarmConfig
+    ) -> Self {
+        Swarm {
+            local_peer_id: local_peer_id,
+            transport: transport,
+            pool: Pool::new(local_peer_id, config.pool_config),
+            behaviour: behaviour,
+            supported_protocols: Default::default(),
+            confirmed_external_addr: Default::default(),
+            listened_addrs: HashMap::new(),
+            pending_event: None,
+        }
+    }
+
     /// Returns information about the connections underlying the [`Swarm`].
     pub fn network_info(&self) -> NetworkInfo {
         let num_peers = self.pool.num_peers();
@@ -1343,7 +1363,146 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     }
 }
 
+pub struct SwarmConfig {
+    pool_config: PoolConfig,
+}
+
+impl SwarmConfig
+{
+    /// Creates a new [`SwarmConfig`] from the given executor. The [`Swarm`] is obtained via
+    /// [`Swarm::new_from_config`].
+    pub fn with_executor(
+        executor: impl Executor + Send + 'static,
+    ) -> Self {
+        Self {
+            pool_config: PoolConfig::new(Some(Box::new(executor))),
+        }
+    }
+
+    /// Sets executor to the `wasm` executor.
+    /// Background tasks will be executed by the browser on the next micro-tick.
+    ///
+    /// Spawning a task is similar too:
+    /// ```typescript
+    /// function spawn(task: () => Promise<void>) {
+    ///     task()
+    /// }
+    /// ```
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+    ) -> Self {
+        Self::with_executor(
+            crate::executor::WasmBindgenExecutor,
+        )
+    }
+
+    /// Builds a new [`SwarmConfig`] from the given `tokio` executor.
+    #[cfg(all(
+        feature = "tokio",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_tokio_executor(
+    ) -> Self {
+        Self::with_executor(
+            crate::executor::TokioExecutor,
+        )
+    }
+
+    /// Builds a new [`SwarmConfig`] from the given `async-std` executor.
+    #[cfg(all(
+        feature = "async-std",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_async_std_executor(
+    ) -> Self {
+        Self::with_executor(
+            crate::executor::AsyncStdExecutor,
+        )
+    }
+
+    // TODO: Should we remove this from `SwarmConfig`?!
+    //
+    /// Creates a new [`SwarmConfig`].
+    ///
+    /// ## ⚠️  Performance warning
+    /// All connections will be polled on the current task, thus quite bad performance
+    /// characteristics should be expected. Whenever possible use an executor and
+    /// [`SwarmConfig::with_executor`].
+    pub fn without_executor(
+    ) -> Self {
+        Self {
+            pool_config: PoolConfig::new(None),
+        }
+    }
+
+    /// Configures the number of events from the [`NetworkBehaviour`] in
+    /// destination to the [`ConnectionHandler`] that can be buffered before
+    /// the [`Swarm`] has to wait. An individual buffer with this number of
+    /// events exists for each individual connection.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, and the
+    /// volume of events. If this value is too low, then the [`Swarm`] will
+    /// be sleeping more often than necessary. Increasing this value increases
+    /// the overall memory usage.
+    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.pool_config = self.pool_config.with_notify_handler_buffer_size(n);
+        self
+    }
+
+    /// Configures the size of the buffer for events sent by a [`ConnectionHandler`] to the
+    /// [`NetworkBehaviour`].
+    ///
+    /// Each connection has its own buffer.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed and the volume of events.
+    /// If this value is too low, then the [`ConnectionHandler`]s will be sleeping more often
+    /// than necessary. Increasing this value increases the overall memory
+    /// usage, and more importantly the latency between the moment when an
+    /// event is emitted and the moment when it is received by the
+    /// [`NetworkBehaviour`].
+    pub fn per_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.pool_config = self.pool_config.with_per_connection_event_buffer_size(n);
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.pool_config = self.pool_config.with_dial_concurrency_factor(factor);
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    ///
+    /// The subtream upgrade protocol is the multistream-select protocol
+    /// used for protocol negotiation on substreams. Since a listener
+    /// supports all existing versions, the choice of upgrade protocol
+    /// only effects the "dialer", i.e. the peer opening a substream.
+    ///
+    /// > **Note**: If configured, specific upgrade protocols for
+    /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
+    /// > are ignored.
+    pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
+        self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
+        self
+    }
+
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
+    ///
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+        self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
+        self
+    }
+}
+
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
+#[deprecated(note = "Use the new `libp2p::SwarmBuilder` instead of `libp2p::swarm::SwarmBuilder` or create a `Swarm` directly via `Swarm::new_with_config`.")]
 pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -1351,6 +1510,7 @@ pub struct SwarmBuilder<TBehaviour> {
     pool_config: PoolConfig,
 }
 
+#[allow(deprecated)]
 impl<TBehaviour> SwarmBuilder<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
