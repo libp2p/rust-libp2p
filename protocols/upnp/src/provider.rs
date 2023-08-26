@@ -107,11 +107,6 @@ macro_rules! impl_provider {
         use super::{Gateway, IpAddr};
         use crate::behaviour::{GatewayEvent, GatewayRequest};
 
-        use std::{
-            net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-            time::Duration,
-        };
-
         use async_trait::async_trait;
         use futures::{channel::mpsc, SinkExt, StreamExt};
         use igd_next::SearchOptions;
@@ -120,12 +115,7 @@ macro_rules! impl_provider {
         #[async_trait]
         impl super::Provider for $impl {
             async fn search_gateway() -> Result<super::Gateway, Box<dyn Error>> {
-                let options = SearchOptions {
-                    bind_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 0)),
-                    broadcast_address: "239.255.255.250:1900".parse().unwrap(),
-                    timeout: Some(Duration::from_secs(10)),
-                };
-                let gateway = $gateway::search_gateway(options).await?;
+                let gateway = $gateway::search_gateway(SearchOptions::default()).await?;
                 let external_addr = gateway.get_external_ip().await?;
 
                 let (events_sender, mut task_receiver) = mpsc::channel(10);
