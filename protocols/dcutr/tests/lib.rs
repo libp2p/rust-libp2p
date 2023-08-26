@@ -114,7 +114,7 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.to_peer_id();
 
-    let (relay_transport, behaviour) = relay::client::new(local_peer_id, Default::default());
+    let (relay_transport, behaviour) = relay::client::new(local_peer_id);
 
     let transport = relay_transport
         .or_transport(MemoryTransport::default())

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::priv_client::{transport, Config};
+use crate::priv_client::transport;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use either::Either;
@@ -49,6 +49,9 @@ use std::time::Duration;
 ///
 /// Circuits to be denied exceeding the limit are dropped.
 const MAX_NUMBER_DENYING_CIRCUIT: usize = 8;
+
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 
 pub enum In {
     Reserve {
@@ -168,12 +171,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(
-        config: Config,
-        local_peer_id: PeerId,
-        remote_peer_id: PeerId,
-        remote_addr: Multiaddr,
-    ) -> Self {
+    pub fn new(local_peer_id: PeerId, remote_peer_id: PeerId, remote_addr: Multiaddr) -> Self {
         Self {
             local_peer_id,
             remote_peer_id,
@@ -182,19 +180,19 @@ impl Handler {
             pending_error: Default::default(),
             wait_for_reserve_outbound_stream: Default::default(),
             reserve_futs: futures_bounded::WorkerFutures::new(
-                config.substream_timeout,
-                config.max_concurrent_streams,
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             wait_for_connection_outbound_stream: Default::default(),
             circuit_connection_futs: futures_bounded::WorkerFutures::new(
-                config.substream_timeout,
-                config.max_concurrent_streams,
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
             open_circuit_futs: futures_bounded::WorkerFutures::new(
-                config.substream_timeout,
-                config.max_concurrent_streams,
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),

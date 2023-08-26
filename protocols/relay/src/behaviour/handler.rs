@@ -45,10 +45,11 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub substream_timeout: Duration,
-    pub max_concurrent_streams_per_connection: usize,
     pub reservation_duration: Duration,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
@@ -391,8 +392,8 @@ impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
             protocol_futs: futures_bounded::WorkerFutures::new(
-                config.substream_timeout,
-                config.max_concurrent_streams_per_connection,
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             endpoint,
             config,

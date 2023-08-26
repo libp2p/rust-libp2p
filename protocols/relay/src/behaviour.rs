@@ -54,8 +54,6 @@ pub struct Config {
     pub reservation_duration: Duration,
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
-    pub substream_timeout: Duration,
-    pub max_concurrent_streams_per_connection: usize,
     pub max_circuits: usize,
     pub max_circuits_per_peer: usize,
     pub max_circuit_duration: Duration,
@@ -153,8 +151,6 @@ impl Default for Config {
             reservation_duration: Duration::from_secs(60 * 60),
             reservation_rate_limiters,
 
-            substream_timeout: Duration::from_secs(10),
-            max_concurrent_streams_per_connection: 10,
             max_circuits: 16,
             max_circuits_per_peer: 4,
             max_circuit_duration: Duration::from_secs(2 * 60),
@@ -306,10 +302,6 @@ impl NetworkBehaviour for Behaviour {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
-                substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams_per_connection: self
-                    .config
-                    .max_concurrent_streams_per_connection,
             },
             ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
@@ -335,10 +327,6 @@ impl NetworkBehaviour for Behaviour {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
-                substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams_per_connection: self
-                    .config
-                    .max_concurrent_streams_per_connection,
             },
             ConnectedPoint::Dialer {
                 address: addr.clone(),
