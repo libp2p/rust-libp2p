@@ -178,7 +178,7 @@ impl hash::Hash for PublicKey {
 
 impl cmp::PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.to_bytes().partial_cmp(&other.to_bytes())
+        Some(self.cmp(other))
     }
 }
 

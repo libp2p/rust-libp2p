@@ -1,4 +1,4 @@
-## 0.42.1 - unreleased
+## 0.42.1
 
 - Bump `futures-rustls` to `0.24.0`.
   This is a part of the resolution of the [RUSTSEC-2023-0052].

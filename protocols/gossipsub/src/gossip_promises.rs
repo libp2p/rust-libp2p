@@ -48,7 +48,7 @@ impl GossipPromises {
             // If a promise for this message id and peer already exists we don't update the expiry!
             self.promises
                 .entry(message_id.clone())
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .entry(peer)
                 .or_insert(expires);
         }
