@@ -667,7 +667,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Process protocol requests
-        if let Poll::Ready((_, worker_res)) = self.protocol_futs.poll_unpin(cx) {
+        if let Poll::Ready(((), worker_res)) = self.protocol_futs.poll_unpin(cx) {
             let event = worker_res
                 .unwrap_or_else(|_| ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
 
