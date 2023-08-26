@@ -48,7 +48,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub struct Config {
     pub substream_timeout: Duration,
-    pub max_concurrent_streams: usize,
+    pub max_concurrent_streams_per_connection: usize,
     pub reservation_duration: Duration,
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
@@ -392,7 +392,7 @@ impl Handler {
         Handler {
             protocol_futs: futures_bounded::WorkerFutures::new(
                 config.substream_timeout,
-                config.max_concurrent_streams,
+                config.max_concurrent_streams_per_connection,
             ),
             endpoint,
             config,
