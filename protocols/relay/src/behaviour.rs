@@ -55,7 +55,7 @@ pub struct Config {
     pub reservation_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
 
     pub substream_timeout: Duration,
-    pub max_concurrent_streams: usize,
+    pub max_concurrent_streams_per_connection: usize,
     pub max_circuits: usize,
     pub max_circuits_per_peer: usize,
     pub max_circuit_duration: Duration,
