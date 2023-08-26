@@ -355,6 +355,46 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
+        // Circuit connections
+        if let Poll::Ready(((), worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
+            if worker_res.is_err() {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            }
+
+            let opt = match worker_res.unwrap() {
+                Ok(Some(outbound_hop::Output::Circuit { limit })) => {
+                    Some(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitEstablished { limit },
+                    ))
+                }
+                Ok(None) => None,
+                Err(err) => {
+                    let res = match err {
+                        outbound_hop::UpgradeError::CircuitFailed(e) => {
+                            ConnectionHandlerEvent::NotifyBehaviour(
+                                Event::OutboundCircuitReqFailed {
+                                    error: StreamUpgradeError::Apply(e),
+                                },
+                            )
+                        }
+                        outbound_hop::UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
+                            StreamUpgradeError::Apply(Either::Right(e)),
+                        ),
+                        outbound_hop::UpgradeError::ReservationFailed(_) => {
+                            unreachable!("do not emit `ReservationFailed` for connection")
+                        }
+                    };
+
+                    Some(res)
+                }
+                _ => unreachable!("do not emit 'Output::Reservation' for connection"),
+            };
+
+            if let Some(event) = opt {
+                return Poll::Ready(event);
+            }
+        }
+
         // Reservations
         if let Poll::Ready(((), worker_res)) = self.reserve_futs.poll_unpin(cx) {
             if worker_res.is_err() {
@@ -395,46 +435,6 @@ impl ConnectionHandler for Handler {
             };
 
             return Poll::Ready(event);
-        }
-
-        // Circuit connections
-        if let Poll::Ready(((), worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
-            if worker_res.is_err() {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-            }
-
-            let opt = match worker_res.unwrap() {
-                Ok(Some(outbound_hop::Output::Circuit { limit })) => {
-                    Some(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundCircuitEstablished { limit },
-                    ))
-                }
-                Ok(None) => None,
-                Err(err) => {
-                    let res = match err {
-                        outbound_hop::UpgradeError::CircuitFailed(e) => {
-                            ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::OutboundCircuitReqFailed {
-                                    error: StreamUpgradeError::Apply(e),
-                                },
-                            )
-                        }
-                        outbound_hop::UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
-                            StreamUpgradeError::Apply(Either::Right(e)),
-                        ),
-                        outbound_hop::UpgradeError::ReservationFailed(_) => {
-                            unreachable!("do not emit `ReservationFailed` for connection")
-                        }
-                    };
-
-                    Some(res)
-                }
-                _ => unreachable!("do not emit 'Output::Reservation' for connection"),
-            };
-
-            if let Some(event) = opt {
-                return Poll::Ready(event);
-            }
         }
 
         // Return queued events.
