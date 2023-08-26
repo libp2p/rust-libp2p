@@ -78,7 +78,7 @@ pub(crate) async fn handle_stop_message_response(
     io: Stream,
     stop_command: StopCommand,
     tx: oneshot::Sender<()>,
-) -> handler::CHEvent {
+) -> handler::RelayConnectionHandlerEvent {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
         peer: Some(proto::Peer {

@@ -307,7 +307,9 @@ impl NetworkBehaviour for Behaviour {
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
                 substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams: self.config.max_concurrent_streams,
+                max_concurrent_streams_per_connection: self
+                    .config
+                    .max_concurrent_streams_per_connection,
             },
             ConnectedPoint::Listener {
                 local_addr: local_addr.clone(),
@@ -334,7 +336,9 @@ impl NetworkBehaviour for Behaviour {
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
                 substream_timeout: self.config.substream_timeout,
-                max_concurrent_streams: self.config.max_concurrent_streams,
+                max_concurrent_streams_per_connection: self
+                    .config
+                    .max_concurrent_streams_per_connection,
             },
             ConnectedPoint::Dialer {
                 address: addr.clone(),

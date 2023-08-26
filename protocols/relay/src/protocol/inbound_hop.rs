@@ -188,7 +188,7 @@ pub(crate) async fn handle_inbound_request(
     max_circuit_bytes: u64,
     endpoint: ConnectedPoint,
     renewed: bool,
-) -> handler::CHEvent {
+) -> handler::RelayConnectionHandlerEvent {
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     let res = substream.next().await;

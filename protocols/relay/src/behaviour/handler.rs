@@ -384,7 +384,7 @@ pub struct Handler {
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
     stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
-    protocol_futs: futures_bounded::WorkerFutures<(), CHEvent>,
+    protocol_futs: futures_bounded::WorkerFutures<(), RelayConnectionHandlerEvent>,
 }
 
 impl Handler {
@@ -502,7 +502,7 @@ enum ReservationRequestFuture {
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 
-pub(crate) type ConnectionHandlerEvent = libp2p_swarm::ConnectionHandlerEvent<
+pub(crate) type RelayConnectionHandlerEvent = libp2p_swarm::ConnectionHandlerEvent<
     <Handler as ConnectionHandler>::OutboundProtocol,
     <Handler as ConnectionHandler>::OutboundOpenInfo,
     <Handler as ConnectionHandler>::ToBehaviour,
