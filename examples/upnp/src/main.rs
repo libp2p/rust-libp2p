@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
-        upnp::async_std::Behaviour::new(upnp::Config::new()),
+        upnp::async_std::Behaviour::new(),
         local_peer_id,
     )
     .build();
