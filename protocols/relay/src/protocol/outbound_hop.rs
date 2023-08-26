@@ -288,6 +288,11 @@ pub(crate) async fn handle_connection_message_response(
     Ok(output)
 }
 
+pub(crate) enum OutboundStreamInfo {
+    Reserve(mpsc::Sender<transport::ToListenerMsg>),
+    CircuitConnection(Command),
+}
+
 pub(crate) struct Command {
     dst_peer_id: PeerId,
     pub(crate) send_back: oneshot::Sender<Result<priv_client::Connection, ()>>,
