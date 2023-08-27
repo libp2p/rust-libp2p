@@ -164,7 +164,6 @@ pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
 
-// TODO: deprecate
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
 ///  * DNS resolution.
@@ -176,6 +175,7 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "tcp",
@@ -210,7 +210,6 @@ pub async fn development_transport(
         .boxed())
 }
 
-// TODO: deprecate
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
 ///  * DNS resolution.
@@ -222,6 +221,7 @@ pub async fn development_transport(
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "tcp",
