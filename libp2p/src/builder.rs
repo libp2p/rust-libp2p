@@ -8,6 +8,50 @@ use std::convert::Infallible;
 use std::io;
 use std::marker::PhantomData;
 
+/// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
+///
+/// ```
+/// # use libp2p::{swarm::NetworkBehaviour, SwarmBuilder};
+/// # use std::error::Error;
+/// #
+/// # #[cfg(all(
+/// #     feature = "tokio",
+/// #     feature = "tcp",
+/// #     feature = "tls",
+/// #     feature = "noise",
+/// #     feature = "quic",
+/// #     feature = "dns",
+/// #     feature = "relay",
+/// #     feature = "websocket",
+/// # ))]
+/// # async fn build_swarm() -> Result<(), Box<dyn Error>> {
+/// #     #[derive(NetworkBehaviour)]
+/// #     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+/// #     struct MyBehaviour {
+/// #         relay: libp2p_relay::client::Behaviour,
+/// #     }
+///
+///  let swarm = SwarmBuilder::with_new_identity()
+///      .with_tokio()
+///      .with_tcp()
+///      .with_tls()?
+///      .with_noise()?
+///      .with_quic()
+///      .with_dns()
+///      .await?
+///      .with_relay()
+///      .with_tls()?
+///      .with_noise()?
+///      .with_websocket()
+///      .with_tls()?
+///      .with_noise()
+///      .await?
+///      .with_behaviour(|_key, relay| MyBehaviour { relay })?
+///      .build();
+/// #
+/// #     Ok(())
+/// # }
+/// ```
 pub struct SwarmBuilder<Provider, Phase> {
     keypair: libp2p_identity::Keypair,
     phantom: PhantomData<Provider>,
@@ -819,7 +863,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
-    ) -> Result<SwarmBuilder<Provider, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>, R::Error> {
+    ) -> Result<
+        SwarmBuilder<Provider, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>,
+        R::Error,
+    > {
         self.without_noise()
             .without_websocket()
             .with_behaviour(constructor)
@@ -1403,6 +1450,51 @@ mod tests {
             .await
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[tokio::test]
+    #[cfg(all(
+        feature = "tokio",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise",
+        feature = "quic",
+        feature = "dns",
+        feature = "relay",
+        feature = "websocket",
+    ))]
+    async fn all() {
+        #[derive(NetworkBehaviour)]
+        #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+        struct MyBehaviour {
+            relay: libp2p_relay::client::Behaviour,
+        }
+
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .with_tls()
+            .unwrap()
+            .with_noise()
+            .unwrap()
+            .with_quic()
+            .with_dns()
+            .await
+            .unwrap()
+            .with_relay()
+            .with_tls()
+            .unwrap()
+            .with_noise()
+            .unwrap()
+            .with_websocket()
+            .with_tls()
+            .unwrap()
+            .with_noise()
+            .await
+            .unwrap()
+            .with_behaviour(|_key, relay| MyBehaviour { relay })
             .unwrap()
             .build();
     }
