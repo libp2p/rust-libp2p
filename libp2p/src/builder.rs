@@ -63,12 +63,12 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
 
     pub fn with_tcp_config(
         self,
-        config: libp2p_tcp::Config,
+        tcp_config: libp2p_tcp::Config,
     ) -> SwarmBuilder<Provider, TcpTlsPhase> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: TcpTlsPhase { config },
+            phase: TcpTlsPhase { tcp_config },
         }
     }
 }
@@ -121,21 +121,25 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
 
 #[cfg(feature = "tcp")]
 pub struct TcpTlsPhase {
-    config: libp2p_tcp::Config,
+    tcp_config: libp2p_tcp::Config,
 }
 
 #[cfg(feature = "tcp")]
 impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<Provider, TcpNoisePhase<Tls>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
+    pub fn with_tls(
+        self,
+    ) -> Result<SwarmBuilder<Provider, TcpNoisePhase<libp2p_tls::Config>>, AuthenticationError>
+    {
+        Ok(SwarmBuilder {
             phase: TcpNoisePhase {
-                config: self.phase.config,
+                tcp_config: self.phase.tcp_config,
+                tls_config: libp2p_tls::Config::new(&self.keypair)?,
                 phantom: PhantomData,
             },
-        }
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
     }
 
     fn without_tls(self) -> SwarmBuilder<Provider, TcpNoisePhase<WithoutTls>> {
@@ -143,7 +147,8 @@ impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: TcpNoisePhase {
-                config: self.phase.config,
+                tcp_config: self.phase.tcp_config,
+                tls_config: WithoutTls {},
                 phantom: PhantomData,
             },
         }
@@ -178,16 +183,17 @@ impl SwarmBuilder<Tokio, TcpTlsPhase> {
 
 #[cfg(feature = "tcp")]
 pub struct TcpNoisePhase<A> {
-    config: libp2p_tcp::Config,
+    tcp_config: libp2p_tcp::Config,
+    tls_config: A,
     phantom: PhantomData<A>,
 }
 
 #[cfg(feature = "tcp")]
 macro_rules! construct_quic_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
-        Ok(SwarmBuilder {
+        SwarmBuilder {
             phase: QuicPhase {
-                transport: libp2p_tcp::$tcp::Transport::new($self.phase.config)
+                transport: libp2p_tcp::$tcp::Transport::new($self.phase.tcp_config)
                     .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                     .authenticate($auth)
                     .multiplex(libp2p_yamux::Config::default())
@@ -195,14 +201,14 @@ macro_rules! construct_quic_builder {
             },
             keypair: $self.keypair,
             phantom: PhantomData,
-        })
+        }
     };
 }
 
 macro_rules! impl_tcp_noise_builder {
     ($providerKebabCase:literal, $providerCamelCase:ident, $tcp:ident) => {
         #[cfg(all(feature = $providerKebabCase, feature = "tcp", feature = "tls"))]
-        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<Tls>> {
+        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<libp2p_tls::Config>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
                 self,
@@ -210,12 +216,12 @@ macro_rules! impl_tcp_noise_builder {
                 SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
-                construct_quic_builder!(
+                Ok(construct_quic_builder!(
                     self,
                     $tcp,
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
-                            libp2p_tls::Config::new(&self.keypair)?,
+                            self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair)?,
                         ),
                         |upgrade| match upgrade {
@@ -227,16 +233,14 @@ macro_rules! impl_tcp_noise_builder {
                             }
                         },
                     )
-                )
+                ))
             }
 
-            pub fn without_noise(
+            fn without_noise(
                 self,
-            ) -> Result<
-                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-                AuthenticationError,
-            > {
-                construct_quic_builder!(self, $tcp, libp2p_tls::Config::new(&self.keypair)?)
+            ) -> SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>
+            {
+                construct_quic_builder!(self, $tcp, self.phase.tls_config)
             }
         }
 
@@ -249,7 +253,11 @@ macro_rules! impl_tcp_noise_builder {
                 SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
-                construct_quic_builder!(self, $tcp, libp2p_noise::Config::new(&self.keypair)?)
+                Ok(construct_quic_builder!(
+                    self,
+                    $tcp,
+                    libp2p_noise::Config::new(&self.keypair)?
+                ))
             }
         }
     };
@@ -258,10 +266,7 @@ macro_rules! impl_tcp_noise_builder {
 impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
 impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
-#[cfg(feature = "tls")]
-pub enum Tls {}
-
-pub enum WithoutTls {}
+pub struct WithoutTls {}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AuthenticationError {
@@ -271,6 +276,24 @@ pub enum AuthenticationError {
     #[error("Noise")]
     #[cfg(feature = "noise")]
     Noise(#[from] libp2p_noise::Error),
+}
+
+// Shortcuts
+#[cfg(all(feature = "quic", feature = "async-std"))]
+impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
+    pub fn with_quic(
+        self,
+    ) -> SwarmBuilder<AsyncStd, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+        self.without_noise().with_quic()
+    }
+}
+#[cfg(all(feature = "quic", feature = "tokio"))]
+impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
+    pub fn with_quic(
+        self,
+    ) -> SwarmBuilder<Tokio, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+        self.without_noise().with_quic()
+    }
 }
 
 pub struct QuicPhase<T> {
@@ -612,7 +635,7 @@ pub struct RelayTlsPhase<T> {
 #[cfg(feature = "relay")]
 impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, Tls>> {
+    pub fn with_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -704,7 +727,7 @@ macro_rules! construct_websocket_builder {
 
 #[cfg(all(feature = "relay", feature = "tls"))]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, RelayNoisePhase<T, Tls>>
+    SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
     #[cfg(feature = "noise")]
     pub fn with_noise(
@@ -833,16 +856,22 @@ pub struct WebsocketTlsPhase<T, R> {
 #[cfg(feature = "websocket")]
 impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<Provider, WebsocketNoisePhase<T, R, Tls>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
+    pub fn with_tls(
+        self,
+    ) -> Result<
+        SwarmBuilder<Provider, WebsocketNoisePhase<T, R, libp2p_tls::Config>>,
+        AuthenticationError,
+    > {
+        Ok(SwarmBuilder {
             phase: WebsocketNoisePhase {
+                tls_config: libp2p_tls::Config::new(&self.keypair)?,
                 relay_behaviour: self.phase.relay_behaviour,
                 transport: self.phase.transport,
                 phantom: PhantomData,
             },
-        }
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
     }
 
     fn without_tls(self) -> SwarmBuilder<Provider, WebsocketNoisePhase<T, R, WithoutTls>> {
@@ -850,6 +879,7 @@ impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: WebsocketNoisePhase {
+                tls_config: WithoutTls {},
                 relay_behaviour: self.phase.relay_behaviour,
                 transport: self.phase.transport,
                 phantom: PhantomData,
@@ -886,6 +916,7 @@ impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, WebsocketTlsPh
 
 #[cfg(feature = "websocket")]
 pub struct WebsocketNoisePhase<T, R, A> {
+    tls_config: A,
     transport: T,
     relay_behaviour: R,
     phantom: PhantomData<A>,
@@ -922,7 +953,7 @@ macro_rules! impl_websocket_noise_builder {
                                                                     feature = "tls"
                                                                 ))]
         impl<T: AuthenticatedMultiplexedTransport, R>
-            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, Tls>>
+            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, libp2p_tls::Config>>
         {
             #[cfg(feature = "noise")]
             pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BehaviourPhase<impl AuthenticatedMultiplexedTransport, R>>, WebsocketError> {
@@ -931,7 +962,7 @@ macro_rules! impl_websocket_noise_builder {
                     $dnsTcp,
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
-                            libp2p_tls::Config::new(&self.keypair).map_err(Into::<AuthenticationError>::into)?,
+                            self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair).map_err(Into::<AuthenticationError>::into)?,
                         ),
                         |upgrade| match upgrade {
@@ -1060,10 +1091,10 @@ impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
 }
 
 #[cfg(feature = "async-std")]
-impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<AsyncStd, SwarmPhase<T, B>> {
-    pub fn build(
-        self,
-    ) -> libp2p_swarm::Swarm<B> {
+impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
+    SwarmBuilder<AsyncStd, SwarmPhase<T, B>>
+{
+    pub fn build(self) -> libp2p_swarm::Swarm<B> {
         SwarmBuilder {
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
@@ -1072,15 +1103,16 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<Asy
             },
             keypair: self.keypair,
             phantom: PhantomData::<AsyncStd>,
-        }.build()
+        }
+        .build()
     }
 }
 
 #[cfg(feature = "tokio")]
-impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<Tokio, SwarmPhase<T, B>> {
-    pub fn build(
-        self,
-    ) -> libp2p_swarm::Swarm<B> {
+impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
+    SwarmBuilder<Tokio, SwarmPhase<T, B>>
+{
+    pub fn build(self) -> libp2p_swarm::Swarm<B> {
         SwarmBuilder {
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
@@ -1089,7 +1121,8 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour> SwarmBuilder<Tok
             },
             keypair: self.keypair,
             phantom: PhantomData::<Tokio>,
-        }.build()
+        }
+        .build()
     }
 }
 
@@ -1193,6 +1226,7 @@ mod tests {
             .with_tokio()
             .with_tcp()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -1213,6 +1247,7 @@ mod tests {
             .with_tokio()
             .with_tcp()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_quic()
@@ -1241,6 +1276,7 @@ mod tests {
             .with_tokio()
             .with_tcp()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_relay()
@@ -1269,6 +1305,7 @@ mod tests {
                 .with_tokio()
                 .with_tcp()
                 .with_tls()
+                .unwrap()
                 .with_noise()
                 .unwrap()
                 .with_dns(),
@@ -1287,6 +1324,7 @@ mod tests {
             .with_tokio()
             .with_tcp()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
@@ -1311,10 +1349,12 @@ mod tests {
             .with_tokio()
             .with_tcp()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_websocket()
             .with_tls()
+            .unwrap()
             .with_noise()
             .await
             .unwrap()
