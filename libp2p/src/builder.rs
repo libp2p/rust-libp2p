@@ -872,7 +872,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "tls", feature = "relay"))]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
@@ -934,6 +934,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport, R>
 }
 
 // Shortcuts
+#[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, WebsocketPhase<T, libp2p_relay::client::Behaviour>>
 {
