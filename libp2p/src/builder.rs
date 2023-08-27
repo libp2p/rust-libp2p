@@ -1,5 +1,6 @@
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider making with_other_transport fallible.
+// TODO: Are all with_behaviour with Relay behaviour properly set?
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::NetworkBehaviour;
@@ -613,6 +614,7 @@ impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
 }
 
 // Shortcuts
+#[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     #[cfg(feature = "websocket")]
     pub fn with_websocket(
@@ -642,15 +644,19 @@ pub struct RelayTlsPhase<T> {
 #[cfg(feature = "relay")]
 impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
     #[cfg(feature = "tls")]
-    pub fn with_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>> {
-        SwarmBuilder {
+    pub fn with_tls(
+        self,
+    ) -> Result<SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>, AuthenticationError>
+    {
+        Ok(SwarmBuilder {
+            phase: RelayNoisePhase {
+                tls_config: libp2p_tls::Config::new(&self.keypair)
+                    .map_err(|e| AuthenticationError(e.into()))?,
+                transport: self.phase.transport,
+            },
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: RelayNoisePhase {
-                transport: self.phase.transport,
-                phantom: PhantomData,
-            },
-        }
+        })
     }
 
     fn without_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, WithoutTls>> {
@@ -658,9 +664,8 @@ impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: RelayNoisePhase {
+                tls_config: WithoutTls {},
                 transport: self.phase.transport,
-
-                phantom: PhantomData,
             },
         }
     }
@@ -700,8 +705,8 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, RelayTlsPhase<T>>
 
 #[cfg(feature = "relay")]
 pub struct RelayNoisePhase<T, A> {
+    tls_config: A,
     transport: T,
-    phantom: PhantomData<A>,
 }
 
 // TODO: Rename these macros to phase not builder. All.
@@ -711,7 +716,7 @@ macro_rules! construct_websocket_builder {
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new($self.keypair.public().to_peer_id());
 
-        Ok(SwarmBuilder {
+        SwarmBuilder {
             phase: WebsocketPhase {
                 relay_behaviour,
                 transport: $self
@@ -728,7 +733,7 @@ macro_rules! construct_websocket_builder {
             },
             keypair: $self.keypair,
             phantom: PhantomData,
-        })
+        }
     }};
 }
 
@@ -746,12 +751,11 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         >,
         AuthenticationError,
     > {
-        construct_websocket_builder!(
+        Ok(construct_websocket_builder!(
             self,
             libp2p_core::upgrade::Map::new(
                 libp2p_core::upgrade::SelectUpgrade::new(
-                    libp2p_tls::Config::new(&self.keypair)
-                        .map_err(|e| AuthenticationError(e.into()))?,
+                    self.phase.tls_config,
                     libp2p_noise::Config::new(&self.keypair)
                         .map_err(|e| AuthenticationError(e.into()))?,
                 ),
@@ -764,23 +768,16 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
                     }
                 },
             )
-        )
+        ))
     }
 
-    // TODO: construct tls in previous phase.
-    pub fn without_noise(
+    fn without_noise(
         self,
-    ) -> Result<
-        SwarmBuilder<
-            Provider,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-        >,
-        AuthenticationError,
+    ) -> SwarmBuilder<
+        Provider,
+        WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
     > {
-        construct_websocket_builder!(
-            self,
-            libp2p_tls::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
-        )
+        construct_websocket_builder!(self, self.phase.tls_config)
     }
 }
 
@@ -798,10 +795,34 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         >,
         AuthenticationError,
     > {
-        construct_websocket_builder!(
+        Ok(construct_websocket_builder!(
             self,
             libp2p_noise::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
-        )
+        ))
+    }
+}
+
+// Shortcuts
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
+{
+    #[cfg(feature = "websocket")]
+    pub fn with_websocket(
+        self,
+    ) -> SwarmBuilder<
+        Provider,
+        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+    > {
+        self.without_noise().with_websocket()
+    }
+
+    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
+        self,
+        constructor: impl FnMut(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>, R::Error> {
+        self.without_noise()
+            .without_websocket()
+            .with_behaviour(constructor)
     }
 }
 
@@ -1303,6 +1324,7 @@ mod tests {
             .unwrap()
             .with_relay()
             .with_tls()
+            .unwrap()
             .with_noise()
             .unwrap()
             .with_behaviour(|_, relay| Behaviour {
