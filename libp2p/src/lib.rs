@@ -143,7 +143,6 @@ pub use libp2p_webtransport_websys as webtransport_websys;
 pub use libp2p_yamux as yamux;
 
 mod builder;
-pub use builder::SwarmBuilder;
 
 mod transport_ext;
 
@@ -157,6 +156,7 @@ pub use self::core::{
     upgrade::{InboundUpgrade, OutboundUpgrade},
     Transport,
 };
+pub use self::builder::SwarmBuilder;
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
@@ -164,6 +164,7 @@ pub use libp2p_identity as identity;
 pub use libp2p_identity::PeerId;
 pub use libp2p_swarm::{Stream, StreamProtocol};
 
+// TODO: deprecate
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
 ///  * DNS resolution.
@@ -209,6 +210,7 @@ pub async fn development_transport(
         .boxed())
 }
 
+// TODO: deprecate
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
 ///  * DNS resolution.
