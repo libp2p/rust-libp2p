@@ -1,6 +1,7 @@
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider making with_other_transport fallible.
 // TODO: Are all with_behaviour with Relay behaviour properly set?
+// TODO: WASM executor
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::NetworkBehaviour;
@@ -15,6 +16,7 @@ use std::marker::PhantomData;
 /// # use std::error::Error;
 /// #
 /// # #[cfg(all(
+/// #     not(target_arch = "wasm32"),
 /// #     feature = "tokio",
 /// #     feature = "tcp",
 /// #     feature = "tls",
@@ -78,7 +80,7 @@ impl SwarmBuilder<NoProviderSpecified, InitialPhase> {
 pub struct ProviderPhase {}
 
 impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
-    #[cfg(feature = "async-std")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "async-std"))]
     pub fn with_async_std(self) -> SwarmBuilder<AsyncStd, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
@@ -87,7 +89,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
         }
     }
 
-    #[cfg(feature = "tokio")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
     pub fn with_tokio(self) -> SwarmBuilder<Tokio, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
@@ -99,7 +101,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
 pub struct TcpPhase {}
 
-#[cfg(feature = "tcp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_tcp(self) -> SwarmBuilder<Provider, TcpTlsPhase> {
         self.with_tcp_config(Default::default())
@@ -136,7 +138,7 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
 }
 
 // Shortcuts
-#[cfg(all(feature = "quic", feature = "async-std"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "async-std"))]
 impl SwarmBuilder<AsyncStd, TcpPhase> {
     pub fn with_quic(
         self,
@@ -144,7 +146,7 @@ impl SwarmBuilder<AsyncStd, TcpPhase> {
         self.without_tcp().with_quic()
     }
 }
-#[cfg(all(feature = "quic", feature = "tokio"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = "tokio"))]
 impl SwarmBuilder<Tokio, TcpPhase> {
     pub fn with_quic(
         self,
@@ -163,12 +165,12 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-#[cfg(feature = "tcp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
 pub struct TcpTlsPhase {
     tcp_config: libp2p_tcp::Config,
 }
 
-#[cfg(feature = "tcp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
 impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
     #[cfg(feature = "tls")]
     pub fn with_tls(
@@ -201,9 +203,13 @@ impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
 }
 
 // Shortcuts
-#[cfg(all(feature = "tcp", feature = "noise", feature = "async-std"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    feature = "noise",
+    feature = "async-std"
+))]
 impl SwarmBuilder<AsyncStd, TcpTlsPhase> {
-    #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
     ) -> Result<
@@ -213,9 +219,13 @@ impl SwarmBuilder<AsyncStd, TcpTlsPhase> {
         self.without_tls().with_noise()
     }
 }
-#[cfg(all(feature = "tcp", feature = "noise", feature = "tokio"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    feature = "noise",
+    feature = "tokio"
+))]
 impl SwarmBuilder<Tokio, TcpTlsPhase> {
-    #[cfg(feature = "noise")]
     pub fn with_noise(
         self,
     ) -> Result<
@@ -226,14 +236,14 @@ impl SwarmBuilder<Tokio, TcpTlsPhase> {
     }
 }
 
-#[cfg(feature = "tcp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
 pub struct TcpNoisePhase<A> {
     tcp_config: libp2p_tcp::Config,
     tls_config: A,
     phantom: PhantomData<A>,
 }
 
-#[cfg(feature = "tcp")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
 macro_rules! construct_quic_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
         SwarmBuilder {
@@ -252,7 +262,7 @@ macro_rules! construct_quic_builder {
 
 macro_rules! impl_tcp_noise_builder {
     ($providerKebabCase:literal, $providerCamelCase:ident, $tcp:ident) => {
-        #[cfg(all(feature = $providerKebabCase, feature = "tcp", feature = "tls"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "tls"))]
         impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<libp2p_tls::Config>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
@@ -290,7 +300,7 @@ macro_rules! impl_tcp_noise_builder {
             }
         }
 
-        #[cfg(feature = $providerKebabCase)]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp"))]
         impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<WithoutTls>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
@@ -331,7 +341,12 @@ enum AuthenticationErrorInner {
 }
 
 // Shortcuts
-#[cfg(all(feature = "tls", feature = "quic", feature = "async-std"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tls",
+    feature = "quic",
+    feature = "async-std"
+))]
 impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
     pub fn with_quic(
         self,
@@ -339,7 +354,12 @@ impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
         self.without_noise().with_quic()
     }
 }
-#[cfg(all(feature = "tls", feature = "quic", feature = "tokio"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tls",
+    feature = "quic",
+    feature = "tokio"
+))]
 impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
     pub fn with_quic(
         self,
@@ -352,18 +372,17 @@ pub struct QuicPhase<T> {
     transport: T,
 }
 
-
-#[cfg(feature = "quic")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "quic"))]
 macro_rules! construct_other_transport_builder {
     ($self:ident, $quic:ident, $config:expr) => {
         SwarmBuilder {
-            phase: OtherTransportPhase{
+            phase: OtherTransportPhase {
                 transport: $self
                     .phase
                     .transport
                     .or_transport(
                         libp2p_quic::$quic::Transport::new($config)
-                        .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
+                            .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
                     )
                     .map(|either, _| either.into_inner()),
             },
@@ -379,18 +398,24 @@ macro_rules! impl_quic_builder {
         impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
             pub fn with_quic(
                 self,
-            ) -> SwarmBuilder<$providerCamelCase, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+            ) -> SwarmBuilder<
+                $providerCamelCase,
+                OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+            > {
                 self.with_quic_config(|key| libp2p_quic::Config::new(&key))
             }
 
             pub fn with_quic_config(
                 self,
                 constructor: impl FnOnce(&libp2p_identity::Keypair) -> libp2p_quic::Config,
-            ) -> SwarmBuilder<$providerCamelCase, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+            ) -> SwarmBuilder<
+                $providerCamelCase,
+                OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+            > {
                 construct_other_transport_builder!(self, $quic, constructor(&self.keypair))
             }
         }
-    }
+    };
 }
 
 impl_quic_builder!("async-std", AsyncStd, async_std);
@@ -428,7 +453,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self.without_quic().with_other_transport(constructor)
     }
 
-    #[cfg(feature = "websocket")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
     pub fn with_websocket(
         self,
     ) -> SwarmBuilder<
@@ -454,7 +479,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
             .with_behaviour(constructor)
     }
 }
-#[cfg(all(feature = "async-std", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, QuicPhase<T>> {
     pub async fn with_dns(
         self,
@@ -466,7 +491,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, QuicPhase<T>> 
             .await
     }
 }
-#[cfg(all(feature = "tokio", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, QuicPhase<T>> {
     pub fn with_dns(
         self,
@@ -502,7 +527,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         }
     }
 
-    // TODO: Not the ideal name.
     fn without_any_other_transports(self) -> SwarmBuilder<Provider, DnsPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
@@ -515,7 +539,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
-#[cfg(all(feature = "async-std", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, OtherTransportPhase<T>> {
     pub async fn with_dns(
         self,
@@ -524,7 +548,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, OtherTransport
         self.without_any_other_transports().with_dns().await
     }
 }
-#[cfg(all(feature = "tokio", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, OtherTransportPhase<T>> {
     pub fn with_dns(
         self,
@@ -564,7 +588,7 @@ pub struct DnsPhase<T> {
     transport: T,
 }
 
-#[cfg(all(feature = "async-std", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, DnsPhase<T>> {
     pub async fn with_dns(
         self,
@@ -580,7 +604,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, DnsPhase<T>> {
     }
 }
 
-#[cfg(all(feature = "tokio", feature = "dns"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio", feature = "dns"))]
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, DnsPhase<T>> {
     pub fn with_dns(
         self,
@@ -658,7 +682,7 @@ impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
 // Shortcuts
 #[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
-    #[cfg(feature = "websocket")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
     pub fn with_websocket(
         self,
     ) -> SwarmBuilder<
@@ -851,7 +875,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
-    #[cfg(feature = "websocket")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
     pub fn with_websocket(
         self,
     ) -> SwarmBuilder<
@@ -879,7 +903,7 @@ pub struct WebsocketPhase<T, R> {
     relay_behaviour: R,
 }
 
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 impl<Provider, T, R> SwarmBuilder<Provider, WebsocketPhase<T, R>> {
     pub fn with_websocket(self) -> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
         SwarmBuilder {
@@ -909,7 +933,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport, R>
 }
 
 // Shortcuts
-#[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, WebsocketPhase<T, libp2p_relay::client::Behaviour>>
 {
@@ -938,7 +961,7 @@ pub struct WebsocketTlsPhase<T, R> {
     relay_behaviour: R,
 }
 
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
     #[cfg(feature = "tls")]
     pub fn with_tls(
@@ -975,7 +998,12 @@ impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
 }
 
 // Shortcuts
-#[cfg(all(feature = "websocket", feature = "noise", feature = "async-std"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    feature = "noise",
+    feature = "async-std"
+))]
 impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<AsyncStd, WebsocketTlsPhase<T, R>> {
     #[cfg(feature = "noise")]
     pub async fn with_noise(
@@ -987,7 +1015,12 @@ impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<AsyncStd, WebsocketTl
         self.without_tls().with_noise().await
     }
 }
-#[cfg(all(feature = "websocket", feature = "noise", feature = "tokio"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "websocket",
+    feature = "noise",
+    feature = "tokio"
+))]
 impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, WebsocketTlsPhase<T, R>> {
     #[cfg(feature = "noise")]
     pub async fn with_noise(
@@ -1000,7 +1033,7 @@ impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, WebsocketTlsPh
     }
 }
 
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 pub struct WebsocketNoisePhase<T, R, A> {
     tls_config: A,
     transport: T,
@@ -1008,7 +1041,7 @@ pub struct WebsocketNoisePhase<T, R, A> {
     phantom: PhantomData<A>,
 }
 
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 macro_rules! construct_behaviour_builder {
     ($self:ident, $dnsTcp:expr, $auth:expr) => {{
         let websocket_transport =
@@ -1034,11 +1067,12 @@ macro_rules! construct_behaviour_builder {
 macro_rules! impl_websocket_noise_builder {
     ($providerKebabCase:literal, $providerCamelCase:ident, $dnsTcp:expr) => {
         #[cfg(all(
-                                                                    feature = $providerKebabCase,
-                                                                    feature = "websocket",
-                                                                    feature = "dns",
-                                                                    feature = "tls"
-                                                                ))]
+            not(target_arch = "wasm32"),
+            feature = $providerKebabCase,
+            feature = "websocket",
+            feature = "dns",
+            feature = "tls"
+        ))]
         impl<T: AuthenticatedMultiplexedTransport, R>
             SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, libp2p_tls::Config>>
         {
@@ -1181,7 +1215,7 @@ impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
     }
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std"))]
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     SwarmBuilder<AsyncStd, SwarmPhase<T, B>>
 {
@@ -1199,7 +1233,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     }
 }
 
-#[cfg(feature = "tokio")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     SwarmBuilder<Tokio, SwarmPhase<T, B>>
 {
