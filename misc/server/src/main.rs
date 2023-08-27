@@ -1,28 +1,20 @@
 use base64::Engine;
 use clap::Parser;
 use futures::executor::block_on;
-use futures::future::Either;
 use futures::stream::StreamExt;
 use futures_timer::Delay;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade;
-use libp2p::dns;
 use libp2p::identify;
 use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::noise;
-use libp2p::quic;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{SwarmEvent};
 use libp2p::tcp;
-use libp2p::yamux;
-use libp2p::Transport;
+use libp2p::quic;
 use log::{debug, info};
 use prometheus_client::metrics::info::Info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
-use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::task::Poll;
@@ -81,38 +73,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
     println!("Local peer id: {local_peer_id}");
 
-    let transport = {
-        let tcp_transport =
-            tcp::tokio::Transport::new(tcp::Config::new().port_reuse(true).nodelay(true))
-                .upgrade(upgrade::Version::V1)
-                .authenticate(noise::Config::new(&local_keypair)?)
-                .multiplex(yamux::Config::default())
-                .timeout(Duration::from_secs(20));
-
-        let quic_transport = {
-            let mut config = quic::Config::new(&local_keypair);
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
+        .with_tokio()
+        .with_tcp_config(tcp::Config::new().port_reuse(true).nodelay(true))
+        .with_noise()?
+        .with_quic_config(|key| {
+            let mut config = quic::Config::new(key);
             config.support_draft_29 = true;
-            quic::tokio::Transport::new(config)
-        };
-
-        dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(
-            quic_transport,
-            tcp_transport,
-        ))?
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            config
         })
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-        .boxed()
-    };
-
-    let behaviour = behaviour::Behaviour::new(
-        local_keypair.public(),
-        opt.enable_kademlia,
-        opt.enable_autonat,
-    );
-    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
+        .with_dns()?
+        .with_behaviour(|key| {
+            behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
+        })?
+        .build();
 
     if config.addresses.swarm.is_empty() {
         log::warn!("No listen addresses configured.");
