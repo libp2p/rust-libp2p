@@ -362,13 +362,13 @@ where
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
-        config: SwarmConfig
+        config: SwarmConfig,
     ) -> Self {
         Swarm {
-            local_peer_id: local_peer_id,
-            transport: transport,
+            local_peer_id,
+            transport,
             pool: Pool::new(local_peer_id, config.pool_config),
-            behaviour: behaviour,
+            behaviour,
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
@@ -1367,13 +1367,10 @@ pub struct SwarmConfig {
     pool_config: PoolConfig,
 }
 
-impl SwarmConfig
-{
+impl SwarmConfig {
     /// Creates a new [`SwarmConfig`] from the given executor. The [`Swarm`] is obtained via
     /// [`Swarm::new_from_config`].
-    pub fn with_executor(
-        executor: impl Executor + Send + 'static,
-    ) -> Self {
+    pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
             pool_config: PoolConfig::new(Some(Box::new(executor))),
         }
@@ -1389,11 +1386,8 @@ impl SwarmConfig
     /// }
     /// ```
     #[cfg(feature = "wasm-bindgen")]
-    pub fn with_wasm_executor(
-    ) -> Self {
-        Self::with_executor(
-            crate::executor::WasmBindgenExecutor,
-        )
+    pub fn with_wasm_executor() -> Self {
+        Self::with_executor(crate::executor::WasmBindgenExecutor)
     }
 
     /// Builds a new [`SwarmConfig`] from the given `tokio` executor.
@@ -1401,11 +1395,8 @@ impl SwarmConfig
         feature = "tokio",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
-    pub fn with_tokio_executor(
-    ) -> Self {
-        Self::with_executor(
-            crate::executor::TokioExecutor,
-        )
+    pub fn with_tokio_executor() -> Self {
+        Self::with_executor(crate::executor::TokioExecutor)
     }
 
     /// Builds a new [`SwarmConfig`] from the given `async-std` executor.
@@ -1413,11 +1404,8 @@ impl SwarmConfig
         feature = "async-std",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
-    pub fn with_async_std_executor(
-    ) -> Self {
-        Self::with_executor(
-            crate::executor::AsyncStdExecutor,
-        )
+    pub fn with_async_std_executor() -> Self {
+        Self::with_executor(crate::executor::AsyncStdExecutor)
     }
 
     // TODO: Should we remove this from `SwarmConfig`?!
@@ -1428,8 +1416,7 @@ impl SwarmConfig
     /// All connections will be polled on the current task, thus quite bad performance
     /// characteristics should be expected. Whenever possible use an executor and
     /// [`SwarmConfig::with_executor`].
-    pub fn without_executor(
-    ) -> Self {
+    pub fn without_executor() -> Self {
         Self {
             pool_config: PoolConfig::new(None),
         }
@@ -1502,7 +1489,9 @@ impl SwarmConfig
 }
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
-#[deprecated(note = "Use the new `libp2p::SwarmBuilder` instead of `libp2p::swarm::SwarmBuilder` or create a `Swarm` directly via `Swarm::new_with_config`.")]
+#[deprecated(
+    note = "Use the new `libp2p::SwarmBuilder` instead of `libp2p::swarm::SwarmBuilder` or create a `Swarm` directly via `Swarm::new_with_config`."
+)]
 pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,

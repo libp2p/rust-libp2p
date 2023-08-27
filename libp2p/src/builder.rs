@@ -324,6 +324,7 @@ macro_rules! impl_tcp_noise_builder {
 impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
 impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
+#[cfg(any(feature = "tls", feature = "noise"))]
 pub struct WithoutTls {}
 
 #[derive(Debug, thiserror::Error)]
@@ -1111,6 +1112,8 @@ macro_rules! impl_websocket_noise_builder {
             SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, WithoutTls>>
         {
             pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BehaviourPhase<impl AuthenticatedMultiplexedTransport, R>>, WebsocketError> {
+                let _ = self.phase.tls_config;
+
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
