@@ -957,7 +957,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     }
 }
 
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 pub struct WebsocketTlsPhase<T, R> {
     transport: T,
     relay_behaviour: R,
