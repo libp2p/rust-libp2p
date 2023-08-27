@@ -334,7 +334,7 @@ pub struct AuthenticationError(AuthenticationErrorInner);
 #[derive(Debug, thiserror::Error)]
 enum AuthenticationErrorInner {
     #[error("Tls")]
-    #[cfg(feature = "tls")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "tls"))]
     Tls(#[from] libp2p_tls::certificate::GenError),
     #[error("Noise")]
     #[cfg(feature = "noise")]
@@ -395,7 +395,7 @@ macro_rules! construct_other_transport_builder {
 
 macro_rules! impl_quic_builder {
     ($providerKebabCase:literal, $providerCamelCase:ident, $quic:ident) => {
-        #[cfg(all(feature = "quic", feature = $providerKebabCase))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = $providerKebabCase))]
         impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
             pub fn with_quic(
                 self,
@@ -710,7 +710,7 @@ pub struct RelayTlsPhase<T> {
 
 #[cfg(feature = "relay")]
 impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
-    #[cfg(feature = "tls")]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "tls"))]
     pub fn with_tls(
         self,
     ) -> Result<SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>, AuthenticationError>
@@ -804,7 +804,7 @@ macro_rules! construct_websocket_builder {
     }};
 }
 
-#[cfg(all(feature = "relay", feature = "tls"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "relay", feature = "tls"))]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
@@ -872,7 +872,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
-#[cfg(all(feature = "tls", feature = "relay"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tls", feature = "relay"))]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
@@ -1108,7 +1108,7 @@ macro_rules! impl_websocket_noise_builder {
             }
         }
 
-        #[cfg(all(feature = $providerKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
         impl<T: AuthenticatedMultiplexedTransport, R>
             SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, WithoutTls>>
         {
