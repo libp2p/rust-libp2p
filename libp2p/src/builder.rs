@@ -134,7 +134,8 @@ impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
         Ok(SwarmBuilder {
             phase: TcpNoisePhase {
                 tcp_config: self.phase.tcp_config,
-                tls_config: libp2p_tls::Config::new(&self.keypair)?,
+                tls_config: libp2p_tls::Config::new(&self.keypair)
+                    .map_err(|e| AuthenticationError(e.into()))?,
                 phantom: PhantomData,
             },
             keypair: self.keypair,
@@ -222,7 +223,8 @@ macro_rules! impl_tcp_noise_builder {
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
-                            libp2p_noise::Config::new(&self.keypair)?,
+                            libp2p_noise::Config::new(&self.keypair)
+                                .map_err(|e| AuthenticationError(e.into()))?,
                         ),
                         |upgrade| match upgrade {
                             futures::future::Either::Left((peer_id, upgrade)) => {
@@ -256,7 +258,8 @@ macro_rules! impl_tcp_noise_builder {
                 Ok(construct_quic_builder!(
                     self,
                     $tcp,
-                    libp2p_noise::Config::new(&self.keypair)?
+                    libp2p_noise::Config::new(&self.keypair)
+                        .map_err(|e| AuthenticationError(e.into()))?
                 ))
             }
         }
@@ -269,7 +272,11 @@ impl_tcp_noise_builder!("tokio", Tokio, tokio);
 pub struct WithoutTls {}
 
 #[derive(Debug, thiserror::Error)]
-pub enum AuthenticationError {
+#[error(transparent)]
+pub struct AuthenticationError(AuthenticationErrorInner);
+
+#[derive(Debug, thiserror::Error)]
+enum AuthenticationErrorInner {
     #[error("Tls")]
     #[cfg(feature = "tls")]
     Tls(#[from] libp2p_tls::certificate::GenError),
@@ -743,8 +750,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
             self,
             libp2p_core::upgrade::Map::new(
                 libp2p_core::upgrade::SelectUpgrade::new(
-                    libp2p_tls::Config::new(&self.keypair)?,
-                    libp2p_noise::Config::new(&self.keypair)?,
+                    libp2p_tls::Config::new(&self.keypair)
+                        .map_err(|e| AuthenticationError(e.into()))?,
+                    libp2p_noise::Config::new(&self.keypair)
+                        .map_err(|e| AuthenticationError(e.into()))?,
                 ),
                 |upgrade| match upgrade {
                     futures::future::Either::Left((peer_id, upgrade)) => {
@@ -758,6 +767,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         )
     }
 
+    // TODO: construct tls in previous phase.
     pub fn without_noise(
         self,
     ) -> Result<
@@ -767,7 +777,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         >,
         AuthenticationError,
     > {
-        construct_websocket_builder!(self, libp2p_tls::Config::new(&self.keypair)?)
+        construct_websocket_builder!(
+            self,
+            libp2p_tls::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
+        )
     }
 }
 
@@ -785,7 +798,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         >,
         AuthenticationError,
     > {
-        construct_websocket_builder!(self, libp2p_noise::Config::new(&self.keypair)?)
+        construct_websocket_builder!(
+            self,
+            libp2p_noise::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
+        )
     }
 }
 
@@ -864,7 +880,8 @@ impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
     > {
         Ok(SwarmBuilder {
             phase: WebsocketNoisePhase {
-                tls_config: libp2p_tls::Config::new(&self.keypair)?,
+                tls_config: libp2p_tls::Config::new(&self.keypair)
+                    .map_err(|e| AuthenticationError(e.into()))?,
                 relay_behaviour: self.phase.relay_behaviour,
                 transport: self.phase.transport,
                 phantom: PhantomData,
@@ -925,11 +942,12 @@ pub struct WebsocketNoisePhase<T, R, A> {
 #[cfg(feature = "websocket")]
 macro_rules! construct_behaviour_builder {
     ($self:ident, $dnsTcp:expr, $auth:expr) => {{
-        let websocket_transport = libp2p_websocket::WsConfig::new($dnsTcp.await?)
-            .upgrade(libp2p_core::upgrade::Version::V1)
-            .authenticate($auth)
-            .multiplex(libp2p_yamux::Config::default())
-            .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
+        let websocket_transport =
+            libp2p_websocket::WsConfig::new($dnsTcp.await.map_err(|e| WebsocketError(e.into()))?)
+                .upgrade(libp2p_core::upgrade::Version::V1)
+                .authenticate($auth)
+                .multiplex(libp2p_yamux::Config::default())
+                .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
 
         Ok(SwarmBuilder {
             keypair: $self.keypair,
@@ -963,7 +981,7 @@ macro_rules! impl_websocket_noise_builder {
                     libp2p_core::upgrade::Map::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
-                            libp2p_noise::Config::new(&self.keypair).map_err(Into::<AuthenticationError>::into)?,
+                            libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?,
                         ),
                         |upgrade| match upgrade {
                             futures::future::Either::Left((peer_id, upgrade)) => {
@@ -980,7 +998,7 @@ macro_rules! impl_websocket_noise_builder {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
-                    libp2p_tls::Config::new(&self.keypair).map_err(Into::<AuthenticationError>::into)?
+                    libp2p_tls::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?
                 )
             }
         }
@@ -993,7 +1011,7 @@ macro_rules! impl_websocket_noise_builder {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
-                    libp2p_noise::Config::new(&self.keypair).map_err(Into::<AuthenticationError>::into)?
+                    libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?
                 )
             }
         }
@@ -1017,10 +1035,14 @@ impl_websocket_noise_builder!(
 );
 
 #[derive(Debug, thiserror::Error)]
-pub enum WebsocketError {
+#[error(transparent)]
+pub struct WebsocketError(WebsocketErrorInner);
+
+#[derive(Debug, thiserror::Error)]
+enum WebsocketErrorInner {
     #[error("Dns")]
     #[cfg(any(feature = "tls", feature = "noise"))]
-    Authentication(#[from] AuthenticationError),
+    Authentication(#[from] AuthenticationErrorInner),
     #[cfg(feature = "dns")]
     #[error("Dns")]
     Dns(#[from] io::Error),
