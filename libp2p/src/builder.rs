@@ -1,6 +1,7 @@
 // TODO: Be able to address `SwarmBuilder` configuration methods.
 // TODO: Consider making with_other_transport fallible.
 // TODO: Are all with_behaviour with Relay behaviour properly set?
+// TODO: replace FnMut with FnOnce
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::NetworkBehaviour;
@@ -89,7 +90,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     }
 
     #[cfg(feature = "tokio")]
-    pub fn with_tokio(self) -> SwarmBuilder<AsyncStd, TcpPhase> {
+    pub fn with_tokio(self) -> SwarmBuilder<Tokio, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
@@ -300,6 +301,7 @@ macro_rules! impl_tcp_noise_builder {
                 SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
                 AuthenticationError,
             > {
+                let _ = self.phase.tls_config;
                 Ok(construct_quic_builder!(
                     self,
                     $tcp,
@@ -331,7 +333,7 @@ enum AuthenticationErrorInner {
 }
 
 // Shortcuts
-#[cfg(all(feature = "quic", feature = "async-std"))]
+#[cfg(all(feature = "tls", feature = "quic", feature = "async-std"))]
 impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
     pub fn with_quic(
         self,
@@ -339,7 +341,7 @@ impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
         self.without_noise().with_quic()
     }
 }
-#[cfg(all(feature = "quic", feature = "tokio"))]
+#[cfg(all(feature = "tls", feature = "quic", feature = "tokio"))]
 impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
     pub fn with_quic(
         self,
@@ -352,51 +354,49 @@ pub struct QuicPhase<T> {
     transport: T,
 }
 
-#[cfg(all(feature = "quic", feature = "async-std"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, QuicPhase<T>> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<AsyncStd, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+
+#[cfg(feature = "quic")]
+macro_rules! construct_other_transport_builder {
+    ($self:ident, $quic:ident, $config:expr) => {
         SwarmBuilder {
-            phase: OtherTransportPhase {
-                transport: self
+            phase: OtherTransportPhase{
+                transport: $self
                     .phase
                     .transport
                     .or_transport(
-                        libp2p_quic::async_std::Transport::new(libp2p_quic::Config::new(
-                            &self.keypair,
-                        ))
+                        libp2p_quic::$quic::Transport::new($config)
                         .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
                     )
                     .map(|either, _| either.into_inner()),
             },
-            keypair: self.keypair,
+            keypair: $self.keypair,
             phantom: PhantomData,
+        }
+    };
+}
+
+macro_rules! impl_quic_builder {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $quic:ident) => {
+        #[cfg(all(feature = "quic", feature = $providerKebabCase))]
+        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
+            pub fn with_quic(
+                self,
+            ) -> SwarmBuilder<$providerCamelCase, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+                self.with_quic_config(|key| libp2p_quic::Config::new(&key))
+            }
+
+            pub fn with_quic_config(
+                self,
+                mut constructor: impl FnMut(&libp2p_identity::Keypair) -> libp2p_quic::Config,
+            ) -> SwarmBuilder<$providerCamelCase, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+                construct_other_transport_builder!(self, $quic, constructor(&self.keypair))
+            }
         }
     }
 }
 
-#[cfg(all(feature = "quic", feature = "tokio"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, QuicPhase<T>> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<Tokio, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
-        SwarmBuilder {
-            phase: OtherTransportPhase {
-                transport: self
-                    .phase
-                    .transport
-                    .or_transport(
-                        libp2p_quic::tokio::Transport::new(libp2p_quic::Config::new(&self.keypair))
-                            .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
-                    )
-                    .map(|either, _| either.into_inner()),
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
-        }
-    }
-}
+impl_quic_builder!("async-std", AsyncStd, async_std);
+impl_quic_builder!("tokio", Tokio, tokio);
 
 impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
     fn without_quic(self) -> SwarmBuilder<Provider, OtherTransportPhase<T>> {
@@ -839,6 +839,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         >,
         AuthenticationError,
     > {
+        let _ = self.phase.tls_config;
+
         Ok(construct_websocket_builder!(
             self,
             libp2p_noise::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
@@ -847,6 +849,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
+#[cfg(feature = "tls")]
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
 {
@@ -1382,7 +1385,7 @@ mod tests {
             .build();
     }
 
-    #[test]
+    #[tokio::test]
     #[cfg(all(
         feature = "tokio",
         feature = "tcp",
@@ -1390,21 +1393,19 @@ mod tests {
         feature = "noise",
         feature = "dns"
     ))]
-    fn tcp_dns() {
-        let _ = futures::executor::block_on(
-            SwarmBuilder::with_new_identity()
-                .with_tokio()
-                .with_tcp()
-                .with_tls()
-                .unwrap()
-                .with_noise()
-                .unwrap()
-                .with_dns(),
-        )
-        .unwrap()
-        .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
-        .unwrap()
-        .build();
+    async fn tcp_dns() {
+        SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp()
+            .with_tls()
+            .unwrap()
+            .with_noise()
+            .unwrap()
+            .with_dns()
+            .unwrap()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
     }
 
     /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. QUIC or WebRTC.
@@ -1481,7 +1482,6 @@ mod tests {
             .unwrap()
             .with_quic()
             .with_dns()
-            .await
             .unwrap()
             .with_relay()
             .with_tls()
