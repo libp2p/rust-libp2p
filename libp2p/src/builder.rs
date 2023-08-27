@@ -681,7 +681,6 @@ impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
 }
 
 // Shortcuts
-#[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
     pub fn with_websocket(
