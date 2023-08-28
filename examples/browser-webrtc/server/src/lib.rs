@@ -38,33 +38,28 @@ pub async fn start() -> Result<()> {
 
     swarm.listen_on(address_webrtc.clone())?;
 
-    let mut addr = None; // We only need 1 address
-
     loop {
         if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
-            addr = Some(
-                address
-                    .with(Protocol::P2p(*swarm.local_peer_id()))
-                    .clone()
-                    .to_string(),
-            );
+            let addr = address
+                .with(Protocol::P2p(*swarm.local_peer_id()))
+                .clone()
+                .to_string();
+
+            log::info!("Listening on: {}", addr);
+
+            // Serve the multiaddress over HTTP
+            tokio::spawn(async move {
+                servers::serve_multiaddr(addr).await;
+            });
+
+            // Also statically serve the ../client/index.html file for this example
+            tokio::spawn(async {
+                servers::serve_files().await;
+            });
+
             break;
         }
     }
-
-    let address = addr.as_ref().unwrap().clone();
-
-    log::info!("Listening on: {}", address);
-
-    // Serve the multiaddress over HTTP
-    tokio::spawn(async move {
-        servers::serve_multiaddr(address).await;
-    });
-
-    // Also statically serve the ../client/index.html file for this example
-    tokio::spawn(async {
-        servers::serve_files().await;
-    });
 
     loop {
         tokio::select! {
