@@ -5,7 +5,7 @@ use axum::{
     routing::get,
     Router,
 };
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
@@ -32,7 +32,7 @@ pub(crate) async fn serve_multiaddr(address: String) {
 pub(crate) async fn serve_files() {
     let app = Router::new().nest_service("/", get(handler));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], STATIC_PORT));
+    let addr = SocketAddr::from((IpAddr::V4(Ipv4Addr::LOCALHOST), STATIC_PORT));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
