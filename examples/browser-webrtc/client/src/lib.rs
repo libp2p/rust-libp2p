@@ -29,8 +29,6 @@ pub fn run() -> Result<(), JsValue> {
     // create a mpsc channel to get pings to from the pinger
     let (sendr, mut recvr) = channel::mpsc::channel::<Result<f32, PingerError>>(2);
 
-    log::info!("Spawn a pinger");
-
     // start the pinger, pass in our sender
     spawn_local(async move {
         match start_pinger(sendr).await {

@@ -14,7 +14,6 @@ pub const PORT: u16 = 4455;
 pub(crate) async fn start_pinger(
     mut sendr: channel::mpsc::Sender<Result<f32, PingerError>>,
 ) -> Result<(), PingerError> {
-    log::info!("start_pinger");
     let addr = fetch_server_addr().await;
 
     log::trace!("Got addr {} from server", addr);
