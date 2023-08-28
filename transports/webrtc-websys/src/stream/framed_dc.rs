@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::poll_data_channel::PollDataChannel;
+use super::poll_data_channel::{DataChannel, PollDataChannel};
 use asynchronous_codec::Framed;
 use libp2p_webrtc_utils::proto::Message;
 use libp2p_webrtc_utils::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
-use web_sys::RtcDataChannel;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub(crate) type FramedDc = Framed<PollDataChannel, quick_protobuf_codec::Codec<Message>>;
-pub(crate) fn new(data_channel: RtcDataChannel) -> FramedDc {
+pub(crate) fn new(data_channel: Rc<RefCell<DataChannel>>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
     inner.set_read_buf_capacity(MAX_MSG_LEN);
 
@@ -33,7 +34,7 @@ pub(crate) fn new(data_channel: RtcDataChannel) -> FramedDc {
         inner,
         quick_protobuf_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN),
     );
-    // If not set, `Framed` buffers up to 16384 bytes (16kB) of data before sending
+    // If not set, `Framed` buffers up to 16377 bytes of data before sending
     framed.set_send_high_water_mark(MAX_DATA_LEN);
     framed
 }

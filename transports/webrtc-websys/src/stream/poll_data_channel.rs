@@ -2,9 +2,11 @@
 use crate::error::Error;
 use futures::channel;
 use futures::{AsyncRead, AsyncWrite, FutureExt, StreamExt};
+use std::cell::RefCell;
 use std::fmt;
 use std::io;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::result::Result;
 use std::task::{ready, Context, Poll};
 use wasm_bindgen::{prelude::*, JsCast};
@@ -13,33 +15,32 @@ use web_sys::{MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelS
 /// Default capacity of the temporary read buffer used by [`webrtc_sctp::stream::PollStream`].
 const DEFAULT_READ_BUF_SIZE: usize = 8192;
 
-/// A wrapper around around [`RtcDataChannel`], which implements [`AsyncRead`] and
-/// [`AsyncWrite`].
+/// [`DataChannel`] is a wrapper around around [`RtcDataChannel`] which initializes event callback handlers.
 ///
-/// Both `poll_read` and `poll_write` calls allocate temporary buffers, which results in an
-/// additional overhead.
-pub struct PollDataChannel {
-    /// The [RtcDataChannel]
-    data_channel: RtcDataChannel,
+/// Separating this into its own struct enables us fine grained control over when the callbacks are initialized.
+pub struct DataChannel {
+    /// The [RtcDataChannel] being wrapped.
+    inner: RtcDataChannel,
 
-    /// Receive messages from the RtcDataChannel callback
+    /// Receive messages from the [RtcDataChannel] callback
     /// mpsc since multiple messages may be sent
     rx_onmessage: channel::mpsc::Receiver<Vec<u8>>,
-    /// Receive onopen event from the RtcDataChannel callback
-    /// oneshot since only one onopen event is sent
-    rx_onopen: channel::mpsc::Receiver<()>,
-    /// Receieve onbufferedamountlow event from the RtcDataChannel callback
-    /// mpsc since multiple onbufferedamountlow events may be sent
-    rx_onbufferedamountlow: channel::mpsc::Receiver<()>,
-    /// Receive onclose event from the RtcDataChannel callback
-    /// oneshot since only one onclose event is sent
-    rx_onclose: channel::oneshot::Receiver<()>,
 
-    read_buf_cap: usize,
+    /// Receive onopen event from the [RtcDataChannel] callback
+    rx_onopen: channel::mpsc::Receiver<()>,
+
+    /// Receieve onbufferedamountlow event from the [RtcDataChannel] callback
+    /// mpsc since multiple `onbufferedamountlow` events may be sent
+    rx_onbufferedamountlow: channel::mpsc::Receiver<()>,
+
+    /// Receive onclose event from the [RtcDataChannel] callback
+    /// oneshot since only one `onclose` event is sent
+    rx_onclose: channel::oneshot::Receiver<()>,
 }
 
-impl PollDataChannel {
-    /// Constructs a new `PollDataChannel`.
+impl DataChannel {
+    /// Constructs a new [`DataChannel`]
+    /// and initializes the event callback handlers.
     pub(crate) fn new(data_channel: RtcDataChannel) -> Self {
         /*
          * On Open
@@ -59,7 +60,7 @@ impl PollDataChannel {
         /*
          * On Message Stream
          */
-        let (mut tx_onmessage, rx_onmessage) = channel::mpsc::channel(2); // TODO: How big should this be?
+        let (mut tx_onmessage, rx_onmessage) = channel::mpsc::channel(16); // TODO: How big should this be? Does it need to be large enough to handle incoming messages faster than we can process them?
 
         let onmessage_callback = Closure::<dyn FnMut(_)>::new(move |ev: MessageEvent| {
             let data = ev.data();
@@ -107,38 +108,71 @@ impl PollDataChannel {
         onbufferedamountlow_callback.forget();
 
         Self {
-            data_channel,
+            inner: data_channel,
             rx_onmessage,
             rx_onopen,
             rx_onclose,
             rx_onbufferedamountlow,
+        }
+    }
+
+    /// Returns the [RtcDataChannelState] of the [RtcDataChannel]
+    fn ready_state(&self) -> RtcDataChannelState {
+        self.inner.ready_state()
+    }
+
+    /// Returns the [RtcDataChannel] label
+    fn label(&self) -> String {
+        self.inner.label()
+    }
+
+    /// Send data over this [RtcDataChannel]
+    fn send(&self, data: &[u8]) -> Result<(), JsValue> {
+        self.inner.send_with_u8_array(data)
+    }
+
+    /// Returns the current [RtcDataChannel] BufferedAmount
+    fn buffered_amount(&self) -> u32 {
+        self.inner.buffered_amount()
+    }
+}
+
+/// A wrapper around around [`DataChannel`], which implements [`AsyncRead`] and
+/// [`AsyncWrite`].
+pub struct PollDataChannel {
+    /// The [DataChannel]
+    data_channel: Rc<RefCell<DataChannel>>,
+
+    read_buf_cap: usize,
+}
+
+impl PollDataChannel {
+    /// Constructs a new `PollDataChannel`.
+    pub(crate) fn new(data_channel: Rc<RefCell<DataChannel>>) -> Self {
+        Self {
+            data_channel,
             read_buf_cap: DEFAULT_READ_BUF_SIZE,
         }
     }
 
-    /// Get back the inner data_channel.
-    pub(crate) fn into_inner(self) -> RtcDataChannel {
-        self.data_channel
-    }
-
-    /// Obtain a clone of the inner data_channel.
-    pub fn clone_inner(&self) -> RtcDataChannel {
+    /// Obtain a clone of the mutable smart pointer to the [`DataChannel`].
+    pub fn clone_inner(&self) -> Rc<RefCell<DataChannel>> {
         self.data_channel.clone()
     }
 
     /// Set the capacity of the temporary read buffer (default: 8192).
-    pub fn set_read_buf_capacity(&mut self, capacity: usize) {
+    pub(crate) fn set_read_buf_capacity(&mut self, capacity: usize) {
         self.read_buf_cap = capacity
     }
 
     /// Get Ready State of [RtcDataChannel]
-    pub(crate) fn ready_state(&self) -> RtcDataChannelState {
-        self.data_channel.ready_state()
+    fn ready_state(&self) -> RtcDataChannelState {
+        self.data_channel.borrow().ready_state()
     }
 
     /// Send data buffer
-    pub fn send(&self, data: &[u8]) -> Result<(), Error> {
-        self.data_channel.send_with_u8_array(data)?;
+    fn send(&self, data: &[u8]) -> Result<(), Error> {
+        self.data_channel.borrow().send(data)?;
         Ok(())
     }
 
@@ -148,7 +182,7 @@ impl PollDataChannel {
 
         // temp workaround: use label, though it is "" so it's not unique
         // TODO: After the above PR is released, use the label instead of the stream id
-        let label = self.data_channel.label();
+        let label = self.data_channel.borrow().label();
         let b = label.as_bytes();
         let mut stream_id: u16 = 0;
         b.iter().enumerate().for_each(|(i, &b)| {
@@ -160,11 +194,16 @@ impl PollDataChannel {
 
 impl AsyncRead for PollDataChannel {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize, std::io::Error>> {
-        match ready!(self.rx_onmessage.poll_next_unpin(cx)) {
+        match ready!(self
+            .data_channel
+            .borrow_mut()
+            .rx_onmessage
+            .poll_next_unpin(cx))
+        {
             Some(data) => {
                 let data_len = data.len();
                 let buf_len = buf.len();
@@ -187,12 +226,12 @@ impl AsyncWrite for PollDataChannel {
         log::trace!(
             "poll_write: [{:?}], state: {:?}",
             buf.len(),
-            self.data_channel.ready_state()
+            self.ready_state()
         );
         // If the data channel is not open,
         // poll on open future until the channel is open
-        if self.data_channel.ready_state() != RtcDataChannelState::Open {
-            ready!(self.rx_onopen.poll_next_unpin(cx)).unwrap();
+        if self.ready_state() != RtcDataChannelState::Open {
+            ready!(self.data_channel.borrow_mut().rx_onopen.poll_next_unpin(cx)).unwrap();
         }
 
         // Now that the channel is open, send the data
@@ -215,14 +254,19 @@ impl AsyncWrite for PollDataChannel {
     ///
     /// We can therefore create a callback future called `onbufferedamountlow_fut` to listen for `bufferedamountlow` event and wake the task
     /// The default `bufferedAmountLowThreshold` value is 0.
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // if bufferedamountlow empty, return ready
-        if self.data_channel.buffered_amount() == 0 {
+        if self.data_channel.borrow().buffered_amount() == 0 {
             return Poll::Ready(Ok(()));
         }
 
         // Otherwise, wait for the event to occur, so poll on onbufferedamountlow_fut
-        match self.rx_onbufferedamountlow.poll_next_unpin(cx) {
+        match self
+            .data_channel
+            .borrow_mut()
+            .rx_onbufferedamountlow
+            .poll_next_unpin(cx)
+        {
             Poll::Pending => Poll::Pending,
             _ => Poll::Ready(Ok(())),
         }
@@ -230,11 +274,11 @@ impl AsyncWrite for PollDataChannel {
 
     /// Initiates or attempts to shut down this writer,
     /// returning success when the connection callback returns has completely shut down.
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         log::trace!("poll_close");
-        self.data_channel.close();
-        // TODO: Confirm that channels are closing properyl. Poll onclose 'should' be done here but it Errors when sent, as data channals can be closed by either end
-        let _ = ready!(self.rx_onclose.poll_unpin(cx));
+        self.data_channel.borrow().inner.close();
+        // TODO: Confirm that channels are closing properly. Poll onclose trigger onclose event, but this should be tested (currently) is not tested
+        let _ = ready!(self.data_channel.borrow_mut().rx_onclose.poll_unpin(cx));
         log::trace!("close complete");
         Poll::Ready(Ok(()))
     }
@@ -249,14 +293,8 @@ impl Clone for PollDataChannel {
 impl fmt::Debug for PollDataChannel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PollDataChannel")
-            .field("data_channel", &self.data_channel)
+            .field("data_channel", &self.data_channel.borrow().inner)
             .field("read_buf_cap", &self.read_buf_cap)
             .finish()
-    }
-}
-
-impl AsRef<RtcDataChannel> for PollDataChannel {
-    fn as_ref(&self) -> &RtcDataChannel {
-        &self.data_channel
     }
 }

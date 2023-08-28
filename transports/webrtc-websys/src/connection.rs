@@ -42,7 +42,7 @@ struct ConnectionInner {
 
     /// A list of futures, which, once completed, signal that a [`WebRTCStream`] has been dropped.
     /// Currently unimplemented, will be implemented in a future PR.
-    drop_listeners: FuturesUnordered<super::stream::DropListener>,
+    drop_listeners: FuturesUnordered<crate::stream::DropListener>,
     /// Currently unimplemented, will be implemented in a future PR.
     no_drop_listeners_waker: Option<Waker>,
 }
@@ -85,7 +85,13 @@ impl ConnectionInner {
         // Create Regular Data Channel
         log::trace!("Creating outbound data channel");
         let dc = RtcDataChannelBuilder::default().build_with(&self.peer_connection);
-        let channel = Stream::new(dc);
+        let (channel, drop_listener) = Stream::new(dc);
+
+        self.drop_listeners.push(drop_listener);
+        if let Some(waker) = self.no_drop_listeners_waker.take() {
+            waker.wake()
+        }
+
         Poll::Ready(Ok(channel))
     }
 
@@ -98,7 +104,13 @@ impl ConnectionInner {
         match ready!(self.rx_ondatachannel.poll_next_unpin(cx)) {
             Some(dc) => {
                 // Create a WebRTC Stream from the Data Channel
-                let channel = Stream::new(dc);
+                let (channel, drop_listener) = Stream::new(dc);
+
+                self.drop_listeners.push(drop_listener);
+                if let Some(waker) = self.no_drop_listeners_waker.take() {
+                    waker.wake()
+                }
+
                 log::trace!("connection::poll_ondatachannel ready");
                 Poll::Ready(Ok(channel))
             }

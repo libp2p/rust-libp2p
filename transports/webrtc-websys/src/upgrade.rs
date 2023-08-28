@@ -62,7 +62,8 @@ async fn outbound_inner(
         .negotiated(true)
         .build_with(&peer_connection);
 
-    let webrtc_stream = Stream::new(handshake_data_channel);
+    let (channel, listener) = Stream::new(handshake_data_channel);
+    drop(listener);
 
     let ufrag = libp2p_webrtc_utils::sdp::random_ufrag();
 
@@ -101,13 +102,7 @@ async fn outbound_inner(
     log::trace!("local_fingerprint: {:?}", local_fingerprint);
     log::trace!("remote_fingerprint: {:?}", remote_fingerprint);
 
-    let peer_id = noise::outbound(
-        id_keys,
-        webrtc_stream,
-        remote_fingerprint,
-        local_fingerprint,
-    )
-    .await?;
+    let peer_id = noise::outbound(id_keys, channel, remote_fingerprint, local_fingerprint).await?;
 
     log::debug!("Remote peer identified as {peer_id}");
 

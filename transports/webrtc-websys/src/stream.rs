@@ -1,6 +1,8 @@
 //! The WebRTC [Stream] over the Connection
 use self::framed_dc::FramedDc;
+use self::poll_data_channel::DataChannel;
 use bytes::Bytes;
+use futures::channel::oneshot;
 use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
 use libp2p_webrtc_utils::proto::{Flag, Message};
 use libp2p_webrtc_utils::stream::{
@@ -8,8 +10,10 @@ use libp2p_webrtc_utils::stream::{
     MAX_DATA_LEN,
 };
 use send_wrapper::SendWrapper;
+use std::cell::RefCell;
 use std::io;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::task::{ready, Context, Poll};
 use web_sys::{RtcDataChannel, RtcDataChannelInit, RtcDataChannelType, RtcPeerConnection};
 
@@ -17,7 +21,7 @@ mod drop_listener;
 mod framed_dc;
 mod poll_data_channel;
 
-pub(crate) use drop_listener::DropListener;
+pub(crate) use drop_listener::{DropListener, GracefullyClosed};
 
 /// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
 const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
@@ -65,16 +69,25 @@ pub struct Stream {
     state: State,
     /// Buffer for incoming data
     read_buffer: Bytes,
+    // Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
+    drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
 impl Stream {
     /// Create a new WebRTC Substream
-    pub fn new(channel: RtcDataChannel) -> Self {
-        Self {
-            inner: SendWrapper::new(StreamInner::new(channel)),
+    pub(crate) fn new(channel: RtcDataChannel) -> (Self, DropListener) {
+        let (sender, receiver) = oneshot::channel();
+        let wrapped_dc = Rc::new(RefCell::new(DataChannel::new(channel)));
+
+        let drop_listener = DropListener::new(framed_dc::new(wrapped_dc.clone()), receiver);
+
+        let stream = Self {
+            inner: SendWrapper::new(StreamInner::new(wrapped_dc)),
             read_buffer: Bytes::new(),
             state: State::Open,
-        }
+            drop_notifier: Some(sender),
+        };
+        (stream, drop_listener)
     }
 }
 
@@ -85,9 +98,9 @@ struct StreamInner {
 
 /// Inner Stream to make Sendable
 impl StreamInner {
-    pub fn new(channel: RtcDataChannel) -> Self {
+    pub fn new(wrapped_dc: Rc<RefCell<DataChannel>>) -> Self {
         Self {
-            io: framed_dc::new(channel),
+            io: framed_dc::new(wrapped_dc),
         }
     }
 }
@@ -208,12 +221,12 @@ impl AsyncWrite for Stream {
 
                     self.state.write_closed();
 
-                    // TODO: implement drop_notifier? Drop notifier built into the Browser as 'onclose' event
-                    // let _ = self
-                    //     .drop_notifier
-                    //     .take()
-                    //     .expect("to not close twice")
-                    //     .send(GracefullyClosed {});
+                    // TODO: implement drop notifier. Drop notifier built into the Browser as 'onclose' event
+                    let _ = self
+                        .drop_notifier
+                        .take()
+                        .expect("to not close twice")
+                        .send(GracefullyClosed {});
 
                     return Poll::Ready(Ok(()));
                 }
