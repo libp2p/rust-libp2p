@@ -187,7 +187,7 @@ pub fn render_description(
 }
 
 /// Get Fingerprint from SDP
-/// Gets the fingerprint from matching between the angle brackets: a=fingerprint:<hash-algo> <fingerprint>
+/// Gets the fingerprint from: a=fingerprint: hash-algo  fingerprint
 pub fn fingerprint(sdp: &str) -> Option<Fingerprint> {
     // split the sdp by new lines / carriage returns
     let lines = sdp.split("\r\n");
