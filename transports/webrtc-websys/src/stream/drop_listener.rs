@@ -77,24 +77,26 @@ impl Future for DropListener {
                     stream,
                     substream_id,
                     mut receiver,
-                } => match receiver.poll_unpin(cx) {
-                    Poll::Ready(Ok(GracefullyClosed {})) => {
-                        return Poll::Ready(Ok(()));
+                } => {
+                    match receiver.poll_unpin(cx) {
+                        Poll::Ready(Ok(GracefullyClosed {})) => {
+                            return Poll::Ready(Ok(()));
+                        }
+                        Poll::Ready(Err(Canceled)) => {
+                            log::info!("Stream {substream_id} dropped without graceful close, sending Reset");
+                            *state = State::SendingReset { stream };
+                            continue;
+                        }
+                        Poll::Pending => {
+                            *state = State::Idle {
+                                stream,
+                                substream_id,
+                                receiver,
+                            };
+                            return Poll::Pending;
+                        }
                     }
-                    Poll::Ready(Err(Canceled)) => {
-                        log::info!("Stream {substream_id} dropped without graceful close, sending Reset");
-                        *state = State::SendingReset { stream };
-                        continue;
-                    }
-                    Poll::Pending => {
-                        *state = State::Idle {
-                            stream,
-                            substream_id,
-                            receiver,
-                        };
-                        return Poll::Pending;
-                    }
-                },
+                }
                 State::SendingReset { mut stream } => match stream.poll_ready_unpin(cx)? {
                     Poll::Ready(()) => {
                         stream.start_send_unpin(Message {
