@@ -727,7 +727,6 @@ dependencies = [
 name = "browser-webrtc-example-client"
 version = "0.1.0"
 dependencies = [
- "console_error_panic_hook",
  "futures",
  "js-sys",
  "libp2p",

@@ -1,6 +1,5 @@
 mod error;
 mod pinger;
-mod utils;
 
 use crate::error::PingerError;
 use futures::channel;
