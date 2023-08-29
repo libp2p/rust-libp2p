@@ -40,7 +40,7 @@ struct ConnectionInner {
     /// A channel that signals incoming data channels
     rx_ondatachannel: channel::mpsc::Receiver<RtcDataChannel>,
 
-    /// A list of futures, which, once completed, signal that a [`WebRTCStream`] has been dropped.
+    /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     /// Currently unimplemented, will be implemented in a future PR.
     drop_listeners: FuturesUnordered<crate::stream::DropListener>,
     /// Currently unimplemented, will be implemented in a future PR.

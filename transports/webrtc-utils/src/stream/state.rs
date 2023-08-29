@@ -277,7 +277,7 @@ impl State {
         }
     }
 
-    /// Acts as a "barrier" for [`Substream::poll_close_read`](super::Substream::poll_close_read).
+    /// Acts as a "barrier" for `stream::poll_close_read`.
     pub fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match self {

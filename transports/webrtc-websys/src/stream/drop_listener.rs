@@ -82,7 +82,7 @@ impl Future for DropListener {
                         return Poll::Ready(Ok(()));
                     }
                     Poll::Ready(Err(Canceled)) => {
-                        log::info!("Substream {substream_id} dropped without graceful close, sending Reset");
+                        log::info!("Stream {substream_id} dropped without graceful close, sending Reset");
                         *state = State::SendingReset { stream };
                         continue;
                     }

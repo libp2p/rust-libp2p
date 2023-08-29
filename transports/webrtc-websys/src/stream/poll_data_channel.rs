@@ -12,7 +12,7 @@ use std::task::{ready, Context, Poll};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
-/// Default capacity of the temporary read buffer used by [`webrtc_sctp::stream::PollStream`].
+/// Default capacity of the temporary read buffer used by `webrtc_sctp::stream::PollStream`.
 const DEFAULT_READ_BUF_SIZE: usize = 8192;
 
 /// [`DataChannel`] is a wrapper around around [`RtcDataChannel`] which initializes event callback handlers.

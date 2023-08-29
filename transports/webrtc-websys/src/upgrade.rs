@@ -56,7 +56,7 @@ async fn outbound_inner(
 
     let peer_connection = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
 
-    // Create substream for Noise handshake
+    // Create stream for Noise handshake
     // Must create data channel before Offer is created for it to be included in the SDP
     let handshake_data_channel = RtcDataChannelBuilder::default()
         .negotiated(true)

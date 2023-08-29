@@ -61,7 +61,7 @@ impl RtcDataChannelBuilder {
     }
 }
 
-/// Substream over the Connection
+/// Stream over the Connection
 pub struct Stream {
     /// Wrapper for the inner stream to make it Send
     inner: SendWrapper<StreamInner>,
@@ -74,7 +74,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    /// Create a new WebRTC Substream
+    /// Create a new WebRTC Stream
     pub(crate) fn new(channel: RtcDataChannel) -> (Self, DropListener) {
         let (sender, receiver) = oneshot::channel();
         let wrapped_dc = Rc::new(RefCell::new(DataChannel::new(channel)));
