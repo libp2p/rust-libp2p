@@ -1,5 +1,67 @@
 [workspace]
-members = ["core", "examples/autonat", "examples/browser-webrtc/client", "examples/browser-webrtc/server", "examples/chat-example", "examples/dcutr", "examples/distributed-key-value-store", "examples/file-sharing", "examples/identify", "examples/ipfs-kad", "examples/ipfs-private", "examples/metrics", "examples/ping-example", "examples/relay-server", "examples/rendezvous", "identity", "interop-tests", "misc/allow-block-list", "misc/connection-limits", "misc/keygen", "misc/memory-connection-limits", "misc/metrics", "misc/multistream-select", "misc/quick-protobuf-codec", "misc/quickcheck-ext", "misc/rw-stream-sink", "misc/server", "muxers/mplex", "muxers/test-harness", "muxers/yamux", "protocols/autonat", "protocols/dcutr", "protocols/floodsub", "protocols/gossipsub", "protocols/identify", "protocols/kad", "protocols/mdns", "protocols/perf", "protocols/ping", "protocols/relay", "protocols/rendezvous", "protocols/request-response", "swarm", "swarm-derive", "swarm-test", "transports/deflate", "transports/dns", "transports/noise", "transports/plaintext", "transports/pnet", "transports/quic", "transports/tcp", "transports/tls", "transports/uds", "transports/wasm-ext", "transports/webrtc", "transports/webrtc-utils", "transports/webrtc-websys", "transports/websocket", "transports/webtransport-websys", "wasm-tests/webtransport-tests"]
+members = [
+    "core",
+    "examples/autonat",
+    "examples/browser-webrtc/client",
+    "examples/browser-webrtc/server",
+    "examples/chat-example",
+    "examples/dcutr",
+    "examples/distributed-key-value-store",
+    "examples/file-sharing",
+    "examples/identify",
+    "examples/ipfs-kad",
+    "examples/ipfs-private",
+    "examples/metrics",
+    "examples/ping-example",
+    "examples/relay-server",
+    "examples/rendezvous",
+    "identity",
+    "interop-tests",
+    "misc/allow-block-list",
+    "misc/connection-limits",
+    "misc/keygen",
+    "misc/memory-connection-limits",
+    "misc/metrics",
+    "misc/multistream-select",
+    "misc/quick-protobuf-codec",
+    "misc/quickcheck-ext",
+    "misc/rw-stream-sink",
+    "misc/server",
+    "muxers/mplex",
+    "muxers/test-harness",
+    "muxers/yamux",
+    "protocols/autonat",
+    "protocols/dcutr",
+    "protocols/floodsub",
+    "protocols/gossipsub",
+    "protocols/identify",
+    "protocols/kad",
+    "protocols/mdns",
+    "protocols/perf",
+    "protocols/ping",
+    "protocols/relay",
+    "protocols/rendezvous",
+    "protocols/request-response",
+    "swarm",
+    "swarm-derive",
+    "swarm-test",
+    "transports/deflate",
+    "transports/dns",
+    "transports/noise",
+    "transports/plaintext",
+    "transports/pnet",
+    "transports/quic",
+    "transports/tcp",
+    "transports/tls",
+    "transports/uds",
+    "transports/wasm-ext",
+    "transports/webrtc",
+    "transports/webrtc-utils",
+    "transports/webrtc-websys",
+    "transports/websocket",
+    "transports/webtransport-websys",
+    "wasm-tests/webtransport-tests",
+]
 resolver = "2"
 
 [workspace.package]
@@ -47,12 +109,12 @@ libp2p-webrtc-websys = { version = "0.1.0-alpha", path = "transports/webrtc-webs
 libp2p-websocket = { version = "0.42.1", path = "transports/websocket" }
 libp2p-webtransport-websys = { version = "0.1.0", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.44.1", path = "muxers/yamux" }
-multiaddr = "0.18.0"
-multihash = "0.19.0"
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
+multiaddr = "0.18.0"
+multihash = "0.19.0"
 
 [patch.crates-io]
 
