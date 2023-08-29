@@ -1,6 +1,6 @@
-## 0.1.0-alpha
+## 0.1.0
 
-- Initial alpha release.
+- Initial release.
   See [PR 4248].
 
 [PR 4248]: https://github.com/libp2p/rust-libp2p/pull/4248

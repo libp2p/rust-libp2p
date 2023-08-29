@@ -16,7 +16,7 @@ ip="0.0.0.0" transport=quic-v1 security=quic muxer=quic is_dialer="false" cargo 
 To test the interop with other versions do something similar, except replace one
 of these nodes with the other version's interop test.
 
-# Running this test with webtransport dialer in browser
+# Running this test with webtransport and webrtc dialer in browser
 
 To run the webtransport test from within the browser, you'll need the
 `chromedriver` in your `$PATH`, compatible with your Chrome browser.
