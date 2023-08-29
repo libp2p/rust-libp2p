@@ -62,7 +62,7 @@ pub struct Connection {
     /// Future, which, once polled, will result in closing the entire connection.
     close_fut: Option<BoxFuture<'static, Result<(), Error>>>,
 
-    /// A list of futures, which, once completed, signal that a [`Substream`] has been dropped.
+    /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     drop_listeners: FuturesUnordered<stream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 }

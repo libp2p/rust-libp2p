@@ -9,7 +9,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 
 // The PORT that the server serves their Multiaddr
-pub const PORT: u16 = 4455;
+const PORT: u16 = 4455;
 
 pub(crate) async fn start_pinger(
     mut sendr: channel::mpsc::Sender<Result<f32, PingerError>>,
@@ -65,7 +65,7 @@ struct Behaviour {
 ///
 /// It fetches the multiaddress via HTTP request to
 /// 127.0.0.1:4455.
-pub async fn fetch_server_addr() -> String {
+async fn fetch_server_addr() -> String {
     let url = format!("http://127.0.0.1:{}/", PORT);
     let window = web_sys::window().expect("no global `window` exists");
 
