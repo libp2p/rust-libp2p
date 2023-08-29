@@ -96,7 +96,7 @@ async fn outbound_inner(
     };
     let local_fingerprint = match libp2p_webrtc_utils::sdp::fingerprint(&local_sdp) {
         Some(fingerprint) => fingerprint,
-        None => return Err(Error::JsError(format!("No local fingerprint found"))),
+        None => return Err(Error::JsError("No local fingerprint found".to_string())),
     };
 
     log::trace!("local_fingerprint: {:?}", local_fingerprint);

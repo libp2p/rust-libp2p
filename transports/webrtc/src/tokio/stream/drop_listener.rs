@@ -27,8 +27,8 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use libp2p_webrtc_utils::proto::{Flag, Message};
 use crate::tokio::stream::framed_dc::FramedDc;
+use libp2p_webrtc_utils::proto::{Flag, Message};
 
 #[must_use]
 pub(crate) struct DropListener {

@@ -18,7 +18,7 @@ const DEFAULT_READ_BUF_SIZE: usize = 8192;
 /// [`DataChannel`] is a wrapper around around [`RtcDataChannel`] which initializes event callback handlers.
 ///
 /// Separating this into its own struct enables us fine grained control over when the callbacks are initialized.
-pub struct DataChannel {
+pub(crate) struct DataChannel {
     /// The [RtcDataChannel] being wrapped.
     inner: RtcDataChannel,
 
@@ -139,7 +139,7 @@ impl DataChannel {
 
 /// A wrapper around around [`DataChannel`], which implements [`AsyncRead`] and
 /// [`AsyncWrite`].
-pub struct PollDataChannel {
+pub(crate) struct PollDataChannel {
     /// The [DataChannel]
     data_channel: Rc<RefCell<DataChannel>>,
 
@@ -156,7 +156,7 @@ impl PollDataChannel {
     }
 
     /// Obtain a clone of the mutable smart pointer to the [`DataChannel`].
-    pub fn clone_inner(&self) -> Rc<RefCell<DataChannel>> {
+    fn clone_inner(&self) -> Rc<RefCell<DataChannel>> {
         self.data_channel.clone()
     }
 
@@ -219,7 +219,7 @@ impl AsyncRead for PollDataChannel {
 
 impl AsyncWrite for PollDataChannel {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {

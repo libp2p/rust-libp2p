@@ -6,7 +6,7 @@ use wasm_bindgen::JsValue;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.
-pub fn answer(
+pub(crate) fn answer(
     addr: SocketAddr,
     server_fingerprint: &Fingerprint,
     client_ufrag: &str,
@@ -24,7 +24,7 @@ pub fn answer(
 /// Creates the munged SDP offer from the Browser's given SDP offer
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescriptionInit {
+pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescriptionInit {
     //JsValue to String
     let offer = Reflect::get(&offer, &JsValue::from_str("sdp")).unwrap();
     let offer = offer.as_string().unwrap();

@@ -37,9 +37,9 @@ use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
 
-use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
 use crate::tokio::fingerprint::Fingerprint;
 use crate::tokio::sdp::random_ufrag;
+use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(

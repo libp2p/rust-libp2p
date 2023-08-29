@@ -16,7 +16,7 @@ use libp2p_webrtc_utils::stream::state::{Closing, State};
 use libp2p_webrtc_utils::fingerprint::{Fingerprint, SHA256};
 
 // Utility Error types
-use libp2p_webrtc_utils::Error
+use libp2p_webrtc_utils::Error;
 
 // Session Description Protocol ufrag generation and rendering
 use libp2p_webrtc_utils::sdp::{random_ufrag, render_description};

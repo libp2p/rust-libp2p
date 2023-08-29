@@ -28,7 +28,7 @@ const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybu
 
 /// Builder for DataChannel
 #[derive(Default, Debug)]
-pub struct RtcDataChannelBuilder {
+pub(crate) struct RtcDataChannelBuilder {
     negotiated: bool,
 }
 
@@ -38,13 +38,13 @@ pub struct RtcDataChannelBuilder {
 impl RtcDataChannelBuilder {
     /// Sets the DataChannel to be used for the Noise handshake
     /// Defaults to false
-    pub fn negotiated(&mut self, negotiated: bool) -> &mut Self {
+    pub(crate) fn negotiated(&mut self, negotiated: bool) -> &mut Self {
         self.negotiated = negotiated;
         self
     }
 
     /// Builds the WebRTC DataChannel from [RtcPeerConnection] with the given configuration
-    pub fn build_with(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
+    pub(crate) fn build_with(&self, peer_connection: &RtcPeerConnection) -> RtcDataChannel {
         const LABEL: &str = "";
 
         let dc = match self.negotiated {
@@ -98,7 +98,7 @@ struct StreamInner {
 
 /// Inner Stream to make Sendable
 impl StreamInner {
-    pub fn new(wrapped_dc: Rc<RefCell<DataChannel>>) -> Self {
+    fn new(wrapped_dc: Rc<RefCell<DataChannel>>) -> Self {
         Self {
             io: framed_dc::new(wrapped_dc),
         }

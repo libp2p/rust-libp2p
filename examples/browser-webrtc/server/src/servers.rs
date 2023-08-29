@@ -10,8 +10,8 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
-pub const STATIC_PORT: u16 = 8080;
-pub const MA_PORT: u16 = 4455;
+const STATIC_PORT: u16 = 8080;
+const MA_PORT: u16 = 4455;
 
 /// Serve the Multiaddr we are listening on
 pub(crate) async fn serve_multiaddr(address: String) {
