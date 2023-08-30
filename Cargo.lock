@@ -2873,6 +2873,7 @@ dependencies = [
  "smallvec",
  "socket2 0.5.3",
  "tokio",
+ "tracing",
  "trust-dns-proto",
  "void",
 ]

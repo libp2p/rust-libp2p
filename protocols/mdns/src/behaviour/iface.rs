@@ -37,6 +37,7 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+use tracing::{info, trace, debug, error};
 
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
@@ -102,7 +103,7 @@ where
 {
     /// Builds a new [`InterfaceState`].
     pub(crate) fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
-        log::info!("creating instance on iface {}", addr);
+        info!("creating instance on iface {}", addr);
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
                 let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -167,7 +168,7 @@ where
     }
 
     pub(crate) fn reset_timer(&mut self) {
-        log::trace!("reset timer on {:#?} {:#?}", self.addr, self.probe_state);
+        trace!("reset timer on {:#?} {:#?}", self.addr, self.probe_state);
         let interval = *self.probe_state.interval();
         self.timeout = T::interval(interval);
     }
@@ -184,9 +185,9 @@ where
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-                log::trace!("sending query on iface {}", self.addr);
+                trace!("sending query on iface {}", self.addr);
                 self.send_buffer.push_back(build_query());
-                log::trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
+                trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
 
                 // Stop to probe when the initial interval reach the query interval
                 if let ProbeState::Probing(interval) = self.probe_state {
@@ -209,11 +210,11 @@ where
                     SocketAddr::new(self.multicast_addr, 5353),
                 ) {
                     Poll::Ready(Ok(_)) => {
-                        log::trace!("sent packet on iface {}", self.addr);
+                        trace!("sent packet on iface {}", self.addr);
                         continue;
                     }
                     Poll::Ready(Err(err)) => {
-                        log::error!("error sending packet on iface {} {}", self.addr, err);
+                        error!("error sending packet on iface {} {}", self.addr, err);
                         continue;
                     }
                     Poll::Pending => {
@@ -233,7 +234,7 @@ where
                 .map_ok(|(len, from)| MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from))
             {
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Query(query))))) => {
-                    log::trace!(
+                    trace!(
                         "received query from {} on {}",
                         query.remote_addr(),
                         self.addr
@@ -248,7 +249,7 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Response(response))))) => {
-                    log::trace!(
+                    trace!(
                         "received response from {} on {}",
                         response.remote_addr(),
                         self.addr
@@ -265,7 +266,7 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
-                    log::trace!(
+                    trace!(
                         "received service discovery from {} on {}",
                         disc.remote_addr(),
                         self.addr
@@ -279,10 +280,10 @@ where
                     // No more bytes available on the socket to read
                 }
                 Poll::Ready(Err(err)) => {
-                    log::error!("failed reading datagram: {}", err);
+                    error!("failed reading datagram: {}", err);
                 }
                 Poll::Ready(Ok(Err(err))) => {
-                    log::debug!("Parsing mdns packet failed: {:?}", err);
+                    debug!("Parsing mdns packet failed: {:?}", err);
                 }
                 Poll::Ready(Ok(Ok(None))) | Poll::Pending => {}
             }

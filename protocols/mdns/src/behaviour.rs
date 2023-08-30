@@ -229,7 +229,7 @@ where
 
         match event {
             FromSwarm::NewListener(_) => {
-                log::trace!("waking interface state because listening address changed");
+                tracing::trace!("waking interface state because listening address changed");
                 for iface in self.iface_states.values_mut() {
                     iface.fire_timer();
                 }
@@ -272,17 +272,17 @@ where
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }
-                            Err(err) => log::error!("failed to create `InterfaceState`: {}", err),
+                            Err(err) => tracing::error!("failed to create `InterfaceState`: {}", err),
                         }
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
                     if self.iface_states.contains_key(&inet.addr()) {
-                        log::info!("dropping instance {}", inet.addr());
+                        tracing::info!("dropping instance {}", inet.addr());
                         self.iface_states.remove(&inet.addr());
                     }
                 }
-                Err(err) => log::error!("if watch returned an error: {}", err),
+                Err(err) => tracing::error!("if watch returned an error: {}", err),
             }
         }
         // Emit discovered event.
@@ -298,7 +298,7 @@ where
                 {
                     *cur_expires = cmp::max(*cur_expires, expiration);
                 } else {
-                    log::info!("discovered: {} {}", peer, addr);
+                    tracing::info!("discovered: {} {}", peer, addr);
                     self.discovered_nodes.push((peer, addr.clone(), expiration));
                     discovered.push((peer, addr));
                 }
@@ -314,7 +314,7 @@ where
         let mut expired = Vec::new();
         self.discovered_nodes.retain(|(peer, addr, expiration)| {
             if *expiration <= now {
-                log::info!("expired: {} {}", peer, addr);
+                tracing::info!("expired: {} {}", peer, addr);
                 expired.push((*peer, addr.clone()));
                 return false;
             }
