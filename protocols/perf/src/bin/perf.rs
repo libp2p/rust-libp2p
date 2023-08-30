@@ -32,7 +32,7 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
-use log::{error, info};
+use tracing::{error, info};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
