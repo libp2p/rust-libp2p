@@ -119,7 +119,7 @@ impl Handler {
                     )
                     .is_some()
                 {
-                    log::warn!(
+                    tracing::warn!(
                         "New inbound connect stream while still upgrading previous one. \
                          Replacing previous with new.",
                     );

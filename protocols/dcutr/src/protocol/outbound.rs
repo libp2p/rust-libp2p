@@ -87,14 +87,14 @@ impl upgrade::OutboundUpgrade<Stream> for Upgrade {
                     .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
                         Ok(a) => Some(a),
                         Err(e) => {
-                            log::debug!("Unable to parse multiaddr: {e}");
+                            tracing::debug!("Unable to parse multiaddr: {e}");
                             None
                         }
                     })
                     // Filter out relayed addresses.
                     .filter(|a| {
                         if a.iter().any(|p| p == Protocol::P2pCircuit) {
-                            log::debug!("Dropping relayed address {a}");
+                            tracing::debug!("Dropping relayed address {a}");
                             false
                         } else {
                             true

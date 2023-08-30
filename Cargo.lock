@@ -1313,6 +1313,8 @@ dependencies = [
  "libp2p",
  "libp2p-quic",
  "log",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2672,6 +2674,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "thiserror",
+ "tracing",
  "void",
 ]
 

@@ -43,6 +43,8 @@ use libp2p_quic as quic;
 use log::info;
 use std::error::Error;
 use std::str::FromStr;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p DCUtR client")]
@@ -82,7 +84,11 @@ impl FromStr for Mode {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let opts = Opts::parse();
 
