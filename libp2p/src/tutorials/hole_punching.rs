@@ -54,7 +54,7 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example relay_v2 -p libp2p-relay
+//! cargo build --example relay_v2
 //! ```
 //!
 //! You can find the binary at `target/debug/examples/relay_v2`. In case you built it locally, copy
@@ -122,7 +122,7 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example client -p libp2p-dcutr
+//! cargo build --example client
 //! ```
 //!
 //! You can find the binary at `target/debug/examples/client`. In case you built it locally, copy
