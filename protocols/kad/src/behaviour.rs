@@ -47,7 +47,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use log::{debug, info, warn};
+use tracing::{debug, info, warn, trace, Level};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -1027,7 +1027,7 @@ where
 
         let num_connections = self.connections.len();
 
-        log::debug!(
+        debug!(
             "Re-configuring {} established connection{}",
             num_connections,
             if num_connections > 1 { "s" } else { "" }
@@ -1050,7 +1050,7 @@ where
     fn determine_mode_from_external_addresses(&mut self) {
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
-                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+                debug!("Switching to client-mode because we no longer have any confirmed external addresses");
 
                 Mode::Client
             }
@@ -1060,11 +1060,11 @@ where
                 Mode::Client
             }
             (confirmed_external_addresses, Mode::Client) => {
-                if log::log_enabled!(log::Level::Debug) {
+                if tracing::enabled!(Level::DEBUG) {
                     let confirmed_external_addresses =
                         to_comma_separated_list(confirmed_external_addresses);
 
-                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
                 }
 
                 Mode::Server
@@ -1092,9 +1092,9 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            log::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
+            trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
-                log::trace!(
+                trace!(
                     "Peer {:?} reported by {:?} in query {:?}.",
                     peer,
                     source,
@@ -1324,7 +1324,7 @@ where
     /// Handles a finished (i.e. successful) query.
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
-        log::trace!("Query {:?} finished.", query_id);
+        trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1562,7 +1562,7 @@ where
     /// Handles a query that timed out.
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
-        log::trace!("Query {:?} timed out.", query_id);
+        trace!("Query {:?} timed out.", query_id);
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -2261,7 +2261,7 @@ where
             }
 
             KademliaHandlerEvent::QueryError { query_id, error } => {
-                log::debug!(
+                debug!(
                     "Request to {:?} in query {:?} failed with {:?}",
                     source,
                     query_id,
@@ -2353,7 +2353,7 @@ where
 
                             *step = step.next();
                         } else {
-                            log::trace!("Record with key {:?} not found at {}", key, source);
+                            trace!("Record with key {:?} not found at {}", key, source);
                             if let KademliaCaching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());

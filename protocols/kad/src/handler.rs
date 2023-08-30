@@ -38,7 +38,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use log::trace;
+use tracing::{trace, debug, warn};
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{
@@ -481,12 +481,12 @@ impl KademliaHandler {
     ) -> Self {
         match &endpoint {
             ConnectedPoint::Dialer { .. } => {
-                log::debug!(
+                debug!(
                     "Operating in {mode}-mode on new outbound connection to {remote_peer_id}"
                 );
             }
             ConnectedPoint::Listener { .. } => {
-                log::debug!(
+                debug!(
                     "Operating in {mode}-mode on new inbound connection to {remote_peer_id}"
                 );
             }
@@ -566,13 +566,13 @@ impl KademliaHandler {
                 )
             }) {
                 *s = InboundSubstreamState::Cancelled;
-                log::debug!(
+                debug!(
                     "New inbound substream to {:?} exceeds inbound substream limit. \
                     Removed older substream waiting to be reused.",
                     self.remote_peer_id,
                 )
             } else {
-                log::warn!(
+                warn!(
                     "New inbound substream to {:?} exceeds inbound substream limit. \
                      No older substream waiting to be reused. Dropping new substream.",
                     self.remote_peer_id,
@@ -704,12 +704,12 @@ impl ConnectionHandler for KademliaHandler {
 
                 match &self.endpoint {
                     ConnectedPoint::Dialer { .. } => {
-                        log::debug!(
+                        debug!(
                             "Now operating in {new_mode}-mode on outbound connection with {peer}"
                         )
                     }
                     ConnectedPoint::Listener { local_addr, .. } => {
-                        log::debug!("Now operating in {new_mode}-mode on inbound connection with {peer} assuming that one of our external addresses routes to {local_addr}")
+                        debug!("Now operating in {new_mode}-mode on inbound connection with {peer} assuming that one of our external addresses routes to {local_addr}")
                     }
                 }
 
@@ -808,7 +808,7 @@ impl ConnectionHandler for KademliaHandler {
                     match (remote_supports_our_kademlia_protocols, self.protocol_status) {
                         (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
                         (true, _) => {
-                            log::debug!(
+                            debug!(
                                 "Remote {} now supports our kademlia protocol on connection {}",
                                 self.remote_peer_id,
                                 self.connection_id,
@@ -817,7 +817,7 @@ impl ConnectionHandler for KademliaHandler {
                             self.protocol_status = ProtocolStatus::Confirmed;
                         }
                         (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            log::debug!(
+                            debug!(
                                 "Remote {} no longer supports our kademlia protocol on connection {}",
                                 self.remote_peer_id,
                                 self.connection_id,
@@ -1005,7 +1005,7 @@ impl futures::Stream for InboundSubstreamState {
                     mut substream,
                 } => match substream.poll_next_unpin(cx) {
                     Poll::Ready(Some(Ok(KadRequestMsg::Ping))) => {
-                        log::warn!("Kademlia PING messages are unsupported");
+                        warn!("Kademlia PING messages are unsupported");
 
                         *this = InboundSubstreamState::Closing(substream);
                     }

@@ -2845,6 +2845,7 @@ dependencies = [
  "sha2 0.10.7",
  "smallvec",
  "thiserror",
+ "tracing",
  "uint",
  "unsigned-varint",
  "void",
