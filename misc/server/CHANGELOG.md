@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.12.2]
 ### Fixed
 - Adhere to `--metrics-path` flag and listen on `0.0.0.0:8888` (default IPFS metrics port).
-  [PR XXX]
+  [PR 4392]
 
-[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+[PR 4392]: https://github.com/libp2p/rust-libp2p/pull/4392
 
 ## [0.12.1]
 ### Changed
