@@ -3170,11 +3170,11 @@ dependencies = [
  "libp2p-swarm-test",
  "libp2p-tcp",
  "libp2p-yamux",
- "log",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "smallvec",
+ "tracing",
  "void",
 ]
 
