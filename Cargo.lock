@@ -2763,6 +2763,7 @@ dependencies = [
  "serde",
  "sha2 0.10.7",
  "smallvec",
+ "tracing",
  "unsigned-varint",
  "void",
 ]

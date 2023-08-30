@@ -31,7 +31,7 @@ use std::{
 
 use futures::StreamExt;
 use futures_ticker::Ticker;
-use log::{debug, error, trace, warn};
+use tracing::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 

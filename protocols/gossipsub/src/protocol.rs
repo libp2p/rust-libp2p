@@ -34,7 +34,7 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use log::{debug, warn};
+use tracing::{debug, warn};
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;

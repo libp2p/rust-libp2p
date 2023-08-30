@@ -40,6 +40,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use tracing::{debug, trace, warn};
 use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
@@ -193,7 +194,7 @@ impl EnabledHandler {
         }
 
         // new inbound substream. Replace the current one, if it exists.
-        log::trace!("New inbound substream request");
+        trace!("New inbound substream request");
         self.inbound_substream = Some(InboundSubstreamState::WaitingInput(substream));
     }
 
@@ -264,7 +265,7 @@ impl EnabledHandler {
                             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(message));
                         }
                         Poll::Ready(Some(Err(error))) => {
-                            log::debug!("Failed to read from inbound stream: {error}");
+                            debug!("Failed to read from inbound stream: {error}");
                             // Close this side of the stream. If the
                             // peer is still around, they will re-establish their
                             // outbound stream i.e. our inbound stream.
@@ -273,7 +274,7 @@ impl EnabledHandler {
                         }
                         // peer closed the stream
                         Poll::Ready(None) => {
-                            log::debug!("Inbound stream closed by remote");
+                            debug!("Inbound stream closed by remote");
                             self.inbound_substream =
                                 Some(InboundSubstreamState::Closing(substream));
                         }
@@ -291,7 +292,7 @@ impl EnabledHandler {
                                 // Don't close the connection but just drop the inbound substream.
                                 // In case the remote has more to send, they will open up a new
                                 // substream.
-                                log::debug!("Inbound substream error while closing: {e}");
+                                debug!("Inbound substream error while closing: {e}");
                             }
                             self.inbound_substream = None;
                             break;
@@ -341,14 +342,14 @@ impl EnabledHandler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(e) => {
-                                    log::debug!("Failed to send message on outbound stream: {e}");
+                                    debug!("Failed to send message on outbound stream: {e}");
                                     self.outbound_substream = None;
                                     break;
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
-                            log::debug!("Failed to send message on outbound stream: {e}");
+                            debug!("Failed to send message on outbound stream: {e}");
                             self.outbound_substream = None;
                             break;
                         }
@@ -367,7 +368,7 @@ impl EnabledHandler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            log::debug!("Failed to flush outbound stream: {e}");
+                            debug!("Failed to flush outbound stream: {e}");
                             self.outbound_substream = None;
                             break;
                         }
@@ -424,7 +425,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             Handler::Disabled(_) => {
-                log::debug!("Handler is disabled. Dropping message {:?}", message);
+                debug!("Handler is disabled. Dropping message {:?}", message);
             }
         }
     }
@@ -492,7 +493,7 @@ impl ConnectionHandler for Handler {
                     handler.inbound_substream_attempts += 1;
 
                     if handler.inbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
-                        log::warn!(
+                        warn!(
                             "The maximum number of inbound substreams attempts has been exceeded"
                         );
                         *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
@@ -506,7 +507,7 @@ impl ConnectionHandler for Handler {
                     handler.outbound_substream_attempts += 1;
 
                     if handler.outbound_substream_attempts == MAX_SUBSTREAM_ATTEMPTS {
-                        log::warn!(
+                        warn!(
                             "The maximum number of outbound substream attempts has been exceeded"
                         );
                         *self = Handler::Disabled(DisabledHandler::MaxSubstreamAttempts);
@@ -529,7 +530,7 @@ impl ConnectionHandler for Handler {
                         error: StreamUpgradeError::Timeout,
                         ..
                     }) => {
-                        log::debug!("Dial upgrade error: Protocol negotiation timeout");
+                        debug!("Dial upgrade error: Protocol negotiation timeout");
                     }
                     ConnectionEvent::DialUpgradeError(DialUpgradeError {
                         error: StreamUpgradeError::Apply(e),
@@ -540,7 +541,7 @@ impl ConnectionHandler for Handler {
                         ..
                     }) => {
                         // The protocol is not supported
-                        log::debug!(
+                        debug!(
                             "The remote peer does not support gossipsub on this connection"
                         );
                         *self = Handler::Disabled(DisabledHandler::ProtocolUnsupported {
@@ -551,7 +552,7 @@ impl ConnectionHandler for Handler {
                         error: StreamUpgradeError::Io(e),
                         ..
                     }) => {
-                        log::debug!("Protocol negotiation failed: {e}")
+                        debug!("Protocol negotiation failed: {e}")
                     }
                     ConnectionEvent::AddressChange(_)
                     | ConnectionEvent::ListenUpgradeError(_)

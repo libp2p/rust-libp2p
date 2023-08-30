@@ -20,7 +20,7 @@
 
 use crate::types::Subscription;
 use crate::TopicHash;
-use log::debug;
+use tracing::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 pub trait TopicSubscriptionFilter {
