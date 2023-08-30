@@ -29,6 +29,8 @@ use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::time::Duration;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p autonat")]
@@ -45,7 +47,11 @@ struct Opt {
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let opt = Opt::parse();
 

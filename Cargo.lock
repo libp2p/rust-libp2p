@@ -527,6 +527,8 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2590,6 +2592,7 @@ dependencies = [
  "log",
  "quick-protobuf",
  "rand 0.8.5",
+ "tracing",
 ]
 
 [[package]]

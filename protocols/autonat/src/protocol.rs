@@ -115,7 +115,7 @@ impl DialRequest {
         {
             (peer_id, addrs)
         } else {
-            log::debug!("Received malformed dial message.");
+            tracing::debug!("Received malformed dial message.");
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid dial message",
@@ -132,7 +132,7 @@ impl DialRequest {
             .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
                 Ok(a) => Some(a),
                 Err(e) => {
-                    log::debug!("Unable to parse multiaddr: {e}");
+                    tracing::debug!("Unable to parse multiaddr: {e}");
                     None
                 }
             })
@@ -200,7 +200,7 @@ impl TryFrom<proto::ResponseStatus> for ResponseError {
             proto::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
             proto::ResponseStatus::E_INTERNAL_ERROR => Ok(ResponseError::InternalError),
             proto::ResponseStatus::OK => {
-                log::debug!("Received response with status code OK but expected error.");
+                tracing::debug!("Received response with status code OK but expected error.");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid response error type",
@@ -249,7 +249,7 @@ impl DialResponse {
                 result: Err(ResponseError::try_from(status)?),
             },
             _ => {
-                log::debug!("Received malformed response message.");
+                tracing::debug!("Received malformed response message.");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid dial response message",

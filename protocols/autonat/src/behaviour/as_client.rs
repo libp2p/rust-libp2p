@@ -113,7 +113,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         response,
                     },
             } => {
-                log::debug!("Outbound dial-back request returned {:?}.", response);
+                tracing::debug!("Outbound dial-back request returned {:?}.", response);
 
                 let probe_id = self
                     .ongoing_outbound
@@ -155,7 +155,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 error,
                 request_id,
             } => {
-                log::debug!(
+                tracing::debug!(
                     "Outbound Failure {} when on dial-back request to peer {}.",
                     error,
                     peer
@@ -276,13 +276,13 @@ impl<'a> AsClient<'a> {
     ) -> Result<PeerId, OutboundProbeError> {
         let _ = self.last_probe.insert(Instant::now());
         if addresses.is_empty() {
-            log::debug!("Outbound dial-back request aborted: No dial-back addresses.");
+            tracing::debug!("Outbound dial-back request aborted: No dial-back addresses.");
             return Err(OutboundProbeError::NoAddresses);
         }
         let server = match self.random_server() {
             Some(s) => s,
             None => {
-                log::debug!("Outbound dial-back request aborted: No qualified server.");
+                tracing::debug!("Outbound dial-back request aborted: No qualified server.");
                 return Err(OutboundProbeError::NoServer);
             }
         };
@@ -294,7 +294,7 @@ impl<'a> AsClient<'a> {
             },
         );
         self.throttled_servers.push((server, Instant::now()));
-        log::debug!("Send dial-back request to peer {}.", server);
+        tracing::debug!("Send dial-back request to peer {}.", server);
         self.ongoing_outbound.insert(request_id, probe_id);
         Ok(server)
     }
@@ -345,7 +345,7 @@ impl<'a> AsClient<'a> {
             return None;
         }
 
-        log::debug!(
+        tracing::debug!(
             "Flipped assumed NAT status from {:?} to {:?}",
             self.nat_status,
             reported_status
