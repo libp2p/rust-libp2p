@@ -29,6 +29,7 @@ use libp2p::{
     swarm::{SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -43,6 +44,11 @@ struct MyBehaviour {
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
     // Create a random PeerId
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(id_keys.public());
