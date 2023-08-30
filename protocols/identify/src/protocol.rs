@@ -29,7 +29,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
-use log::{debug, trace};
+use tracing::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
 use thiserror::Error;

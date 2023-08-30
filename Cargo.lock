@@ -2788,6 +2788,7 @@ dependencies = [
  "quick-protobuf-codec",
  "smallvec",
  "thiserror",
+ "tracing",
  "void",
 ]
 
