@@ -38,9 +38,15 @@ use libp2p::{
 use libp2p_quic as quic;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let opt = Opt::parse();
     println!("opt: {opt:?}");

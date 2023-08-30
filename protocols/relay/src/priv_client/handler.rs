@@ -38,7 +38,6 @@ use libp2p_swarm::handler::{
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
 };
-use log::debug;
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
@@ -205,7 +204,7 @@ impl Handler {
                 if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
                     && !self.circuit_deny_futs.contains_key(&src_peer_id)
                 {
-                    log::warn!(
+                    tracing::warn!(
                         "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                         src_peer_id,
                     );
@@ -217,7 +216,7 @@ impl Handler {
                     )
                     .is_some()
                 {
-                    log::warn!(
+                    tracing::warn!(
                             "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
                             src_peer_id
                         )
@@ -278,7 +277,7 @@ impl Handler {
                                 Event::OutboundCircuitEstablished { limit },
                             ));
                     }
-                    Err(_) => debug!(
+                    Err(_) => tracing::debug!(
                         "Oneshot to `client::transport::Dial` future dropped. \
                          Dropping established relayed connection to {:?}.",
                         self.remote_peer_id,
@@ -631,12 +630,12 @@ impl Reservation {
                         if let Err(e) = to_listener
                             .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
                         {
-                            debug!("Failed to sent pending message to listener: {:?}", e);
+                            tracing::debug!("Failed to sent pending message to listener: {:?}", e);
                             *self = Reservation::None;
                         }
                     }
                     Poll::Ready(Err(e)) => {
-                        debug!("Channel to listener failed: {:?}", e);
+                        tracing::debug!("Channel to listener failed: {:?}", e);
                         *self = Reservation::None;
                     }
                     Poll::Pending => {}
