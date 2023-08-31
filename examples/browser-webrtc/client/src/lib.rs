@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 #[wasm_bindgen(start)]
-pub fn run() -> Result<(), JsValue> {
+pub async fn run() -> Result<(), JsValue> {
     wasm_logger::init(wasm_logger::Config::default());
 
     // Use `web_sys`'s global `window` function to get a handle on the global
@@ -35,26 +35,22 @@ pub fn run() -> Result<(), JsValue> {
     });
 
     // loop on recvr await, appending to the DOM with date and RTT when we get it
-    spawn_local(async move {
-        loop {
-            match recvr.next().await {
-                Some(Ok(rtt)) => {
-                    log::info!("Got RTT: {}", rtt);
-                    let val = document
-                        .create_element("p")
-                        .expect("should create a p elem");
-                    val.set_text_content(Some(&format!(
-                        "RTT: {}ms at {}",
-                        rtt,
-                        Date::new_0().to_string()
-                    )));
-                    body.append_child(&val).expect("should append body elem");
-                }
-                Some(Err(e)) => log::info!("Error: {:?}", e),
-                None => log::info!("Recvr channel closed"),
+    loop {
+        match recvr.next().await {
+            Some(Ok(rtt)) => {
+                log::info!("Got RTT: {}", rtt);
+                let val = document
+                    .create_element("p")
+                    .expect("should create a p elem");
+                val.set_text_content(Some(&format!(
+                    "RTT: {}ms at {}",
+                    rtt,
+                    Date::new_0().to_string()
+                )));
+                body.append_child(&val).expect("should append body elem");
             }
+            Some(Err(e)) => log::info!("Error: {:?}", e),
+            None => log::info!("Recvr channel closed"),
         }
-    });
-
-    Ok(())
+    }
 }
