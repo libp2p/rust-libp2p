@@ -1,4 +1,3 @@
-use futures::channel;
 use libp2p::ping::Failure;
 use libp2p::{multiaddr, swarm};
 
@@ -7,7 +6,6 @@ pub(crate) enum PingerError {
     Ping(Failure),
     MultiaddrParse(multiaddr::Error),
     Dial(swarm::DialError),
-    Other(String),
 }
 
 impl From<Failure> for PingerError {
@@ -25,11 +23,5 @@ impl From<multiaddr::Error> for PingerError {
 impl From<swarm::DialError> for PingerError {
     fn from(err: swarm::DialError) -> Self {
         PingerError::Dial(err)
-    }
-}
-
-impl From<channel::mpsc::SendError> for PingerError {
-    fn from(err: channel::mpsc::SendError) -> Self {
-        PingerError::Other(format!("SendError: {:?}", err))
     }
 }

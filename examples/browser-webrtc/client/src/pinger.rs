@@ -39,7 +39,9 @@ pub(crate) async fn start_pinger(
         match swarm.next().await.unwrap() {
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(e), .. })) => {
                 log::error!("Ping failed: {:?}", e);
-                sendr.send(Err(e.into())).await?;
+                if sendr.send(Err(e.into())).await.is_err() {
+                    break;
+                }
             }
             SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                 peer,
@@ -47,11 +49,15 @@ pub(crate) async fn start_pinger(
                 ..
             })) => {
                 log::info!("Ping successful: RTT: {rtt:?}, from {peer}");
-                sendr.send(Ok(rtt.as_secs_f32())).await?;
+                if sendr.send(Ok(rtt.as_secs_f32())).await.is_err() {
+                    break;
+                }
             }
             evt => log::info!("Swarm event: {:?}", evt),
         }
     }
+
+    Ok(())
 }
 
 #[derive(NetworkBehaviour)]
