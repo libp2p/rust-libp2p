@@ -1,7 +1,7 @@
 use axum::{
     body::{boxed, Body, BoxBody},
     http::Method,
-    http::{Request, Response, StatusCode, Uri},
+    http::{Request, Response, Uri},
     routing::get,
     Router,
 };
@@ -16,7 +16,7 @@ const PORT: u16 = 8080;
 pub(crate) async fn serve(address: String) {
     let server = Router::new()
         .route("/address", get(|| async { address }))
-        .nest_service("/", get(handler))
+        .nest_service("/", get(get_static_file))
         .layer(
             // allow cors
             CorsLayer::new()
@@ -28,21 +28,6 @@ pub(crate) async fn serve(address: String) {
         .serve(server.into_make_service())
         .await
         .unwrap();
-}
-
-async fn handler(uri: Uri) -> Result<Response<BoxBody>, (StatusCode, String)> {
-    let res = get_static_file(uri.clone()).await;
-
-    if res.status() == StatusCode::NOT_FOUND {
-        // try with `.html`
-        // TODO: handle if the Uri has query parameters
-        match format!("{}.html", uri).parse() {
-            Ok(uri_html) => Ok(get_static_file(uri_html).await),
-            Err(_) => Err((StatusCode::INTERNAL_SERVER_ERROR, "Invalid URI".to_string())),
-        }
-    } else {
-        Ok(res)
-    }
 }
 
 async fn get_static_file(uri: Uri) -> Response<BoxBody> {
