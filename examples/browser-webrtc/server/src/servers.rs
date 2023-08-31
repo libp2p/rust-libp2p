@@ -10,31 +10,22 @@ use tower::ServiceExt;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
-const STATIC_PORT: u16 = 8080;
-const MA_PORT: u16 = 4455;
+const PORT: u16 = 8080;
 
-/// Serve the Multiaddr we are listening on
-pub(crate) async fn serve_multiaddr(address: String) {
-    let multiaddr_server = Router::new().route("/", get(|| async { address })).layer(
-        // allow cors
-        CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods([Method::GET]),
-    );
+/// Serve the Multiaddr we are listening on and the host files.
+pub(crate) async fn serve(address: String) {
+    let server = Router::new()
+        .route("/address", get(|| async { address }))
+        .nest_service("/", get(handler))
+        .layer(
+            // allow cors
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([Method::GET]),
+        );
 
-    axum::Server::bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), MA_PORT))
-        .serve(multiaddr_server.into_make_service())
-        .await
-        .unwrap();
-}
-
-/// Serve the static files (index.html)
-pub(crate) async fn serve_files() {
-    let app = Router::new().nest_service("/", get(handler));
-
-    let addr = SocketAddr::from((IpAddr::V4(Ipv4Addr::LOCALHOST), STATIC_PORT));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    axum::Server::bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT))
+        .serve(server.into_make_service())
         .await
         .unwrap();
 }

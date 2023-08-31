@@ -49,12 +49,7 @@ pub async fn start() -> Result<()> {
 
             // Serve the multiaddress over HTTP
             tokio::spawn(async move {
-                servers::serve_multiaddr(addr).await;
-            });
-
-            // Also statically serve the ../client/index.html file for this example
-            tokio::spawn(async {
-                servers::serve_files().await;
+                servers::serve(addr).await;
             });
 
             break;
