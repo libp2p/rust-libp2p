@@ -1,4 +1,3 @@
-use crate::error::PingerError;
 use futures::{channel, SinkExt, StreamExt};
 use libp2p::core::Multiaddr;
 use libp2p::identity::{Keypair, PeerId};
@@ -11,8 +10,8 @@ use wasm_bindgen_futures::JsFuture;
 // The PORT that the server serves their Multiaddr
 const PORT: u16 = 8080;
 pub(crate) async fn start_pinger(
-    mut sendr: channel::mpsc::Sender<Result<f32, PingerError>>,
-) -> Result<(), PingerError> {
+    mut sendr: channel::mpsc::Sender<Result<f32, Error>>,
+) -> Result<(), Error> {
     let addr = fetch_server_addr().await;
 
     log::trace!("Got addr {} from server", addr);
@@ -64,6 +63,16 @@ pub(crate) async fn start_pinger(
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    #[error("failed to ping node")]
+    Ping(#[from] ping::Failure),
+    #[error("failed to parse address")]
+    MultiaddrParse(#[from] libp2p::multiaddr::Error),
+    #[error("failed to dial node")]
+    Dial(#[from] libp2p::swarm::DialError),
 }
 
 /// Helper that returns the multiaddress of echo-server

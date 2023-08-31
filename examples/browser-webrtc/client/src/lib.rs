@@ -1,7 +1,5 @@
-mod error;
 mod pinger;
 
-use crate::error::PingerError;
 use futures::channel;
 use futures::StreamExt;
 use js_sys::Date;
@@ -26,7 +24,7 @@ pub fn run() -> Result<(), JsValue> {
     body.append_child(&val)?;
 
     // create a mpsc channel to get pings to from the pinger
-    let (sendr, mut recvr) = channel::mpsc::channel::<Result<f32, PingerError>>(2);
+    let (sendr, mut recvr) = channel::mpsc::channel::<Result<f32, pinger::Error>>(2);
 
     // start the pinger, pass in our sender
     spawn_local(async move {
