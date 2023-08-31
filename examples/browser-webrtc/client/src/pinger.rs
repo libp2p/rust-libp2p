@@ -79,8 +79,7 @@ pub(crate) enum Error {
 
 /// Helper that returns the multiaddress of echo-server
 ///
-/// It fetches the multiaddress via HTTP request to
-/// 127.0.0.1:4455.
+/// It fetches the multiaddress via HTTP request to from 127.0.0.1:8080.
 async fn fetch_server_addr() -> Result<String, &'static str> {
     let url = format!("http://127.0.0.1:{}/address", PORT);
     let window = web_sys::window().expect("no global `window` exists");
