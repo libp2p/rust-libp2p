@@ -103,7 +103,11 @@ pub(crate) async fn serve(address: String) {
                 .allow_methods([Method::GET]),
         );
 
-    axum::Server::bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT))
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), PORT);
+
+    log::info!("Serving client files at http://{addr}");
+
+    axum::Server::bind(&addr)
         .serve(server.into_make_service())
         .await
         .unwrap();
