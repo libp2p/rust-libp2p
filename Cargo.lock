@@ -3369,7 +3369,6 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "futures",
- "getrandom 0.2.10",
  "hex",
  "hex-literal",
  "libp2p-core",

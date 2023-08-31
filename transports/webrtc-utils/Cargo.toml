@@ -27,6 +27,3 @@ tinytemplate = "1.2"
 
 [dev-dependencies]
 hex-literal = "0.4"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2.9", features = ["js"] }
