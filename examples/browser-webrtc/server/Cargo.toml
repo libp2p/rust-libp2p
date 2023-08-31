@@ -7,10 +7,6 @@ publish = false
 rust-version = { workspace = true }
 version = "0.1.0"
 
-[[bin]]
-name = "webrtc-example-server-bin"
-path = "src/bin/webrtc-example-server.rs"
-
 [dependencies]
 anyhow = "1.0.72"
 axum = "0.6.19"
