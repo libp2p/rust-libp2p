@@ -12,7 +12,7 @@ const PORT: u16 = 8080;
 pub(crate) async fn start_pinger(
     mut sendr: channel::mpsc::Sender<Result<f32, Error>>,
 ) -> Result<(), Error> {
-    let addr = fetch_server_addr().await;
+    let addr = fetch_server_addr().await.map_err(Error::FetchAddr)?;
 
     log::trace!("Got addr {} from server", addr);
     let local_key = Keypair::generate_ed25519();
@@ -73,51 +73,32 @@ pub(crate) enum Error {
     MultiaddrParse(#[from] libp2p::multiaddr::Error),
     #[error("failed to dial node")]
     Dial(#[from] libp2p::swarm::DialError),
+    #[error("failed to fetch address: {0}")]
+    FetchAddr(&'static str),
 }
 
 /// Helper that returns the multiaddress of echo-server
 ///
 /// It fetches the multiaddress via HTTP request to
 /// 127.0.0.1:4455.
-async fn fetch_server_addr() -> String {
+async fn fetch_server_addr() -> Result<String, &'static str> {
     let url = format!("http://127.0.0.1:{}/address", PORT);
     let window = web_sys::window().expect("no global `window` exists");
 
-    let value = match JsFuture::from(window.fetch_with_str(&url)).await {
-        Ok(value) => value,
-        Err(err) => {
-            log::error!("fetch failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-    let resp = match value.dyn_into::<web_sys::Response>() {
-        Ok(resp) => resp,
-        Err(err) => {
-            log::error!("fetch response failed: {:?}", err);
-            return "".to_string();
-        }
-    };
+    let response_promise = JsFuture::from(window.fetch_with_str(&url))
+        .await
+        .map_err(|_| "fetch failed")?
+        .dyn_into::<web_sys::Response>()
+        .map_err(|_| "cast to `Response` failed")?
+        .text()
+        .map_err(|_| "response is not text")?;
 
-    let text = match resp.text() {
-        Ok(text) => text,
-        Err(err) => {
-            log::error!("fetch text failed: {:?}", err);
-            return "".to_string();
-        }
-    };
-    let text = match JsFuture::from(text).await {
-        Ok(text) => text,
-        Err(err) => {
-            log::error!("convert future failed: {:?}", err);
-            return "".to_string();
-        }
-    };
+    let value = JsFuture::from(response_promise)
+        .await
+        .map_err(|_| "failed to retrieve body as text")?
+        .as_string()
+        .filter(|s| !s.is_empty())
+        .ok_or("fetch text is empty")?;
 
-    match text.as_string().filter(|s| !s.is_empty()) {
-        Some(text) => text,
-        None => {
-            log::error!("fetch text is empty");
-            "".to_string()
-        }
-    }
+    Ok(value)
 }
