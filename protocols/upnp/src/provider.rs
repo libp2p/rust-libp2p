@@ -18,27 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{error::Error, fmt, net};
+use std::{
+    error::Error,
+    net::{self, IpAddr},
+};
 
 use crate::behaviour::{GatewayEvent, GatewayRequest};
 use async_trait::async_trait;
 use futures::channel::mpsc::{Receiver, Sender};
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct IpAddr(pub(crate) net::IpAddr);
-
-impl fmt::Display for IpAddr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl IpAddr {
-    //TODO: remove when `IpAddr::is_global` stabilizes.
-    pub(crate) fn is_global(&self) -> bool {
-        match self.0 {
-            net::IpAddr::V4(ip) => {
-                !(ip.octets()[0] == 0 // "This network"
+//TODO: remove when `IpAddr::is_global` stabilizes.
+pub(crate) fn is_addr_global(addr: IpAddr) -> bool {
+    match addr {
+        IpAddr::V4(ip) => {
+            !(ip.octets()[0] == 0 // "This network"
                                     || ip.is_private()
                                     // code for Ipv4::is_shared()
                                     || (ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000))
@@ -52,9 +45,9 @@ impl IpAddr {
                                     // code for Ipv4::is_reserved()
                                     || (ip.octets()[0] & 240 == 240 && !ip.is_broadcast())
                                     || ip.is_broadcast())
-            }
-            net::IpAddr::V6(ip) => {
-                !(ip.is_unspecified()
+        }
+        IpAddr::V6(ip) => {
+            !(ip.is_unspecified()
                                     || ip.is_loopback()
                                     // IPv4-mapped Address (`::ffff:0:0/96`)
                                     || matches!(ip.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
@@ -82,10 +75,10 @@ impl IpAddr {
                                     || (ip.segments()[0] & 0xfe00) == 0xfc00
                                     // code for Ipv4::is_unicast_link_local()
                                     || (ip.segments()[0] & 0xffc0) == 0xfe80)
-            }
         }
     }
 }
+
 /// Interface that interacts with the inner gateway by messages,
 /// `GatewayRequest`s and `GatewayEvent`s.
 pub struct Gateway {
@@ -93,8 +86,6 @@ pub struct Gateway {
     pub(crate) receiver: Receiver<GatewayEvent>,
     pub(crate) external_addr: IpAddr,
 }
-
-impl Gateway {}
 
 /// Abstraction to allow for compatibility with various async runtimes.
 #[async_trait]

@@ -33,7 +33,7 @@ use std::{
     time::Duration,
 };
 
-use crate::provider::{Gateway, IpAddr, Provider};
+use crate::provider::{is_addr_global, Gateway, IpAddr, Provider};
 use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -229,16 +229,6 @@ where
     P: Provider + 'static,
 {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<P> Behaviour<P>
-where
-    P: Provider + 'static,
-{
-    /// Builds a new `UPnP` behaviour.
-    pub fn new() -> Self {
         Self {
             state: GatewayState::Searching(P::search_gateway().boxed()),
             mappings: Default::default(),
@@ -408,7 +398,7 @@ where
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
                     Poll::Ready(result) => match result {
                         Ok(gateway) => {
-                            if !gateway.external_addr.is_global() {
+                            if !is_addr_global(gateway.external_addr) {
                                 self.state =
                                     GatewayState::NonRoutableGateway(gateway.external_addr);
                                 log::debug!(
