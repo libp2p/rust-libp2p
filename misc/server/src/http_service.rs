@@ -31,15 +31,23 @@ use std::task::{Context, Poll};
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
 
-pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
+pub(crate) async fn metrics_server(
+    registry: Registry,
+    metrics_path: String,
+) -> Result<(), std::io::Error> {
     // Serve on localhost.
-    let addr = ([127, 0, 0, 1], 8080).into();
+    let addr = ([0, 0, 0, 0], 8888).into();
 
     // Use the tokio runtime to run the hyper server.
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
-        let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-        info!("Metrics server on http://{}/metrics", server.local_addr());
+        let server =
+            Server::bind(&addr).serve(MakeMetricService::new(registry, metrics_path.clone()));
+        info!(
+            "Metrics server on http://{}{}",
+            server.local_addr(),
+            metrics_path
+        );
         if let Err(e) = server.await {
             error!("server error: {}", e);
         }
@@ -49,6 +57,7 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
 
 pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
+    metrics_path: String,
 }
 
 type SharedRegistry = Arc<Mutex<Registry>>;
@@ -75,7 +84,10 @@ impl MetricService {
     fn respond_with_404_not_found(&mut self) -> Response<String> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body("Not found try localhost:[port]/metrics".to_string())
+            .body(format!(
+                "Not found try localhost:[port]/{}",
+                self.metrics_path
+            ))
             .unwrap()
     }
 }
@@ -92,7 +104,7 @@ impl Service<Request<Body>> for MetricService {
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let req_path = req.uri().path();
         let req_method = req.method();
-        let resp = if (req_method == Method::GET) && (req_path == "/metrics") {
+        let resp = if (req_method == Method::GET) && (req_path == self.metrics_path) {
             // Encode and serve metrics from registry.
             self.respond_with_metrics()
         } else {
@@ -104,12 +116,14 @@ impl Service<Request<Body>> for MetricService {
 
 pub(crate) struct MakeMetricService {
     reg: SharedRegistry,
+    metrics_path: String,
 }
 
 impl MakeMetricService {
-    pub(crate) fn new(registry: Registry) -> MakeMetricService {
+    pub(crate) fn new(registry: Registry, metrics_path: String) -> MakeMetricService {
         MakeMetricService {
             reg: Arc::new(Mutex::new(registry)),
+            metrics_path,
         }
     }
 }
@@ -125,7 +139,8 @@ impl<T> Service<T> for MakeMetricService {
 
     fn call(&mut self, _: T) -> Self::Future {
         let reg = self.reg.clone();
-        let fut = async move { Ok(MetricService { reg }) };
+        let metrics_path = self.metrics_path.clone();
+        let fut = async move { Ok(MetricService { reg, metrics_path }) };
         Box::pin(fut)
     }
 }
