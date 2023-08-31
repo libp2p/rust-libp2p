@@ -28,10 +28,15 @@ use libp2p::{
     tcp, yamux, PeerId, Transport,
 };
 use std::time::Duration;
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let key_pair = identity::Keypair::generate_ed25519();
 
@@ -54,22 +59,22 @@ async fn main() {
     )
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
+    tracing::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());
 
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                log::info!("Connected to {}", peer_id);
+                tracing::info!("Connected to {}", peer_id);
             }
             SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                log::info!("Disconnected from {}", peer_id);
+                tracing::info!("Disconnected from {}", peer_id);
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::server::Event::PeerRegistered { peer, registration },
             )) => {
-                log::info!(
+                tracing::info!(
                     "Peer {} registered for namespace '{}'",
                     peer,
                     registration.namespace
@@ -81,14 +86,14 @@ async fn main() {
                     registrations,
                 },
             )) => {
-                log::info!(
+                tracing::info!(
                     "Served peer {} with {} registrations",
                     enquirer,
                     registrations.len()
                 );
             }
             other => {
-                log::debug!("Unhandled {:?}", other);
+                tracing::debug!("Unhandled {:?}", other);
             }
         }
     }

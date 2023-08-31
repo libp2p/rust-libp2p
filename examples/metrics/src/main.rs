@@ -20,7 +20,6 @@
 
 #![doc = include_str!("../README.md")]
 
-use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::{upgrade::Version, Multiaddr, Transport};
@@ -28,15 +27,20 @@ use libp2p::identity::PeerId;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
-use log::info;
+use tracing::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 mod http_service;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());

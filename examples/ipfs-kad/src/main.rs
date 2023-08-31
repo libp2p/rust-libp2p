@@ -29,6 +29,7 @@ use libp2p::{
     PeerId,
 };
 use std::{env, error::Error, time::Duration};
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -39,7 +40,11 @@ const BOOTNODES: [&str; 4] = [
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Create a random key for ourselves.
     let local_key = identity::Keypair::generate_ed25519();

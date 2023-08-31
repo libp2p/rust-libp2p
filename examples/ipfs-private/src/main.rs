@@ -33,6 +33,7 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 /// Builds the transport that serves as a common ground for all connections.
 pub fn build_transport(
@@ -110,7 +111,11 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let ipfs_path = get_ipfs_path();
     println!("using IPFS_PATH {ipfs_path:?}");

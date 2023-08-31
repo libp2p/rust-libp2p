@@ -28,12 +28,17 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 const NAMESPACE: &str = "rendezvous";
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
@@ -56,7 +61,7 @@ async fn main() {
     )
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
+    tracing::info!("Local peer id: {}", swarm.local_peer_id());
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
@@ -67,7 +72,7 @@ async fn main() {
         tokio::select! {
                 event = swarm.select_next_some() => match event {
                     SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == rendezvous_point => {
-                        log::info!(
+                        tracing::info!(
                             "Connected to rendezvous point, discovering nodes in '{}' namespace ...",
                             NAMESPACE
                         );
@@ -89,7 +94,7 @@ async fn main() {
                         for registration in registrations {
                             for address in registration.record.addresses() {
                                 let peer = registration.record.peer_id();
-                                log::info!("Discovered peer {} at {}", peer, address);
+                                tracing::info!("Discovered peer {} at {}", peer, address);
 
                                 let p2p_suffix = Protocol::P2p(peer);
                                 let address_with_p2p =
@@ -108,10 +113,10 @@ async fn main() {
                         result: Ok(rtt),
                         ..
                     })) if peer != rendezvous_point => {
-                        log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
+                        tracing::info!("Ping to {} is {}ms", peer, rtt.as_millis())
                     }
                     other => {
-                        log::debug!("Unhandled {:?}", other);
+                        tracing::debug!("Unhandled {:?}", other);
                     }
             },
             _ = discover_tick.tick(), if cookie.is_some() =>

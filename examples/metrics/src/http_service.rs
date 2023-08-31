@@ -21,7 +21,7 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::{error, info};
+use tracing::{error, info};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;

@@ -37,8 +37,7 @@ use libp2p::{
 };
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let env_filter = EnvFilter::builder()

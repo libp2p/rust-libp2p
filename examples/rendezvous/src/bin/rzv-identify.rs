@@ -26,10 +26,15 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
+use tracing_subscriber::{EnvFilter, filter::LevelFilter};
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .from_env_lossy();
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
@@ -56,7 +61,7 @@ async fn main() {
     )
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
+    tracing::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
@@ -65,14 +70,14 @@ async fn main() {
     while let Some(event) = swarm.next().await {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                log::info!("Listening on {}", address);
+                tracing::info!("Listening on {}", address);
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
                 cause: Some(error),
                 ..
             } if peer_id == rendezvous_point => {
-                log::error!("Lost connection to rendezvous point {}", error);
+                tracing::error!("Lost connection to rendezvous point {}", error);
             }
             // once `/identify` did its job, we know our external address and can register
             SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
@@ -83,7 +88,7 @@ async fn main() {
                     rendezvous_point,
                     None,
                 ) {
-                    log::error!("Failed to register: {error}");
+                    tracing::error!("Failed to register: {error}");
                     return;
                 }
             }
@@ -94,7 +99,7 @@ async fn main() {
                     rendezvous_node,
                 },
             )) => {
-                log::info!(
+                tracing::info!(
                     "Registered for namespace '{}' at rendezvous point {} for the next {} seconds",
                     namespace,
                     rendezvous_node,
@@ -108,7 +113,7 @@ async fn main() {
                     error,
                 },
             )) => {
-                log::error!(
+                tracing::error!(
                     "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
                     rendezvous_node,
                     namespace,
@@ -121,10 +126,10 @@ async fn main() {
                 result: Ok(rtt),
                 ..
             })) if peer != rendezvous_point => {
-                log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
+                tracing::info!("Ping to {} is {}ms", peer, rtt.as_millis())
             }
             other => {
-                log::debug!("Unhandled {:?}", other);
+                tracing::debug!("Unhandled {:?}", other);
             }
         }
     }

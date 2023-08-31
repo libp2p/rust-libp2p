@@ -524,7 +524,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "clap",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -830,7 +829,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -1450,7 +1448,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -1708,10 +1705,11 @@ dependencies = [
  "async-std",
  "clap",
  "either",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "serde",
+ "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2237,6 +2235,8 @@ dependencies = [
  "async-trait",
  "futures",
  "libp2p",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2412,9 +2412,10 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2424,9 +2425,10 @@ dependencies = [
  "async-std",
  "async-trait",
  "either",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3598,13 +3600,13 @@ dependencies = [
 name = "metrics-example"
 version = "0.1.0"
 dependencies = [
- "env_logger 0.10.0",
  "futures",
  "hyper",
  "libp2p",
- "log",
  "prometheus-client",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4635,7 +4637,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -4648,11 +4649,11 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
- "log",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
