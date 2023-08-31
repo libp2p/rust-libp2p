@@ -717,7 +717,6 @@ mod tests {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
             let alive_substream_counter = Arc::new(());
-            let span = tracing::Span::none();
             let mut connection = Connection::new(
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
@@ -725,7 +724,7 @@ mod tests {
                 keep_alive::ConnectionHandler,
                 None,
                 max_negotiating_inbound_streams,
-                span,
+                tracing::Span::none(),
             );
 
             let result = connection.poll_noop_waker();
@@ -743,14 +742,13 @@ mod tests {
 
     #[test]
     fn outbound_stream_timeout_starts_on_request() {
-        let span = tracing::Span::none();
         let upgrade_timeout = Duration::from_secs(1);
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
-            span,
+            tracing::Span::none(),
         );
 
         connection.handler.open_new_outbound();
@@ -768,13 +766,12 @@ mod tests {
 
     #[test]
     fn propagates_changes_to_supported_inbound_protocols() {
-        let span = tracing::Span::none();
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
-            span,
+            tracing::Span::none(),
         );
 
         // First, start listening on a single protocol.
@@ -808,13 +805,12 @@ mod tests {
 
     #[test]
     fn only_propagtes_actual_changes_to_remote_protocols_to_handler() {
-        let span = tracing::Span::none();
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             ConfigurableProtocolConnectionHandler::default(),
             None,
             0,
-            span,
+            tracing::Span::none(),
         );
 
         // First, remote supports a single protocol.
