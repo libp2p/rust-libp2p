@@ -25,5 +25,5 @@ tokio = { version = "1.29", features = ["macros", "net", "rt", "signal"] }
 tokio-stream = "0.1"
 tokio-util = { version = "0.7", features = ["compat"] }
 tower = "0.4"
-tower-http = { version = "0.4.0", features = ["cors", "fs"] }                                                 # axum middleware. fs for static files, cors for CORS
+tower-http = { version = "0.4.0", features = ["cors", "fs"] } # axum middleware. fs for static files, cors for CORS
 void = "1"
