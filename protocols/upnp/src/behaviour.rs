@@ -26,14 +26,14 @@ use std::{
     error::Error,
     hash::{Hash, Hasher},
     marker::PhantomData,
-    net::{self, SocketAddr, SocketAddrV4},
+    net::{self, IpAddr, SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
 
-use crate::provider::{is_addr_global, Gateway, IpAddr, Provider};
+use crate::provider::{is_addr_global, Gateway, Provider};
 use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -82,7 +82,7 @@ impl Mapping {
     /// Given the input gateway address, calculate the
     /// open external `Multiaddr`.
     fn external_addr(&self, gateway_addr: IpAddr) -> Multiaddr {
-        let addr = match gateway_addr.0 {
+        let addr = match gateway_addr {
             net::IpAddr::V4(ip) => multiaddr::Protocol::Ip4(ip),
             net::IpAddr::V6(ip) => multiaddr::Protocol::Ip6(ip),
         };

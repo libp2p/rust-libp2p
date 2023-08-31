@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    error::Error,
-    net::{self, IpAddr},
-};
+use std::{error::Error, net::IpAddr};
 
 use crate::behaviour::{GatewayEvent, GatewayRequest};
 use async_trait::async_trait;
@@ -95,7 +92,7 @@ pub trait Provider {
 
 macro_rules! impl_provider {
     ($impl:ident, $executor: ident, $gateway:ident, $protocol: ident) => {
-        use super::{Gateway, IpAddr};
+        use super::Gateway;
         use crate::behaviour::{GatewayEvent, GatewayRequest};
 
         use async_trait::async_trait;
@@ -159,7 +156,7 @@ macro_rules! impl_provider {
                 Ok(Gateway {
                     sender: events_sender,
                     receiver: events_queue,
-                    external_addr: IpAddr(external_addr),
+                    external_addr,
                 })
             }
         }
