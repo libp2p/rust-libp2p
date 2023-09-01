@@ -1,8 +1,8 @@
 ## 0.43.1 - unreleased
 - Add delay after exceeding failure rate
-  See [PR XXXX].
+  See [PR 4423].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4423]: https://github.com/libp2p/rust-libp2p/pull/4423
 
 ## 0.43.0 
 
