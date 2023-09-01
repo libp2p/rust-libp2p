@@ -3591,7 +3591,6 @@ name = "libp2p-upnp"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "async-trait",
  "futures",
  "futures-timer",
  "igd-next",
@@ -6576,7 +6575,6 @@ name = "upnp-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
- "async-trait",
  "futures",
  "libp2p",
 ]

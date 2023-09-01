@@ -21,8 +21,7 @@
 use std::{error::Error, net::IpAddr};
 
 use crate::behaviour::{GatewayEvent, GatewayRequest};
-use async_trait::async_trait;
-use futures::channel::mpsc::{Receiver, Sender};
+use futures::channel::{mpsc, oneshot};
 
 //TODO: remove when `IpAddr::is_global` stabilizes.
 pub(crate) fn is_addr_global(addr: IpAddr) -> bool {
@@ -78,16 +77,16 @@ pub(crate) fn is_addr_global(addr: IpAddr) -> bool {
 
 /// Interface that interacts with the inner gateway by messages,
 /// `GatewayRequest`s and `GatewayEvent`s.
+#[derive(Debug)]
 pub struct Gateway {
-    pub(crate) sender: Sender<GatewayRequest>,
-    pub(crate) receiver: Receiver<GatewayEvent>,
+    pub(crate) sender: mpsc::Sender<GatewayRequest>,
+    pub(crate) receiver: mpsc::Receiver<GatewayEvent>,
     pub(crate) external_addr: IpAddr,
 }
 
 /// Abstraction to allow for compatibility with various async runtimes.
-#[async_trait]
 pub trait Provider {
-    async fn search_gateway() -> Result<Gateway, Box<dyn Error>>;
+    fn search_gateway() -> oneshot::Receiver<Result<Gateway, Box<dyn Error + Send + Sync>>>;
 }
 
 macro_rules! impl_provider {
@@ -95,21 +94,50 @@ macro_rules! impl_provider {
         use super::Gateway;
         use crate::behaviour::{GatewayEvent, GatewayRequest};
 
-        use async_trait::async_trait;
-        use futures::{channel::mpsc, SinkExt, StreamExt};
+        use futures::{
+            channel::{mpsc, oneshot},
+            SinkExt, StreamExt,
+        };
         use igd_next::SearchOptions;
         use std::error::Error;
 
-        #[async_trait]
         impl super::Provider for $impl {
-            async fn search_gateway() -> Result<super::Gateway, Box<dyn Error>> {
-                let gateway = $gateway::search_gateway(SearchOptions::default()).await?;
-                let external_addr = gateway.get_external_ip().await?;
+            fn search_gateway(
+            ) -> oneshot::Receiver<Result<super::Gateway, Box<dyn Error + Send + Sync>>> {
+                let (search_result_sender, search_result_receiver) = oneshot::channel();
 
                 let (events_sender, mut task_receiver) = mpsc::channel(10);
                 let (mut task_sender, events_queue) = mpsc::channel(0);
 
                 $executor::spawn(async move {
+                    let gateway = match $gateway::search_gateway(SearchOptions::default()).await {
+                        Ok(gateway) => gateway,
+                        Err(err) => {
+                            search_result_sender
+                                .send(Err(err.into()))
+                                .expect("receiver shouldn't have been dropped");
+                            return;
+                        }
+                    };
+
+                    let external_addr = match gateway.get_external_ip().await {
+                        Ok(addr) => addr,
+                        Err(err) => {
+                            search_result_sender
+                                .send(Err(err.into()))
+                                .expect("receiver shouldn't have been dropped");
+                            return;
+                        }
+                    };
+
+                    search_result_sender
+                        .send(Ok(Gateway {
+                            sender: events_sender,
+                            receiver: events_queue,
+                            external_addr,
+                        }))
+                        .expect("receiver shouldn't have been dropped");
+
                     loop {
                         // The task sender has dropped so we can return.
                         let Some(req) = task_receiver.next().await else {
@@ -153,11 +181,7 @@ macro_rules! impl_provider {
                     }
                 });
 
-                Ok(Gateway {
-                    sender: events_sender,
-                    receiver: events_queue,
-                    external_addr,
-                })
+                search_result_receiver
             }
         }
     };

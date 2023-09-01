@@ -34,7 +34,7 @@ use std::{
 };
 
 use crate::provider::{is_addr_global, Gateway, Provider};
-use futures::{future::BoxFuture, Future, FutureExt, StreamExt};
+use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
 use libp2p_core::{multiaddr, transport::ListenerId, Endpoint, Multiaddr};
@@ -127,7 +127,7 @@ enum MappingState {
 
 /// Current state of the UPnP [`Gateway`].
 enum GatewayState {
-    Searching(BoxFuture<'static, Result<Gateway, Box<dyn std::error::Error>>>),
+    Searching(oneshot::Receiver<Result<Gateway, Box<dyn std::error::Error + Send + Sync>>>),
     Available(Gateway),
     GatewayNotFound,
     NonRoutableGateway(IpAddr),
@@ -230,7 +230,7 @@ where
 {
     fn default() -> Self {
         Self {
-            state: GatewayState::Searching(P::search_gateway().boxed()),
+            state: GatewayState::Searching(P::search_gateway()),
             mappings: Default::default(),
             pending_events: VecDeque::new(),
             provider: PhantomData,
@@ -396,27 +396,29 @@ where
         loop {
             match self.state {
                 GatewayState::Searching(ref mut fut) => match Pin::new(fut).poll(cx) {
-                    Poll::Ready(result) => match result {
-                        Ok(gateway) => {
-                            if !is_addr_global(gateway.external_addr) {
-                                self.state =
-                                    GatewayState::NonRoutableGateway(gateway.external_addr);
-                                log::debug!(
-                                    "the gateway is not routable, its address is {}",
-                                    gateway.external_addr
-                                );
-                                return Poll::Ready(ToSwarm::GenerateEvent(
-                                    Event::NonRoutableGateway,
-                                ));
+                    Poll::Ready(result) => {
+                        match result.expect("sender shouldn't have been dropped") {
+                            Ok(gateway) => {
+                                if !is_addr_global(gateway.external_addr) {
+                                    self.state =
+                                        GatewayState::NonRoutableGateway(gateway.external_addr);
+                                    log::debug!(
+                                        "the gateway is not routable, its address is {}",
+                                        gateway.external_addr
+                                    );
+                                    return Poll::Ready(ToSwarm::GenerateEvent(
+                                        Event::NonRoutableGateway,
+                                    ));
+                                }
+                                self.state = GatewayState::Available(gateway);
                             }
-                            self.state = GatewayState::Available(gateway);
+                            Err(err) => {
+                                log::debug!("could not find gateway: {err}");
+                                self.state = GatewayState::GatewayNotFound;
+                                return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
+                            }
                         }
-                        Err(err) => {
-                            log::debug!("could not find gateway: {err}");
-                            self.state = GatewayState::GatewayNotFound;
-                            return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
-                        }
-                    },
+                    }
                     Poll::Pending => return Poll::Pending,
                 },
                 GatewayState::Available(ref mut gateway) => {
