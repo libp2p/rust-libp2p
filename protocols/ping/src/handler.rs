@@ -149,6 +149,8 @@ pub struct Handler {
     state: State,
     /// The peer we are connected to.
     peer: PeerId,
+    /// delay after a failure is reported
+    failure_delay: Option<Delay>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +178,7 @@ impl Handler {
             outbound: None,
             inbound: None,
             state: State::Active,
+            failure_delay: None,
         }
     }
 
@@ -271,6 +274,12 @@ impl ConnectionHandler for Handler {
         }
 
         loop {
+            if let Some(delay) = self.failure_delay.as_mut() {
+                if delay.poll_unpin(cx).is_pending() {
+                    return Poll::Pending;
+                }
+            }
+
             // Check for outbound ping failures.
             if let Some(error) = self.pending_errors.pop_back() {
                 log::debug!("Ping failure: {:?}", error);
@@ -283,9 +292,12 @@ impl ConnectionHandler for Handler {
                 // that use a single substream, since every successful ping
                 // resets `failures` to `0`.
                 if self.failures > 1 {
+                    self.failure_delay = Some(Delay::new(Duration::from_secs(5)));
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Err(error)));
                 }
             }
+
+            self.failure_delay = None;
 
             // Continue outbound pings.
             match self.outbound.take() {

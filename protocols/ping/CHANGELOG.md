@@ -1,3 +1,9 @@
+## 0.43.1 - unreleased
+- Add delay after exceeding failure rate
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.43.0 
 
 - Raise MSRV to 1.65.
