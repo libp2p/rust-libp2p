@@ -29,6 +29,7 @@ Firefox is not yet supported as it doesn't support all required features yet
 
 To run the webrtc-direct test, you'll need the `chromedriver` in your `$PATH`, compatible with your Chrome browser.
 
+1. Start redis: `docker run --rm -p 6379:6379 redis:7-alpine`.
 1. Build the wasm package: `wasm-pack build --target web`
 1. With the webrtc-direct listener `RUST_LOG=debug,webrtc=off,webrtc_sctp=off redis_addr="127.0.0.1:6379" ip="0.0.0.0" transport=webrtc-direct is_dialer="false" cargo run --bin native_ping`
 1. Run the webrtc-direct dialer: `RUST_LOG=debug,hyper=off redis_addr="127.0.0.1:6379" ip="0.0.0.0" transport=webrtc-direct is_dialer=true cargo run --bin wasm_ping` 
