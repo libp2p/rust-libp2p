@@ -115,11 +115,7 @@ pub(crate) mod native {
                 )
                 .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                 .boxed(),
-                // IPv4 does not pass tests locally, but IPv6 does.
-                Multiaddr::from(Ipv6Addr::UNSPECIFIED)
-                    .with(Protocol::Udp(0))
-                    .with(Protocol::WebRTCDirect)
-                    .to_string(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
             (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
             (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
