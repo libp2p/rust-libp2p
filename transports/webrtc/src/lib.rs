@@ -83,6 +83,7 @@
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
+    #[cfg(feature = "tokio")]
     pub(crate) use self::webrtc::pb::{mod_Message::Flag, Message};
 }
 
