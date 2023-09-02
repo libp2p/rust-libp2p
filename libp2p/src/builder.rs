@@ -1,5 +1,3 @@
-// TODO: WASM executor
-
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::NetworkBehaviour;
 use std::convert::Infallible;
