@@ -1,4 +1,3 @@
-// TODO: Are all with_behaviour with Relay behaviour properly set?
 // TODO: WASM executor
 
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
@@ -166,6 +165,21 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
         self.without_tcp()
             .without_quic()
             .with_other_transport(constructor)
+    }
+
+    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+    pub fn with_websocket(
+        self,
+    ) -> SwarmBuilder<
+        Provider,
+        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    > {
+        self.without_tcp()
+            .without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_relay()
+            .with_websocket()
     }
 }
 
@@ -370,6 +384,50 @@ impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
         self,
     ) -> SwarmBuilder<Tokio, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
         self.without_noise().with_quic()
+    }
+}
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tls",
+    feature = "quic",
+    feature = "async-std"
+))]
+impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
+    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
+        self,
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<
+        SwarmBuilder<AsyncStd, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>,
+        R::Error,
+    > {
+        self.without_noise()
+            .without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_relay()
+            .without_websocket()
+            .with_behaviour(constructor)
+    }
+}
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tls",
+    feature = "quic",
+    feature = "tokio"
+))]
+impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
+    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
+        self,
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<SwarmBuilder<Tokio, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>, R::Error>
+    {
+        self.without_noise()
+            .without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_relay()
+            .without_websocket()
+            .with_behaviour(constructor)
     }
 }
 
