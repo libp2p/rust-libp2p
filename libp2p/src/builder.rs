@@ -1,5 +1,3 @@
-// TODO: Be able to address `SwarmBuilder` configuration methods.
-// TODO: Consider making with_other_transport fallible.
 // TODO: Are all with_behaviour with Relay behaviour properly set?
 // TODO: WASM executor
 
@@ -155,10 +153,16 @@ impl SwarmBuilder<Tokio, TcpPhase> {
     }
 }
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
-    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
+    pub fn with_other_transport<
+        OtherTransport: AuthenticatedMultiplexedTransport,
+        R: TryIntoTransport<OtherTransport>,
+    >(
         self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<
+        SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>,
+        R::Error,
+    > {
         self.without_tcp()
             .without_quic()
             .with_other_transport(constructor)
@@ -447,10 +451,16 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         }
     }
 
-    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
+    pub fn with_other_transport<
+        OtherTransport: AuthenticatedMultiplexedTransport,
+        R: TryIntoTransport<OtherTransport>,
+    >(
         self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<
+        SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>,
+        R::Error,
+    > {
         self.without_quic().with_other_transport(constructor)
     }
 
@@ -511,21 +521,27 @@ pub struct OtherTransportPhase<T> {
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
-    pub fn with_other_transport<OtherTransport: AuthenticatedMultiplexedTransport>(
+    pub fn with_other_transport<
+        OtherTransport: AuthenticatedMultiplexedTransport,
+        R: TryIntoTransport<OtherTransport>,
+    >(
         self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair) -> OtherTransport,
-    ) -> SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
-        SwarmBuilder {
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<
+        SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>,
+        R::Error,
+    > {
+        Ok(SwarmBuilder {
             phase: OtherTransportPhase {
                 transport: self
                     .phase
                     .transport
-                    .or_transport(constructor(&self.keypair))
+                    .or_transport(constructor(&self.keypair).try_into_transport()?)
                     .map(|either, _| either.into_inner()),
             },
             keypair: self.keypair,
             phantom: PhantomData,
-        }
+        })
     }
 
     fn without_any_other_transports(self) -> SwarmBuilder<Provider, DnsPhase<T>> {
@@ -1336,9 +1352,40 @@ impl<B> TryIntoBehaviour<B> for Result<B, Box<dyn std::error::Error + Send + Syn
 where
     B: NetworkBehaviour,
 {
+    // TODO mxinden: why do we need an io error here? isn't box<dyn> enough?
     type Error = io::Error; // TODO: Consider a dedicated type here with a descriptive message like "failed to build behaviour"?
 
     fn try_into_behaviour(self) -> Result<B, Self::Error> {
+        self.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+}
+
+// TODO: Seal this.
+pub trait TryIntoTransport<T> {
+    type Error;
+
+    fn try_into_transport(self) -> Result<T, Self::Error>;
+}
+
+impl<T> TryIntoTransport<T> for T
+where
+    T: AuthenticatedMultiplexedTransport,
+{
+    type Error = Infallible;
+
+    fn try_into_transport(self) -> Result<T, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl<T> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Sync>>
+where
+    T: AuthenticatedMultiplexedTransport,
+{
+    // TODO mxinden: why do we need an io error here? isn't box<dyn> enough?
+    type Error = io::Error; // TODO: Consider a dedicated type here with a descriptive message like "failed to build behaviour"?
+
+    fn try_into_transport(self) -> Result<T, Self::Error> {
         self.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 }
@@ -1443,23 +1490,27 @@ mod tests {
             .build();
     }
 
-    /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. QUIC or WebRTC.
+    /// Showcases how to provide custom transports unknown to the libp2p crate, e.g. WebRTC.
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
-    fn tcp_other_transport_other_transport() {
+    #[cfg(feature = "tokio")]
+    fn other_transport() -> Result<(), Box<dyn std::error::Error>> {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
-            .unwrap()
-            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
-            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
-            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())
+            // Closure can either return a Transport directly.
+            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())?
+            // Or a Result containing a Transport.
+            .with_other_transport(|_| {
+                if true {
+                    Ok(libp2p_core::transport::dummy::DummyTransport::new())
+                } else {
+                    Err(Box::from("test"))
+                }
+            })?
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
+
+        Ok(())
     }
 
     #[tokio::test]
