@@ -1,5 +1,5 @@
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
-use libp2p_swarm::NetworkBehaviour;
+use libp2p_swarm::{NetworkBehaviour, Swarm};
 use std::convert::Infallible;
 use std::io;
 use std::marker::PhantomData;
@@ -1303,7 +1303,7 @@ impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     SwarmBuilder<AsyncStd, SwarmPhase<T, B>>
 {
-    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+    pub fn build(self) -> Swarm<B> {
         SwarmBuilder {
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
@@ -1321,7 +1321,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     SwarmBuilder<Tokio, SwarmPhase<T, B>>
 {
-    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+    pub fn build(self) -> Swarm<B> {
         SwarmBuilder {
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
@@ -1339,7 +1339,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     SwarmBuilder<WasmBindgen, SwarmPhase<T, B>>
 {
-    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+    pub fn build(self) -> Swarm<B> {
         SwarmBuilder {
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
@@ -1364,8 +1364,8 @@ const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1
 impl<Provider, T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBehaviour>
     SwarmBuilder<Provider, BuildPhase<T, B>>
 {
-    pub fn build(self) -> libp2p_swarm::Swarm<B> {
-        libp2p_swarm::Swarm::new_with_config(
+    pub fn build(self) -> Swarm<B> {
+        Swarm::new_with_config(
             libp2p_core::transport::timeout::TransportTimeout::new(
                 self.phase.transport,
                 CONNECTION_TIMEOUT,

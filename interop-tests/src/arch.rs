@@ -21,7 +21,7 @@ pub(crate) mod native {
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
-    use crate::{from_env, Muxer, SecProtocol, Transport};
+    use crate::{from_env, SecProtocol, Transport};
 
     pub(crate) type Instant = std::time::Instant;
 
@@ -35,6 +35,7 @@ pub(crate) mod native {
         tokio::time::sleep(duration).boxed()
     }
 
+    // TODO: Error in case muxer is not yamux.
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
