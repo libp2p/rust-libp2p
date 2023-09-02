@@ -96,16 +96,11 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     }
 
     #[cfg(feature = "wasm-bindgen")]
-    pub fn with_wasm_bindgen(
-        self,
-    ) -> SwarmBuilder<WasmBindgen, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>
-    {
+    pub fn with_wasm_bindgen(self) -> SwarmBuilder<WasmBindgen, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: OtherTransportPhase {
-                transport: libp2p_core::transport::dummy::DummyTransport::new(),
-            },
+            phase: TcpPhase {},
         }
     }
 }
