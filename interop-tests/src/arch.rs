@@ -35,14 +35,6 @@ pub(crate) mod native {
         tokio::time::sleep(duration).boxed()
     }
 
-    // TODO: Still need to support mplex? Ideally not.
-    // fn muxer_protocol_from_env() -> Result<Either<yamux::Config, mplex::MplexConfig>> {
-    //     Ok(match from_env("muxer")? {
-    //         Muxer::Yamux => Either::Left(yamux::Config::default()),
-    //         Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
-    //     })
-    // }
-
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
