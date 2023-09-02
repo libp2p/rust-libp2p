@@ -1,16 +1,10 @@
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::Boxed;
-use libp2p::PeerId;
-
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
 
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
-pub(crate) use wasm::{build_swarm, init_logger, sleep, swarm_builder, Instant, RedisClient};
-
-type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
+pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
@@ -28,8 +22,6 @@ pub(crate) mod native {
     use redis::AsyncCommands;
 
     use crate::{from_env, Muxer, SecProtocol, Transport};
-
-    use super::BoxedTransport;
 
     pub(crate) type Instant = std::time::Instant;
 
@@ -154,14 +146,13 @@ pub(crate) mod native {
 pub(crate) mod wasm {
     use anyhow::{bail, Result};
     use futures::future::{BoxFuture, FutureExt};
+    use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
-    use libp2p::PeerId;
+    use libp2p::swarm::{NetworkBehaviour, Swarm};
+    use libp2p::Transport as _;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
-
-    use super::BoxedTransport;
 
     pub(crate) type Instant = instant::Instant;
 
@@ -174,18 +165,19 @@ pub(crate) mod wasm {
         futures_timer::Delay::new(duration).boxed()
     }
 
-    pub(crate) fn build_swarm(
+    pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
-        behaviour_constructor: FnOnce(Keypair) -> B,
-    ) -> Result<(BoxedTransport, String)> {
+        behaviour_constructor: impl FnOnce(&Keypair) -> B,
+    ) -> Result<(Swarm<B>, String)> {
         if let Transport::Webtransport = transport {
             let swarm = libp2p::SwarmBuilder::with_new_identity()
-                .with_wasm_executor()
+                .with_wasm_bindgen()
                 .with_other_transport(|key| {
                     libp2p::webtransport_websys::Transport::new(
                         libp2p::webtransport_websys::Config::new(key),
                     )
+                    .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                 })?
                 .with_behaviour(behaviour_constructor)?
                 .build();
@@ -193,14 +185,6 @@ pub(crate) mod wasm {
         } else {
             bail!("Only webtransport supported with wasm")
         }
-    }
-
-    pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
-        transport: BoxedTransport,
-        behaviour: TBehaviour,
-        peer_id: PeerId,
-    ) -> SwarmBuilder<TBehaviour> {
-        SwarmBuilder::with_wasm_executor(transport, behaviour, peer_id)
     }
 
     pub(crate) struct RedisClient(String);

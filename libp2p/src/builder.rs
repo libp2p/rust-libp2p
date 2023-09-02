@@ -94,6 +94,20 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
             phase: TcpPhase {},
         }
     }
+
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_bindgen(
+        self,
+    ) -> SwarmBuilder<WasmBindgen, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>
+    {
+        SwarmBuilder {
+            keypair: self.keypair,
+            phantom: PhantomData,
+            phase: OtherTransportPhase {
+                transport: libp2p_core::transport::dummy::DummyTransport::new(),
+            },
+        }
+    }
 }
 
 pub struct TcpPhase {}
@@ -1328,6 +1342,24 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
     }
 }
 
+#[cfg(feature = "wasm-bindgen")]
+impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
+    SwarmBuilder<WasmBindgen, SwarmPhase<T, B>>
+{
+    pub fn build(self) -> libp2p_swarm::Swarm<B> {
+        SwarmBuilder {
+            phase: BuildPhase {
+                behaviour: self.phase.behaviour,
+                transport: self.phase.transport,
+                swarm_config: libp2p_swarm::SwarmConfig::with_wasm_executor(),
+            },
+            keypair: self.keypair,
+            phantom: PhantomData::<WasmBindgen>,
+        }
+        .build()
+    }
+}
+
 pub struct BuildPhase<T, B> {
     behaviour: B,
     transport: T,
@@ -1360,6 +1392,9 @@ pub enum AsyncStd {}
 
 #[cfg(feature = "tokio")]
 pub enum Tokio {}
+
+#[cfg(feature = "wasm-bindgen")]
+pub enum WasmBindgen {}
 
 pub trait AuthenticatedMultiplexedTransport:
     Transport<
