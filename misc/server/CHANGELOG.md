@@ -4,8 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.1]
+## [0.12.2]
+### Fixed
+- Adhere to `--metrics-path` flag and listen on `0.0.0.0:8888` (default IPFS metrics port).
+  [PR 4392]
 
+[PR 4392]: https://github.com/libp2p/rust-libp2p/pull/4392
+
+## [0.12.1]
 ### Changed
 - Move to tokio and hyper.
   See [PR 4311].

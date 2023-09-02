@@ -11,7 +11,7 @@ use libp2p::metrics::{Metrics, Recorder};
 use libp2p::quic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp;
-use log::{debug, info};
+use log::{debug, info, warn};
 use prometheus_client::metrics::info::Info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -71,7 +71,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         (peer_id, keypair)
     };
-    println!("Local peer id: {local_peer_id}");
+    info!("Local peer id: {local_peer_id}");
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
@@ -89,24 +89,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build();
 
     if config.addresses.swarm.is_empty() {
-        log::warn!("No listen addresses configured.");
+        warn!("No listen addresses configured.");
     }
     for address in &config.addresses.swarm {
         match swarm.listen_on(address.clone()) {
             Ok(_) => {}
             Err(e @ libp2p::TransportError::MultiaddrNotSupported(_)) => {
-                log::warn!("Failed to listen on {address}, continuing anyways, {e}")
+                warn!("Failed to listen on {address}, continuing anyways, {e}")
             }
             Err(e) => return Err(e.into()),
         }
     }
     if config.addresses.append_announce.is_empty() {
-        log::warn!("No external addresses configured.");
+        warn!("No external addresses configured.");
     }
     for address in &config.addresses.append_announce {
         swarm.add_external_address(address.clone())
     }
-    log::info!(
+    info!(
         "External addresses: {:?}",
         swarm.external_addresses().collect::<Vec<_>>()
     );
@@ -119,7 +119,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "A metric with a constant '1' value labeled by version",
         build_info,
     );
-    thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
+    thread::spawn(move || {
+        block_on(http_service::metrics_server(
+            metric_registry,
+            opt.metrics_path,
+        ))
+    });
 
     let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
 
@@ -179,7 +184,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // metrics.record(&e)
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening on {address:?}");
+                info!("Listening on {address:?}");
             }
             _ => {}
         }
