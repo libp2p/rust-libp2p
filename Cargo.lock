@@ -2509,7 +2509,7 @@ checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 
 [[package]]
 name = "libp2p"
-version = "0.52.3"
+version = "0.52.4"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3188,7 +3188,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.3"
+version = "0.43.4"
 dependencies = [
  "async-std",
  "either",

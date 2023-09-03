@@ -1,3 +1,12 @@
+## 0.52.4
+
+- Introduce the new `libp2p::SwarmBuilder`.
+  Users should use the new `libp2p::SwarmBuilder` instead of the now deprecated `libp2p::swarm::SwarmBuilder`.
+  See `libp2p::SwarmBuilder` docs on how to use the new builder.
+  Also see [PR 4120].
+
+[PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+
 ## 0.52.3
 
 - Add `libp2p-quic` stable release.
