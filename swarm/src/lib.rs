@@ -1369,7 +1369,7 @@ pub struct SwarmConfig {
 
 impl SwarmConfig {
     /// Creates a new [`SwarmConfig`] from the given executor. The [`Swarm`] is obtained via
-    /// [`Swarm::new_from_config`].
+    /// [`Swarm::new_with_config`].
     pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
             pool_config: PoolConfig::new(Some(Box::new(executor))),
@@ -1431,7 +1431,7 @@ impl SwarmConfig {
     /// volume of events. If this value is too low, then the [`Swarm`] will
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
-    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
         self.pool_config = self.pool_config.with_notify_handler_buffer_size(n);
         self
     }
@@ -1453,7 +1453,7 @@ impl SwarmConfig {
     }
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.pool_config = self.pool_config.with_dial_concurrency_factor(factor);
         self
     }
@@ -1468,7 +1468,7 @@ impl SwarmConfig {
     /// > **Note**: If configured, specific upgrade protocols for
     /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
     /// > are ignored.
-    pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
+    pub fn with_substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
         self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
         self
     }
@@ -1482,7 +1482,7 @@ impl SwarmConfig {
     /// connection is the sum of negotiating and negotiated streams. A limit on
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
-    pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+    pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
     }

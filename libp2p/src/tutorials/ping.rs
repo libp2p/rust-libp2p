@@ -171,7 +171,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp()
-//!         .with_tls()?;
+//!         .with_tls()?
 //!         .with_behaviour(|_| Behaviour::default())?
 //!         .build();
 //!
@@ -225,7 +225,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp()
-//!         .with_tls()?;
+//!         .with_tls()?
 //!         .with_behaviour(|_| Behaviour::default())?
 //!         .build();
 //!
@@ -274,7 +274,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp()
-//!         .with_tls()?;
+//!         .with_tls()?
 //!         .with_behaviour(|_| Behaviour::default())?
 //!         .build();
 //!

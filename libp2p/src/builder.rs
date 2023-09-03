@@ -272,7 +272,11 @@ pub struct TcpNoisePhase<A> {
     phantom: PhantomData<A>,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    any(feature = "tls", feature = "noise")
+))]
 macro_rules! construct_quic_builder {
     ($self:ident, $tcp:ident, $auth:expr) => {
         SwarmBuilder {
@@ -329,9 +333,8 @@ macro_rules! impl_tcp_noise_builder {
             }
         }
 
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "noise"))]
         impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<WithoutTls>> {
-            #[cfg(feature = "noise")]
             pub fn with_noise(
                 self,
             ) -> Result<
@@ -353,7 +356,6 @@ macro_rules! impl_tcp_noise_builder {
 impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
 impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
-#[cfg(any(feature = "tls", feature = "noise"))]
 pub struct WithoutTls {}
 
 #[derive(Debug, thiserror::Error)]
@@ -660,7 +662,13 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 {
     pub fn with_bandwidth_logging(
         self,
-    ) -> (SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>>, Arc<BandwidthSinks>) {
+    ) -> (
+        SwarmBuilder<
+            Provider,
+            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+        >,
+        Arc<BandwidthSinks>,
+    ) {
         self.without_any_other_transports()
             .without_dns()
             .without_relay()
@@ -1040,7 +1048,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
-        self.without_websocket().without_bandwidth_logging().with_behaviour(constructor)
+        self.without_websocket()
+            .without_bandwidth_logging()
+            .with_behaviour(constructor)
     }
 }
 
@@ -1051,7 +1061,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
-        self.without_websocket().without_bandwidth_logging().with_behaviour(constructor)
+        self.without_websocket()
+            .without_bandwidth_logging()
+            .with_behaviour(constructor)
     }
 }
 
@@ -1281,9 +1293,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider, R>
         )
     }
 
-    pub fn without_bandwidth_logging(
-        self,
-    ) -> SwarmBuilder<Provider, BehaviourPhase<T, R>> {
+    pub fn without_bandwidth_logging(self) -> SwarmBuilder<Provider, BehaviourPhase<T, R>> {
         SwarmBuilder {
             phase: BehaviourPhase {
                 relay_behaviour: self.phase.relay_behaviour,
