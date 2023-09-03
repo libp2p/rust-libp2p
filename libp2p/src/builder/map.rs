@@ -30,7 +30,7 @@ pub(crate) struct Upgrade<U, F> {
 
 impl<U, F> Upgrade<U, F> {
     /// Applies the function on the result of the upgrade.
-    pub fn new(upgrade: U, fun: F) -> Self {
+    pub(crate) fn new(upgrade: U, fun: F) -> Self {
         Upgrade { upgrade, fun }
     }
 }
