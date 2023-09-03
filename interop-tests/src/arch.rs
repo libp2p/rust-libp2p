@@ -21,7 +21,7 @@ pub(crate) mod native {
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
-    use crate::{from_env, SecProtocol, Transport};
+    use crate::{from_env, Muxer, SecProtocol, Transport};
 
     pub(crate) type Instant = std::time::Instant;
 
@@ -33,6 +33,15 @@ pub(crate) mod native {
 
     pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {
         tokio::time::sleep(duration).boxed()
+    }
+
+    fn expect_muxer_yamux() -> Result<()> {
+        Ok(match from_env("muxer")? {
+            Muxer::Yamux => (),
+            Muxer::Mplex => {
+                bail!("Only Yamux is supported, not Mplex")
+            }
+        })
     }
 
     // TODO: Error in case muxer is not yamux.
@@ -51,7 +60,8 @@ pub(crate) mod native {
                 (swarm, format!("/ip4/{ip}/udp/0/quic-v1"))
             }
             (Transport::Tcp, Ok(SecProtocol::Tls)) => {
-                // TODO: Note that the timeout of 5 secs is gone now.
+                expect_muxer_yamux()?;
+
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp()
@@ -61,7 +71,8 @@ pub(crate) mod native {
                 (swarm, format!("/ip4/{ip}/tcp/0"))
             }
             (Transport::Tcp, Ok(SecProtocol::Noise)) => {
-                // TODO: Note that the timeout of 5 secs is gone now.
+                expect_muxer_yamux()?;
+
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp()
@@ -71,6 +82,8 @@ pub(crate) mod native {
                 (swarm, format!("/ip4/{ip}/tcp/0"))
             }
             (Transport::Ws, Ok(SecProtocol::Tls)) => {
+                expect_muxer_yamux()?;
+
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_websocket()
@@ -82,6 +95,8 @@ pub(crate) mod native {
                 (swarm, format!("/ip4/{ip}/tcp/0/ws"))
             }
             (Transport::Ws, Ok(SecProtocol::Noise)) => {
+                expect_muxer_yamux()?;
+
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_websocket()
