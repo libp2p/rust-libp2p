@@ -9,7 +9,12 @@ use crate::bandwidth::BandwidthSinks;
 use crate::TransportExt;
 use map::Map as MapUpgrade;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tls",
+    feature = "noise",
+    any(feature = "tcp", feature = "relay", feature = "websocket")
+))]
 mod map;
 
 /// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
