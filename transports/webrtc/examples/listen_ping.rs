@@ -33,7 +33,7 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(SwarmConfig::new_with_config(
+    Ok(Swarm::new_with_config(
         transport,
         Behaviour::default(),
         peer_id,
