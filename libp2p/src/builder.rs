@@ -1,3 +1,5 @@
+// TODO: Feature flag for yamux.
+
 use crate::TransportExt;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::{NetworkBehaviour, Swarm};
@@ -109,7 +111,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
 pub struct TcpPhase {}
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_tcp(self) -> SwarmBuilder<Provider, TcpTlsPhase> {
         self.with_tcp_config(Default::default())
@@ -194,12 +196,12 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
 pub struct TcpTlsPhase {
     tcp_config: libp2p_tcp::Config,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
 impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
     #[cfg(feature = "tls")]
     pub fn with_tls(
@@ -265,7 +267,7 @@ impl SwarmBuilder<Tokio, TcpTlsPhase> {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
 pub struct TcpNoisePhase<A> {
     tcp_config: libp2p_tcp::Config,
     tls_config: A,
@@ -356,6 +358,7 @@ macro_rules! impl_tcp_noise_builder {
 impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
 impl_tcp_noise_builder!("tokio", Tokio, tokio);
 
+#[cfg(any(feature = "tls", feature = "noise"))]
 pub struct WithoutTls {}
 
 #[derive(Debug, thiserror::Error)]
