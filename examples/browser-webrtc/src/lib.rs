@@ -9,15 +9,13 @@ use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use std::convert::From;
 use std::io;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen_futures::JsFuture;
 use web_sys::{Document, HtmlElement};
 
-#[wasm_bindgen(start)]
-pub async fn run() -> Result<(), JsError> {
+#[wasm_bindgen]
+pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
     wasm_logger::init(wasm_logger::Config::default());
-    let body = Body::from_current_window()?;
 
+    let body = Body::from_current_window()?;
     body.append_p("Let's ping the WebRTC Server!")?;
 
     let local_key = Keypair::generate_ed25519();
@@ -34,7 +32,7 @@ pub async fn run() -> Result<(), JsError> {
 
     log::info!("Initialize swarm with identity: {local_peer_id}");
 
-    let addr = fetch_server_addr().await?;
+    let addr = libp2p_endpoint.parse::<Multiaddr>()?;
     log::info!("Dialing {addr}");
     swarm.dial(addr)?;
 
@@ -99,31 +97,6 @@ impl Body {
 
         Ok(())
     }
-}
-
-/// Helper that returns the multiaddress of echo-server
-///
-/// It fetches the multiaddress via HTTP request to from our serving host.
-async fn fetch_server_addr() -> Result<Multiaddr, JsError> {
-    let window = web_sys::window().expect("no global `window` exists");
-
-    let response_promise = JsFuture::from(window.fetch_with_str("/address"))
-        .await
-        .map_err(|_| js_error("fetch failed"))?
-        .dyn_into::<web_sys::Response>()
-        .map_err(|_| js_error("cast to `Response` failed"))?
-        .text()
-        .map_err(|_| js_error("response is not text"))?;
-
-    let value = JsFuture::from(response_promise)
-        .await
-        .map_err(|_| js_error("failed to retrieve body as text"))?
-        .as_string()
-        .filter(|s| !s.is_empty())
-        .ok_or(js_error("fetch text is empty"))?
-        .parse::<Multiaddr>()?;
-
-    Ok(value)
 }
 
 fn js_error(msg: &str) -> JsError {

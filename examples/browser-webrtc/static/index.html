@@ -14,10 +14,10 @@
         </div>
 
         <script type="module" defer>
-            import * as wasm from "./browser_webrtc_example.js"
-            wasm.default().then(() => {
-                console.log("WASM loaded")
-            })
+            import init, { run } from "./browser_webrtc_example.js"
+
+            await init();
+            run("__LIBP2P_ENDPOINT__"); // This placeholder will be replaced by the server at runtime with the actual listening address.
         </script>
     </body>
 </html>
