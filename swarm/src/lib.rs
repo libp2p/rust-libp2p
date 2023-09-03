@@ -2008,12 +2008,7 @@ mod tests {
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
 
-        Swarm::new_with_config(
-            transport,
-            behaviour,
-            local_public_key.into(),
-            config,
-        )
+        Swarm::new_with_config(transport, behaviour, local_public_key.into(), config)
     }
 
     fn swarms_connected<TBehaviour>(
