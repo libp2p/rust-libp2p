@@ -658,6 +658,19 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
 impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
+    pub fn with_bandwidth_logging(
+        self,
+    ) -> (SwarmBuilder<Provider, BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>>, Arc<BandwidthSinks>) {
+        self.without_any_other_transports()
+            .without_dns()
+            .without_relay()
+            .without_websocket()
+            .with_bandwidth_logging()
+    }
+}
+impl<Provider, T: AuthenticatedMultiplexedTransport>
+    SwarmBuilder<Provider, OtherTransportPhase<T>>
+{
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
@@ -666,6 +679,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
             .without_dns()
             .without_relay()
             .without_websocket()
+            .without_bandwidth_logging()
             .with_behaviour(constructor)
     }
 }
