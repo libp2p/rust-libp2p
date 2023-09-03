@@ -454,10 +454,7 @@ impl PeerScore {
 
         // Insert the ip
         peer_stats.known_ips.insert(ip);
-        self.peer_ips
-            .entry(ip)
-            .or_insert_with(HashSet::new)
-            .insert(*peer_id);
+        self.peer_ips.entry(ip).or_default().insert(*peer_id);
     }
 
     /// Removes an ip from a peer
@@ -570,9 +567,7 @@ impl PeerScore {
         topic_hash: &TopicHash,
     ) {
         // adds an empty record with the message id
-        self.deliveries
-            .entry(msg_id.clone())
-            .or_insert_with(DeliveryRecord::default);
+        self.deliveries.entry(msg_id.clone()).or_default();
 
         if let Some(callback) = self.message_delivery_time_callback {
             if self
@@ -595,10 +590,7 @@ impl PeerScore {
     ) {
         self.mark_first_message_delivery(from, topic_hash);
 
-        let record = self
-            .deliveries
-            .entry(msg_id.clone())
-            .or_insert_with(DeliveryRecord::default);
+        let record = self.deliveries.entry(msg_id.clone()).or_default();
 
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
@@ -649,10 +641,7 @@ impl PeerScore {
         }
 
         let peers: Vec<_> = {
-            let record = self
-                .deliveries
-                .entry(msg_id.clone())
-                .or_insert_with(DeliveryRecord::default);
+            let record = self.deliveries.entry(msg_id.clone()).or_default();
 
             // Multiple peers can now reject the same message as we track which peers send us the
             // message. If we have already updated the status, return.
@@ -686,10 +675,7 @@ impl PeerScore {
         msg_id: &MessageId,
         topic_hash: &TopicHash,
     ) {
-        let record = self
-            .deliveries
-            .entry(msg_id.clone())
-            .or_insert_with(DeliveryRecord::default);
+        let record = self.deliveries.entry(msg_id.clone()).or_default();
 
         if record.peers.get(from).is_some() {
             // we have already seen this duplicate!
@@ -778,6 +764,11 @@ impl PeerScore {
                 entry.insert(params);
             }
         }
+    }
+
+    /// Returns a scoring parameters for a topic if existent.
+    pub(crate) fn get_topic_params(&self, topic_hash: &TopicHash) -> Option<&TopicScoreParams> {
+        self.params.topics.get(topic_hash)
     }
 
     /// Increments the "invalid message deliveries" counter for all scored topics the message

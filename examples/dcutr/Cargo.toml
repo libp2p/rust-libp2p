@@ -6,10 +6,9 @@ publish = false
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.3.12", features = ["derive"] }
+clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
 futures-timer = "3.0"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
-libp2p-quic = { path = "../../transports/quic", features = ["async-std"] }
+libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
