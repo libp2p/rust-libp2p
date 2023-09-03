@@ -38,8 +38,7 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         Behaviour::default(),
         peer_id,
         SwarmConfig::with_tokio_executor(),
-    )
-    .build())
+    ))
 }
 
 #[derive(NetworkBehaviour, Default)]
