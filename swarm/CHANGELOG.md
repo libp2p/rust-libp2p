@@ -1,3 +1,10 @@
+## 0.43.4
+
+- Implement `Debug` for event structs
+  See [PR 4426]
+
+[PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
+
 ## 0.43.3
 
 - Implement `Display` for `ConnectionId`.
