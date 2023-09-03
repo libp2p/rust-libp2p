@@ -14,7 +14,6 @@ type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
-    use std::net::Ipv6Addr;
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
@@ -25,10 +24,9 @@ pub(crate) mod native {
     use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
-    use libp2p::multiaddr::Protocol;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::websocket::WsConfig;
-    use libp2p::{noise, quic, tcp, tls, yamux, Multiaddr, PeerId, Transport as _};
+    use libp2p::{noise, quic, tcp, tls, yamux, PeerId, Transport as _};
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
