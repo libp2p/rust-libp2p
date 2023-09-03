@@ -26,7 +26,7 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
@@ -124,15 +124,15 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    SwarmBuilder::without_executor(
+    Swarm::new_with_config(
         transport,
         Client {
             relay: behaviour,
             dcutr: dcutr::Behaviour::new(local_peer_id),
         },
         local_peer_id,
+        SwarmConfig::without_executor(),
     )
-    .build()
 }
 
 #[derive(NetworkBehaviour)]

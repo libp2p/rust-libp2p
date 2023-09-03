@@ -1,5 +1,3 @@
-// TODO: Feature flag for yamux.
-
 use crate::TransportExt;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::{NetworkBehaviour, Swarm};
@@ -111,7 +109,11 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
 pub struct TcpPhase {}
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    any(feature = "tls", feature = "noise")
+))]
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_tcp(self) -> SwarmBuilder<Provider, TcpTlsPhase> {
         self.with_tcp_config(Default::default())
@@ -196,12 +198,20 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    any(feature = "tls", feature = "noise")
+))]
 pub struct TcpTlsPhase {
     tcp_config: libp2p_tcp::Config,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    any(feature = "tls", feature = "noise")
+))]
 impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
     #[cfg(feature = "tls")]
     pub fn with_tls(
@@ -267,7 +277,11 @@ impl SwarmBuilder<Tokio, TcpTlsPhase> {
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "tcp", any(feature = "tls", feature = "noise")))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    feature = "tcp",
+    any(feature = "tls", feature = "noise")
+))]
 pub struct TcpNoisePhase<A> {
     tcp_config: libp2p_tcp::Config,
     tls_config: A,
@@ -277,6 +291,7 @@ pub struct TcpNoisePhase<A> {
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "tcp",
+    feature = "yamux",
     any(feature = "tls", feature = "noise")
 ))]
 macro_rules! construct_quic_builder {
@@ -297,7 +312,7 @@ macro_rules! construct_quic_builder {
 
 macro_rules! impl_tcp_noise_builder {
     ($providerKebabCase:literal, $providerCamelCase:ident, $tcp:ident) => {
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "tls"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "tls", feature = "yamux"))]
         impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<libp2p_tls::Config>> {
             #[cfg(feature = "noise")]
             pub fn with_noise(
@@ -335,7 +350,7 @@ macro_rules! impl_tcp_noise_builder {
             }
         }
 
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "noise"))]
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "noise", feature = "yamux"))]
         impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<WithoutTls>> {
             pub fn with_noise(
                 self,

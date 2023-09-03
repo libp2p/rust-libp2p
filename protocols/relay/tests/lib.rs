@@ -34,7 +34,7 @@ use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -312,7 +312,7 @@ fn build_relay() -> Swarm<Relay> {
 
     let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new_with_config(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -325,8 +325,8 @@ fn build_relay() -> Swarm<Relay> {
             ),
         },
         local_peer_id,
+        SwarmConfig::with_async_std_executor(),
     )
-    .build()
 }
 
 fn build_client() -> Swarm<Client> {
@@ -340,15 +340,15 @@ fn build_client() -> Swarm<Client> {
         local_public_key,
     );
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new_with_config(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),
             relay: behaviour,
         },
         local_peer_id,
+        SwarmConfig::without_executor(),
     )
-    .build()
 }
 
 fn upgrade_transport<StreamSink>(
