@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future::{self, TryFutureExt};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Upgrade applying a function to an inner upgrade.
 #[derive(Debug, Clone)]

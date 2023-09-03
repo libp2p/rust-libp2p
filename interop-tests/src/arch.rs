@@ -36,12 +36,13 @@ pub(crate) mod native {
     }
 
     fn expect_muxer_yamux() -> Result<()> {
-        Ok(match from_env("muxer")? {
+       match from_env("muxer")? {
             Muxer::Yamux => (),
             Muxer::Mplex => {
                 bail!("Only Yamux is supported, not Mplex")
             }
-        })
+        };
+        Ok(())
     }
 
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
