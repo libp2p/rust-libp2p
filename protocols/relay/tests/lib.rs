@@ -347,7 +347,7 @@ fn build_client() -> Swarm<Client> {
             relay: behaviour,
         },
         local_peer_id,
-        SwarmConfig::without_executor(),
+        SwarmConfig::with_async_std_executor(),
     )
 }
 
