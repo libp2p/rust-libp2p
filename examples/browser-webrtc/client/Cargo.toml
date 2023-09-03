@@ -16,7 +16,6 @@ js-sys = "0.3.64"
 libp2p = { path = "../../../libp2p", features = ["ed25519", "macros", "ping", "wasm-bindgen"] }
 libp2p-webrtc-websys = { workspace = true }
 log = "0.4"
-thiserror = "1.0.44"
 wasm-bindgen = "0.2.84"
 wasm-bindgen-futures = "0.4.37"
 wasm-logger = { version = "0.2.0" }
