@@ -263,9 +263,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: thomaseizinger/cargo-semver-checks-action@b266e63c6c2823106f61fd9ee4805ac6ce0a2783
-        with:
-          version: "baz"
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
 
   rustfmt:
     runs-on: ubuntu-latest
