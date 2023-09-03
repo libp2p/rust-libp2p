@@ -61,7 +61,6 @@ mod apply;
 mod denied;
 mod either;
 mod error;
-mod map;
 mod pending;
 mod ready;
 mod select;
@@ -75,7 +74,6 @@ use futures::future::Future;
 
 pub use self::{
     denied::DeniedUpgrade,
-    map::Map,
     pending::PendingUpgrade,
     ready::ReadyUpgrade,
     select::SelectUpgrade,

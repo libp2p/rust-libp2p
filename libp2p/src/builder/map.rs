@@ -18,13 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use futures::future::{self, TryFutureExt};
 
-// TODO: Rename to MapUpgrade?
 /// Upgrade applying a function to an inner upgrade.
 #[derive(Debug, Clone)]
-pub struct Map<U, F> {
+pub(crate) struct Map<U, F> {
     upgrade: U,
     fun: F,
 }

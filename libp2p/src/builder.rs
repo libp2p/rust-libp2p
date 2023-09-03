@@ -1,4 +1,3 @@
-use crate::TransportExt;
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_swarm::{NetworkBehaviour, Swarm};
 use std::convert::Infallible;
@@ -6,7 +5,11 @@ use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::TransportExt;
 use crate::bandwidth::BandwidthSinks;
+use map::Map as MapUpgrade;
+
+mod map;
 
 /// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
 ///
@@ -324,7 +327,7 @@ macro_rules! impl_tcp_noise_builder {
                 Ok(construct_quic_builder!(
                     self,
                     $tcp,
-                    libp2p_core::upgrade::Map::new(
+                    MapUpgrade::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair)
@@ -944,7 +947,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     > {
         Ok(construct_websocket_builder!(
             self,
-            libp2p_core::upgrade::Map::new(
+            MapUpgrade::new(
                 libp2p_core::upgrade::SelectUpgrade::new(
                     self.phase.tls_config,
                     libp2p_noise::Config::new(&self.keypair)
@@ -1211,7 +1214,7 @@ macro_rules! impl_websocket_noise_builder {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
-                    libp2p_core::upgrade::Map::new(
+                    MapUpgrade::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?,
