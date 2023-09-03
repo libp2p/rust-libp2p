@@ -1,3 +1,5 @@
+#![cfg(target_arch = "wasm32")]
+
 use futures::StreamExt;
 use js_sys::Date;
 use libp2p::core::Multiaddr;
@@ -30,7 +32,7 @@ pub async fn run() -> Result<(), JsError> {
     )
     .build();
 
-    log::info!("Running pinger with peer_id: {local_peer_id}");
+    log::info!("Initialize swarm with identity: {local_peer_id}");
 
     let addr = fetch_server_addr().await?;
     log::info!("Dialing {addr}");
@@ -101,11 +103,11 @@ impl Body {
 
 /// Helper that returns the multiaddress of echo-server
 ///
-/// It fetches the multiaddress via HTTP request to from 127.0.0.1:8080.
+/// It fetches the multiaddress via HTTP request to from our serving host.
 async fn fetch_server_addr() -> Result<Multiaddr, JsError> {
     let window = web_sys::window().expect("no global `window` exists");
 
-    let response_promise = JsFuture::from(window.fetch_with_str("http://127.0.0.1:8080/address"))
+    let response_promise = JsFuture::from(window.fetch_with_str("/address"))
         .await
         .map_err(|_| js_error("fetch failed"))?
         .dyn_into::<web_sys::Response>()
