@@ -23,19 +23,19 @@ use futures::future::{self, TryFutureExt};
 
 /// Upgrade applying a function to an inner upgrade.
 #[derive(Debug, Clone)]
-pub(crate) struct Map<U, F> {
+pub(crate) struct Upgrade<U, F> {
     upgrade: U,
     fun: F,
 }
 
-impl<U, F> Map<U, F> {
+impl<U, F> Upgrade<U, F> {
     /// Applies the function on the result of the upgrade.
     pub fn new(upgrade: U, fun: F) -> Self {
-        Map { upgrade, fun }
+        Upgrade { upgrade, fun }
     }
 }
 
-impl<U, F> UpgradeInfo for Map<U, F>
+impl<U, F> UpgradeInfo for Upgrade<U, F>
 where
     U: UpgradeInfo,
 {
@@ -47,7 +47,7 @@ where
     }
 }
 
-impl<U, F, C, D> InboundUpgrade<C> for Map<U, F>
+impl<U, F, C, D> InboundUpgrade<C> for Upgrade<U, F>
 where
     U: InboundUpgrade<C>,
     F: FnOnce(U::Output) -> D,
@@ -61,7 +61,7 @@ where
     }
 }
 
-impl<U, F, C, D> OutboundUpgrade<C> for Map<U, F>
+impl<U, F, C, D> OutboundUpgrade<C> for Upgrade<U, F>
 where
     U: OutboundUpgrade<C>,
     F: FnOnce(U::Output) -> D,

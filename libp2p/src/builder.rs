@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use crate::bandwidth::BandwidthSinks;
 use crate::TransportExt;
-use map::Map as MapUpgrade;
 
 #[cfg(all(
     not(target_arch = "wasm32"),
@@ -333,7 +332,7 @@ macro_rules! impl_tcp_noise_builder {
                 Ok(construct_quic_builder!(
                     self,
                     $tcp,
-                    MapUpgrade::new(
+                    map::Upgrade::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair)
@@ -953,7 +952,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     > {
         Ok(construct_websocket_builder!(
             self,
-            MapUpgrade::new(
+            map::Upgrade::new(
                 libp2p_core::upgrade::SelectUpgrade::new(
                     self.phase.tls_config,
                     libp2p_noise::Config::new(&self.keypair)
@@ -1220,7 +1219,7 @@ macro_rules! impl_websocket_noise_builder {
                 construct_behaviour_builder!(
                     self,
                     $dnsTcp,
-                    MapUpgrade::new(
+                    map::Upgrade::new(
                         libp2p_core::upgrade::SelectUpgrade::new(
                             self.phase.tls_config,
                             libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?,
