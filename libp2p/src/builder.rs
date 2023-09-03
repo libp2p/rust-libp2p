@@ -5,10 +5,11 @@ use std::io;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::TransportExt;
 use crate::bandwidth::BandwidthSinks;
+use crate::TransportExt;
 use map::Map as MapUpgrade;
 
+#[cfg(not(target_arch = "wasm32"))]
 mod map;
 
 /// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
