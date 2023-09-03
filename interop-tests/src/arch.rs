@@ -44,7 +44,6 @@ pub(crate) mod native {
         })
     }
 
-    // TODO: Error in case muxer is not yamux.
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
