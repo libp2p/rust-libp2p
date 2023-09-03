@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-// TODO: Update
-
 //! # Hole Punching Tutorial
 //!
 //! This tutorial shows hands-on how to overcome firewalls and NATs with libp2p's hole punching
