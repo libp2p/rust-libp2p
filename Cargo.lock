@@ -463,17 +463,17 @@ dependencies = [
 
 [[package]]
 name = "async-std-resolver"
-version = "0.22.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ba50e24d9ee0a8950d3d03fc6d0dd10aa14b5de3b101949b4e160f7fee7c723"
+checksum = "0354a68a52265a3bde76005ddd2726624ef8624614f7f58871301de205a58a59"
 dependencies = [
  "async-std",
  "async-trait",
  "futures-io",
  "futures-util",
  "pin-utils",
- "socket2 0.4.9",
- "trust-dns-resolver",
+ "socket2 0.5.3",
+ "trust-dns-resolver 0.23.0",
 ]
 
 [[package]]
@@ -2708,7 +2708,7 @@ dependencies = [
  "parking_lot",
  "smallvec",
  "tokio",
- "trust-dns-resolver",
+ "trust-dns-resolver 0.22.0",
 ]
 
 [[package]]
@@ -5945,6 +5945,26 @@ dependencies = [
  "tracing",
  "trust-dns-proto 0.22.0",
  "webpki-roots 0.22.6",
+]
+
+[[package]]
+name = "trust-dns-resolver"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dff7aed33ef3e8bf2c9966fccdfed93f93d46f432282ea875cd66faabc6ef2f"
+dependencies = [
+ "cfg-if 1.0.0",
+ "futures-util",
+ "ipconfig",
+ "lru-cache",
+ "once_cell",
+ "parking_lot",
+ "rand 0.8.5",
+ "resolv-conf",
+ "smallvec",
+ "thiserror",
+ "tracing",
+ "trust-dns-proto 0.23.0",
 ]
 
 [[package]]
