@@ -1829,7 +1829,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35bd3cf68c183738046838e300353e4716c674dc5e56890de4826801a6622a28"
 dependencies = [
  "futures-io",
- "rustls 0.21.6",
+ "rustls 0.21.7",
 ]
 
 [[package]]
@@ -3074,7 +3074,7 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "socket2 0.5.3",
  "thiserror",
  "tokio",
@@ -3276,7 +3276,7 @@ dependencies = [
  "libp2p-yamux",
  "rcgen 0.10.0",
  "ring",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-webpki",
  "thiserror",
  "tokio",
@@ -4371,7 +4371,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "thiserror",
  "tokio",
  "tracing",
@@ -4387,7 +4387,7 @@ dependencies = [
  "rand 0.8.5",
  "ring",
  "rustc-hash",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "slab",
  "thiserror",
  "tinyvec",
@@ -4903,9 +4903,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.6"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
+checksum = "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
 dependencies = [
  "log",
  "ring",
@@ -5756,9 +5756,9 @@ dependencies = [
 
 [[package]]
 name = "tower-http"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55ae70283aba8d2a8b411c695c437fe25b8b5e44e23e780662002fc72fb47a82"
+checksum = "61c5bb1d698276a2443e5ecfabc1008bf15a36c12e6a7176e7bf089ea9131140"
 dependencies = [
  "bitflags 2.3.3",
  "bytes",
@@ -6049,9 +6049,9 @@ checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "url"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb"
+checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
  "idna 0.4.0",
