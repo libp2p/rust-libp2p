@@ -54,7 +54,6 @@ async fn main() {
     )
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());
 

@@ -56,7 +56,6 @@ async fn main() {
     )
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
