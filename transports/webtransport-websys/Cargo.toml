@@ -23,7 +23,7 @@ log = "0.4.20"
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-thiserror = "1.0.44"
+thiserror = "1.0.48"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 web-sys = { version = "0.3.64", features = [
