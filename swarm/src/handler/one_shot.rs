@@ -26,9 +26,10 @@ use crate::handler::{
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use instant::Instant;
 use smallvec::SmallVec;
-use std::{error, fmt, fmt::Debug, task::Context, task::Poll, time::Duration};
+use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
 /// A [`ConnectionHandler`] that opens a new substream for each request.
+// TODO: Debug
 pub struct OneShotHandler<TInbound, TOutbound, TEvent>
 where
     TOutbound: OutboundUpgradeSend,
@@ -47,26 +48,6 @@ where
     keep_alive: KeepAlive,
     /// The configuration container for the handler
     config: OneShotHandlerConfig,
-}
-
-impl<TInbound, TOutbound, TEvent> Debug for OneShotHandler<TInbound, TOutbound, TEvent>
-where
-    TInbound: Debug,
-    TOutbound: OutboundUpgradeSend + Debug,
-    TOutbound::Error: Debug,
-    TEvent: Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OneShotHandler")
-            .field("listen_protocol", &self.listen_protocol)
-            .field("pending_error", &self.pending_error)
-            .field("events_out", &self.events_out)
-            .field("dial_queue", &self.dial_queue)
-            .field("dial_negotiated", &self.dial_negotiated)
-            .field("keep_alive", &self.keep_alive)
-            .field("config", &self.config)
-            .finish()
-    }
 }
 
 impl<TInbound, TOutbound, TEvent> OneShotHandler<TInbound, TOutbound, TEvent>
