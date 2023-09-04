@@ -8,6 +8,11 @@ updates:
     commit-message:
       prefix: "deps"
     rebase-strategy: "disabled"
+    groups:
+      trust-dns:
+        patterns:
+          - "trust-dns-*"
+          - "async-std-resolver"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
