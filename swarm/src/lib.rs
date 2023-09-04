@@ -1581,8 +1581,8 @@ impl fmt::Display for DialError {
                 "Dial error: tried to dial local peer id at {endpoint:?}."
             ),
             DialError::DialPeerConditionFalse(condition) => match condition {
-                PeerCondition::Disconnected => write!(f, "Dial error: condition dial was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
-                PeerCondition::NotDialing => write!(f, "Dial error: condition dial was configured to only if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but node is already dialing, thus cancelling new dial."),
+                PeerCondition::Disconnected => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
+                PeerCondition::NotDialing => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
                 PeerCondition::Always => write!(f, "Dial error: condition dial was configured to always happen (`PeerCondition::Always`)."),
             }
             DialError::Aborted => write!(
