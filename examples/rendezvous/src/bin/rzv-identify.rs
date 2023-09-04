@@ -56,7 +56,6 @@ async fn main() {
     )
     .build();
 
-
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();

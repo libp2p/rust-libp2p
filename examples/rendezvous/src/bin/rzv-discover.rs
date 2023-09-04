@@ -56,7 +56,6 @@ async fn main() {
     )
     .build();
 
-
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
     let mut discover_tick = tokio::time::interval(Duration::from_secs(30));
