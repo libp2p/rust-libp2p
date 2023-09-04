@@ -100,8 +100,7 @@ pub(crate) async fn handle_stop_message_response(
 
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
-    let send_res = substream.send(msg).await;
-    if send_res.is_err() {
+    if substream.send(msg).await.is_err() {
         return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
             FatalUpgradeError::StreamClosed,
         )));
@@ -132,40 +131,36 @@ pub(crate) async fn handle_stop_message_response(
     }
 
     match status {
-        Some(proto_status) => match proto_status {
-            proto::Status::OK => {}
-            proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-                return ConnectionHandlerEvent::NotifyBehaviour(
-                    handler::Event::OutboundConnectNegotiationFailed {
-                        circuit_id: stop_command.circuit_id,
-                        src_peer_id: stop_command.src_peer_id,
-                        src_connection_id: stop_command.src_connection_id,
-                        inbound_circuit_req: stop_command.inbound_circuit_req,
-                        status: proto_status,
-                        error: StreamUpgradeError::Apply(
-                            CircuitFailedReason::ResourceLimitExceeded,
-                        ),
-                    },
-                )
-            }
-            proto::Status::PERMISSION_DENIED => {
-                return ConnectionHandlerEvent::NotifyBehaviour(
-                    handler::Event::OutboundConnectNegotiationFailed {
-                        circuit_id: stop_command.circuit_id,
-                        src_peer_id: stop_command.src_peer_id,
-                        src_connection_id: stop_command.src_connection_id,
-                        inbound_circuit_req: stop_command.inbound_circuit_req,
-                        status: proto_status,
-                        error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
-                    },
-                )
-            }
-            s => {
-                return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-                    FatalUpgradeError::UnexpectedStatus(s),
-                )))
-            }
-        },
+        Some(proto::Status::OK) => {}
+        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
+            return ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundConnectNegotiationFailed {
+                    circuit_id: stop_command.circuit_id,
+                    src_peer_id: stop_command.src_peer_id,
+                    src_connection_id: stop_command.src_connection_id,
+                    inbound_circuit_req: stop_command.inbound_circuit_req,
+                    status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
+                },
+            )
+        }
+        Some(proto::Status::PERMISSION_DENIED) => {
+            return ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundConnectNegotiationFailed {
+                    circuit_id: stop_command.circuit_id,
+                    src_peer_id: stop_command.src_peer_id,
+                    src_connection_id: stop_command.src_connection_id,
+                    inbound_circuit_req: stop_command.inbound_circuit_req,
+                    status: proto::Status::PERMISSION_DENIED,
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
+                },
+            )
+        }
+        Some(s) => {
+            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
+                FatalUpgradeError::UnexpectedStatus(s),
+            )))
+        }
         None => {
             return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
                 FatalUpgradeError::MissingStatusField,

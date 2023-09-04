@@ -45,7 +45,7 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-const STREAM_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 
 #[derive(Debug, Clone)]
