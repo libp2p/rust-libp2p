@@ -1,4 +1,4 @@
-## 0.43.4
+## 0.43.4 - unreleased
 
 - Implement `Debug` for event structs
   See [PR 4426]
