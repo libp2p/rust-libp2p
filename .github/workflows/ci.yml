@@ -49,20 +49,6 @@ jobs:
       - name: Check if we compile without any features activated
         run: cargo build --package "$CRATE" --no-default-features
 
-      - run: cargo clean
-
-      - name: Check if crate has been released
-        id: check-released
-        run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
-          echo "code=${RESPONSE_CODE}"
-          echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
-
-      - uses: ./.github/actions/cargo-semver-checks
-        if: steps.check-released.outputs.code == 200 && !contains(fromJSON('["libp2p-swarm-derive", "libp2p-server"]'), env.CRATE) # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
-        with:
-          crate: ${{ env.CRATE }}
-
       - name: Enforce no dependency on meta crate
         if: env.CRATE != 'libp2p-server'
         run: |
@@ -272,6 +258,14 @@ jobs:
           for toml in examples/**/Cargo.toml; do
             cargo check --manifest-path "$toml";
           done
+
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.22.1/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+        shell: bash
+      - uses: obi1kenobi/cargo-semver-checks-action@v2
 
   rustfmt:
     runs-on: ubuntu-latest
