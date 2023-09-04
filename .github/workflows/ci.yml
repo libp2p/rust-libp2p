@@ -353,13 +353,8 @@ jobs:
 
   cargo-deny:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        checks:
-          - advisories
-          - bans licenses sources
     steps:
     - uses: actions/checkout@v3
     - uses: EmbarkStudios/cargo-deny-action@v1
       with:
-        command: check ${{ matrix.checks }}
+        command: check advisories bans licenses sources
