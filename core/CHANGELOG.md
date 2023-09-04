@@ -1,7 +1,7 @@
 ## 0.40.1 - unreleased
 
-- Implement `Debug` for `StreamMuxerEvent`
-  See [PR 4426]
+- Implement `Debug` for `StreamMuxerEvent`.
+  See [PR 4426].
 
 [PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
 
