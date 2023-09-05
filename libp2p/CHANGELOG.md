@@ -1,4 +1,4 @@
-## 0.52.4
+## 0.52.4 - unreleased
 
 - Introduce the new `libp2p::SwarmBuilder`.
   Users should use the new `libp2p::SwarmBuilder` instead of the now deprecated `libp2p::swarm::SwarmBuilder`.
