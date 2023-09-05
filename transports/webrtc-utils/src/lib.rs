@@ -1,19 +1,15 @@
-#![doc = include_str!("../README.md")]
-
 mod proto {
     #![allow(unreachable_pub)]
     include!("generated/mod.rs");
     pub use self::webrtc::pb::{mod_Message::Flag, Message};
 }
 
-pub mod error;
 mod fingerprint;
 pub mod noise;
 pub mod sdp;
 mod stream;
 pub mod transport;
 
-pub use error::Error;
 pub use fingerprint::{Fingerprint, SHA256};
 pub use stream::{DropListener, Stream, MAX_MSG_LEN};
 pub use transport::parse_webrtc_dial_addr;

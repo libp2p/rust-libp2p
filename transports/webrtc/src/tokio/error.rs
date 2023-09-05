@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_identity::PeerId;
-use libp2p_webrtc_utils::Error as UtilsError;
 use thiserror::Error;
 
 /// Error in WebRTC.
@@ -44,18 +43,4 @@ pub enum Error {
 
     #[error("internal error: {0} (see debug logs)")]
     Internal(String),
-}
-
-/// Ensure the Utilities error is converted to the WebRTC error so we don't expose it to the user
-/// via our public API.
-impl From<UtilsError> for Error {
-    fn from(e: UtilsError) -> Self {
-        match e {
-            UtilsError::Io(e) => Error::Io(e),
-            UtilsError::Authentication(e) => Error::Authentication(e),
-            UtilsError::InvalidPeerID { expected, got } => Error::InvalidPeerID { expected, got },
-            UtilsError::NoListeners => Error::NoListeners,
-            UtilsError::Internal(e) => Error::Internal(e),
-        }
-    }
 }

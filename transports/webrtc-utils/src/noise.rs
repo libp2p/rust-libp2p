@@ -25,14 +25,13 @@ use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 
 use crate::fingerprint::Fingerprint;
-use crate::Error;
 
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
     stream: T,
     client_fingerprint: Fingerprint,
     server_fingerprint: Fingerprint,
-) -> Result<PeerId, Error>
+) -> Result<PeerId, libp2p_noise::Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -54,7 +53,7 @@ pub async fn outbound<T>(
     stream: T,
     server_fingerprint: Fingerprint,
     client_fingerprint: Fingerprint,
-) -> Result<PeerId, Error>
+) -> Result<PeerId, libp2p_noise::Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {

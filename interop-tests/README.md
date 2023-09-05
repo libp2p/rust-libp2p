@@ -15,7 +15,7 @@ can dial/listen for ourselves we can do the following:
 To test the interop with other versions do something similar, except replace one
 of these nodes with the other version's interop test.
 
-# Running this test with webtransport
+# Running this test with webtransport dialer in browser
 
 To run the webtransport test from within the browser, you'll need the
 `chromedriver` in your `$PATH`, compatible with your Chrome browser.
