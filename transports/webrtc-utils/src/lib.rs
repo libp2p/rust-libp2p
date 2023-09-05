@@ -8,7 +8,7 @@ mod fingerprint;
 pub mod noise;
 pub mod sdp;
 mod stream;
-pub mod transport;
+mod transport;
 
 pub use fingerprint::{Fingerprint, SHA256};
 pub use stream::{DropListener, Stream, MAX_MSG_LEN};

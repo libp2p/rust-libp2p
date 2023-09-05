@@ -19,23 +19,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use bytes::Bytes;
+use futures::{channel::oneshot, prelude::*, ready};
+
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use crate::proto::{Flag, Message};
+use crate::{
+    stream::drop_listener::GracefullyClosed,
+    stream::framed_dc::FramedDc,
+    stream::state::{Closing, State},
+};
+
+pub use drop_listener::DropListener;
+
 mod drop_listener;
 mod framed_dc;
 mod state;
-
-use crate::proto::{Flag, Message};
-use crate::stream::state::Closing;
-use bytes::Bytes;
-use drop_listener::GracefullyClosed;
-use framed_dc::FramedDc;
-use futures::channel::oneshot;
-use futures::{ready, AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
-use state::State;
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-pub use drop_listener::DropListener;
 
 /// Maximum length of a message.
 ///
@@ -257,11 +261,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
     use quick_protobuf::{MessageWrite, Writer};
     use unsigned_varint::codec::UviBytes;
+
+    use super::*;
 
     #[test]
     fn max_data_len() {
