@@ -18,18 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::poll_data_channel::{DataChannel, PollDataChannel};
 use asynchronous_codec::Framed;
+
 use libp2p_webrtc_utils::proto::Message;
 use libp2p_webrtc_utils::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
-use std::cell::RefCell;
-use std::rc::Rc;
 
-pub(crate) type FramedDc = Framed<PollDataChannel, quick_protobuf_codec::Codec<Message>>;
-pub(crate) fn new(data_channel: Rc<RefCell<DataChannel>>) -> FramedDc {
-    let mut inner = PollDataChannel::new(data_channel);
-    inner.set_read_buf_capacity(MAX_MSG_LEN);
+use super::data_channel::DataChannel;
 
+pub(crate) type FramedDc = Framed<DataChannel, quick_protobuf_codec::Codec<Message>>;
+pub(crate) fn new(inner: DataChannel) -> FramedDc {
     let mut framed = Framed::new(
         inner,
         quick_protobuf_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN),

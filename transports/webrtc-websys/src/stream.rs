@@ -1,27 +1,27 @@
 //! The WebRTC [Stream] over the Connection
-use self::framed_dc::FramedDc;
-use self::poll_data_channel::DataChannel;
+use std::io;
+use std::pin::Pin;
+use std::task::{ready, Context, Poll};
+
 use bytes::Bytes;
 use futures::channel::oneshot;
 use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
+use send_wrapper::SendWrapper;
+use web_sys::{RtcDataChannel, RtcDataChannelInit, RtcDataChannelType, RtcPeerConnection};
+
+pub(crate) use drop_listener::{DropListener, GracefullyClosed};
 use libp2p_webrtc_utils::proto::{Flag, Message};
 use libp2p_webrtc_utils::stream::{
     state::{Closing, State},
     MAX_DATA_LEN,
 };
-use send_wrapper::SendWrapper;
-use std::cell::RefCell;
-use std::io;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::task::{ready, Context, Poll};
-use web_sys::{RtcDataChannel, RtcDataChannelInit, RtcDataChannelType, RtcPeerConnection};
 
+use self::data_channel::DataChannel;
+use self::framed_dc::FramedDc;
+
+mod data_channel;
 mod drop_listener;
 mod framed_dc;
-mod poll_data_channel;
-
-pub(crate) use drop_listener::{DropListener, GracefullyClosed};
 
 /// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
 const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
@@ -64,7 +64,7 @@ impl RtcDataChannelBuilder {
 /// Stream over the Connection
 pub struct Stream {
     /// Wrapper for the inner stream to make it Send
-    inner: SendWrapper<StreamInner>,
+    inner: SendWrapper<FramedDc>,
     /// State of the Stream
     state: State,
     /// Buffer for incoming data
@@ -77,31 +77,17 @@ impl Stream {
     /// Create a new WebRTC Stream
     pub(crate) fn new(channel: RtcDataChannel) -> (Self, DropListener) {
         let (sender, receiver) = oneshot::channel();
-        let wrapped_dc = Rc::new(RefCell::new(DataChannel::new(channel)));
+        let channel = DataChannel::new(channel);
 
-        let drop_listener = DropListener::new(framed_dc::new(wrapped_dc.clone()), receiver);
+        let drop_listener = DropListener::new(framed_dc::new(channel.clone()), receiver);
 
         let stream = Self {
-            inner: SendWrapper::new(StreamInner::new(wrapped_dc)),
+            inner: SendWrapper::new(framed_dc::new(channel)),
             read_buffer: Bytes::new(),
             state: State::Open,
             drop_notifier: Some(sender),
         };
         (stream, drop_listener)
-    }
-}
-
-/// Inner Stream to make Sendable
-struct StreamInner {
-    io: FramedDc,
-}
-
-/// Inner Stream to make Sendable
-impl StreamInner {
-    fn new(wrapped_dc: Rc<RefCell<DataChannel>>) -> Self {
-        Self {
-            io: framed_dc::new(wrapped_dc),
-        }
     }
 }
 
@@ -130,7 +116,7 @@ impl AsyncRead for Stream {
                 ..
             } = &mut *self;
 
-            match ready!(io_poll_next(&mut inner.io, cx))? {
+            match ready!(io_poll_next(&mut *inner, cx))? {
                 Some((flag, message)) => {
                     if let Some(flag) = flag {
                         state.handle_inbound_flag(flag, read_buffer);
@@ -168,7 +154,7 @@ impl AsyncWrite for Stream {
                 ..
             } = &mut *self;
 
-            match io_poll_next(&mut inner.io, cx)? {
+            match io_poll_next(&mut *inner, cx)? {
                 Poll::Ready(Some((Some(flag), message))) => {
                     // Read side is closed. Discard any incoming messages.
                     drop(message);
@@ -182,11 +168,11 @@ impl AsyncWrite for Stream {
 
         self.state.write_barrier()?;
 
-        ready!(self.inner.io.poll_ready_unpin(cx))?;
+        ready!(self.inner.poll_ready_unpin(cx))?;
 
         let n = usize::min(buf.len(), MAX_DATA_LEN);
 
-        Pin::new(&mut self.inner.io).start_send(Message {
+        Pin::new(&mut *self.inner).start_send(Message {
             flag: None,
             message: Some(buf[0..n].into()),
         })?;
@@ -195,7 +181,7 @@ impl AsyncWrite for Stream {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        self.inner.io.poll_flush_unpin(cx).map_err(Into::into)
+        self.inner.poll_flush_unpin(cx).map_err(Into::into)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
@@ -204,11 +190,11 @@ impl AsyncWrite for Stream {
         loop {
             match self.state.close_write_barrier()? {
                 Some(Closing::Requested) => {
-                    ready!(self.inner.io.poll_ready_unpin(cx))?;
+                    ready!(self.inner.poll_ready_unpin(cx))?;
 
                     log::debug!("Sending FIN flag");
 
-                    self.inner.io.start_send_unpin(Message {
+                    self.inner.start_send_unpin(Message {
                         flag: Some(Flag::FIN),
                         message: None,
                     })?;
@@ -217,7 +203,7 @@ impl AsyncWrite for Stream {
                     continue;
                 }
                 Some(Closing::MessageSent) => {
-                    ready!(self.inner.io.poll_flush_unpin(cx))?;
+                    ready!(self.inner.poll_flush_unpin(cx))?;
 
                     self.state.write_closed();
 
