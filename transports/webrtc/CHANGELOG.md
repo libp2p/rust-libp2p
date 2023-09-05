@@ -1,7 +1,6 @@
-## 0.7.0-alpha
+## 0.6.1-alpha - unreleased
 
 - Move common dependencies to `libp2p-webrtc-utils` crate.
-- Use new `libp2p-webrtc-utils` crate as a common dependency.
   See [PR 4248].
 
 [PR 4248]: https://github.com/libp2p/rust-libp2p/pull/4248
