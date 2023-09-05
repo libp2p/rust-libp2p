@@ -15,5 +15,5 @@ zeroize = "1"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = "1.0.105"
 libp2p-core = { workspace = true }
-base64 = "0.21.2"
+base64 = "0.21.3"
 libp2p-identity = { workspace = true }
