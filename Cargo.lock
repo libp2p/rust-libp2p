@@ -746,15 +746,12 @@ dependencies = [
  "libp2p-webrtc-websys",
  "log",
  "mime_guess",
- "multiaddr",
  "rand 0.8.5",
  "rust-embed",
  "tokio",
- "tokio-stream",
  "tokio-util",
  "tower",
  "tower-http",
- "void",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-logger",
@@ -5892,17 +5889,6 @@ dependencies = [
  "rustls 0.20.8",
  "tokio",
  "webpki 0.22.0",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
-dependencies = [
- "futures-core",
- "pin-project-lite 0.2.12",
- "tokio",
 ]
 
 [[package]]

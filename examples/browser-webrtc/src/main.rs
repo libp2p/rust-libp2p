@@ -8,11 +8,12 @@ use futures::StreamExt;
 use libp2p::{
     core::muxing::StreamMuxerBox,
     core::Transport,
-    identity, ping,
+    identity,
+    multiaddr::{Multiaddr, Protocol},
+    ping,
     swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
 };
 use libp2p_webrtc as webrtc;
-use multiaddr::{Multiaddr, Protocol};
 use rand::thread_rng;
 use std::{
     net::Ipv6Addr,
