@@ -33,8 +33,14 @@ type Multihash = multihash::Multihash<64>;
 pub struct Fingerprint([u8; 32]);
 
 impl Fingerprint {
+    pub const FF: Fingerprint = Fingerprint([0xFF; 32]);
+
+    pub const fn raw(digest: [u8; 32]) -> Self {
+        Fingerprint(digest)
+    }
+
     /// Creates a new [Fingerprint] from a raw certificate by hashing the given bytes with SHA256.
-    pub fn new(bytes: &[u8]) -> Self {
+    pub fn from_certificate(bytes: &[u8]) -> Self {
         Fingerprint(sha2::Sha256::digest(bytes).into())
     }
 
@@ -75,12 +81,6 @@ impl fmt::Debug for Fingerprint {
     }
 }
 
-impl From<[u8; 32]> for Fingerprint {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn sdp_format() {
-        let fp = Fingerprint::from(REGULAR_FORMAT);
+        let fp = Fingerprint::raw(REGULAR_FORMAT);
 
         let formatted = fp.to_sdp_format();
 
@@ -103,7 +103,7 @@ mod tests {
         let mut bytes = [0; 32];
         bytes.copy_from_slice(&hex::decode(SDP_FORMAT.replace(':', "")).unwrap());
 
-        let fp = Fingerprint::from(bytes);
-        assert_eq!(fp, Fingerprint::from(REGULAR_FORMAT));
+        let fp = Fingerprint::raw(bytes);
+        assert_eq!(fp, Fingerprint::raw(REGULAR_FORMAT));
     }
 }

@@ -3,8 +3,8 @@ use crate::connection::RtcPeerConnection;
 use crate::sdp;
 use crate::Connection;
 use libp2p_identity::{Keypair, PeerId};
-use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use libp2p_webrtc_utils::noise;
+use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
 use std::net::SocketAddr;
 
@@ -40,7 +40,7 @@ async fn outbound_inner(
         .set_local_description(munged_offer)
         .await?;
 
-    let answer = sdp::answer(sock_addr, &remote_fingerprint, &ufrag);
+    let answer = sdp::answer(sock_addr, remote_fingerprint, &ufrag);
     rtc_peer_connection.set_remote_description(answer).await?;
 
     let local_fingerprint = rtc_peer_connection.local_fingerprint()?;

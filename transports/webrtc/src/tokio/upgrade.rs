@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_webrtc_utils::noise;
+use libp2p_webrtc_utils::{noise, Fingerprint};
 
 use futures::channel::oneshot;
 use futures::future::Either;
@@ -37,7 +37,6 @@ use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
 
-use crate::tokio::fingerprint::Fingerprint;
 use crate::tokio::sdp::random_ufrag;
 use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
 
@@ -58,7 +57,7 @@ pub(crate) async fn outbound(
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, &server_fingerprint, &ufrag);
+    let answer = sdp::answer(addr, server_fingerprint, &ufrag);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
@@ -187,7 +186,7 @@ fn setting_engine(
 async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     let cert_bytes = conn.sctp().transport().get_remote_certificate().await;
 
-    Fingerprint::new(&cert_bytes)
+    Fingerprint::from_certificate(&cert_bytes)
 }
 
 async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Result<Stream, Error> {

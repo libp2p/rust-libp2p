@@ -1,11 +1,11 @@
-use libp2p_webrtc_utils::fingerprint::Fingerprint;
+use libp2p_webrtc_utils::Fingerprint;
 use std::net::SocketAddr;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.
 pub(crate) fn answer(
     addr: SocketAddr,
-    server_fingerprint: &Fingerprint,
+    server_fingerprint: Fingerprint,
     client_ufrag: &str,
 ) -> RtcSessionDescriptionInit {
     let mut answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);

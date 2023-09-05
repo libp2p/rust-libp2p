@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::tokio::fingerprint::Fingerprint;
 use rand::{distributions::DistString, CryptoRng, Rng};
 use webrtc::peer_connection::certificate::RTCCertificate;
-
-use crate::tokio::fingerprint::{self, Fingerprint};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Certificate {
@@ -58,7 +57,7 @@ impl Certificate {
             .find(|f| f.algorithm == "sha-256")
             .expect("a SHA-256 fingerprint");
 
-        fingerprint::try_from_rtc_dtls(sha256_fingerprint).expect("we filtered by sha-256")
+        Fingerprint::try_from_rtc_dtls(sha256_fingerprint).expect("we filtered by sha-256")
     }
 
     /// Parses a certificate from the ASCII PEM format.

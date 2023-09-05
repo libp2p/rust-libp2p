@@ -7,12 +7,13 @@ mod proto {
 }
 
 pub mod error;
-pub mod fingerprint;
+mod fingerprint;
 pub mod noise;
 pub mod sdp;
 mod stream;
 pub mod transport;
 
 pub use error::Error;
+pub use fingerprint::{Fingerprint, SHA256};
 pub use stream::{DropListener, Stream, MAX_MSG_LEN};
 pub use transport::parse_webrtc_dial_addr;

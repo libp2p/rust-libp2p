@@ -7,7 +7,7 @@ use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_webrtc_utils::fingerprint::Fingerprint;
+use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
 use std::pin::Pin;
 use std::task::Waker;
@@ -286,7 +286,7 @@ fn parse_fingerprint(sdp: &str) -> Option<Fingerprint> {
             let fingerprint = line.split(' ').nth(1).unwrap();
             let bytes = hex::decode(fingerprint.replace(':', "")).unwrap();
             let arr: [u8; 32] = bytes.as_slice().try_into().unwrap();
-            return Some(Fingerprint::from(arr));
+            return Some(Fingerprint::raw(arr));
         }
     }
     None
