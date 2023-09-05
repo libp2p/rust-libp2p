@@ -57,6 +57,7 @@
 //!    [dependencies]
 //!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
+//!        env_logger = "0.10.0"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!    ```
 //!
@@ -75,16 +76,13 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     Ok(())
 //! }
 //! ```
-//!
-//! Go ahead and build and run the above code with: `cargo run`. A unique
-//! [`PeerId`](crate::PeerId) should be displayed.
 //!
 //! ## Transport
 //!
@@ -109,9 +107,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -148,9 +146,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -186,9 +184,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -243,9 +241,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -293,9 +291,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -349,9 +347,8 @@
 //! cargo run --example ping
 //! ```
 //!
-//! It will print the PeerId and the new listening addresses, e.g.
+//! It will print the new listening addresses, e.g.
 //! ```sh
-//! Local peer id: PeerId("12D3KooWT1As4mwh3KYBnNTw9bSrRbYQGJTm9SSte82JSumqgCQG")
 //! Listening on "/ip4/127.0.0.1/tcp/24915"
 //! Listening on "/ip4/192.168.178.25/tcp/24915"
 //! Listening on "/ip4/172.17.0.1/tcp/24915"
