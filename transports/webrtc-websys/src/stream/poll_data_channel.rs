@@ -1,7 +1,8 @@
 use std::cmp::min;
 use std::io;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::sync::Mutex;
 use std::task::{Context, Poll};
 
 use bytes::BytesMut;
@@ -23,29 +24,29 @@ pub(crate) struct PollDataChannel {
     /// The [RtcDataChannel] being wrapped.
     inner: RtcDataChannel,
 
-    new_data_waker: Arc<AtomicWaker>,
-    read_buffer: Arc<Mutex<BytesMut>>,
+    new_data_waker: Rc<AtomicWaker>,
+    read_buffer: Rc<Mutex<BytesMut>>,
 
     /// Waker for when we are waiting for the DC to be opened.
-    open_waker: Arc<AtomicWaker>,
+    open_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting to write (again) to the DC because we previously exceeded the `MAX_BUFFERED_AMOUNT` threshold.
-    write_waker: Arc<AtomicWaker>,
+    write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the DC to be closed.
-    close_waker: Arc<AtomicWaker>,
+    close_waker: Rc<AtomicWaker>,
 
     // Store the closures for proper garbage collection.
-    // These are wrapped in an `Arc` so we can implement `Clone`.
-    _on_open_closure: Arc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
-    _on_write_closure: Arc<Closure<dyn FnMut(Event)>>,
-    _on_close_closure: Arc<Closure<dyn FnMut(Event)>>,
-    _on_message_closure: Arc<Closure<dyn FnMut(MessageEvent)>>,
+    // These are wrapped in an `Rc` so we can implement `Clone`.
+    _on_open_closure: Rc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    _on_write_closure: Rc<Closure<dyn FnMut(Event)>>,
+    _on_close_closure: Rc<Closure<dyn FnMut(Event)>>,
+    _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
 }
 
 impl PollDataChannel {
     pub(crate) fn new(inner: RtcDataChannel) -> Self {
-        let open_waker = Arc::new(AtomicWaker::new());
+        let open_waker = Rc::new(AtomicWaker::new());
         let on_open_closure = Closure::new({
             let open_waker = open_waker.clone();
 
@@ -56,7 +57,7 @@ impl PollDataChannel {
         });
         inner.set_onopen(Some(on_open_closure.as_ref().unchecked_ref()));
 
-        let write_waker = Arc::new(AtomicWaker::new());
+        let write_waker = Rc::new(AtomicWaker::new());
         inner.set_buffered_amount_low_threshold(0);
         let on_write_closure = Closure::new({
             let write_waker = write_waker.clone();
@@ -68,7 +69,7 @@ impl PollDataChannel {
         });
         inner.set_onbufferedamountlow(Some(on_write_closure.as_ref().unchecked_ref()));
 
-        let close_waker = Arc::new(AtomicWaker::new());
+        let close_waker = Rc::new(AtomicWaker::new());
         let on_close_closure = Closure::new({
             let close_waker = close_waker.clone();
 
@@ -79,8 +80,8 @@ impl PollDataChannel {
         });
         inner.set_onclose(Some(on_close_closure.as_ref().unchecked_ref()));
 
-        let new_data_waker = Arc::new(AtomicWaker::new());
-        let read_buffer = Arc::new(Mutex::new(BytesMut::new())); // We purposely don't use `with_capacity` so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
+        let new_data_waker = Rc::new(AtomicWaker::new());
+        let read_buffer = Rc::new(Mutex::new(BytesMut::new())); // We purposely don't use `with_capacity` so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
 
         let on_message_closure = Closure::<dyn FnMut(_)>::new({
             let new_data_waker = new_data_waker.clone();
@@ -112,10 +113,10 @@ impl PollDataChannel {
             open_waker,
             write_waker,
             close_waker,
-            _on_open_closure: Arc::new(on_open_closure),
-            _on_write_closure: Arc::new(on_write_closure),
-            _on_close_closure: Arc::new(on_close_closure),
-            _on_message_closure: Arc::new(on_message_closure),
+            _on_open_closure: Rc::new(on_open_closure),
+            _on_write_closure: Rc::new(on_write_closure),
+            _on_close_closure: Rc::new(on_close_closure),
+            _on_message_closure: Rc::new(on_message_closure),
         }
     }
 
