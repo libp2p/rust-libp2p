@@ -121,11 +121,6 @@ impl DataChannel {
         self.inner.ready_state()
     }
 
-    /// Returns the [RtcDataChannel] label
-    fn label(&self) -> String {
-        self.inner.label()
-    }
-
     /// Send data over this [RtcDataChannel]
     fn send(&self, data: &[u8]) -> Result<(), JsValue> {
         self.inner.send_with_u8_array(data)
@@ -174,21 +169,6 @@ impl PollDataChannel {
     fn send(&self, data: &[u8]) -> Result<(), Error> {
         self.data_channel.borrow().send(data)?;
         Ok(())
-    }
-
-    /// StreamIdentifier returns the Stream identifier associated to the stream.
-    pub(crate) fn stream_identifier(&self) -> u16 {
-        // self.data_channel.id() // not released (yet), see https://github.com/rustwasm/wasm-bindgen/issues/3547
-
-        // temp workaround: use label, though it is "" so it's not unique
-        // TODO: After the above PR is released, use the label instead of the stream id
-        let label = self.data_channel.borrow().label();
-        let b = label.as_bytes();
-        let mut stream_id: u16 = 0;
-        b.iter().enumerate().for_each(|(i, &b)| {
-            stream_id += (b as u16) << (8 * i);
-        });
-        stream_id
     }
 }
 

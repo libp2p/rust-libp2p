@@ -35,14 +35,8 @@ pub(crate) struct DropListener {
 
 impl DropListener {
     pub(crate) fn new(stream: FramedDc, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
-        let substream_id = stream.stream_identifier();
-
         Self {
-            state: State::Idle {
-                stream,
-                receiver,
-                substream_id,
-            },
+            state: State::Idle { stream, receiver },
         }
     }
 }
@@ -52,7 +46,6 @@ enum State {
     Idle {
         stream: FramedDc,
         receiver: oneshot::Receiver<GracefullyClosed>,
-        substream_id: u16,
     },
     /// The stream got dropped and we are sending a reset flag.
     SendingReset {
@@ -75,28 +68,21 @@ impl Future for DropListener {
             match std::mem::replace(state, State::Poisoned) {
                 State::Idle {
                     stream,
-                    substream_id,
                     mut receiver,
-                } => {
-                    match receiver.poll_unpin(cx) {
-                        Poll::Ready(Ok(GracefullyClosed {})) => {
-                            return Poll::Ready(Ok(()));
-                        }
-                        Poll::Ready(Err(Canceled)) => {
-                            log::info!("Stream {substream_id} dropped without graceful close, sending Reset");
-                            *state = State::SendingReset { stream };
-                            continue;
-                        }
-                        Poll::Pending => {
-                            *state = State::Idle {
-                                stream,
-                                substream_id,
-                                receiver,
-                            };
-                            return Poll::Pending;
-                        }
+                } => match receiver.poll_unpin(cx) {
+                    Poll::Ready(Ok(GracefullyClosed {})) => {
+                        return Poll::Ready(Ok(()));
                     }
-                }
+                    Poll::Ready(Err(Canceled)) => {
+                        log::info!("Stream dropped without graceful close, sending Reset");
+                        *state = State::SendingReset { stream };
+                        continue;
+                    }
+                    Poll::Pending => {
+                        *state = State::Idle { stream, receiver };
+                        return Poll::Pending;
+                    }
+                },
                 State::SendingReset { mut stream } => match stream.poll_ready_unpin(cx)? {
                     Poll::Ready(()) => {
                         stream.start_send_unpin(Message {
