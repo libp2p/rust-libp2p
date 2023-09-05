@@ -1,4 +1,4 @@
-## 0.43.4 0 - unreleased
+## 0.43.4 - unreleased
 
 - Improve error message when `DialPeerCondition` prevents a dial.
   See [PR 4409].
