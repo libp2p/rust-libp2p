@@ -53,7 +53,6 @@ const PROTO_OVERHEAD: usize = 5;
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
 pub use drop_listener::DropListener;
-
 /// A stream backed by a WebRTC data channel.
 ///
 /// To be a proper libp2p stream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
