@@ -72,7 +72,6 @@ async fn outbound_inner(
      */
     let offer = JsFuture::from(peer_connection.create_offer()).await?; // Needs to be Send
     let offer_obj = sdp::offer(offer, &ufrag);
-    log::trace!("Offer SDP: {:?}", offer_obj);
     let sld_promise = peer_connection.set_local_description(&offer_obj);
     JsFuture::from(sld_promise)
         .await
@@ -82,7 +81,6 @@ async fn outbound_inner(
      * ANSWER
      */
     let answer_obj = sdp::answer(sock_addr, &remote_fingerprint, &ufrag);
-    log::trace!("Answer SDP: {:?}", answer_obj);
     let srd_promise = peer_connection.set_remote_description(&answer_obj);
     JsFuture::from(srd_promise)
         .await

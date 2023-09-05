@@ -138,12 +138,16 @@ use rand::{thread_rng, Rng};
 // a=end-of-candidates
 
 pub fn answer(addr: SocketAddr, server_fingerprint: &Fingerprint, client_ufrag: &str) -> String {
-    render_description(
+    let answer = render_description(
         SERVER_SESSION_DESCRIPTION,
         addr,
         server_fingerprint,
         client_ufrag,
-    )
+    );
+
+    log::trace!("Created SDP answer: {answer}");
+
+    answer
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.

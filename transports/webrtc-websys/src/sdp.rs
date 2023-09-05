@@ -23,37 +23,40 @@ pub(crate) fn answer(
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
 pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescriptionInit {
-    //JsValue to String
-    let offer = Reflect::get(&offer, &JsValue::from_str("sdp")).unwrap();
-    let offer = offer.as_string().unwrap();
-
-    log::info!("OFFER: {offer}");
-
-    let lines = offer.split("\r\n");
+    let offer = Reflect::get(&offer, &JsValue::from_str("sdp"))
+        .unwrap()
+        .as_string()
+        .unwrap();
 
     // find line and replace a=ice-ufrag: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
-    // find line andreplace a=ice-pwd: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
+    // find line and replace a=ice-pwd: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
 
-    let mut munged_offer_sdp = String::new();
+    let mut munged_sdp_offer = String::new();
 
-    for line in lines {
+    for line in offer.split("\r\n") {
         if line.starts_with("a=ice-ufrag:") {
-            munged_offer_sdp.push_str(&format!("a=ice-ufrag:{}\r\n", client_ufrag));
-        } else if line.starts_with("a=ice-pwd:") {
-            munged_offer_sdp.push_str(&format!("a=ice-pwd:{}\r\n", client_ufrag));
-        } else if !line.is_empty() {
-            munged_offer_sdp.push_str(&format!("{}\r\n", line));
+            munged_sdp_offer.push_str(&format!("a=ice-ufrag:{client_ufrag}\r\n"));
+            continue;
+        }
+
+        if line.starts_with("a=ice-pwd:") {
+            munged_sdp_offer.push_str(&format!("a=ice-pwd:{client_ufrag}\r\n"));
+            continue;
+        }
+
+        if !line.is_empty() {
+            munged_sdp_offer.push_str(&format!("{}\r\n", line));
+            continue;
         }
     }
 
     // remove any double \r\n
-    let munged_offer_sdp = munged_offer_sdp.replace("\r\n\r\n", "\r\n");
+    let munged_sdp_offer = munged_sdp_offer.replace("\r\n\r\n", "\r\n");
 
-    log::trace!("munged_offer_sdp: {}", munged_offer_sdp);
+    log::trace!("Created SDP offer: {munged_sdp_offer}");
 
-    // setLocalDescription
     let mut offer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
-    offer_obj.sdp(&munged_offer_sdp);
+    offer_obj.sdp(&munged_sdp_offer);
 
     offer_obj
 }
