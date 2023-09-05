@@ -40,14 +40,13 @@ impl Connection {
 /// Inner Connection that is wrapped in [SendWrapper]
 struct ConnectionInner {
     /// The [RtcPeerConnection] that is used for the WebRTC Connection
-    peer_connection: RtcPeerConnection,
+    inner: RtcPeerConnection,
     /// Whether the connection is closed
     closed: bool,
     /// An [`mpsc::channel`] for all inbound data channels.
     ///
     /// Because the browser's WebRTC API is event-based, we need to use a channel to obtain all inbound data channels.
     inbound_data_channels: mpsc::Receiver<RtcDataChannel>,
-
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     /// Currently unimplemented, will be implemented in a future PR.
     drop_listeners: FuturesUnordered<DropListener>,
@@ -84,7 +83,7 @@ impl ConnectionInner {
         ondatachannel_callback.forget();
 
         Self {
-            peer_connection,
+            inner: peer_connection,
             closed: false,
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
@@ -97,7 +96,7 @@ impl ConnectionInner {
     fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Stream> {
         log::trace!("Creating outbound data channel");
 
-        let data_channel = self.peer_connection.new_regular_data_channel();
+        let data_channel = self.inner.new_regular_data_channel();
         let stream = self.new_stream_from_data_channel(data_channel);
 
         Poll::Ready(stream)
@@ -153,7 +152,7 @@ impl ConnectionInner {
     fn close_connection(&mut self) {
         if !self.closed {
             log::trace!("connection::close_connection");
-            self.peer_connection.inner.close();
+            self.inner.inner.close();
             self.closed = true;
         }
     }
