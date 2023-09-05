@@ -1,7 +1,5 @@
-use js_sys::Reflect;
 use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use std::net::SocketAddr;
-use wasm_bindgen::JsValue;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
 
 /// Creates the SDP answer used by the client.
@@ -22,12 +20,7 @@ pub(crate) fn answer(
 /// Creates the munged SDP offer from the Browser's given SDP offer
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescriptionInit {
-    let offer = Reflect::get(&offer, &JsValue::from_str("sdp"))
-        .unwrap()
-        .as_string()
-        .unwrap();
-
+pub(crate) fn offer(offer: String, client_ufrag: &str) -> RtcSessionDescriptionInit {
     // find line and replace a=ice-ufrag: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
     // find line and replace a=ice-pwd: with "\r\na=ice-ufrag:{client_ufrag}\r\n"
 

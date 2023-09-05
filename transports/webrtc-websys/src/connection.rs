@@ -1,19 +1,25 @@
 //! Websys WebRTC Peer Connection
 //!
 //! Creates and manages the [RtcPeerConnection](https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection)
-use crate::stream::RtcDataChannelBuilder;
+use crate::stream::DropListener;
 
 use super::{Error, Stream};
 use futures::channel;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_webrtc_utils::fingerprint::Fingerprint;
 use send_wrapper::SendWrapper;
 use std::pin::Pin;
 use std::task::Waker;
 use std::task::{ready, Context, Poll};
 use wasm_bindgen::prelude::*;
-use web_sys::{RtcDataChannel, RtcDataChannelEvent, RtcPeerConnection};
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{
+    RtcConfiguration, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelInit, RtcDataChannelType,
+    RtcSessionDescriptionInit,
+};
 
 /// A WebRTC Connection
 pub struct Connection {
@@ -67,7 +73,9 @@ impl ConnectionInner {
                 }
             });
 
-        peer_connection.set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
+        peer_connection
+            .inner
+            .set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
         ondatachannel_callback.forget();
 
         Self {
@@ -81,18 +89,17 @@ impl ConnectionInner {
 
     /// Initiates and polls a future from `create_data_channel`.
     /// Takes the RtcPeerConnection and creates a regular DataChannel
-    fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Result<Stream, Error>> {
-        // Create Regular Data Channel
+    fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Stream> {
         log::trace!("Creating outbound data channel");
-        let dc = RtcDataChannelBuilder::default().build_with(&self.peer_connection);
-        let (channel, drop_listener) = Stream::new(dc);
+
+        let (stream, drop_listener) = self.peer_connection.new_stream();
 
         self.drop_listeners.push(drop_listener);
         if let Some(waker) = self.no_drop_listeners_waker.take() {
             waker.wake()
         }
 
-        Poll::Ready(Ok(channel))
+        Poll::Ready(stream)
     }
 
     /// Polls the ondatachannel callback for inbound data channel stream.
@@ -146,7 +153,7 @@ impl ConnectionInner {
     fn close_connection(&mut self) {
         if !self.closed {
             log::trace!("connection::close_connection");
-            self.peer_connection.close();
+            self.peer_connection.inner.close();
             self.closed = true;
         }
     }
@@ -179,7 +186,9 @@ impl StreamMuxer for Connection {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.inner.poll_create_data_channel(cx)
+        let stream = ready!(self.inner.poll_create_data_channel(cx));
+
+        Poll::Ready(Ok(stream))
     }
 
     /// Closes the Peer Connection.
@@ -199,5 +208,139 @@ impl StreamMuxer for Connection {
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         self.inner.poll(cx)
+    }
+}
+
+pub(crate) struct RtcPeerConnection {
+    inner: web_sys::RtcPeerConnection,
+}
+
+impl RtcPeerConnection {
+    pub(crate) async fn new(algorithm: String) -> Result<Self, Error> {
+        let algo: Object = Object::new();
+        Reflect::set(&algo, &"name".into(), &"ECDSA".into()).unwrap();
+        Reflect::set(&algo, &"namedCurve".into(), &"P-256".into()).unwrap();
+        Reflect::set(&algo, &"hash".into(), &algorithm.into()).unwrap();
+
+        let certificate_promise =
+            web_sys::RtcPeerConnection::generate_certificate_with_object(&algo)
+                .expect("certificate to be valid");
+
+        let certificate = JsFuture::from(certificate_promise).await?;
+
+        let mut config = RtcConfiguration::default();
+        // wrap certificate in a js Array first before adding it to the config object
+        let certificate_arr = js_sys::Array::new();
+        certificate_arr.push(&certificate);
+        config.certificates(&certificate_arr);
+
+        let inner = web_sys::RtcPeerConnection::new_with_configuration(&config)?;
+
+        Ok(Self { inner })
+    }
+
+    pub(crate) fn new_handshake_stream(&self) -> (Stream, DropListener) {
+        Stream::new(self.new_data_channel(true))
+    }
+
+    pub(crate) fn new_stream(&self) -> (Stream, DropListener) {
+        Stream::new(self.new_data_channel(false))
+    }
+
+    fn new_data_channel(&self, negotiated: bool) -> RtcDataChannel {
+        const LABEL: &str = "";
+
+        let dc = match negotiated {
+            true => {
+                let mut options = RtcDataChannelInit::new();
+                options.negotiated(true).id(0); // id is only ever set to zero when negotiated is true
+
+                self.inner
+                    .create_data_channel_with_data_channel_dict(LABEL, &options)
+            }
+            false => self.inner.create_data_channel(LABEL),
+        };
+        dc.set_binary_type(RtcDataChannelType::Arraybuffer); // Hardcoded here, it's the only type we use
+
+        dc
+    }
+
+    pub(crate) async fn create_offer(&self) -> Result<String, Error> {
+        let offer = JsFuture::from(self.inner.create_offer()).await?;
+
+        let offer = Reflect::get(&offer, &JsValue::from_str("sdp"))
+            .unwrap()
+            .as_string()
+            .unwrap();
+
+        Ok(offer)
+    }
+
+    pub(crate) async fn set_local_description(
+        &self,
+        sdp: RtcSessionDescriptionInit,
+    ) -> Result<(), Error> {
+        let promise = self.inner.set_local_description(&sdp);
+        JsFuture::from(promise).await?;
+
+        Ok(())
+    }
+
+    pub(crate) fn local_fingerprint(&self) -> Result<Fingerprint, Error> {
+        let sdp = &self
+            .inner
+            .local_description()
+            .ok_or_else(|| Error::JsError("No local description".to_string()))?
+            .sdp();
+
+        let fingerprint = parse_fingerprint(sdp)
+            .ok_or_else(|| Error::JsError("No fingerprint in SDP".to_string()))?;
+
+        Ok(fingerprint)
+    }
+
+    pub(crate) async fn set_remote_description(
+        &self,
+        sdp: RtcSessionDescriptionInit,
+    ) -> Result<(), Error> {
+        let promise = self.inner.set_remote_description(&sdp);
+        JsFuture::from(promise).await?;
+
+        Ok(())
+    }
+}
+
+/// Parse Fingerprint from a SDP.
+fn parse_fingerprint(sdp: &str) -> Option<Fingerprint> {
+    // split the sdp by new lines / carriage returns
+    let lines = sdp.split("\r\n");
+
+    // iterate through the lines to find the one starting with a=fingerprint:
+    // get the value after the first space
+    // return the value as a Fingerprint
+    for line in lines {
+        if line.starts_with("a=fingerprint:") {
+            let fingerprint = line.split(' ').nth(1).unwrap();
+            let bytes = hex::decode(fingerprint.replace(':', "")).unwrap();
+            let arr: [u8; 32] = bytes.as_slice().try_into().unwrap();
+            return Some(Fingerprint::from(arr));
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod sdp_tests {
+    use super::*;
+
+    #[test]
+    fn test_fingerprint() {
+        let sdp: &str = "v=0\r\no=- 0 0 IN IP6 ::1\r\ns=-\r\nc=IN IP6 ::1\r\nt=0 0\r\na=ice-lite\r\nm=application 61885 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:0\r\na=setup:passive\r\na=ice-ufrag:libp2p+webrtc+v1/YwapWySn6fE6L9i47PhlB6X4gzNXcgFs\r\na=ice-pwd:libp2p+webrtc+v1/YwapWySn6fE6L9i47PhlB6X4gzNXcgFs\r\na=fingerprint:sha-256 A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89\r\na=sctp-port:5000\r\na=max-message-size:16384\r\na=candidate:1467250027 1 UDP 1467250027 ::1 61885 typ host\r\n";
+        let fingerprint = match parse_fingerprint(sdp) {
+            Some(fingerprint) => fingerprint,
+            None => panic!("No fingerprint found"),
+        };
+        assert_eq!(fingerprint.algorithm(), "sha-256");
+        assert_eq!(fingerprint.to_sdp_format(), "A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89");
     }
 }

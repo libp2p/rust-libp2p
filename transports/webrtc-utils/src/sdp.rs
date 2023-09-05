@@ -179,26 +179,6 @@ pub fn render_description(
     tt.render("description", &context).unwrap()
 }
 
-/// Get Fingerprint from SDP
-/// Gets the fingerprint from: a=fingerprint: hash-algo  fingerprint
-pub fn fingerprint(sdp: &str) -> Option<Fingerprint> {
-    // split the sdp by new lines / carriage returns
-    let lines = sdp.split("\r\n");
-
-    // iterate through the lines to find the one starting with a=fingerprint:
-    // get the value after the first space
-    // return the value as a Fingerprint
-    for line in lines {
-        if line.starts_with("a=fingerprint:") {
-            let fingerprint = line.split(' ').nth(1).unwrap();
-            let bytes = hex::decode(fingerprint.replace(':', "")).unwrap();
-            let arr: [u8; 32] = bytes.as_slice().try_into().unwrap();
-            return Some(Fingerprint::from(arr));
-        }
-    }
-    None
-}
-
 /// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
 #[derive(Serialize)]
 enum IpVersion {
@@ -248,20 +228,4 @@ pub fn random_ufrag() -> String {
             .map(char::from)
             .collect::<String>()
     )
-}
-
-#[cfg(test)]
-mod sdp_tests {
-    use super::*;
-
-    #[test]
-    fn test_fingerprint() {
-        let sdp: &str = "v=0\r\no=- 0 0 IN IP6 ::1\r\ns=-\r\nc=IN IP6 ::1\r\nt=0 0\r\na=ice-lite\r\nm=application 61885 UDP/DTLS/SCTP webrtc-datachannel\r\na=mid:0\r\na=setup:passive\r\na=ice-ufrag:libp2p+webrtc+v1/YwapWySn6fE6L9i47PhlB6X4gzNXcgFs\r\na=ice-pwd:libp2p+webrtc+v1/YwapWySn6fE6L9i47PhlB6X4gzNXcgFs\r\na=fingerprint:sha-256 A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89\r\na=sctp-port:5000\r\na=max-message-size:16384\r\na=candidate:1467250027 1 UDP 1467250027 ::1 61885 typ host\r\n";
-        let fingerprint = match fingerprint(sdp) {
-            Some(fingerprint) => fingerprint,
-            None => panic!("No fingerprint found"),
-        };
-        assert_eq!(fingerprint.algorithm(), "sha-256");
-        assert_eq!(fingerprint.to_sdp_format(), "A8:17:77:1E:02:7E:D1:2B:53:92:70:A6:8E:F9:02:CC:21:72:3A:92:5D:F4:97:5F:27:C4:5E:75:D4:F4:31:89");
-    }
 }

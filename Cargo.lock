@@ -3456,6 +3456,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "getrandom 0.2.10",
+ "hex",
  "hex-literal",
  "js-sys",
  "libp2p-core",

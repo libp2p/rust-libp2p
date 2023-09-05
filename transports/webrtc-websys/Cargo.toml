@@ -20,6 +20,7 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-webrtc-utils = { workspace = true }
 log = "0.4.19"
+hex = "0.4.3"
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1"
