@@ -137,24 +137,13 @@ use rand::{thread_rng, Rng};
 //
 // a=end-of-candidates
 
-/// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
-#[derive(Serialize)]
-enum IpVersion {
-    IP4,
-    IP6,
-}
-
-/// Context passed to the templating engine, which replaces the above placeholders (e.g.
-/// `{IP_VERSION}`) with real values.
-#[derive(Serialize)]
-struct DescriptionContext {
-    pub(crate) ip_version: IpVersion,
-    pub(crate) target_ip: IpAddr,
-    pub(crate) target_port: u16,
-    pub(crate) fingerprint_algorithm: String,
-    pub(crate) fingerprint_value: String,
-    pub(crate) ufrag: String,
-    pub(crate) pwd: String,
+pub fn answer(addr: SocketAddr, server_fingerprint: &Fingerprint, client_ufrag: &str) -> String {
+    render_description(
+        SERVER_SESSION_DESCRIPTION,
+        addr,
+        server_fingerprint,
+        client_ufrag,
+    )
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
@@ -205,6 +194,45 @@ pub fn fingerprint(sdp: &str) -> Option<Fingerprint> {
     }
     None
 }
+
+/// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
+#[derive(Serialize)]
+enum IpVersion {
+    IP4,
+    IP6,
+}
+
+/// Context passed to the templating engine, which replaces the above placeholders (e.g.
+/// `{IP_VERSION}`) with real values.
+#[derive(Serialize)]
+struct DescriptionContext {
+    pub(crate) ip_version: IpVersion,
+    pub(crate) target_ip: IpAddr,
+    pub(crate) target_port: u16,
+    pub(crate) fingerprint_algorithm: String,
+    pub(crate) fingerprint_value: String,
+    pub(crate) ufrag: String,
+    pub(crate) pwd: String,
+}
+
+const SERVER_SESSION_DESCRIPTION: &str = "v=0
+o=- 0 0 IN {ip_version} {target_ip}
+s=-
+t=0 0
+a=ice-lite
+m=application {target_port} UDP/DTLS/SCTP webrtc-datachannel
+c=IN {ip_version} {target_ip}
+a=mid:0
+a=ice-options:ice2
+a=ice-ufrag:{ufrag}
+a=ice-pwd:{pwd}
+a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
+a=setup:passive
+a=sctp-port:5000
+a=max-message-size:16384
+a=candidate:1467250027 1 UDP 1467250027 {target_ip} {target_port} typ host
+a=end-of-candidates
+";
 
 /// Generates a random ufrag and adds a prefix according to the spec.
 pub fn random_ufrag() -> String {

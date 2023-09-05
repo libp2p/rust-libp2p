@@ -1,6 +1,5 @@
 use js_sys::Reflect;
 use libp2p_webrtc_utils::fingerprint::Fingerprint;
-use libp2p_webrtc_utils::sdp::render_description;
 use std::net::SocketAddr;
 use wasm_bindgen::JsValue;
 use web_sys::{RtcSdpType, RtcSessionDescriptionInit};
@@ -12,8 +11,7 @@ pub(crate) fn answer(
     client_ufrag: &str,
 ) -> RtcSessionDescriptionInit {
     let mut answer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Answer);
-    answer_obj.sdp(&render_description(
-        SESSION_DESCRIPTION,
+    answer_obj.sdp(&libp2p_webrtc_utils::sdp::answer(
         addr,
         server_fingerprint,
         client_ufrag,
@@ -28,6 +26,8 @@ pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescription
     //JsValue to String
     let offer = Reflect::get(&offer, &JsValue::from_str("sdp")).unwrap();
     let offer = offer.as_string().unwrap();
+
+    log::info!("OFFER: {offer}");
 
     let lines = offer.split("\r\n");
 
@@ -57,20 +57,3 @@ pub(crate) fn offer(offer: JsValue, client_ufrag: &str) -> RtcSessionDescription
 
     offer_obj
 }
-
-const SESSION_DESCRIPTION: &str = "v=0
-o=- 0 0 IN {ip_version} {target_ip}
-s=-
-c=IN {ip_version} {target_ip}
-t=0 0
-a=ice-lite
-m=application {target_port} UDP/DTLS/SCTP webrtc-datachannel
-a=mid:0
-a=setup:passive
-a=ice-ufrag:{ufrag}
-a=ice-pwd:{pwd}
-a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
-a=sctp-port:5000
-a=max-message-size:16384
-a=candidate:1467250027 1 UDP 1467250027 {target_ip} {target_port} typ host
-";

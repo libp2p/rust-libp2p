@@ -81,7 +81,6 @@ async fn outbound_inner(
     /*
      * ANSWER
      */
-    // TODO: Update SDP Answer format for Browser WebRTC
     let answer_obj = sdp::answer(sock_addr, &remote_fingerprint, &ufrag);
     log::trace!("Answer SDP: {:?}", answer_obj);
     let srd_promise = peer_connection.set_remote_description(&answer_obj);
