@@ -1,3 +1,10 @@
+## 0.45.2 - unreleased
+
+- return typed error from config builder.
+  See [PR 4445]
+
+[PR 4445]: https://github.com/libp2p/rust-libp2p/pull/4445
+
 ## 0.45.1
 
 - Add getter function to obtain `TopicScoreParams`.
