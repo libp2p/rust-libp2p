@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::tokio::fingerprint::Fingerprint;
 use rand::{distributions::DistString, CryptoRng, Rng};
 use webrtc::peer_connection::certificate::RTCCertificate;
+
+use crate::tokio::fingerprint::Fingerprint;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Certificate {
