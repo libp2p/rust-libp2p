@@ -107,7 +107,7 @@ impl ConnectionInner {
     /// To poll for inbound WebRTCStreams, we need to poll for the ondatachannel callback
     /// We only get that callback for inbound data channels on our connections.
     /// This callback is converted to a future using channel, which we can poll here
-    fn poll_ondatachannel(&mut self, cx: &mut Context) -> Poll<Result<Stream, Error>> {
+    fn poll_inbound(&mut self, cx: &mut Context) -> Poll<Result<Stream, Error>> {
         match ready!(self.rx_ondatachannel.poll_next_unpin(cx)) {
             Some(dc) => {
                 // Create a WebRTC Stream from the Data Channel
@@ -168,20 +168,16 @@ impl Drop for ConnectionInner {
 /// WebRTC native multiplexing
 /// Allows users to open substreams
 impl StreamMuxer for Connection {
-    type Substream = Stream; // A Stream of a WebRTC PeerConnection is a Data Channel
+    type Substream = Stream;
     type Error = Error;
 
-    /// Polls for inbound connections by waiting for the ondatachannel callback to be triggered
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        // Inbound substream is signalled by an ondatachannel event
-        self.inner.poll_ondatachannel(cx)
+        self.inner.poll_inbound(cx)
     }
 
-    // We create the Data Channel here from the Peer Connection
-    // then wait for the Data Channel to be opened
     fn poll_outbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -202,7 +198,6 @@ impl StreamMuxer for Connection {
         Poll::Ready(Ok(()))
     }
 
-    /// Polls the connection
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

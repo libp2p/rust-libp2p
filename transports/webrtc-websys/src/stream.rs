@@ -8,7 +8,9 @@ use web_sys::RtcDataChannel;
 
 mod poll_data_channel;
 
-/// Stream over the Connection
+/// A stream over a WebRTC connection.
+///
+/// Backed by a WebRTC data channel.
 pub struct Stream {
     /// Wrapper for the inner stream to make it Send
     inner: SendWrapper<libp2p_webrtc_utils::Stream<PollDataChannel>>,
