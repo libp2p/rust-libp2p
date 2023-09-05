@@ -108,7 +108,6 @@ async fn open_in_browser() -> Result<(Child, WebDriver)> {
     } else {
         "chromedriver"
     };
-    
     let mut chrome = tokio::process::Command::new(chromedriver)
         .arg("--port=45782")
         .stdout(Stdio::piped())
