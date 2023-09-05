@@ -4,7 +4,7 @@
 use crate::stream::DropListener;
 
 use super::{Error, Stream};
-use futures::channel;
+use futures::channel::mpsc;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use js_sys::{Object, Reflect};
@@ -43,12 +43,14 @@ struct ConnectionInner {
     peer_connection: RtcPeerConnection,
     /// Whether the connection is closed
     closed: bool,
-    /// A channel that signals incoming data channels
-    rx_ondatachannel: channel::mpsc::Receiver<RtcDataChannel>,
+    /// An [`mpsc::channel`] for all inbound data channels.
+    ///
+    /// Because the browser's WebRTC API is event-based, we need to use a channel to obtain all inbound data channels.
+    inbound_data_channels: mpsc::Receiver<RtcDataChannel>,
 
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
     /// Currently unimplemented, will be implemented in a future PR.
-    drop_listeners: FuturesUnordered<crate::stream::DropListener>,
+    drop_listeners: FuturesUnordered<DropListener>,
     /// Currently unimplemented, will be implemented in a future PR.
     no_drop_listeners_waker: Option<Waker>,
 }
@@ -57,19 +59,22 @@ impl ConnectionInner {
     /// Create a new inner WebRTC Connection
     fn new(peer_connection: RtcPeerConnection) -> Self {
         // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
-        let (mut tx_ondatachannel, rx_ondatachannel) = channel::mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
+        let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
         // Wake the Future in the ondatachannel callback
         let ondatachannel_callback =
             Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
-                let dc2 = ev.channel();
-                log::trace!("ondatachannel_callback triggered");
-                match tx_ondatachannel.try_send(dc2) {
-                    Ok(_) => log::trace!("ondatachannel_callback sent data channel"),
-                    Err(e) => log::error!(
-                        "ondatachannel_callback: failed to send data channel: {:?}",
-                        e
-                    ),
+                log::trace!("New data channel");
+
+                if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
+                    if e.is_full() {
+                        log::warn!("Remote is opening too many data channels, we can't keep up!");
+                        return;
+                    }
+
+                    if e.is_disconnected() {
+                        log::warn!("Receiver is gone, are we shutting down?");
+                    }
                 }
             });
 
@@ -83,7 +88,7 @@ impl ConnectionInner {
             closed: false,
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
-            rx_ondatachannel,
+            inbound_data_channels: rx_ondatachannel,
         }
     }
 
@@ -92,40 +97,35 @@ impl ConnectionInner {
     fn poll_create_data_channel(&mut self, _cx: &mut Context) -> Poll<Stream> {
         log::trace!("Creating outbound data channel");
 
-        let (stream, drop_listener) = self.peer_connection.new_stream();
-
-        self.drop_listeners.push(drop_listener);
-        if let Some(waker) = self.no_drop_listeners_waker.take() {
-            waker.wake()
-        }
+        let data_channel = self.peer_connection.new_regular_data_channel();
+        let stream = self.new_stream_from_data_channel(data_channel);
 
         Poll::Ready(stream)
     }
 
-    /// Polls the ondatachannel callback for inbound data channel stream.
-    ///
-    /// To poll for inbound WebRTCStreams, we need to poll for the ondatachannel callback
-    /// We only get that callback for inbound data channels on our connections.
-    /// This callback is converted to a future using channel, which we can poll here
+    /// Polls the chann
     fn poll_inbound(&mut self, cx: &mut Context) -> Poll<Result<Stream, Error>> {
-        match ready!(self.rx_ondatachannel.poll_next_unpin(cx)) {
-            Some(dc) => {
-                // Create a WebRTC Stream from the Data Channel
-                let (channel, drop_listener) = Stream::new(dc);
+        match ready!(self.inbound_data_channels.poll_next_unpin(cx)) {
+            Some(data_channel) => {
+                let stream = self.new_stream_from_data_channel(data_channel);
 
-                self.drop_listeners.push(drop_listener);
-                if let Some(waker) = self.no_drop_listeners_waker.take() {
-                    waker.wake()
-                }
-
-                log::trace!("connection::poll_ondatachannel ready");
-                Poll::Ready(Ok(channel))
+                Poll::Ready(Ok(stream))
             }
             None => {
                 self.no_drop_listeners_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
         }
+    }
+
+    fn new_stream_from_data_channel(&mut self, data_channel: RtcDataChannel) -> Stream {
+        let (stream, drop_listener) = Stream::new(data_channel);
+
+        self.drop_listeners.push(drop_listener);
+        if let Some(waker) = self.no_drop_listeners_waker.take() {
+            waker.wake()
+        }
+        stream
     }
 
     /// Poll the Connection
@@ -234,12 +234,16 @@ impl RtcPeerConnection {
         Ok(Self { inner })
     }
 
+    /// Creates the stream for the initial noise handshake.
+    ///
+    /// The underlying data channel MUST have `negotiated` set to `true` and carry the ID 0.
     pub(crate) fn new_handshake_stream(&self) -> (Stream, DropListener) {
         Stream::new(self.new_data_channel(true))
     }
 
-    pub(crate) fn new_stream(&self) -> (Stream, DropListener) {
-        Stream::new(self.new_data_channel(false))
+    /// Creates a regular data channel for when the connection is already established.
+    pub(crate) fn new_regular_data_channel(&self) -> RtcDataChannel {
+        self.new_data_channel(false)
     }
 
     fn new_data_channel(&self, negotiated: bool) -> RtcDataChannel {
