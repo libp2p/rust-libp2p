@@ -99,7 +99,7 @@ impl DataChannel {
                     return;
                 }
 
-                read_buffer.copy_from_slice(&data.to_vec());
+                read_buffer.extend_from_slice(&data.to_vec());
                 new_data_waker.wake();
             }
         })
@@ -125,6 +125,19 @@ impl DataChannel {
     fn buffered_amount(&self) -> usize {
         self.inner.buffered_amount() as usize
     }
+
+    fn poll_open(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
+        match self.ready_state() {
+            RtcDataChannelState::Connecting => {
+                self.open_waker.register(cx.waker());
+                Poll::Pending
+            }
+            RtcDataChannelState::Closing | RtcDataChannelState::Closed => {
+                Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+            }
+            RtcDataChannelState::Open | RtcDataChannelState::__Nonexhaustive => Poll::Ready(Ok(())),
+        }
+    }
 }
 
 impl AsyncRead for DataChannel {
@@ -133,21 +146,14 @@ impl AsyncRead for DataChannel {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        match self.ready_state() {
-            RtcDataChannelState::Connecting => {
-                self.open_waker.register(cx.waker());
-                return Poll::Pending;
-            }
-            RtcDataChannelState::Closing | RtcDataChannelState::Closed => {
-                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
-            }
-            RtcDataChannelState::Open | RtcDataChannelState::__Nonexhaustive => {}
-        }
+        let this = self.get_mut();
 
-        let mut read_buffer = self.read_buffer.lock().unwrap();
+        futures::ready!(this.poll_open(cx))?;
+
+        let mut read_buffer = this.read_buffer.lock().unwrap();
 
         if read_buffer.is_empty() {
-            self.new_data_waker.register(cx.waker());
+            this.new_data_waker.register(cx.waker());
             return Poll::Pending;
         }
 
@@ -156,10 +162,11 @@ impl AsyncRead for DataChannel {
         // - at most what we have (`read_buffer.len()`)
         let split_index = min(buf.len(), read_buffer.len());
 
-        let bytes_to_return = read_buffer.split_off(split_index);
-        buf.copy_from_slice(&bytes_to_return);
+        let bytes_to_return = read_buffer.split_to(split_index);
+        let len = bytes_to_return.len();
+        buf[..len].copy_from_slice(&bytes_to_return);
 
-        Poll::Ready(Ok(bytes_to_return.len()))
+        Poll::Ready(Ok(len))
     }
 }
 
@@ -169,17 +176,21 @@ impl AsyncWrite for DataChannel {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        debug_assert!(self.buffered_amount() <= MAX_BUFFER);
-        let remaining_space = MAX_BUFFER - self.buffered_amount();
+        let this = self.get_mut();
+
+        futures::ready!(this.poll_open(cx))?;
+
+        debug_assert!(this.buffered_amount() <= MAX_BUFFER);
+        let remaining_space = MAX_BUFFER - this.buffered_amount();
 
         if remaining_space == 0 {
-            self.write_waker.register(cx.waker());
+            this.write_waker.register(cx.waker());
             return Poll::Pending;
         }
 
         let bytes_to_send = min(buf.len(), remaining_space);
 
-        if self
+        if this
             .inner
             .send_with_u8_array(&buf[..bytes_to_send])
             .is_err()
