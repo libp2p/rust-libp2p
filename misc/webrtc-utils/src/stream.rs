@@ -35,8 +35,6 @@ use crate::{
     stream::state::{Closing, State},
 };
 
-pub use drop_listener::DropListener;
-
 mod drop_listener;
 mod framed_dc;
 mod state;
@@ -46,7 +44,7 @@ mod state;
 /// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
 /// size to 16 KB to avoid monopolization."
 /// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
-pub const MAX_MSG_LEN: usize = 16384; // 16kiB
+pub const MAX_MSG_LEN: usize = 16 * 1024;
 /// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
 /// Overhead of the protobuf encoding, in bytes.
@@ -54,9 +52,11 @@ const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
-/// A substream on top of a WebRTC data channel.
+pub use drop_listener::DropListener;
+
+/// A stream backed by a WebRTC data channel.
 ///
-/// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
+/// To be a proper libp2p stream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
 /// as support a half-closed state which we do by framing messages in a protobuf envelope.
 pub struct Stream<T> {
     io: FramedDc<T>,
@@ -70,12 +70,11 @@ impl<T> Stream<T>
 where
     T: AsyncRead + AsyncWrite + Unpin + Clone,
 {
-    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
-    /// is dropped.
+    /// Returns a new [`Stream`] and a [`DropListener`], which will notify the receiver when/if the stream is dropped.
     pub fn new(data_channel: T) -> (Self, DropListener<T>) {
         let (sender, receiver) = oneshot::channel();
 
-        let substream = Self {
+        let stream = Self {
             io: framed_dc::new(data_channel.clone()),
             state: State::Open,
             read_buffer: Bytes::default(),
@@ -83,10 +82,10 @@ where
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
 
-        (substream, listener)
+        (stream, listener)
     }
 
-    /// Gracefully closes the "read-half" of the substream.
+    /// Gracefully closes the "read-half" of the stream.
     pub fn poll_close_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.close_read_barrier()? {
@@ -261,12 +260,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
     use quick_protobuf::{MessageWrite, Writer};
     use unsigned_varint::codec::UviBytes;
-
-    use super::*;
 
     #[test]
     fn max_data_len() {

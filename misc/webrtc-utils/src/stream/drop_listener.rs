@@ -79,7 +79,7 @@ where
                         return Poll::Ready(Ok(()));
                     }
                     Poll::Ready(Err(Canceled)) => {
-                        log::info!("Substream dropped without graceful close, sending Reset");
+                        log::info!("Stream dropped without graceful close, sending Reset");
                         *state = State::SendingReset { stream };
                         continue;
                     }
@@ -117,5 +117,5 @@ where
     }
 }
 
-/// Indicates that our substream got gracefully closed.
+/// Indicates that our stream got gracefully closed.
 pub struct GracefullyClosed {}

@@ -8,20 +8,14 @@ use std::task::{Context, Poll};
 use bytes::BytesMut;
 use futures::task::AtomicWaker;
 use futures::{AsyncRead, AsyncWrite};
+use libp2p_webrtc_utils::MAX_MSG_LEN;
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
-
-/// WebRTC data channels only support backpressure for reading in a limited way.
-/// We have to check the `bufferedAmount` property and compare it to chosen constant.
-/// Once we exceed the constant, we pause sending of data until we receive the `bufferedAmountLow` event.
-///
-/// As per spec, we limit the maximum amount to 16KB, see <https://www.rfc-editor.org/rfc/rfc8831.html#name-transferring-user-data-on-a>.
-const MAX_BUFFER: usize = 16 * 1024;
 
 /// [`PollDataChannel`] is a wrapper around around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
 #[derive(Debug, Clone)]
 pub(crate) struct PollDataChannel {
-    /// The [RtcDataChannel] being wrapped.
+    /// The [`RtcDataChannel`] being wrapped.
     inner: RtcDataChannel,
 
     new_data_waker: Rc<AtomicWaker>,
@@ -30,14 +24,14 @@ pub(crate) struct PollDataChannel {
     /// Waker for when we are waiting for the DC to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the DC because we previously exceeded the `MAX_BUFFERED_AMOUNT` threshold.
+    /// Waker for when we are waiting to write (again) to the DC because we previously exceeded the [`MAX_MSG_LEN`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the DC to be closed.
     close_waker: Rc<AtomicWaker>,
 
     // Store the closures for proper garbage collection.
-    // These are wrapped in an `Rc` so we can implement `Clone`.
+    // These are wrapped in an [`Rc`] so we can implement [`Clone`].
     _on_open_closure: Rc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
     _on_write_closure: Rc<Closure<dyn FnMut(Event)>>,
     _on_close_closure: Rc<Closure<dyn FnMut(Event)>>,
@@ -92,7 +86,9 @@ impl PollDataChannel {
 
                 let mut read_buffer = read_buffer.lock().unwrap();
 
-                if read_buffer.len() + data.length() as usize >= MAX_BUFFER {
+                if read_buffer.len() + data.length() as usize > MAX_MSG_LEN {
+                    // TODO: Should we take as much of the data as we can or drop the entire message?
+
                     log::warn!(
                         "Remote is overloading us with messages, dropping {} bytes of data",
                         data.length()
