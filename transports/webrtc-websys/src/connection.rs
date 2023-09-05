@@ -52,6 +52,8 @@ struct ConnectionInner {
     drop_listeners: FuturesUnordered<DropListener>,
     /// Currently unimplemented, will be implemented in a future PR.
     no_drop_listeners_waker: Option<Waker>,
+
+    _ondatachannel_closure: Closure<dyn FnMut(RtcDataChannelEvent)>,
 }
 
 impl ConnectionInner {
@@ -60,27 +62,24 @@ impl ConnectionInner {
         // An ondatachannel Future enables us to poll for incoming data channel events in poll_incoming
         let (mut tx_ondatachannel, rx_ondatachannel) = mpsc::channel(4); // we may get more than one data channel opened on a single peer connection
 
-        // Wake the Future in the ondatachannel callback
-        let ondatachannel_callback =
-            Closure::<dyn FnMut(_)>::new(move |ev: RtcDataChannelEvent| {
-                log::trace!("New data channel");
+        let ondatachannel_closure = Closure::new(move |ev: RtcDataChannelEvent| {
+            log::trace!("New data channel");
 
-                if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
-                    if e.is_full() {
-                        log::warn!("Remote is opening too many data channels, we can't keep up!");
-                        return;
-                    }
-
-                    if e.is_disconnected() {
-                        log::warn!("Receiver is gone, are we shutting down?");
-                    }
+            if let Err(e) = tx_ondatachannel.try_send(ev.channel()) {
+                if e.is_full() {
+                    log::warn!("Remote is opening too many data channels, we can't keep up!");
+                    return;
                 }
-            });
+
+                if e.is_disconnected() {
+                    log::warn!("Receiver is gone, are we shutting down?");
+                }
+            }
+        });
 
         peer_connection
             .inner
-            .set_ondatachannel(Some(ondatachannel_callback.as_ref().unchecked_ref()));
-        ondatachannel_callback.forget();
+            .set_ondatachannel(Some(ondatachannel_closure.as_ref().unchecked_ref()));
 
         Self {
             inner: peer_connection,
@@ -88,6 +87,7 @@ impl ConnectionInner {
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
             inbound_data_channels: rx_ondatachannel,
+            _ondatachannel_closure: ondatachannel_closure,
         }
     }
 
