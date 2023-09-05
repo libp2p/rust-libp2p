@@ -14,5 +14,5 @@ mod stream;
 pub mod transport;
 
 pub use error::Error;
-pub use stream::{DropListener, Stream};
+pub use stream::{DropListener, Stream, MAX_MSG_LEN};
 pub use transport::parse_webrtc_dial_addr;
