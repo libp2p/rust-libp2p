@@ -6,9 +6,9 @@ use std::task::{Context, Poll};
 
 use bytes::BytesMut;
 use futures::task::AtomicWaker;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{ready, AsyncRead, AsyncWrite};
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{MessageEvent, RtcDataChannel, RtcDataChannelState};
+use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
 /// WebRTC data channels only support backpressure for reading in a limited way.
 /// We have to check the `bufferedAmount` property and compare it to chosen constant.
@@ -35,54 +35,55 @@ pub(crate) struct DataChannel {
 
     /// Waker for when we are waiting for the DC to be closed.
     close_waker: Arc<AtomicWaker>,
+
+    // Store the closures for proper garbage collection.
+    // These are wrapped in an `Arc` so we can implement `Clone`.
+    _on_open_closure: Arc<Closure<dyn FnMut(RtcDataChannelEvent)>>,
+    _on_write_closure: Arc<Closure<dyn FnMut(Event)>>,
+    _on_close_closure: Arc<Closure<dyn FnMut(Event)>>,
+    _on_message_closure: Arc<Closure<dyn FnMut(MessageEvent)>>,
 }
 
 impl DataChannel {
     pub(crate) fn new(inner: RtcDataChannel) -> Self {
         let open_waker = Arc::new(AtomicWaker::new());
-        inner.set_onopen(Some(
-            Closure::once_into_js({
-                let open_waker = open_waker.clone();
+        let on_open_closure = Closure::new({
+            let open_waker = open_waker.clone();
 
-                move || {
-                    log::trace!("DataChannel opened");
-                    open_waker.wake();
-                }
-            })
-            .unchecked_ref(),
-        ));
+            move |_: RtcDataChannelEvent| {
+                log::trace!("DataChannel opened");
+                open_waker.wake();
+            }
+        });
+        inner.set_onopen(Some(on_open_closure.as_ref().unchecked_ref()));
 
         let write_waker = Arc::new(AtomicWaker::new());
         inner.set_buffered_amount_low_threshold(0);
-        inner.set_onbufferedamountlow(Some(
-            Closure::once_into_js({
-                let write_waker = write_waker.clone();
+        let on_write_closure = Closure::new({
+            let write_waker = write_waker.clone();
 
-                move || {
-                    log::trace!("DataChannel available for writing (again)");
-                    write_waker.wake();
-                }
-            })
-            .unchecked_ref(),
-        ));
+            move |_: Event| {
+                log::trace!("DataChannel available for writing (again)");
+                write_waker.wake();
+            }
+        });
+        inner.set_onbufferedamountlow(Some(on_write_closure.as_ref().unchecked_ref()));
 
         let close_waker = Arc::new(AtomicWaker::new());
-        inner.set_onclose(Some(
-            Closure::once_into_js({
-                let close_waker = close_waker.clone();
+        let on_close_closure = Closure::new({
+            let close_waker = close_waker.clone();
 
-                move || {
-                    log::trace!("DataChannel closed");
-                    close_waker.wake();
-                }
-            })
-            .unchecked_ref(),
-        ));
+            move |_: Event| {
+                log::trace!("DataChannel closed");
+                close_waker.wake();
+            }
+        });
+        inner.set_onclose(Some(on_close_closure.as_ref().unchecked_ref()));
 
         let new_data_waker = Arc::new(AtomicWaker::new());
         let read_buffer = Arc::new(Mutex::new(BytesMut::new())); // We purposely don't use `with_capacity` so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
 
-        let onmessage_callback = Closure::<dyn FnMut(_)>::new({
+        let on_message_closure = Closure::<dyn FnMut(_)>::new({
             let new_data_waker = new_data_waker.clone();
             let read_buffer = read_buffer.clone();
 
@@ -102,9 +103,8 @@ impl DataChannel {
                 read_buffer.extend_from_slice(&data.to_vec());
                 new_data_waker.wake();
             }
-        })
-        .into_js_value();
-        inner.set_onmessage(Some(onmessage_callback.unchecked_ref()));
+        });
+        inner.set_onmessage(Some(on_message_closure.as_ref().unchecked_ref()));
 
         Self {
             inner,
@@ -113,6 +113,10 @@ impl DataChannel {
             open_waker,
             write_waker,
             close_waker,
+            _on_open_closure: Arc::new(on_open_closure),
+            _on_write_closure: Arc::new(on_write_closure),
+            _on_close_closure: Arc::new(on_close_closure),
+            _on_message_closure: Arc::new(on_message_closure),
         }
     }
 
