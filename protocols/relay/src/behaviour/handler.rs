@@ -45,8 +45,8 @@ use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -385,13 +385,13 @@ pub struct Handler {
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
     stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
-    protocol_futs: futures_bounded::WorkerFutures<(), RelayConnectionHandlerEvent>,
+    protocol_futs: futures_bounded::BoundedWorkers<RelayConnectionHandlerEvent>,
 }
 
 impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
-            protocol_futs: futures_bounded::WorkerFutures::new(
+            protocol_futs: futures_bounded::BoundedWorkers::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -414,7 +414,6 @@ impl Handler {
         if self
             .protocol_futs
             .try_push(
-                (),
                 inbound_hop::handle_inbound_request(
                     stream,
                     self.config.reservation_duration,
@@ -425,7 +424,7 @@ impl Handler {
                 )
                 .boxed(),
             )
-            .is_some()
+            .is_failing()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
         }
@@ -442,11 +441,8 @@ impl Handler {
 
         if self
             .protocol_futs
-            .try_push(
-                (),
-                outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed(),
-            )
-            .is_some()
+            .try_push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed())
+            .is_failing()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
         }
@@ -667,7 +663,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Process protocol requests
-        if let Poll::Ready(((), worker_res)) = self.protocol_futs.poll_unpin(cx) {
+        if let Poll::Ready(worker_res) = self.protocol_futs.poll_unpin(cx) {
             let event = worker_res
                 .unwrap_or_else(|_| ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
 

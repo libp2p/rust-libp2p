@@ -27,7 +27,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
-use futures_bounded::Timeout;
+use futures_bounded::{PushResult, Timeout};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
@@ -42,7 +42,7 @@ use libp2p_swarm::{
     SubstreamProtocol,
 };
 use log::debug;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -51,9 +51,10 @@ use std::time::Duration;
 ///
 /// Circuits to be denied exceeding the limit are dropped.
 const MAX_NUMBER_DENYING_CIRCUIT: usize = 8;
+const DENYING_CIRCUIT_TIMEOUT: Duration = Duration::from_secs(60);
 
-const STREAM_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum In {
     Reserve {
@@ -135,12 +136,9 @@ pub struct Handler {
     >,
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
-    reserve_futs: futures_bounded::WorkerFutures<
-        (),
-        Result<outbound_hop::Output, outbound_hop::UpgradeError>,
-    >,
-    circuit_connection_futs: futures_bounded::WorkerFutures<
-        (),
+    reserve_futs:
+        futures_bounded::BoundedWorkers<Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
+    circuit_connection_futs: futures_bounded::BoundedWorkers<
         Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>,
     >,
 
@@ -156,12 +154,12 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs: futures_bounded::WorkerFutures<
-        (),
+    open_circuit_futs: futures_bounded::BoundedWorkers<
         Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>,
     >,
 
-    circuit_deny_futs: HashMap<PeerId, BoxFuture<'static, Result<(), inbound_stop::UpgradeError>>>,
+    circuit_deny_futs:
+        futures_bounded::UniqueWorkers<PeerId, Result<(), inbound_stop::UpgradeError>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -179,21 +177,24 @@ impl Handler {
             queued_events: Default::default(),
             pending_error: Default::default(),
             wait_for_outbound_stream: Default::default(),
-            reserve_futs: futures_bounded::WorkerFutures::new(
+            reserve_futs: futures_bounded::BoundedWorkers::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            circuit_connection_futs: futures_bounded::WorkerFutures::new(
+            circuit_connection_futs: futures_bounded::BoundedWorkers::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
-            open_circuit_futs: futures_bounded::WorkerFutures::new(
+            open_circuit_futs: futures_bounded::BoundedWorkers::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            circuit_deny_futs: Default::default(),
+            circuit_deny_futs: futures_bounded::UniqueWorkers::new(
+                DENYING_CIRCUIT_TIMEOUT,
+                MAX_NUMBER_DENYING_CIRCUIT,
+            ),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
         }
@@ -271,25 +272,19 @@ impl Handler {
     fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
         let src_peer_id = circuit.src_peer_id();
 
-        if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
-            && !self.circuit_deny_futs.contains_key(&src_peer_id)
-        {
-            log::warn!(
+        match self.circuit_deny_futs.try_push(
+            src_peer_id,
+            circuit.deny(proto::Status::NO_RESERVATION).boxed(),
+        ) {
+            PushResult::Ok => {}
+            PushResult::BeyondCapacity => log::warn!(
                 "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                 src_peer_id
-            );
-            return;
-        }
-
-        if self
-            .circuit_deny_futs
-            .insert(
-                src_peer_id,
-                circuit.deny(proto::Status::NO_RESERVATION).boxed(),
-            )
-            .is_some()
-        {
-            log::warn!("Dropping existing inbound circuit request to be denied from {:?} in favor of new one.", src_peer_id);
+            ),
+            PushResult::ExistedID => log::warn!(
+                "Dropping inbound circuit request to be denied from {:?} in favor of existing one.",
+                src_peer_id
+            ),
         }
     }
 }
@@ -357,7 +352,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Circuit connections
-        if let Poll::Ready(((), worker_res)) = self.circuit_connection_futs.poll_unpin(cx) {
+        if let Poll::Ready(worker_res) = self.circuit_connection_futs.poll_unpin(cx) {
             let res = match worker_res {
                 Ok(r) => r,
                 Err(Timeout { .. }) => {
@@ -400,7 +395,7 @@ impl ConnectionHandler for Handler {
         }
 
         // Reservations
-        if let Poll::Ready(((), worker_res)) = self.reserve_futs.poll_unpin(cx) {
+        if let Poll::Ready(worker_res) = self.reserve_futs.poll_unpin(cx) {
             let res = match worker_res {
                 Ok(r) => r,
                 Err(Timeout { .. }) => {
@@ -449,7 +444,7 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        if let Poll::Ready(((), worker_res)) = self.open_circuit_futs.poll_unpin(cx) {
+        if let Poll::Ready(worker_res) = self.open_circuit_futs.poll_unpin(cx) {
             let res = match worker_res {
                 Ok(r) => r,
                 Err(Timeout { .. }) => {
@@ -502,28 +497,21 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        let maybe_event =
-            self.circuit_deny_futs
-                .iter_mut()
-                .find_map(|(src_peer_id, fut)| match fut.poll_unpin(cx) {
-                    Poll::Ready(Ok(())) => Some((
-                        *src_peer_id,
-                        Event::InboundCircuitReqDenied {
-                            src_peer_id: *src_peer_id,
-                        },
-                    )),
-                    Poll::Ready(Err(error)) => Some((
-                        *src_peer_id,
-                        Event::InboundCircuitReqDenyFailed {
-                            src_peer_id: *src_peer_id,
-                            error,
-                        },
-                    )),
-                    Poll::Pending => None,
-                });
-        if let Some((src_peer_id, event)) = maybe_event {
-            self.circuit_deny_futs.remove(&src_peer_id);
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+        match self.circuit_deny_futs.poll_unpin(cx) {
+            Poll::Ready((src_peer_id, Ok(Ok(())))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundCircuitReqDenied { src_peer_id },
+                ));
+            }
+            Poll::Ready((src_peer_id, Ok(Err(error)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundCircuitReqDenyFailed { src_peer_id, error },
+                ));
+            }
+            Poll::Ready((src_peer_id, Err(Timeout { .. }))) => {
+                log::warn!("Dropping inbound circuit request to be denied from {:?} due to exceeding limit.", src_peer_id);
+            }
+            Poll::Pending => {}
         }
 
         // Send errors to transport.
@@ -573,8 +561,8 @@ impl ConnectionHandler for Handler {
             }) => {
                 if self
                     .open_circuit_futs
-                    .try_push((), inbound_stop::handle_open_circuit(stream).boxed())
-                    .is_some()
+                    .try_push(inbound_stop::handle_open_circuit(stream).boxed())
+                    .is_failing()
                 {
                     log::warn!("Dropping inbound stream because we are at capacity")
                 }
@@ -591,11 +579,10 @@ impl ConnectionHandler for Handler {
                         if self
                             .reserve_futs
                             .try_push(
-                                (),
                                 outbound_hop::handle_reserve_message_response(stream, to_listener)
                                     .boxed(),
                             )
-                            .is_some()
+                            .is_failing()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")
                         }
@@ -607,7 +594,6 @@ impl ConnectionHandler for Handler {
                         if self
                             .circuit_connection_futs
                             .try_push(
-                                (),
                                 outbound_hop::handle_connection_message_response(
                                     stream,
                                     self.remote_peer_id,
@@ -616,7 +602,7 @@ impl ConnectionHandler for Handler {
                                 )
                                 .boxed(),
                             )
-                            .is_some()
+                            .is_failing()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")
                         }
