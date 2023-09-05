@@ -16,7 +16,7 @@ pub struct Stream {
     inner: SendWrapper<libp2p_webrtc_utils::Stream<PollDataChannel>>,
 }
 
-pub(crate) type DropListener = libp2p_webrtc_utils::DropListener<PollDataChannel>;
+pub(crate) type DropListener = SendWrapper<libp2p_webrtc_utils::DropListener<PollDataChannel>>;
 
 impl Stream {
     pub(crate) fn new(data_channel: RtcDataChannel) -> (Self, DropListener) {
@@ -27,7 +27,7 @@ impl Stream {
             Self {
                 inner: SendWrapper::new(inner),
             },
-            drop_listener,
+            SendWrapper::new(drop_listener),
         )
     }
 }
