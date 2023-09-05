@@ -19,19 +19,22 @@
 // DEALINGS IN THE SOFTWARE.
 
 use asynchronous_codec::Framed;
+use futures::{AsyncRead, AsyncWrite};
 
-use libp2p_webrtc_utils::proto::Message;
-use libp2p_webrtc_utils::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
+use crate::proto::Message;
+use crate::stream::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
 
-use super::data_channel::DataChannel;
-
-pub(crate) type FramedDc = Framed<DataChannel, quick_protobuf_codec::Codec<Message>>;
-pub(crate) fn new(inner: DataChannel) -> FramedDc {
+pub(crate) type FramedDc<T> = Framed<T, quick_protobuf_codec::Codec<Message>>;
+pub(crate) fn new<T>(inner: T) -> FramedDc<T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     let mut framed = Framed::new(
         inner,
         quick_protobuf_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN),
     );
-    // If not set, `Framed` buffers up to 16377 bytes of data before sending
+    // If not set, `Framed` buffers up to 131kB of data before sending, which leads to "outbound
+    // packet larger than maximum message size" error in webrtc-rs.
     framed.set_send_high_water_mark(MAX_DATA_LEN);
     framed
 }

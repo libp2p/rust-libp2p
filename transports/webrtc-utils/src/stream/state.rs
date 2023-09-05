@@ -25,7 +25,7 @@ use std::io;
 use crate::proto::Flag;
 
 #[derive(Debug, Copy, Clone)]
-pub enum State {
+pub(crate) enum State {
     Open,
     ReadClosed,
     WriteClosed,
@@ -49,14 +49,14 @@ pub enum State {
 /// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag respectively
 /// and flushing the underlying connection.
 #[derive(Debug, Copy, Clone)]
-pub enum Closing {
+pub(crate) enum Closing {
     Requested,
     MessageSent,
 }
 
 impl State {
     /// Performs a state transition for a flag contained in an inbound message.
-    pub fn handle_inbound_flag(&mut self, flag: Flag, buffer: &mut Bytes) {
+    pub(crate) fn handle_inbound_flag(&mut self, flag: Flag, buffer: &mut Bytes) {
         let current = *self;
 
         match (current, flag) {
@@ -80,7 +80,7 @@ impl State {
         }
     }
 
-    pub fn write_closed(&mut self) {
+    pub(crate) fn write_closed(&mut self) {
         match self {
             State::ClosingWrite {
                 read_closed: true,
@@ -108,7 +108,7 @@ impl State {
         }
     }
 
-    pub fn close_write_message_sent(&mut self) {
+    pub(crate) fn close_write_message_sent(&mut self) {
         match self {
             State::ClosingWrite { inner, read_closed } => {
                 debug_assert!(matches!(inner, Closing::Requested));
@@ -128,7 +128,7 @@ impl State {
         }
     }
 
-    pub fn read_closed(&mut self) {
+    pub(crate) fn read_closed(&mut self) {
         match self {
             State::ClosingRead {
                 write_closed: true,
@@ -156,7 +156,7 @@ impl State {
         }
     }
 
-    pub fn close_read_message_sent(&mut self) {
+    pub(crate) fn close_read_message_sent(&mut self) {
         match self {
             State::ClosingRead {
                 inner,
@@ -183,12 +183,12 @@ impl State {
     ///
     /// This is necessary for read-closed streams because we would otherwise not read any more flags from
     /// the socket.
-    pub fn read_flags_in_async_write(&self) -> bool {
+    pub(crate) fn read_flags_in_async_write(&self) -> bool {
         matches!(self, Self::ReadClosed)
     }
 
     /// Acts as a "barrier" for [`futures::AsyncRead::poll_read`].
-    pub fn read_barrier(&self) -> io::Result<()> {
+    pub(crate) fn read_barrier(&self) -> io::Result<()> {
         use State::*;
 
         let kind = match self {
@@ -210,7 +210,7 @@ impl State {
     }
 
     /// Acts as a "barrier" for [`futures::AsyncWrite::poll_write`].
-    pub fn write_barrier(&self) -> io::Result<()> {
+    pub(crate) fn write_barrier(&self) -> io::Result<()> {
         use State::*;
 
         let kind = match self {
@@ -233,7 +233,7 @@ impl State {
     }
 
     /// Acts as a "barrier" for [`futures::AsyncWrite::poll_close`].
-    pub fn close_write_barrier(&mut self) -> io::Result<Option<Closing>> {
+    pub(crate) fn close_write_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match &self {
                 State::WriteClosed => return Ok(None),
@@ -278,7 +278,7 @@ impl State {
     }
 
     /// Acts as a "barrier" for `stream::poll_close_read`.
-    pub fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
+    pub(crate) fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match self {
                 State::ReadClosed => return Ok(None),

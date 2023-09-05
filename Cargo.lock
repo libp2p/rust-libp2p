@@ -3396,7 +3396,6 @@ version = "0.7.0-alpha"
 dependencies = [
  "anyhow",
  "async-trait",
- "asynchronous-codec",
  "bytes",
  "env_logger 0.10.0",
  "futures",
@@ -3412,8 +3411,6 @@ dependencies = [
  "libp2p-webrtc-utils",
  "log",
  "multihash",
- "quick-protobuf",
- "quick-protobuf-codec",
  "quickcheck",
  "rand 0.8.5",
  "rcgen 0.10.0",
@@ -3432,6 +3429,7 @@ dependencies = [
 name = "libp2p-webrtc-utils"
 version = "0.1.0"
 dependencies = [
+ "asynchronous-codec",
  "bytes",
  "futures",
  "hex",
@@ -3447,13 +3445,13 @@ dependencies = [
  "sha2 0.10.7",
  "thiserror",
  "tinytemplate",
+ "unsigned-varint",
 ]
 
 [[package]]
 name = "libp2p-webrtc-websys"
 version = "0.1.0-alpha"
 dependencies = [
- "asynchronous-codec",
  "bytes",
  "futures",
  "futures-timer",
@@ -3466,8 +3464,6 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-webrtc-utils",
  "log",
- "quick-protobuf",
- "quick-protobuf-codec",
  "send_wrapper 0.6.0",
  "serde",
  "thiserror",

@@ -1,27 +1,14 @@
 //! The WebRTC [Stream] over the Connection
-use std::io;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll};
 
-use bytes::Bytes;
-use futures::channel::oneshot;
-use futures::{AsyncRead, AsyncWrite, Sink, SinkExt, StreamExt};
+use futures::{AsyncRead, AsyncWrite};
 use send_wrapper::SendWrapper;
 use web_sys::{RtcDataChannel, RtcDataChannelInit, RtcDataChannelType, RtcPeerConnection};
 
-pub(crate) use drop_listener::{DropListener, GracefullyClosed};
-use libp2p_webrtc_utils::proto::{Flag, Message};
-use libp2p_webrtc_utils::stream::{
-    state::{Closing, State},
-    MAX_DATA_LEN,
-};
+use self::poll_data_channel::PollDataChannel;
 
-use self::data_channel::DataChannel;
-use self::framed_dc::FramedDc;
-
-mod data_channel;
-mod drop_listener;
-mod framed_dc;
+mod poll_data_channel;
 
 /// The Browser Default is Blob, so we must set ours to Arraybuffer explicitly
 const ARRAY_BUFFER_BINARY_TYPE: RtcDataChannelType = RtcDataChannelType::Arraybuffer;
@@ -64,173 +51,49 @@ impl RtcDataChannelBuilder {
 /// Stream over the Connection
 pub struct Stream {
     /// Wrapper for the inner stream to make it Send
-    inner: SendWrapper<FramedDc>,
-    /// State of the Stream
-    state: State,
-    /// Buffer for incoming data
-    read_buffer: Bytes,
-    // Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
-    drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
+    inner: SendWrapper<libp2p_webrtc_utils::Stream<PollDataChannel>>,
 }
 
+pub(crate) type DropListener = libp2p_webrtc_utils::DropListener<PollDataChannel>;
+
 impl Stream {
-    /// Create a new WebRTC Stream
-    pub(crate) fn new(channel: RtcDataChannel) -> (Self, DropListener) {
-        let (sender, receiver) = oneshot::channel();
-        let channel = DataChannel::new(channel);
+    pub(crate) fn new(data_channel: RtcDataChannel) -> (Self, DropListener) {
+        let (inner, drop_listener) =
+            libp2p_webrtc_utils::Stream::new(PollDataChannel::new(data_channel));
 
-        let drop_listener = DropListener::new(framed_dc::new(channel.clone()), receiver);
-
-        let stream = Self {
-            inner: SendWrapper::new(framed_dc::new(channel)),
-            read_buffer: Bytes::new(),
-            state: State::Open,
-            drop_notifier: Some(sender),
-        };
-        (stream, drop_listener)
+        (
+            Self {
+                inner: SendWrapper::new(inner),
+            },
+            drop_listener,
+        )
     }
 }
 
 impl AsyncRead for Stream {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
-        loop {
-            self.state.read_barrier()?;
-
-            // Return buffered data, if any
-            if !self.read_buffer.is_empty() {
-                let n = std::cmp::min(self.read_buffer.len(), buf.len());
-                let data = self.read_buffer.split_to(n);
-                buf[0..n].copy_from_slice(&data[..]);
-
-                return Poll::Ready(Ok(n));
-            }
-
-            let Self {
-                read_buffer,
-                state,
-                inner,
-                ..
-            } = &mut *self;
-
-            match ready!(io_poll_next(&mut *inner, cx))? {
-                Some((flag, message)) => {
-                    if let Some(flag) = flag {
-                        state.handle_inbound_flag(flag, read_buffer);
-                    }
-
-                    debug_assert!(read_buffer.is_empty());
-                    if let Some(message) = message {
-                        *read_buffer = message.into();
-                    }
-                    // continue to loop
-                }
-                None => {
-                    state.handle_inbound_flag(Flag::FIN, read_buffer);
-                    return Poll::Ready(Ok(0));
-                }
-            }
-        }
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut *self.get_mut().inner).poll_read(cx, buf)
     }
 }
 
 impl AsyncWrite for Stream {
     fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        while self.state.read_flags_in_async_write() {
-            // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
-            // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
-
-            let Self {
-                read_buffer,
-                state,
-                inner,
-                ..
-            } = &mut *self;
-
-            match io_poll_next(&mut *inner, cx)? {
-                Poll::Ready(Some((Some(flag), message))) => {
-                    // Read side is closed. Discard any incoming messages.
-                    drop(message);
-                    // But still handle flags, e.g. a `Flag::StopSending`.
-                    state.handle_inbound_flag(flag, read_buffer)
-                }
-                Poll::Ready(Some((None, message))) => drop(message),
-                Poll::Ready(None) | Poll::Pending => break,
-            }
-        }
-
-        self.state.write_barrier()?;
-
-        ready!(self.inner.poll_ready_unpin(cx))?;
-
-        let n = usize::min(buf.len(), MAX_DATA_LEN);
-
-        Pin::new(&mut *self.inner).start_send(Message {
-            flag: None,
-            message: Some(buf[0..n].into()),
-        })?;
-
-        Poll::Ready(Ok(n))
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut *self.get_mut().inner).poll_write(cx, buf)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        self.inner.poll_flush_unpin(cx).map_err(Into::into)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut *self.get_mut().inner).poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        log::trace!("poll_closing");
-
-        loop {
-            match self.state.close_write_barrier()? {
-                Some(Closing::Requested) => {
-                    ready!(self.inner.poll_ready_unpin(cx))?;
-
-                    log::debug!("Sending FIN flag");
-
-                    self.inner.start_send_unpin(Message {
-                        flag: Some(Flag::FIN),
-                        message: None,
-                    })?;
-                    self.state.close_write_message_sent();
-
-                    continue;
-                }
-                Some(Closing::MessageSent) => {
-                    ready!(self.inner.poll_flush_unpin(cx))?;
-
-                    self.state.write_closed();
-
-                    // TODO: implement drop notifier. Drop notifier built into the Browser as 'onclose' event
-                    let _ = self
-                        .drop_notifier
-                        .take()
-                        .expect("to not close twice")
-                        .send(GracefullyClosed {});
-
-                    return Poll::Ready(Ok(()));
-                }
-                None => return Poll::Ready(Ok(())),
-            }
-        }
-    }
-}
-
-fn io_poll_next(
-    io: &mut FramedDc,
-    cx: &mut Context<'_>,
-) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
-    match ready!(io.poll_next_unpin(cx))
-        .transpose()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-    {
-        Some(Message { flag, message }) => Poll::Ready(Ok(Some((flag, message)))),
-        None => Poll::Ready(Ok(None)),
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut *self.get_mut().inner).poll_close(cx)
     }
 }

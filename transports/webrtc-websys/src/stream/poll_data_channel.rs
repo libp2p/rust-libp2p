@@ -6,7 +6,7 @@ use std::task::{Context, Poll};
 
 use bytes::BytesMut;
 use futures::task::AtomicWaker;
-use futures::{ready, AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite};
 use wasm_bindgen::{prelude::*, JsCast};
 use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataChannelState};
 
@@ -17,10 +17,9 @@ use web_sys::{Event, MessageEvent, RtcDataChannel, RtcDataChannelEvent, RtcDataC
 /// As per spec, we limit the maximum amount to 16KB, see <https://www.rfc-editor.org/rfc/rfc8831.html#name-transferring-user-data-on-a>.
 const MAX_BUFFER: usize = 16 * 1024;
 
-/// [`DataChannel`] is a wrapper around around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
-
+/// [`PollDataChannel`] is a wrapper around around [`RtcDataChannel`] which implements [`AsyncRead`] and [`AsyncWrite`].
 #[derive(Debug, Clone)]
-pub(crate) struct DataChannel {
+pub(crate) struct PollDataChannel {
     /// The [RtcDataChannel] being wrapped.
     inner: RtcDataChannel,
 
@@ -44,7 +43,7 @@ pub(crate) struct DataChannel {
     _on_message_closure: Arc<Closure<dyn FnMut(MessageEvent)>>,
 }
 
-impl DataChannel {
+impl PollDataChannel {
     pub(crate) fn new(inner: RtcDataChannel) -> Self {
         let open_waker = Arc::new(AtomicWaker::new());
         let on_open_closure = Closure::new({
@@ -144,7 +143,7 @@ impl DataChannel {
     }
 }
 
-impl AsyncRead for DataChannel {
+impl AsyncRead for PollDataChannel {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -174,7 +173,7 @@ impl AsyncRead for DataChannel {
     }
 }
 
-impl AsyncWrite for DataChannel {
+impl AsyncWrite for PollDataChannel {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
