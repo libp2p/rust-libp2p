@@ -36,7 +36,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use tracing::{warn, Level};
+use tracing::Level;
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
@@ -155,7 +155,7 @@ impl Handler {
             }
             future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
-                    warn!(
+                    tracing::warn!(
                         "New inbound identify push stream from {} while still \
                          upgrading previous one. Replacing previous with new.",
                         self.remote_peer_id,

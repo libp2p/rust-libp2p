@@ -32,7 +32,7 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
-use tracing::{error, info};
+use tracing;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -123,20 +123,20 @@ async fn server(server_address: SocketAddr) -> Result<()> {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("Listening on {address}");
+                    tracing::info!("Listening on {address}");
                 }
                 SwarmEvent::IncomingConnection { .. } => {}
                 e @ SwarmEvent::IncomingConnectionError { .. } => {
-                    error!("{e:?}");
+                    tracing::error!("{e:?}");
                 }
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    tracing::info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
                 SwarmEvent::Behaviour(()) => {
-                    info!("Finished run",)
+                    tracing::info!("Finished run",)
                 }
                 e => panic!("{e:?}"),
             }
@@ -195,7 +195,7 @@ async fn client(
 }
 
 async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
-    info!("start benchmark: custom");
+    tracing::info!("start benchmark: custom");
     let mut swarm = swarm().await?;
 
     let start = Instant::now();
@@ -222,7 +222,7 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
 }
 
 async fn latency(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: round-trip-time latency");
+    tracing::info!("start benchmark: round-trip-time latency");
     let mut swarm = swarm().await?;
 
     let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -254,12 +254,12 @@ async fn latency(server_address: Multiaddr) -> Result<()> {
 
     latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    info!(
+    tracing::info!(
         "Finished: {rounds} pings in {:.4}s",
         start.elapsed().as_secs_f64()
     );
-    info!("- {:.4} s median", percentile(&latencies, 0.50),);
-    info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
+    tracing::info!("- {:.4} s median", percentile(&latencies, 0.50),);
+    tracing::info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
     Ok(())
 }
 
@@ -269,7 +269,7 @@ fn percentile<V: PartialOrd + Copy>(values: &[V], percentile: f64) -> V {
 }
 
 async fn throughput(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: single connection single channel throughput");
+    tracing::info!("start benchmark: single connection single channel throughput");
     let mut swarm = swarm().await?;
 
     let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -285,7 +285,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
 }
 
 async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: single connection parallel requests per second");
+    tracing::info!("start benchmark: single connection parallel requests per second");
     let mut swarm = swarm().await?;
 
     let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
@@ -326,16 +326,16 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     let duration = start.elapsed().as_secs_f64();
     let requests_per_second = num as f64 / duration;
 
-    info!(
+    tracing::info!(
             "Finished: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s",
         );
-    info!("- {requests_per_second:.2} req/s\n");
+    tracing::info!("- {requests_per_second:.2} req/s\n");
 
     Ok(())
 }
 
 async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<()> {
-    info!("start benchmark: sequential connections with single request per second");
+    tracing::info!("start benchmark: sequential connections with single request per second");
     let mut rounds = 0;
     let to_send = 1;
     let to_receive = 1;
@@ -380,11 +380,11 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
     let connection_establishment_plus_request_95th =
         percentile(&latency_connection_establishment_plus_request, 0.95);
 
-    info!(
+    tracing::info!(
             "Finished: established {rounds} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
         );
-    info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
-    info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
+    tracing::info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
+    tracing::info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
     Ok(())
 }
@@ -441,7 +441,7 @@ async fn connect(
     let duration = start.elapsed();
     let duration_seconds = duration.as_secs_f64();
 
-    info!("established connection in {duration_seconds:.4} s");
+    tracing::info!("established connection in {duration_seconds:.4} s");
 
     Ok(server_peer_id)
 }
@@ -461,7 +461,7 @@ async fn perf(
         e => panic!("{e:?}"),
     };
 
-    info!("{}", Run { params, duration });
+    tracing::info!("{}", Run { params, duration });
 
     Ok(duration)
 }

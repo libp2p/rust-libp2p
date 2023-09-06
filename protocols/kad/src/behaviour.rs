@@ -47,7 +47,7 @@ use libp2p_swarm::{
     NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use tracing::{debug, info, warn, trace, Level};
+use tracing::Level;
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -574,7 +574,7 @@ where
                         RoutingUpdate::Success
                     }
                     kbucket::InsertResult::Full => {
-                        debug!("Bucket full. Peer not added to routing table: {}", peer);
+                        tracing::trace!("Bucket full. Peer not added to routing table: {}", peer);
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
@@ -1027,7 +1027,7 @@ where
 
         let num_connections = self.connections.len();
 
-        debug!(
+        tracing::trace!(
             "Re-configuring {} established connection{}",
             num_connections,
             if num_connections > 1 { "s" } else { "" }
@@ -1050,7 +1050,7 @@ where
     fn determine_mode_from_external_addresses(&mut self) {
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
-                debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+                tracing::trace!("Switching to client-mode because we no longer have any confirmed external addresses");
 
                 Mode::Client
             }
@@ -1064,7 +1064,7 @@ where
                     let confirmed_external_addresses =
                         to_comma_separated_list(confirmed_external_addresses);
 
-                    debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                    tracing::trace!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
                 }
 
                 Mode::Server
@@ -1092,9 +1092,9 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
+            tracing::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
             for peer in others_iter.clone() {
-                trace!(
+                tracing::trace!(
                     "Peer {:?} reported by {:?} in query {:?}.",
                     peer,
                     source,
@@ -1287,7 +1287,7 @@ where
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
                             kbucket::InsertResult::Full => {
-                                debug!("Bucket full. Peer not added to routing table: {}", peer);
+                                tracing::trace!("Bucket full. Peer not added to routing table: {}", peer);
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                                     KademliaEvent::RoutablePeer { peer, address },
@@ -1324,7 +1324,7 @@ where
     /// Handles a finished (i.e. successful) query.
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
-        trace!("Query {:?} finished.", query_id);
+        tracing::trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1551,7 +1551,7 @@ where
                         step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => {
-                        debug!("Record replicated: {:?}", record.key);
+                        tracing::trace!("Record replicated: {:?}", record.key);
                         None
                     }
                 }
@@ -1562,7 +1562,7 @@ where
     /// Handles a query that timed out.
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
-        trace!("Query {:?} timed out.", query_id);
+        tracing::trace!("Query {:?} timed out.", query_id);
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1660,11 +1660,11 @@ where
                     }),
                     PutRecordContext::Replicate => match phase {
                         PutRecordPhase::GetClosestPeers => {
-                            warn!("Locating closest peers for replication failed: {:?}", err);
+                            tracing::trace!("Locating closest peers for replication failed: {:?}", err);
                             None
                         }
                         PutRecordPhase::PutRecord { .. } => {
-                            debug!("Replicating record failed: {:?}", err);
+                            tracing::trace!("Replicating record failed: {:?}", err);
                             None
                         }
                     },
@@ -1764,7 +1764,7 @@ where
             match self.record_filtering {
                 KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => {
-                        debug!(
+                        tracing::trace!(
                             "Record stored: {:?}; {} bytes",
                             record.key,
                             record.value.len()
@@ -1780,7 +1780,7 @@ where
                         ));
                     }
                     Err(e) => {
-                        info!("Record not stored: {:?}", e);
+                        tracing::info!("Record not stored: {:?}", e);
                         self.queued_events.push_back(ToSwarm::NotifyHandler {
                             peer_id: source,
                             handler: NotifyHandler::One(connection),
@@ -1834,7 +1834,7 @@ where
             match self.record_filtering {
                 KademliaStoreInserts::Unfiltered => {
                     if let Err(e) = self.store.add_provider(record) {
-                        info!("Provider record not stored: {:?}", e);
+                        tracing::info!("Provider record not stored: {:?}", e);
                         return;
                     }
 
@@ -1867,7 +1867,7 @@ where
             // of the error is not possible (and also not truly desirable or ergonomic).
             // The error passed in should rather be a dedicated enum.
             if addrs.remove(address).is_ok() {
-                debug!(
+                tracing::trace!(
                     "Address '{}' removed from peer '{}' due to error.",
                     address, peer_id
                 );
@@ -1881,7 +1881,7 @@ where
                 // into the same bucket. This is handled transparently by the
                 // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
                 // within `Kademlia::poll`.
-                debug!(
+                tracing::trace!(
                     "Last remaining address '{}' of peer '{}' is unreachable.",
                     address, peer_id,
                 )
@@ -1949,19 +1949,19 @@ where
         // Update routing table.
         if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
             if addrs.replace(old, new) {
-                debug!(
+                tracing::trace!(
                     "Address '{}' replaced with '{}' for peer '{}'.",
                     old, new, peer
                 );
             } else {
-                debug!(
+                tracing::trace!(
                     "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
                      present.",
                     old, new, peer
                 );
             }
         } else {
-            debug!(
+            tracing::trace!(
                 "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
                  routing table.",
                 old, new, peer
@@ -2261,7 +2261,7 @@ where
             }
 
             KademliaHandlerEvent::QueryError { query_id, error } => {
-                debug!(
+                tracing::trace!(
                     "Request to {:?} in query {:?} failed with {:?}",
                     source,
                     query_id,
@@ -2353,7 +2353,7 @@ where
 
                             *step = step.next();
                         } else {
-                            trace!("Record with key {:?} not found at {}", key, source);
+                            tracing::trace!("Record with key {:?} not found at {}", key, source);
                             if let KademliaCaching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());
@@ -2394,7 +2394,7 @@ where
                             let peers = success.clone();
                             let finished = query.try_finish(peers.iter());
                             if !finished {
-                                debug!(
+                                tracing::trace!(
                                     "PutRecord query ({:?}) reached quorum ({}/{}) with response \
                                      from peer {} but could not yet finish.",
                                     query_id,

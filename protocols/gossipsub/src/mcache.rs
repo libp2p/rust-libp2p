@@ -21,7 +21,7 @@
 use crate::topic::TopicHash;
 use crate::types::{MessageId, RawMessage};
 use libp2p_identity::PeerId;
-use tracing::{debug, trace};
+use tracing;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::{
@@ -87,7 +87,7 @@ impl MessageCache {
                 entry.insert((msg, HashSet::default()));
                 self.history[0].push(cache_entry);
 
-                trace!("Put message {:?} in mcache", message_id);
+                tracing::trace!("Put message {:?} in mcache", message_id);
                 true
             }
         }
@@ -191,13 +191,13 @@ impl MessageCache {
                     // If GossipsubConfig::validate_messages is true, the implementing
                     // application has to ensure that Gossipsub::validate_message gets called for
                     // each received message within the cache timeout time."
-                    debug!(
+                    tracing::debug!(
                         "The message with id {} got removed from the cache without being validated.",
                         &entry.mid
                     );
                 }
             }
-            trace!("Remove message from the cache: {}", &entry.mid);
+            tracing::trace!("Remove message from the cache: {}", &entry.mid);
 
             self.iwant_counts.remove(&entry.mid);
         }

@@ -21,13 +21,13 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use tracing::{error, info};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use tracing;
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
 
@@ -39,9 +39,9 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-        info!("Metrics server on http://{}/metrics", server.local_addr());
+        tracing::info!("Metrics server on http://{}/metrics", server.local_addr());
         if let Err(e) = server.await {
-            error!("server error: {}", e);
+            tracing::error!("server error: {}", e);
         }
         Ok(())
     })

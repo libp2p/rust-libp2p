@@ -26,7 +26,6 @@ use crate::time_cache::TimeCache;
 use crate::{MessageId, TopicHash};
 use instant::Instant;
 use libp2p_identity::PeerId;
-use tracing::{debug, trace, warn};
 use std::collections::{hash_map, HashMap, HashSet};
 use std::net::IpAddr;
 use std::time::Duration;
@@ -274,7 +273,7 @@ impl PeerScore {
                     if let Some(metrics) = metrics.as_mut() {
                         metrics.register_score_penalty(Penalty::MessageDeficit);
                     }
-                    debug!(
+                    tracing::debug!(
                         "[Penalty] The peer {} has a mesh message deliveries deficit of {} in topic\
                          {} and will get penalized by {}",
                         peer_id,
@@ -326,7 +325,7 @@ impl PeerScore {
                     if let Some(metrics) = metrics.as_mut() {
                         metrics.register_score_penalty(Penalty::IPColocation);
                     }
-                    debug!(
+                    tracing::debug!(
                         "[Penalty] The peer {} gets penalized because of too many peers with the ip {}. \
                         The surplus is {}. ",
                         peer_id, ip, surplus
@@ -347,7 +346,7 @@ impl PeerScore {
 
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
-            debug!(
+            tracing::debug!(
                 "[Penalty] Behavioral penalty for peer {}, count = {}.",
                 peer_id, count
             );
@@ -445,7 +444,7 @@ impl PeerScore {
 
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
     pub(crate) fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
-        trace!("Add ip for peer {}, ip: {}", peer_id, ip);
+        tracing::trace!("Add ip for peer {}, ip: {}", peer_id, ip);
         let peer_stats = self.peer_stats.entry(*peer_id).or_default();
 
         // Mark the peer as connected (currently the default is connected, but we don't want to
@@ -462,17 +461,17 @@ impl PeerScore {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.known_ips.remove(ip);
             if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
-                trace!("Remove ip for peer {}, ip: {}", peer_id, ip);
+                tracing::trace!("Remove ip for peer {}, ip: {}", peer_id, ip);
                 peer_ids.remove(peer_id);
             } else {
-                trace!(
+                tracing::trace!(
                     "No entry in peer_ips for ip {} which should get removed for peer {}",
                     ip,
                     peer_id
                 );
             }
         } else {
-            trace!(
+            tracing::trace!(
                 "No peer_stats for peer {} which should remove the ip {}",
                 peer_id,
                 ip
@@ -594,7 +593,7 @@ impl PeerScore {
 
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
-            warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
+            tracing::warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
             return;
         }
 
@@ -611,7 +610,7 @@ impl PeerScore {
 
     /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
     pub(crate) fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
-        debug!(
+        tracing::debug!(
             "[Penalty] Message from {} rejected because of ValidationError or SelfOrigin",
             from
         );
@@ -778,7 +777,7 @@ impl PeerScore {
             if let Some(topic_stats) =
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {
-                debug!(
+                tracing::debug!(
                     "[Penalty] Peer {} delivered an invalid message in topic {} and gets penalized \
                     for it",
                     peer_id, topic_hash

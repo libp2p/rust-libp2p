@@ -29,7 +29,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
-use tracing::{debug, trace};
+use tracing;
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
 use thiserror::Error;
@@ -154,7 +154,7 @@ pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
-    trace!("Sending: {:?}", info);
+    tracing::trace!("Sending: {:?}", info);
 
     let listen_addrs = info
         .listen_addrs
@@ -202,7 +202,7 @@ where
     .ok_or(UpgradeError::StreamClosed)??
     .try_into()?;
 
-    trace!("Received: {:?}", info);
+    tracing::trace!("Received: {:?}", info);
 
     Ok(info)
 }
@@ -221,7 +221,7 @@ impl TryFrom<proto::Identify> for Info {
                 match parse_multiaddr(addr) {
                     Ok(a) => addrs.push(a),
                     Err(e) => {
-                        debug!("Unable to parse multiaddr: {e:?}");
+                        tracing::debug!("Unable to parse multiaddr: {e:?}");
                     }
                 }
             }
@@ -233,7 +233,7 @@ impl TryFrom<proto::Identify> for Info {
         let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,
             Err(e) => {
-                debug!("Unable to parse multiaddr: {e:?}");
+                tracing::debug!("Unable to parse multiaddr: {e:?}");
                 Multiaddr::empty()
             }
         };
@@ -248,7 +248,7 @@ impl TryFrom<proto::Identify> for Info {
                 .filter_map(|p| match StreamProtocol::try_from_owned(p) {
                     Ok(p) => Some(p),
                     Err(e) => {
-                        debug!("Received invalid protocol from peer: {e}");
+                        tracing::debug!("Received invalid protocol from peer: {e}");
                         None
                     }
                 })
