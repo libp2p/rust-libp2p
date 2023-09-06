@@ -307,9 +307,6 @@ impl Connection {
                 &Array::new(),
             )
             .expect("to be able to set an interval");
-        socket.set_onmessage(Some(
-            on_buffered_amount_low_closure.as_ref().unchecked_ref(),
-        ));
 
         Self {
             inner: SendWrapper::new(Inner {

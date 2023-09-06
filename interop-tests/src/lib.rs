@@ -129,7 +129,10 @@ pub async fn run_test(
                     }
                     if listener_id == id {
                         let ma = format!("{address}/p2p/{local_peer_id}");
-                        redis_client.rpush("listenerAddr", ma).await?;
+                        redis_client.rpush("listenerAddr", ma.clone()).await?;
+
+                        log::debug!("Pushed {ma} to redis");
+
                         break;
                     }
                 }
@@ -139,7 +142,9 @@ pub async fn run_test(
             futures::future::select(
                 async move {
                     loop {
-                        swarm.next().await;
+                        let event = swarm.next().await.unwrap();
+
+                        log::debug!("{event:?}");
                     }
                 }
                 .boxed(),
@@ -271,15 +276,4 @@ struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
     identify: identify::Behaviour,
-}
-
-/// Helper function to get a ENV variable into an test parameter like `Transport`.
-pub fn from_env<T>(env_var: &str) -> Result<T>
-where
-    T: FromStr<Err = anyhow::Error>,
-{
-    std::env::var(env_var)
-        .with_context(|| format!("{env_var} environment variable is not set"))?
-        .parse()
-        .map_err(Into::into)
 }

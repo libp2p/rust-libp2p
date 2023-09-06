@@ -205,8 +205,8 @@ async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, 
                     "{ip}",
                     {is_dialer},
                     "{test_timeout}",
-                    "{BIND_ADDR}"
-                    "{sec_protocol}"
+                    "{BIND_ADDR}",
+                    "{sec_protocol}",
                     "{muxer}"
                 )
             </script>
