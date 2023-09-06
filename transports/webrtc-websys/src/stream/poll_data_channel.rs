@@ -180,8 +180,8 @@ impl AsyncWrite for PollDataChannel {
 
         futures::ready!(this.poll_open(cx))?;
 
-        debug_assert!(this.buffered_amount() <= MAX_BUFFER);
-        let remaining_space = MAX_BUFFER - this.buffered_amount();
+        debug_assert!(this.buffered_amount() <= MAX_MSG_LEN);
+        let remaining_space = MAX_MSG_LEN - this.buffered_amount();
 
         if remaining_space == 0 {
             this.write_waker.register(cx.waker());
