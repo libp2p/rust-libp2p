@@ -12,8 +12,7 @@ use crate::Timeout;
 
 /// Represents a set of (Worker)-[Future]s.
 ///
-/// This wraps [FuturesUnordered] but bounds it by time and size. Every worker has to have a unique ID.
-/// In other words, each worker must finish within the specified time and the set never outgrows its capacity.
+/// Each worker must finish within the specified time and the set never outgrows its capacity.
 pub struct UniqueWorkers<ID, O> {
     timeout: Duration,
     capacity: usize,
