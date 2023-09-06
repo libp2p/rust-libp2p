@@ -109,7 +109,7 @@ mod tests {
         let mut workers = BoundedWorkers::new(Duration::from_secs(10), 1);
 
         assert!(workers.try_push(ready(())).is_ok());
-        matches!(workers.try_push(ready(())), Err(_));
+        assert!(workers.try_push(ready(())).is_err());
     }
 
     #[tokio::test]
