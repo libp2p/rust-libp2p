@@ -223,14 +223,14 @@ pub(crate) mod wasm {
         sec_protocol: Option<SecProtocol>,
         muxer: Option<Muxer>,
     ) -> Result<(BoxedTransport, String)> {
-        match (transport, sec_protocol, muxer) {
-            (Transport::Webtransport, _, _) => Ok((
+        Ok(match (transport, sec_protocol, muxer) {
+            (Transport::Webtransport, _, _) => (
                 libp2p::webtransport_websys::Transport::new(
                     libp2p::webtransport_websys::Config::new(&local_key),
                 )
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
-            )),
+            ),
             (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
                 libp2p::websocket_websys::Transport::default()
                     .upgrade(Version::V1Lazy)
@@ -255,7 +255,7 @@ pub(crate) mod wasm {
                 libp2p::websocket_websys::Transport::default()
                     .upgrade(Version::V1Lazy)
                     .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(yamux::Config::new())
+                    .multiplex(yamux::Config::default())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0/wss"),
@@ -266,7 +266,7 @@ pub(crate) mod wasm {
                     .authenticate(
                         noise::Config::new(&local_key).context("failed to initialise tls")?,
                     )
-                    .multiplex(yamux::Config::new())
+                    .multiplex(yamux::Config::default())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0/wss"),
@@ -280,7 +280,7 @@ pub(crate) mod wasm {
             (Transport::WebRtcDirect | Transport::QuicV1 | Transport::Tcp, _, _) => {
                 bail!("{transport:?} is not supported in WASM")
             }
-        }
+        })
     }
 
     pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
