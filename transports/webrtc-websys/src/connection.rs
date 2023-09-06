@@ -232,9 +232,9 @@ impl RtcPeerConnection {
         let offer = JsFuture::from(self.inner.create_offer()).await?;
 
         let offer = Reflect::get(&offer, &JsValue::from_str("sdp"))
-            .unwrap()
+            .expect("sdp should be valid")
             .as_string()
-            .unwrap();
+            .expect("sdp string should be valid string");
 
         Ok(offer)
     }
