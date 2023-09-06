@@ -119,9 +119,10 @@ libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
+libp2p-tls = { workspace = true, optional = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
-libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-websocket-websys = { version = "0.1.0", path = "../transports/websocket-websys", optional = true }
+libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
 pin-project = "1.0.0"
@@ -133,7 +134,6 @@ libp2p-mdns = { workspace = true, optional = true }
 libp2p-memory-connection-limits = { workspace = true, optional = true }
 libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
-libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
