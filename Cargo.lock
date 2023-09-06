@@ -2519,7 +2519,7 @@ checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 
 [[package]]
 name = "libp2p"
-version = "0.52.3"
+version = "0.52.4"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3385,12 +3385,14 @@ dependencies = [
 name = "libp2p-websocket-websys"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "futures",
  "js-sys",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-yamux",
+ "log",
  "parking_lot",
  "send_wrapper 0.6.0",
  "thiserror",

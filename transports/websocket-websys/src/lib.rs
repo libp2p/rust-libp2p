@@ -19,22 +19,22 @@
 // SOFTWARE.
 
 //! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+use bytes::BytesMut;
+use futures::task::AtomicWaker;
 use futures::{future::Ready, io, prelude::*};
+use js_sys::Array;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
 };
-use parking_lot::Mutex;
 use send_wrapper::SendWrapper;
+use std::cmp::min;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::{pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{prelude::*, JsCast};
-use web_sys::{MessageEvent, WebSocket};
-
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::Poll,
-    task::{Context, Waker},
-};
+use web_sys::{window, CloseEvent, Event, MessageEvent, WebSocket};
 
 /// A Websocket transport that can be used in a wasm environment.
 ///
@@ -59,6 +59,9 @@ use std::{
 pub struct Transport {
     _private: (),
 }
+
+/// Arbitrary, maximum amount we are willing to buffer before we throttle our user.
+const MAX_BUFFER: usize = 1024 * 1024;
 
 impl libp2p_core::Transport for Transport {
     type Output = Connection;
@@ -156,142 +159,179 @@ impl Error {
 
 /// A Websocket connection created by the [`Transport`].
 pub struct Connection {
-    shared: Arc<Mutex<Shared>>,
+    inner: SendWrapper<Inner>,
 }
 
-struct Shared {
-    state: State,
-    read_waker: Option<Waker>,
-    write_waker: Option<Waker>,
-    socket: SendWrapper<WebSocket>,
-    closures: Option<SendWrapper<Closures>>,
+struct Inner {
+    socket: WebSocket,
+
+    new_data_waker: Rc<AtomicWaker>,
+    read_buffer: Rc<Mutex<BytesMut>>,
+
+    /// Waker for when we are waiting for the WebSocket to be opened.
+    open_waker: Rc<AtomicWaker>,
+
+    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_MSG_LEN`] threshold.
+    write_waker: Rc<AtomicWaker>,
+
+    /// Waker for when we are waiting for the WebSocket to be closed.
+    close_waker: Rc<AtomicWaker>,
+
+    /// Whether the connection errored.
+    errored: Rc<AtomicBool>,
+
+    // Store the closures for proper garbage collection.
+    // These are wrapped in an [`Rc`] so we can implement [`Clone`].
+    _on_open_closure: Rc<Closure<dyn FnMut(Event)>>,
+    _on_buffered_amount_low_closure: Rc<Closure<dyn FnMut(Event)>>,
+    _on_close_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
+    _on_error_closure: Rc<Closure<dyn FnMut(CloseEvent)>>,
+    _on_message_closure: Rc<Closure<dyn FnMut(MessageEvent)>>,
+    buffered_amount_low_interval: i32,
 }
 
-enum State {
+impl Inner {
+    fn ready_state(&self) -> ReadyState {
+        match self.socket.ready_state() {
+            0 => ReadyState::Connecting,
+            1 => ReadyState::Open,
+            2 => ReadyState::Closing,
+            3 => ReadyState::Closed,
+            unknown => unreachable!("invalid `ReadyState` value: {unknown}"),
+        }
+    }
+
+    fn poll_open(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.ready_state() {
+            ReadyState::Connecting => {
+                self.open_waker.register(cx.waker());
+                Poll::Pending
+            }
+            ReadyState::Open => Poll::Ready(Ok(())),
+            ReadyState::Closed | ReadyState::Closing => {
+                Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+            }
+        }
+    }
+
+    fn error_barrier(&self) -> io::Result<()> {
+        if self.errored.load(Ordering::SeqCst) {
+            return Err(io::ErrorKind::BrokenPipe.into());
+        }
+
+        Ok(())
+    }
+}
+
+/// The state of the WebSocket.
+///
+/// See <https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState>.
+#[derive(PartialEq)]
+enum ReadyState {
     Connecting,
-    Open { buffer: Vec<u8> },
+    Open,
     Closing,
     Closed,
-    Error,
 }
-
-impl Shared {
-    fn wake_read_write(&self) {
-        self.wake_read();
-        self.wake_write()
-    }
-
-    fn wake_write(&self) {
-        if let Some(waker) = &self.write_waker {
-            waker.wake_by_ref();
-        }
-    }
-
-    fn wake_read(&self) {
-        if let Some(waker) = &self.read_waker {
-            waker.wake_by_ref();
-        }
-    }
-}
-
-type Closures = (
-    Closure<dyn FnMut()>,
-    Closure<dyn FnMut(MessageEvent)>,
-    Closure<dyn FnMut(web_sys::Event)>,
-    Closure<dyn FnMut(web_sys::CloseEvent)>,
-);
 
 impl Connection {
     fn new(socket: WebSocket) -> Self {
         socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
-        let shared = Arc::new(Mutex::new(Shared {
-            state: State::Connecting,
-            read_waker: None,
-            write_waker: None,
-            socket: SendWrapper::new(socket.clone()),
-            closures: None,
-        }));
-
-        let open_callback = Closure::<dyn FnMut()>::new({
-            let weak_shared = Arc::downgrade(&shared);
-            move || {
-                if let Some(shared) = weak_shared.upgrade() {
-                    let mut locked = shared.lock();
-                    locked.state = State::Open {
-                        buffer: Vec::default(),
-                    };
-                    locked.wake_read_write();
-                }
+        let open_waker = Rc::new(AtomicWaker::new());
+        let onopen_closure = Closure::<dyn FnMut(_)>::new({
+            let open_waker = open_waker.clone();
+            move |_| {
+                open_waker.wake();
             }
         });
-        socket.set_onopen(Some(open_callback.as_ref().unchecked_ref()));
+        socket.set_onopen(Some(onopen_closure.as_ref().unchecked_ref()));
 
-        let message_callback = Closure::<dyn FnMut(_)>::new({
-            let weak_shared = Arc::downgrade(&shared);
+        let close_waker = Rc::new(AtomicWaker::new());
+        let onclose_closure = Closure::<dyn FnMut(_)>::new({
+            let close_waker = close_waker.clone();
+            move |_| {
+                close_waker.wake();
+            }
+        });
+        socket.set_onclose(Some(onclose_closure.as_ref().unchecked_ref()));
+
+        let errored = Rc::new(AtomicBool::new(false));
+        let onerror_closure = Closure::<dyn FnMut(_)>::new({
+            let errored = errored.clone();
+            move |_| {
+                errored.store(true, Ordering::SeqCst);
+            }
+        });
+        socket.set_onerror(Some(onerror_closure.as_ref().unchecked_ref()));
+
+        let read_buffer = Rc::new(Mutex::new(BytesMut::new()));
+        let new_data_waker = Rc::new(AtomicWaker::new());
+        let onmessage_closure = Closure::<dyn FnMut(_)>::new({
+            let read_buffer = read_buffer.clone();
+            let new_data_waker = new_data_waker.clone();
             move |e: MessageEvent| {
-                let buf = match e.data().dyn_into::<js_sys::ArrayBuffer>() {
-                    Ok(buf) => buf,
-                    _ => {
-                        debug_assert!(false, "Unexpected data format {:?}", e.data());
-                        return;
-                    }
-                };
+                let data = js_sys::Uint8Array::new(&e.data());
 
-                let shared = match weak_shared.upgrade() {
-                    Some(shared) => shared,
-                    None => return,
-                };
+                let mut read_buffer = read_buffer.lock().unwrap();
 
-                let mut locked = shared.lock();
-                let bytes = js_sys::Uint8Array::new(&buf).to_vec();
-
-                if let State::Open { buffer } = &mut locked.state {
-                    buffer.extend(bytes.into_iter());
-                    locked.wake_read();
+                if read_buffer.len() + data.length() as usize > MAX_BUFFER {
+                    log::warn!(
+                        "Remote is overloading us with messages, dropping {} bytes of data",
+                        data.length()
+                    );
+                    return;
                 }
+
+                read_buffer.extend_from_slice(&data.to_vec());
+                new_data_waker.wake();
             }
         });
-        socket.set_onmessage(Some(message_callback.as_ref().unchecked_ref()));
+        socket.set_onmessage(Some(onmessage_closure.as_ref().unchecked_ref()));
 
-        let error_callback = Closure::<dyn FnMut(_)>::new({
-            let weak_shared = Arc::downgrade(&shared);
+        let write_waker = Rc::new(AtomicWaker::new());
+        let on_buffered_amount_low_closure = Closure::<dyn FnMut(_)>::new({
+            let write_waker = write_waker.clone();
+            let socket = socket.clone();
             move |_| {
-                // The error event for error callback doesn't give any information and
-                // generates error on the browser console we just signal it to the
-                // stream.
-                if let Some(shared) = weak_shared.upgrade() {
-                    let mut locked = shared.lock();
-                    locked.state = State::Error;
-                    locked.wake_read_write();
+                if socket.buffered_amount() == 0 {
+                    write_waker.wake();
                 }
             }
         });
-        socket.set_onerror(Some(error_callback.as_ref().unchecked_ref()));
-
-        let close_callback = Closure::<dyn FnMut(_)>::new({
-            let weak_shared = Arc::downgrade(&shared);
-            move |_| {
-                if let Some(shared) = weak_shared.upgrade() {
-                    let mut locked = shared.lock();
-                    locked.state = State::Closed;
-                    locked.wake_write();
-                }
-            }
-        });
-        socket.set_onclose(Some(close_callback.as_ref().unchecked_ref()));
-
-        // Manage closures memory.
-        let closures = SendWrapper::new((
-            open_callback,
-            message_callback,
-            error_callback,
-            close_callback,
+        let buffered_amount_low_interval = window()
+            .expect("to have a window")
+            .set_interval_with_callback_and_timeout_and_arguments(
+                on_buffered_amount_low_closure.as_ref().unchecked_ref(),
+                500,
+                &Array::new(),
+            )
+            .expect("to be able to set an interval");
+        socket.set_onmessage(Some(
+            on_buffered_amount_low_closure.as_ref().unchecked_ref(),
         ));
 
-        shared.lock().closures = Some(closures);
+        Self {
+            inner: SendWrapper::new(Inner {
+                socket,
+                new_data_waker,
+                read_buffer,
+                open_waker,
+                write_waker,
+                close_waker,
+                errored,
+                _on_open_closure: Rc::new(onopen_closure),
+                _on_buffered_amount_low_closure: Rc::new(on_buffered_amount_low_closure),
+                _on_close_closure: Rc::new(onclose_closure),
+                _on_error_closure: Rc::new(onerror_closure),
+                _on_message_closure: Rc::new(onmessage_closure),
+                buffered_amount_low_interval,
+            }),
+        }
+    }
 
-        Self { shared }
+    fn buffered_amount(&self) -> usize {
+        self.inner.socket.buffered_amount() as usize
     }
 }
 
@@ -301,34 +341,27 @@ impl AsyncRead for Connection {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<Result<usize, io::Error>> {
-        let mut shared = self.shared.lock();
+        let this = self.get_mut();
+        this.inner.error_barrier()?;
+        futures::ready!(this.inner.poll_open(cx))?;
 
-        let buffer = match &mut shared.state {
-            State::Connecting => {
-                shared.read_waker = Some(cx.waker().clone());
-                return Poll::Pending;
-            }
-            State::Open { buffer } if buffer.is_empty() => {
-                shared.read_waker = Some(cx.waker().clone());
-                return Poll::Pending;
-            }
-            State::Open { buffer } => buffer,
-            State::Closed | State::Closing => {
-                return Poll::Ready(Ok(0));
-            }
-            State::Error => {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
-            }
-        };
+        let mut read_buffer = this.inner.read_buffer.lock().unwrap();
 
-        let n = buffer.len().min(buf.len());
+        if read_buffer.is_empty() {
+            this.inner.new_data_waker.register(cx.waker());
+            return Poll::Pending;
+        }
 
-        let remaining_buffer = buffer.split_off(n);
-        buf.copy_from_slice(buffer);
-        buffer.clear();
-        *buffer = remaining_buffer;
+        // Ensure that we:
+        // - at most return what the caller can read (`buf.len()`)
+        // - at most what we have (`read_buffer.len()`)
+        let split_index = min(buf.len(), read_buffer.len());
 
-        Poll::Ready(Ok(n))
+        let bytes_to_return = read_buffer.split_to(split_index);
+        let len = bytes_to_return.len();
+        buf[..len].copy_from_slice(&bytes_to_return);
+
+        Poll::Ready(Ok(len))
     }
 }
 
@@ -337,58 +370,63 @@ impl AsyncWrite for Connection {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let mut shared = self.shared.lock();
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
 
-        match &shared.state {
-            State::Connecting => {
-                shared.write_waker = Some(cx.waker().clone());
-                return Poll::Pending;
-            }
-            State::Closed | State::Closing => {
-                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
-            }
-            State::Error => {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error")));
-            }
-            State::Open { .. } => {}
+        this.inner.error_barrier()?;
+        futures::ready!(this.inner.poll_open(cx))?;
+
+        debug_assert!(this.buffered_amount() <= MAX_BUFFER);
+        let remaining_space = MAX_BUFFER - this.buffered_amount();
+
+        if remaining_space == 0 {
+            this.inner.write_waker.register(cx.waker());
+            return Poll::Pending;
         }
 
-        shared.socket.send_with_u8_array(buf).map_err(|e| {
-            io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "Failed to write data: {}",
-                    e.as_string().unwrap_or_default()
-                ),
-            )
-        })?;
+        let bytes_to_send = min(buf.len(), remaining_space);
 
-        Poll::Ready(Ok(buf.len()))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        let mut shared = self.shared.lock();
-
-        match &shared.state {
-            State::Open { .. } | State::Connecting => {
-                let _ = shared.socket.close();
-                shared.state = State::Closing;
-
-                shared.write_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            State::Closing => {
-                shared.write_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            State::Closed => Poll::Ready(Ok(())),
-            State::Error => Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "Socket error"))),
+        if this
+            .inner
+            .socket
+            .send_with_u8_array(&buf[..bytes_to_send])
+            .is_err()
+        {
+            return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()));
         }
+
+        Poll::Ready(Ok(bytes_to_send))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.buffered_amount() == 0 {
+            return Poll::Ready(Ok(()));
+        }
+
+        self.inner.error_barrier()?;
+
+        self.inner.write_waker.register(cx.waker());
+        Poll::Pending
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        const REGULAR_CLOSE: u16 = 1000; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
+
+        if self.inner.ready_state() == ReadyState::Closed {
+            return Poll::Ready(Ok(()));
+        }
+
+        self.inner.error_barrier()?;
+
+        if self.inner.ready_state() != ReadyState::Closing {
+            let _ = self
+                .inner
+                .socket
+                .close_with_code_and_reason(REGULAR_CLOSE, "user initiated");
+        }
+
+        self.inner.close_waker.register(cx.waker());
+        Poll::Pending
     }
 }
 
@@ -396,12 +434,15 @@ impl Drop for Connection {
     fn drop(&mut self) {
         const GO_AWAY_STATUS_CODE: u16 = 1001; // See https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.1.
 
-        let shared = self.shared.lock();
-
-        if let State::Connecting | State::Open { .. } = shared.state {
-            let _ = shared
+        if let ReadyState::Connecting | ReadyState::Open = self.inner.ready_state() {
+            let _ = self
+                .inner
                 .socket
                 .close_with_code_and_reason(GO_AWAY_STATUS_CODE, "connection dropped");
         }
+
+        window()
+            .expect("to have a window")
+            .clear_interval_with_handle(self.inner.buffered_amount_low_interval)
     }
 }
