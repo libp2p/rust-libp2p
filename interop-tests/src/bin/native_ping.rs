@@ -12,6 +12,8 @@ async fn main() -> Result<()> {
         config.is_dialer,
         config.test_timeout,
         &config.redis_addr,
+        config.sec_protocol,
+        config.muxer,
     )
     .await?;
 

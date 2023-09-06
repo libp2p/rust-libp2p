@@ -17,7 +17,6 @@ pub(crate) mod native {
     use std::time::Duration;
 
     use anyhow::{bail, Context, Result};
-    use either::Either;
     use env_logger::{Env, Target};
     use futures::future::BoxFuture;
     use futures::FutureExt;
@@ -31,7 +30,7 @@ pub(crate) mod native {
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
-    use crate::{from_env, Muxer, SecProtocol, Transport};
+    use crate::{Muxer, SecProtocol, Transport};
 
     use super::BoxedTransport;
 
@@ -47,66 +46,101 @@ pub(crate) mod native {
         tokio::time::sleep(duration).boxed()
     }
 
-    fn muxer_protocol_from_env() -> Result<Either<yamux::Config, mplex::MplexConfig>> {
-        Ok(match from_env("muxer")? {
-            Muxer::Yamux => Either::Left(yamux::Config::default()),
-            Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
-        })
-    }
-
     pub(crate) fn build_transport(
         local_key: Keypair,
         ip: &str,
         transport: Transport,
+        sec_protocol: Option<SecProtocol>,
+        muxer: Option<Muxer>,
     ) -> Result<(BoxedTransport, String)> {
-        let (transport, addr) = match (transport, from_env::<SecProtocol>("security")) {
-            (Transport::QuicV1, _) => (
+        let (transport, addr) = match (transport, sec_protocol, muxer) {
+            (Transport::QuicV1, _, _) => (
                 quic::tokio::Transport::new(quic::Config::new(&local_key))
                     .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
                     .boxed(),
                 format!("/ip4/{ip}/udp/0/quic-v1"),
             ),
-            (Transport::Tcp, Ok(SecProtocol::Tls)) => (
+            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
                 tcp::tokio::Transport::new(tcp::Config::new())
                     .upgrade(Version::V1Lazy)
                     .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(muxer_protocol_from_env()?)
+                    .multiplex(mplex::MplexConfig::new())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
-            (Transport::Tcp, Ok(SecProtocol::Noise)) => (
+            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
+                tcp::tokio::Transport::new(tcp::Config::new())
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
+                    .multiplex(yamux::Config::default())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
                 tcp::tokio::Transport::new(tcp::Config::new())
                     .upgrade(Version::V1Lazy)
                     .authenticate(
                         noise::Config::new(&local_key).context("failed to intialise noise")?,
                     )
-                    .multiplex(muxer_protocol_from_env()?)
+                    .multiplex(mplex::MplexConfig::new())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
-            (Transport::Ws, Ok(SecProtocol::Tls)) => (
+            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                tcp::tokio::Transport::new(tcp::Config::new())
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(
+                        noise::Config::new(&local_key).context("failed to intialise noise")?,
+                    )
+                    .multiplex(yamux::Config::default())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
                 WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                     .upgrade(Version::V1Lazy)
                     .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(muxer_protocol_from_env()?)
+                    .multiplex(mplex::MplexConfig::new())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
-            (Transport::Ws, Ok(SecProtocol::Noise)) => (
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
                 WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                     .upgrade(Version::V1Lazy)
                     .authenticate(
                         noise::Config::new(&local_key).context("failed to intialise noise")?,
                     )
-                    .multiplex(muxer_protocol_from_env()?)
+                    .multiplex(yamux::Config::default())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
-            (Transport::WebRtcDirect, _) => (
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
+                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
+                    .multiplex(mplex::MplexConfig::new())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(
+                        noise::Config::new(&local_key).context("failed to intialise noise")?,
+                    )
+                    .multiplex(yamux::Config::default())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::WebRtcDirect, _, _) => (
                 webrtc::tokio::Transport::new(
                     local_key,
                     webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
@@ -115,9 +149,13 @@ pub(crate) mod native {
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
-            (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
-            (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
-            (Transport::Webtransport, _) => bail!("Webtransport can only be used with wasm"),
+            (Transport::Webtransport, _, _) => bail!("Webtransport can only be used with wasm"),
+            (Transport::Tcp | Transport::Ws, None, _) => {
+                bail!("Missing security protocol for {transport:?}")
+            }
+            (Transport::Tcp | Transport::Ws, _, None) => {
+                bail!("Missing muxer protocol for {transport:?}")
+            }
         };
         Ok((transport, addr))
     }
@@ -161,7 +199,7 @@ pub(crate) mod wasm {
     use libp2p::PeerId;
     use std::time::Duration;
 
-    use crate::{BlpopRequest, Transport};
+    use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
 
     use super::BoxedTransport;
 
@@ -180,6 +218,8 @@ pub(crate) mod wasm {
         local_key: Keypair,
         ip: &str,
         transport: Transport,
+        sec_protocol: Option<SecProtocol>,
+        muxer: Option<Muxer>,
     ) -> Result<(BoxedTransport, String)> {
         if let Transport::Webtransport = transport {
             Ok((
