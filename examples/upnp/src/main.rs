@@ -29,21 +29,21 @@ use libp2p::{
 };
 use std::error::Error;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let transport = tcp::async_io::Transport::default()
+    let transport = tcp::tokio::Transport::default()
         .upgrade(Version::V1Lazy)
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let mut swarm = SwarmBuilder::with_async_std_executor(
+    let mut swarm = SwarmBuilder::with_tokio_executor(
         transport,
-        upnp::async_std::Behaviour::default(),
+        upnp::tokio::Behaviour::default(),
         local_peer_id,
     )
     .build();
