@@ -54,8 +54,7 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cd ./examples/relay-server
-//! cargo build
+//! cargo build --bin relay-server-example
 //! ```
 //!
 //! You can find the binary at `target/debug/relay-server-example`. In case you built it locally, copy
@@ -123,8 +122,7 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cd ./examples/relay-server
-//! cargo build
+//! cargo build --bin dcutr
 //! ```
 //!
 //! You can find the binary at `target/debug/dcutr`. In case you built it locally, copy
