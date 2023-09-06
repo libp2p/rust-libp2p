@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 use anyhow::Result;
 use axum::extract::{Path, State};
 use axum::http::header::CONTENT_TYPE;
