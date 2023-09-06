@@ -2,6 +2,6 @@
   "id": "chromium-rust-libp2p-head",
   "containerImageID": "chromium-rust-libp2p-head",
   "transports": [{ "name": "webtransport", "onlyDial": true }, { "name": "ws", "onlyDial": true }],
-  "secureChannels": ["noise", "tls"],
+  "secureChannels": ["noise"],
   "muxers": ["mplex", "yamux"]
 }
