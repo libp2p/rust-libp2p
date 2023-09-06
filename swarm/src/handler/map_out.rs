@@ -25,6 +25,7 @@ use std::fmt::Debug;
 use std::task::{Context, Poll};
 
 /// Wrapper around a protocol handler that turns the output event into something else.
+#[derive(Debug)]
 pub struct MapOutEvent<TConnectionHandler, TMap> {
     inner: TConnectionHandler,
     map: TMap,
