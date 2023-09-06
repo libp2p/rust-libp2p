@@ -45,13 +45,13 @@ use web_sys::{window, CloseEvent, Event, MessageEvent, WebSocket};
 /// ```
 /// # use libp2p_core::{upgrade::Version, Transport};
 /// # use libp2p_identity::Keypair;
-/// # use libp2p_yamux::YamuxConfig;
-/// # use libp2p_noise::NoiseAuthenticated;
+/// # use libp2p_yamux as yamux;
+/// # use libp2p_noise as noise;
 /// let local_key = Keypair::generate_ed25519();
-/// let transport = libp2p_websys_websocket::Transport::default()
+/// let transport = libp2p_websocket_websys::Transport::default()
 ///     .upgrade(Version::V1)
-///     .authenticate(NoiseAuthenticated::xx(&local_key).unwrap())
-///     .multiplex(YamuxConfig::default())
+///     .authenticate(noise::Config::new(&local_key).unwrap())
+///     .multiplex(yamux::Config::default())
 ///     .boxed();
 /// ```
 ///
@@ -171,7 +171,7 @@ struct Inner {
     /// Waker for when we are waiting for the WebSocket to be opened.
     open_waker: Rc<AtomicWaker>,
 
-    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_MSG_LEN`] threshold.
+    /// Waker for when we are waiting to write (again) to the WebSocket because we previously exceeded the [`MAX_BUFFER`] threshold.
     write_waker: Rc<AtomicWaker>,
 
     /// Waker for when we are waiting for the WebSocket to be closed.
@@ -201,7 +201,7 @@ impl Inner {
         }
     }
 
-    fn poll_open(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_open(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         match self.ready_state() {
             ReadyState::Connecting => {
                 self.open_waker.register(cx.waker());
