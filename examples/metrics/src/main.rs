@@ -27,7 +27,7 @@ use libp2p::identity::PeerId;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
-use tracing::info;
+use tracing;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let local_pub_key = local_key.public();
-    info!("Local peer id: {local_peer_id:?}");
+    tracing::info!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()
@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        info!("Dialed {}", addr)
+        tracing::info!("Dialed {}", addr)
     }
 
     let mut metric_registry = Registry::default();
@@ -74,15 +74,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
-                    info!("{:?}", ping_event);
+                    tracing::info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
-                    info!("{:?}", identify_event);
+                    tracing::info!("{:?}", identify_event);
                     metrics.record(&identify_event);
                 }
                 swarm_event => {
-                    info!("{:?}", swarm_event);
+                    tracing::info!("{:?}", swarm_event);
                     metrics.record(&swarm_event);
                 }
             }
