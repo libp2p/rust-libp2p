@@ -424,7 +424,7 @@ impl Handler {
                 )
                 .boxed(),
             )
-            .is_failing()
+            .is_err()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
         }
@@ -442,7 +442,7 @@ impl Handler {
         if self
             .protocol_futs
             .try_push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed())
-            .is_failing()
+            .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
         }

@@ -27,7 +27,7 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
-use futures_bounded::{PushResult, Timeout};
+use futures_bounded::{PushError, Timeout};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
@@ -276,15 +276,15 @@ impl Handler {
             src_peer_id,
             circuit.deny(proto::Status::NO_RESERVATION).boxed(),
         ) {
-            PushResult::Ok => {}
-            PushResult::BeyondCapacity => log::warn!(
+            Err(PushError::BeyondCapacity(_)) => log::warn!(
                 "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                 src_peer_id
             ),
-            PushResult::ExistedID => log::warn!(
-                "Dropping inbound circuit request to be denied from {:?} in favor of existing one.",
+            Err(PushError::ReplacedWorker(_)) => log::warn!(
+                "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
                 src_peer_id
             ),
+            Ok(()) => {}
         }
     }
 }
@@ -562,7 +562,7 @@ impl ConnectionHandler for Handler {
                 if self
                     .open_circuit_futs
                     .try_push(inbound_stop::handle_open_circuit(stream).boxed())
-                    .is_failing()
+                    .is_err()
                 {
                     log::warn!("Dropping inbound stream because we are at capacity")
                 }
@@ -582,7 +582,7 @@ impl ConnectionHandler for Handler {
                                 outbound_hop::handle_reserve_message_response(stream, to_listener)
                                     .boxed(),
                             )
-                            .is_failing()
+                            .is_err()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")
                         }
@@ -602,7 +602,7 @@ impl ConnectionHandler for Handler {
                                 )
                                 .boxed(),
                             )
-                            .is_failing()
+                            .is_err()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")
                         }

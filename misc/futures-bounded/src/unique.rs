@@ -1,15 +1,14 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::future::Future;
 use std::hash::Hash;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use futures_timer::Delay;
-use futures_util::future::{select, BoxFuture, Either};
-use futures_util::stream::FuturesUnordered;
-use futures_util::{ready, FutureExt, StreamExt};
+use futures_util::future::BoxFuture;
+use futures_util::FutureExt;
 
-use crate::{PushResult, Timeout};
+use crate::Timeout;
 
 /// Represents a set of (Worker)-[Future]s.
 ///
@@ -18,11 +17,18 @@ use crate::{PushResult, Timeout};
 pub struct UniqueWorkers<ID, O> {
     timeout: Duration,
     capacity: usize,
-    keys: HashSet<ID>,
-    inner: FuturesUnordered<BoxFuture<'static, (ID, Result<O, Timeout>)>>,
-
+    inner: HashMap<ID, (BoxFuture<'static, O>, Delay)>,
     empty_waker: Option<Waker>,
     full_waker: Option<Waker>,
+}
+
+/// Error of a worker pushing
+#[derive(PartialEq, Debug)]
+pub enum PushError<F> {
+    /// The length of the set is equal the capacity
+    BeyondCapacity(F),
+    /// The set already contains the given worker's ID
+    ReplacedWorker(F),
 }
 
 impl<ID, O> UniqueWorkers<ID, O> {
@@ -30,7 +36,6 @@ impl<ID, O> UniqueWorkers<ID, O> {
         Self {
             timeout,
             capacity,
-            keys: HashSet::with_capacity(capacity),
             inner: Default::default(),
             empty_waker: None,
             full_waker: None,
@@ -43,45 +48,35 @@ where
     ID: Clone + Hash + Eq + Send + 'static,
 {
     /// Push a worker into the set.
-    /// This method adds the given worker with defined `worker_id` to the set and returns [PushResult::Ok].
-    /// The result [PushResult::ExistedID] says that the set already contains passed `worker_id`.
-    /// If length of the set is equal the capacity, this method returns [PushResult::BeyondCapacity].
-    /// The result different from [PushResult::Ok] means that worker was not added to the set.
-    pub fn try_push<F>(&mut self, worker_id: ID, worker: F) -> PushResult
+    /// This method adds the given worker with defined `worker_id` to the set.
+    /// If the length of the set is equal to the capacity, this method returns [PushError::BeyondCapacity],
+    /// that contains the passed worker. In that case, the worker is not added to the set.
+    /// If a worker with the given `worker_id` already exists, then the old worker will be replaced by a new one.
+    /// In that case, the returned error [PushError::ReplacedWorker] contains the old worker.
+    pub fn try_push<F>(&mut self, worker_id: ID, worker: F) -> Result<(), PushError<BoxFuture<O>>>
     where
         F: Future<Output = O> + Send + 'static + Unpin,
     {
-        // Check worker's ID
-        if !self.keys.insert(worker_id.clone()) {
-            return PushResult::ExistedID;
-        }
-        // Check capacity
         if self.inner.len() >= self.capacity {
-            return PushResult::BeyondCapacity;
+            return Err(PushError::BeyondCapacity(worker.boxed()));
         }
 
-        let timeout = Delay::new(self.timeout);
-
-        self.inner.push(
-            async move {
-                match select(worker, timeout).await {
-                    Either::Left((out, _)) => (worker_id, Ok(out)),
-                    Either::Right(((), _)) => (worker_id, Err(Timeout::new())),
-                }
-            }
-            .boxed(),
+        let val = self.inner.insert(
+            worker_id.clone(),
+            (worker.boxed(), Delay::new(self.timeout)),
         );
 
         if let Some(waker) = self.empty_waker.take() {
             waker.wake();
         }
 
-        PushResult::Ok
+        match val {
+            Some((old_worker, _)) => Err(PushError::ReplacedWorker(old_worker)),
+            None => Ok(()),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        assert_eq!(self.keys.is_empty(), self.keys.is_empty());
-
         self.inner.is_empty()
     }
 
@@ -91,23 +86,35 @@ where
         }
 
         self.full_waker = Some(cx.waker().clone());
+
         Poll::Pending
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<(ID, Result<O, Timeout>)> {
-        match ready!(self.inner.poll_next_unpin(cx)) {
-            None => {
-                self.empty_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            Some(result) => {
-                if let Some(waker) = self.full_waker.take() {
-                    waker.wake();
+        let res = self
+            .inner
+            .iter_mut()
+            .find_map(|(worker_id, (worker, timeout))| {
+                if timeout.poll_unpin(cx).is_ready() {
+                    return Some((worker_id.clone(), Err(Timeout::new())));
                 }
 
-                self.keys.remove(&result.0);
+                match worker.poll_unpin(cx) {
+                    Poll::Ready(output) => Some((worker_id.clone(), Ok(output))),
+                    Poll::Pending => None,
+                }
+            });
 
-                Poll::Ready(result)
+        match res {
+            None => {
+                self.empty_waker = Some(cx.waker().clone());
+
+                Poll::Pending
+            }
+            Some((worker_id, worker_res)) => {
+                self.inner.remove(&worker_id);
+
+                Poll::Ready((worker_id, worker_res))
             }
         }
     }
@@ -126,9 +133,9 @@ mod tests {
         let mut workers = UniqueWorkers::new(Duration::from_secs(10), 1);
 
         assert!(workers.try_push("ID_1", ready(())).is_ok());
-        assert_eq!(
+        matches!(
             workers.try_push("ID_2", ready(())),
-            PushResult::BeyondCapacity
+            Err(PushError::BeyondCapacity(_))
         );
     }
 
@@ -137,8 +144,10 @@ mod tests {
         let mut workers = UniqueWorkers::new(Duration::from_secs(10), 5);
 
         assert!(workers.try_push("ID", ready(())).is_ok());
-        assert_eq!(workers.try_push("ID", ready(())), PushResult::ExistedID);
-        assert_eq!(workers.try_push("ID", ready(())), PushResult::ExistedID);
+        matches!(
+            workers.try_push("ID", ready(())),
+            Err(PushError::ReplacedWorker(_))
+        );
     }
 
     #[tokio::test]

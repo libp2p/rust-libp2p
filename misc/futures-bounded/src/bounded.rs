@@ -7,7 +7,7 @@ use futures_util::future::{select, BoxFuture, Either};
 use futures_util::stream::FuturesUnordered;
 use futures_util::{ready, FutureExt, StreamExt};
 
-use crate::{PushResult, Timeout};
+use crate::Timeout;
 
 /// Represents a set of (Worker)-[Future]s.
 ///
@@ -36,18 +36,19 @@ impl<O> BoundedWorkers<O> {
 
 impl<O> BoundedWorkers<O> {
     /// Push a worker into the set.
-    /// This method adds the given worker to the set and returns [PushResult::Ok].
-    /// If length of the set is equal the capacity, this method returns [PushResult::BeyondCapacity]
-    /// and worker is ignored.
-    pub fn try_push<F>(&mut self, worker: F) -> PushResult
+    /// This method adds the given worker to the set.
+    /// If the length of the set is equal to the capacity,
+    /// this method returns a error that contains the passed worker.
+    /// In that case, the worker is not added to the set.
+    pub fn try_push<F>(&mut self, worker: F) -> Result<(), F>
     where
         F: Future<Output = O> + Send + 'static + Unpin,
     {
         if self.inner.len() >= self.capacity {
-            return PushResult::BeyondCapacity;
+            return Err(worker);
         }
-        let timeout = Delay::new(self.timeout);
 
+        let timeout = Delay::new(self.timeout);
         self.inner.push(
             async move {
                 match select(worker, timeout).await {
@@ -62,7 +63,7 @@ impl<O> BoundedWorkers<O> {
             waker.wake();
         }
 
-        PushResult::Ok
+        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -108,7 +109,7 @@ mod tests {
         let mut workers = BoundedWorkers::new(Duration::from_secs(10), 1);
 
         assert!(workers.try_push(ready(())).is_ok());
-        assert_eq!(workers.try_push(ready(())), PushResult::BeyondCapacity);
+        matches!(workers.try_push(ready(())), Err(_));
     }
 
     #[tokio::test]
