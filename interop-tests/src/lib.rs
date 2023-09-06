@@ -131,8 +131,6 @@ pub async fn run_test(
                         let ma = format!("{address}/p2p/{local_peer_id}");
                         redis_client.rpush("listenerAddr", ma.clone()).await?;
 
-                        log::debug!("Pushed {ma} to redis");
-
                         break;
                     }
                 }
