@@ -113,7 +113,7 @@ pub(crate) mod native {
                 WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                     .upgrade(Version::V1Lazy)
                     .authenticate(
-                        noise::Config::new(&local_key).context("failed to intialise noise")?,
+                        tls::Config::new(&local_key).context("failed to intialise noise")?,
                     )
                     .multiplex(yamux::Config::default())
                     .timeout(Duration::from_secs(5))
@@ -123,7 +123,9 @@ pub(crate) mod native {
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
                 WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
                     .upgrade(Version::V1Lazy)
-                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
+                    .authenticate(
+                        noise::Config::new(&local_key).context("failed to initialise tls")?,
+                    )
                     .multiplex(mplex::MplexConfig::new())
                     .timeout(Duration::from_secs(5))
                     .boxed(),
