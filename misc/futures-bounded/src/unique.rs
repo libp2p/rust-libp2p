@@ -24,7 +24,7 @@ pub struct UniqueWorkers<ID, O> {
 /// Error of a worker pushing
 #[derive(PartialEq, Debug)]
 pub enum PushError<F> {
-    /// The length of the set is equal the capacity
+    /// The length of the set is equal to the capacity
     BeyondCapacity(F),
     /// The set already contains the given worker's ID
     ReplacedWorker(F),
@@ -112,6 +112,10 @@ where
             }
             Some((worker_id, worker_res)) => {
                 self.inner.remove(&worker_id);
+
+                if let Some(waker) = self.full_waker.take() {
+                    waker.wake();
+                }
 
                 Poll::Ready((worker_id, worker_res))
             }
