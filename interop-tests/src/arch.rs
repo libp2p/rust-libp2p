@@ -192,11 +192,13 @@ pub(crate) mod native {
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm {
-    use anyhow::{bail, Result};
+    use anyhow::{bail, Context, Result};
     use futures::future::{BoxFuture, FutureExt};
+    use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
-    use libp2p::PeerId;
+    use libp2p::{noise, tls, yamux, PeerId, Transport as _};
+    use libp2p_mplex as mplex;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
@@ -221,16 +223,63 @@ pub(crate) mod wasm {
         sec_protocol: Option<SecProtocol>,
         muxer: Option<Muxer>,
     ) -> Result<(BoxedTransport, String)> {
-        if let Transport::Webtransport = transport {
-            Ok((
+        match (transport, sec_protocol, muxer) {
+            (Transport::Webtransport, _, _) => Ok((
                 libp2p::webtransport_websys::Transport::new(
                     libp2p::webtransport_websys::Config::new(&local_key),
                 )
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
-            ))
-        } else {
-            bail!("Only webtransport supported with wasm")
+            )),
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
+                libp2p::websocket_websys::Transport::default()
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
+                    .multiplex(mplex::MplexConfig::new())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
+                libp2p::websocket_websys::Transport::default()
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(
+                        noise::Config::new(&local_key).context("failed to initialise tls")?,
+                    )
+                    .multiplex(mplex::MplexConfig::new())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
+                libp2p::websocket_websys::Transport::default()
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
+                    .multiplex(yamux::Config::new())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                libp2p::websocket_websys::Transport::default()
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(
+                        noise::Config::new(&local_key).context("failed to initialise tls")?,
+                    )
+                    .multiplex(yamux::Config::new())
+                    .timeout(Duration::from_secs(5))
+                    .boxed(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::Ws, None, _) => {
+                bail!("Missing security protocol for WS")
+            }
+            (Transport::Ws, _, None) => {
+                bail!("Missing muxer protocol for WS")
+            }
+            (Transport::WebRtcDirect | Transport::QuicV1 | Transport::Tcp, _, _) => {
+                bail!("{transport:?} is not supported in WASM")
+            }
         }
     }
 

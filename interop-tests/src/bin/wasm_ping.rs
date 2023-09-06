@@ -184,7 +184,7 @@ async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, 
     } = state.0.config;
 
     let sec_protocol = sec_protocol.unwrap_or("null".to_owned());
-    let muxer = sec_protocol.unwrap_or("null".to_owned());
+    let muxer = muxer.unwrap_or("null".to_owned());
 
     Ok(Html(format!(
         r#"
