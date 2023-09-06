@@ -1,3 +1,10 @@
+## 0.43.4 - unreleased
+
+- Improve error message when `DialPeerCondition` prevents a dial.
+  See [PR 4409].
+
+[PR 4409]: https://github.com/libp2p/rust-libp2p/pull/4409
+
 ## 0.43.3
 
 - Implement `Display` for `ConnectionId`.
