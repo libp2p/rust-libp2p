@@ -76,13 +76,16 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     Ok(())
 //! }
 //! ```
+//!
+//! Go ahead and build and run the above code with: `cargo run`. A unique
+//! [`PeerId`](crate::PeerId) should be displayed.
 //!
 //! ## Transport
 //!
@@ -107,9 +110,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -146,9 +149,9 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -175,7 +178,10 @@
 //! carried out by a [`Swarm`]. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the
 //! [`NetworkBehaviour`] to the [`Transport`] as well as events from the
-//! [`Transport`] to the [`NetworkBehaviour`].
+//! [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
+//! removed the print of the local [`PeerId`] because every time a [`Swarm`] is created, it prints
+//! the local [`PeerId`] in the logs at the INFO level. In order to continue to see the local
+//! [`PeerId`] you must initialize the logger (In our example, [env_logger] is used)
 //!
 //! ```rust
 //! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
