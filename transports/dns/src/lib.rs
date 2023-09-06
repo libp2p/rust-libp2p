@@ -137,20 +137,15 @@ where
     /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
     pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
         let (cfg, opts) = system_conf::read_system_conf()?;
-        Self::custom(inner, cfg, opts).await
+        Ok(Self::custom(inner, cfg, opts).await)
     }
 
     /// Creates a [`DnsConfig`] with a custom resolver configuration and options.
-    pub async fn custom(
-        inner: T,
-        cfg: ResolverConfig,
-        opts: ResolverOpts,
-    ) -> Result<DnsConfig<T>, io::Error> {
-        // TODO: Make infallible in next breaking release. Or deprecation?
-        Ok(DnsConfig {
+    pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> DnsConfig<T> {
+        DnsConfig {
             inner: Arc::new(Mutex::new(inner)),
             resolver: async_std_resolver::resolver(cfg, opts).await,
-        })
+        }
     }
 }
 
@@ -746,7 +741,7 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns.unwrap())),
+                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns)),
             );
         }
 
