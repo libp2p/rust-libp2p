@@ -22,11 +22,6 @@ web-sys = { version = "0.3.61", features = ["BinaryType", "CloseEvent", "Message
 bytes = "1.4.0"
 log = "0.4.19"
 
-[dev-dependencies]
-libp2p-identity = { path = "../../identity" }
-libp2p-noise = { path = "../noise" }
-libp2p-yamux = { path = "../../muxers/yamux" }
-
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
