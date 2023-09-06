@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     let addr = address.with(Protocol::P2p(*swarm.local_peer_id()));
 
-    // Serve the multiaddress over HTTP
+    // Serve .wasm, .js and server multiaddress over HTTP on this address.
     tokio::spawn(serve(addr));
 
     loop {
