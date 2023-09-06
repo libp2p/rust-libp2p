@@ -143,7 +143,7 @@ where
     }
 
     /// Flushes the underlying I/O stream.
-    pub(crate) fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_flush(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
@@ -169,7 +169,7 @@ where
     /// > **Note**: No `Close` or `Reset` frames are sent on open substreams
     /// > before closing the underlying connection. However, the connection
     /// > close implies a flush of any frames already sent.
-    pub(crate) fn poll_close(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub(crate) fn poll_close(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         match &self.status {
             Status::Closed => return Poll::Ready(Ok(())),
             Status::Err(e) => return Poll::Ready(Err(io::Error::new(e.kind(), e.to_string()))),
@@ -208,10 +208,7 @@ where
     /// [`MaxBufferBehaviour::Block`] is used, this method is blocked
     /// (i.e. `Pending`) on some task reading from the substream whose
     /// buffer is full.
-    pub(crate) fn poll_next_stream(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_next_stream(&mut self, cx: &Context<'_>) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Try to read from the buffer first.
@@ -252,10 +249,7 @@ where
     }
 
     /// Creates a new (outbound) substream, returning the allocated stream ID.
-    pub(crate) fn poll_open_stream(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<LocalStreamId>> {
+    pub(crate) fn poll_open_stream(&mut self, cx: &Context<'_>) -> Poll<io::Result<LocalStreamId>> {
         self.guard_open()?;
 
         // Check the stream limits.
@@ -374,7 +368,7 @@ where
     /// Writes data to a substream.
     pub(crate) fn poll_write_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
@@ -424,7 +418,7 @@ where
     /// Inbound substreams received in excess of that limit are immediately reset.
     pub(crate) fn poll_read_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<Option<Bytes>>> {
         self.guard_open()?;
@@ -516,7 +510,7 @@ where
     /// > the underlying I/O stream is already closed.
     pub(crate) fn poll_flush_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<()>> {
         self.guard_open()?;
@@ -532,7 +526,7 @@ where
     /// > **Note**: As opposed to `poll_close()`, a flush it not implied.
     pub(crate) fn poll_close_stream(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         id: LocalStreamId,
     ) -> Poll<io::Result<()>> {
         self.guard_open()?;
@@ -587,7 +581,7 @@ where
     ///
     /// The frame is only constructed if the underlying sink is ready to
     /// send another frame.
-    fn poll_send_frame<F>(&mut self, cx: &mut Context<'_>, frame: F) -> Poll<io::Result<()>>
+    fn poll_send_frame<F>(&mut self, cx: &Context<'_>, frame: F) -> Poll<io::Result<()>>
     where
         F: FnOnce() -> Frame<LocalStreamId>,
     {
@@ -613,7 +607,7 @@ where
     /// frames for any substream.
     fn poll_read_frame(
         &mut self,
-        cx: &mut Context<'_>,
+        cx: &Context<'_>,
         stream_id: Option<LocalStreamId>,
     ) -> Poll<io::Result<Frame<RemoteStreamId>>> {
         // Try to send pending frames, if there are any, without blocking,
@@ -822,7 +816,7 @@ where
     }
 
     /// Sends pending frames, without flushing.
-    fn send_pending_frames(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn send_pending_frames(&mut self, cx: &Context<'_>) -> Poll<io::Result<()>> {
         while let Some(frame) = self.pending_frames.pop_back() {
             if self.poll_send_frame(cx, || frame.clone())?.is_pending() {
                 self.pending_frames.push_back(frame);

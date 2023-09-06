@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
+use crate::config::{Config, QuinnConfig};
 use crate::hole_punching::hole_puncher;
 use crate::provider::Provider;
-use crate::{endpoint, Connecting, Connection, Error};
+use crate::{ConnectError, Connecting, Connection, Error};
 
-use futures::channel::{mpsc, oneshot};
+use futures::channel::oneshot;
 use futures::future::{BoxFuture, Either};
 use futures::ready;
 use futures::stream::StreamExt;
@@ -37,12 +37,13 @@ use libp2p_core::{
     Transport,
 };
 use libp2p_identity::PeerId;
+use socket2::{Domain, Socket, Type};
 use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
+use std::{fmt, io};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -62,7 +63,7 @@ use std::{
 /// See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
-    /// Config for the inner [`quinn_proto`] structs.
+    /// Config for the inner [`quinn`] structs.
     quinn_config: QuinnConfig,
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
@@ -71,7 +72,7 @@ pub struct GenTransport<P: Provider> {
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
-    dialer: HashMap<SocketFamily, Dialer>,
+    dialer: HashMap<SocketFamily, quinn::Endpoint>,
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
     /// Holepunching attempts
@@ -95,21 +96,57 @@ impl<P: Provider> GenTransport<P> {
         }
     }
 
+    /// Create a new [`quinn::Endpoint`] with the given configs.
+    fn new_endpoint(
+        endpoint_config: quinn::EndpointConfig,
+        server_config: Option<quinn::ServerConfig>,
+        socket: UdpSocket,
+    ) -> Result<quinn::Endpoint, Error> {
+        use crate::provider::Runtime;
+        match P::runtime() {
+            #[cfg(feature = "tokio")]
+            Runtime::Tokio => {
+                let runtime = std::sync::Arc::new(quinn::TokioRuntime);
+                let endpoint =
+                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
+                Ok(endpoint)
+            }
+            #[cfg(feature = "async-std")]
+            Runtime::AsyncStd => {
+                let runtime = std::sync::Arc::new(quinn::AsyncStdRuntime);
+                let endpoint =
+                    quinn::Endpoint::new(endpoint_config, server_config, socket, runtime)?;
+                Ok(endpoint)
+            }
+            Runtime::Dummy => {
+                let _ = endpoint_config;
+                let _ = server_config;
+                let _ = socket;
+                let err = std::io::Error::new(std::io::ErrorKind::Other, "no async runtime found");
+                Err(Error::Io(err))
+            }
+        }
+    }
+
+    /// Extract the addr, quic version and peer id from the given [`Multiaddr`].
     fn remote_multiaddr_to_socketaddr(
         &self,
         addr: Multiaddr,
+        check_unspecified_addr: bool,
     ) -> Result<
         (SocketAddr, ProtocolVersion, Option<PeerId>),
         TransportError<<Self as Transport>::Error>,
     > {
         let (socket_addr, version, peer_id) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
-        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+        if check_unspecified_addr && (socket_addr.port() == 0 || socket_addr.ip().is_unspecified())
+        {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
         Ok((socket_addr, version, peer_id))
     }
 
+    /// Pick any listener to use for dialing.
     fn eligible_listener(&mut self, socket_addr: &SocketAddr) -> Option<&mut Listener<P>> {
         let mut listeners: Vec<_> = self
             .listeners
@@ -118,9 +155,16 @@ impl<P: Provider> GenTransport<P> {
                 if l.is_closed {
                     return false;
                 }
-                let listen_addr = l.endpoint_channel.socket_addr();
-                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
-                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+                SocketFamily::is_same(&l.socket_addr().ip(), &socket_addr.ip())
+            })
+            .filter(|l| {
+                if socket_addr.ip().is_loopback() {
+                    l.listening_addresses
+                        .iter()
+                        .any(|ip_addr| ip_addr.is_loopback())
+                } else {
+                    true
+                }
             })
             .collect();
         match listeners.len() {
@@ -136,6 +180,21 @@ impl<P: Provider> GenTransport<P> {
             }
         }
     }
+
+    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<UdpSocket> {
+        let socket = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::DGRAM,
+            Some(socket2::Protocol::UDP),
+        )?;
+        if socket_addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+
+        socket.bind(&socket_addr.into())?;
+
+        Ok(socket.into())
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -149,13 +208,17 @@ impl<P: Provider> Transport for GenTransport<P> {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) =
-            multiaddr_to_socketaddr(&addr, self.support_draft_29)
-                .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, false)?;
+        let endpoint_config = self.quinn_config.endpoint_config.clone();
+        let server_config = self.quinn_config.server_config.clone();
+        let socket = self.create_socket(socket_addr).map_err(Self::Error::from)?;
+
+        let socket_c = socket.try_clone().map_err(Self::Error::from)?;
+        let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket)?;
         let listener = Listener::new(
             listener_id,
-            socket_addr,
-            self.quinn_config.clone(),
+            socket_c,
+            endpoint,
             self.handshake_timeout,
             version,
         )?;
@@ -194,46 +257,68 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr)?;
+        let (socket_addr, version, _peer_id) = self.remote_multiaddr_to_socketaddr(addr, true)?;
 
-        let handshake_timeout = self.handshake_timeout;
-
-        let dialer_state = match self.eligible_listener(&socket_addr) {
+        let endpoint = match self.eligible_listener(&socket_addr) {
             None => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
-                    Entry::Occupied(occupied) => occupied.into_mut(),
+                    Entry::Occupied(occupied) => occupied.get().clone(),
                     Entry::Vacant(vacant) => {
                         if let Some(waker) = self.waker.take() {
                             waker.wake();
                         }
-                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
+                        let listen_socket_addr = match socket_family {
+                            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+                            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+                        };
+                        let socket =
+                            UdpSocket::bind(listen_socket_addr).map_err(Self::Error::from)?;
+                        let endpoint_config = self.quinn_config.endpoint_config.clone();
+                        let endpoint = Self::new_endpoint(endpoint_config, None, socket)?;
+
+                        vacant.insert(endpoint.clone());
+                        endpoint
                     }
                 };
-                &mut dialer.state
+                dialer
             }
-            Some(listener) => &mut listener.dialer_state,
+            Some(listener) => listener.endpoint.clone(),
         };
-        Ok(dialer_state.new_dial(socket_addr, handshake_timeout, version))
+        let handshake_timeout = self.handshake_timeout;
+        let mut client_config = self.quinn_config.client_config.clone();
+        if version == ProtocolVersion::Draft29 {
+            client_config.version(0xff00_001d);
+        }
+        Ok(Box::pin(async move {
+            // This `"l"` seems necessary because an empty string is an invalid domain
+            // name. While we don't use domain names, the underlying rustls library
+            // is based upon the assumption that we do.
+            let connecting = endpoint
+                .connect_with(client_config, socket_addr, "l")
+                .map_err(ConnectError)?;
+            Connecting::new(connecting, handshake_timeout).await
+        }))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (socket_addr, _version, peer_id) = self.remote_multiaddr_to_socketaddr(addr.clone())?;
+        let (socket_addr, _version, peer_id) =
+            self.remote_multiaddr_to_socketaddr(addr.clone(), true)?;
         let peer_id = peer_id.ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        let endpoint_channel = self
+        let socket = self
             .eligible_listener(&socket_addr)
             .ok_or(TransportError::Other(
                 Error::NoActiveListenerForDialAsListener,
             ))?
-            .endpoint_channel
-            .clone();
+            .try_clone_socket()
+            .map_err(Self::Error::from)?;
 
-        let hole_puncher = hole_puncher::<P>(endpoint_channel, socket_addr, self.handshake_timeout);
+        let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
 
         let (sender, receiver) = oneshot::channel();
 
@@ -274,19 +359,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        let mut errored = Vec::new();
-        for (key, dialer) in &mut self.dialer {
-            if let Poll::Ready(_error) = dialer.poll(cx) {
-                errored.push(*key);
-            }
-        }
-
-        for key in errored {
-            // Endpoint driver of dialer crashed.
-            // Drop dialer and all pending dials so that the connection receiver is notified.
-            self.dialer.remove(&key);
-        }
-
         while let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
             match ev {
                 TransportEvent::Incoming {
@@ -331,112 +403,22 @@ impl From<Error> for TransportError<Error> {
     }
 }
 
-/// Dialer for addresses if no matching listener exists.
-#[derive(Debug)]
-struct Dialer {
-    /// Channel to the [`crate::endpoint::Driver`] that
-    /// is driving the endpoint.
-    endpoint_channel: endpoint::Channel,
-    /// Queued dials for the endpoint.
-    state: DialerState,
-}
-
-impl Dialer {
-    fn new<P: Provider>(
-        config: QuinnConfig,
-        socket_family: SocketFamily,
-    ) -> Result<Self, TransportError<Error>> {
-        let endpoint_channel = endpoint::Channel::new_dialer::<P>(config, socket_family)
-            .map_err(TransportError::Other)?;
-        Ok(Dialer {
-            endpoint_channel,
-            state: DialerState::default(),
-        })
-    }
-
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
-        self.state.poll(&mut self.endpoint_channel, cx)
-    }
-}
-
-impl Drop for Dialer {
-    fn drop(&mut self) {
-        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
-    }
-}
-
-/// Pending dials to be sent to the endpoint was the [`endpoint::Channel`]
-/// has capacity
-#[derive(Default, Debug)]
-struct DialerState {
-    pending_dials: VecDeque<ToEndpoint>,
-    waker: Option<Waker>,
-}
-
-impl DialerState {
-    fn new_dial(
-        &mut self,
-        address: SocketAddr,
-        timeout: Duration,
-        version: ProtocolVersion,
-    ) -> BoxFuture<'static, Result<(PeerId, Connection), Error>> {
-        let (rx, tx) = oneshot::channel();
-
-        let message = ToEndpoint::Dial {
-            addr: address,
-            result: rx,
-            version,
-        };
-
-        self.pending_dials.push_back(message);
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
-
-        async move {
-            // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
-            let connection = tx.await.map_err(|_| Error::EndpointDriverCrashed)??;
-            let (peer, connection) = Connecting::new(connection, timeout).await?;
-
-            Ok((peer, connection))
-        }
-        .boxed()
-    }
-
-    /// Send all pending dials into the given [`endpoint::Channel`].
-    ///
-    /// This only ever returns [`Poll::Pending`], or an error in case the channel is closed.
-    fn poll(&mut self, channel: &mut endpoint::Channel, cx: &mut Context<'_>) -> Poll<Error> {
-        while let Some(to_endpoint) = self.pending_dials.pop_front() {
-            match channel.try_send(to_endpoint, cx) {
-                Ok(Ok(())) => {}
-                Ok(Err(to_endpoint)) => {
-                    self.pending_dials.push_front(to_endpoint);
-                    break;
-                }
-                Err(endpoint::Disconnected {}) => return Poll::Ready(Error::EndpointDriverCrashed),
-            }
-        }
-        self.waker = Some(cx.waker().clone());
-        Poll::Pending
-    }
-}
-
 /// Listener for incoming connections.
 struct Listener<P: Provider> {
     /// Id of the listener.
     listener_id: ListenerId,
 
+    /// Version of the supported quic protocol.
     version: ProtocolVersion,
 
-    /// Channel to the endpoint to initiate dials.
-    endpoint_channel: endpoint::Channel,
-    /// Queued dials.
-    dialer_state: DialerState,
+    /// Endpoint
+    endpoint: quinn::Endpoint,
 
-    /// Channel where new connections are being sent.
-    new_connections_rx: mpsc::Receiver<Connection>,
+    /// An underlying copy of the socket to be able to hole punch with
+    socket: UdpSocket,
+
+    /// A future to poll new incoming connections.
+    accept: BoxFuture<'static, Option<quinn::Connecting>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -453,44 +435,50 @@ struct Listener<P: Provider> {
 
     /// The stream must be awaken after it has been closed to deliver the last event.
     close_listener_waker: Option<Waker>,
+
+    listening_addresses: HashSet<IpAddr>,
 }
 
 impl<P: Provider> Listener<P> {
     fn new(
         listener_id: ListenerId,
-        socket_addr: SocketAddr,
-        config: QuinnConfig,
+        socket: UdpSocket,
+        endpoint: quinn::Endpoint,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
-        let (endpoint_channel, new_connections_rx) =
-            endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
-
         let if_watcher;
         let pending_event;
-        if socket_addr.ip().is_unspecified() {
+        let mut listening_addresses = HashSet::new();
+        let local_addr = socket.local_addr()?;
+        if local_addr.ip().is_unspecified() {
             if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(endpoint_channel.socket_addr(), version);
+            listening_addresses.insert(local_addr.ip());
+            let ma = socketaddr_to_multiaddr(&local_addr, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
             })
         }
 
+        let endpoint_c = endpoint.clone();
+        let accept = async move { endpoint_c.accept().await }.boxed();
+
         Ok(Listener {
-            endpoint_channel,
+            endpoint,
+            socket,
+            accept,
             listener_id,
             version,
-            new_connections_rx,
             handshake_timeout,
             if_watcher,
             is_closed: false,
             pending_event,
-            dialer_state: DialerState::default(),
             close_listener_waker: None,
+            listening_addresses,
         })
     }
 
@@ -500,6 +488,7 @@ impl<P: Provider> Listener<P> {
         if self.is_closed {
             return;
         }
+        self.endpoint.close(From::from(0u32), &[]);
         self.pending_event = Some(TransportEvent::ListenerClosed {
             listener_id: self.listener_id,
             reason,
@@ -512,8 +501,20 @@ impl<P: Provider> Listener<P> {
         }
     }
 
+    /// Clone underlying socket (for hole punching).
+    fn try_clone_socket(&self) -> std::io::Result<UdpSocket> {
+        self.socket.try_clone()
+    }
+
+    fn socket_addr(&self) -> SocketAddr {
+        self.socket
+            .local_addr()
+            .expect("Cannot fail because the socket is bound")
+    }
+
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        let endpoint_addr = self.socket_addr();
         let if_watcher = match self.if_watcher.as_mut() {
             Some(iw) => iw,
             None => return Poll::Pending,
@@ -521,12 +522,11 @@ impl<P: Provider> Listener<P> {
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(
-                        self.endpoint_channel.socket_addr(),
-                        inet.addr(),
-                        self.version,
-                    ) {
-                        log::debug!("New listen address: {}", listen_addr);
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
+                    {
+                        log::debug!("New listen address: {listen_addr}");
+                        self.listening_addresses.insert(inet.addr());
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -534,12 +534,11 @@ impl<P: Provider> Listener<P> {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(
-                        self.endpoint_channel.socket_addr(),
-                        inet.addr(),
-                        self.version,
-                    ) {
-                        log::debug!("Expired listen address: {}", listen_addr);
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
+                    {
+                        log::debug!("Expired listen address: {listen_addr}");
+                        self.listening_addresses.remove(&inet.addr());
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -555,21 +554,10 @@ impl<P: Provider> Listener<P> {
             }
         }
     }
-
-    /// Poll [`DialerState`] to initiate requested dials.
-    fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
-        let Self {
-            dialer_state,
-            endpoint_channel,
-            ..
-        } = self;
-
-        dialer_state.poll(endpoint_channel, cx)
-    }
 }
 
 impl<P: Provider> Stream for Listener<P> {
-    type Item = TransportEvent<Connecting, Error>;
+    type Item = TransportEvent<<GenTransport<P> as Transport>::ListenerUpgrade, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -581,17 +569,18 @@ impl<P: Provider> Stream for Listener<P> {
             if let Poll::Ready(event) = self.poll_if_addr(cx) {
                 return Poll::Ready(Some(event));
             }
-            if let Poll::Ready(error) = self.poll_dialer(cx) {
-                self.close(Err(error));
-                continue;
-            }
-            match self.new_connections_rx.poll_next_unpin(cx) {
-                Poll::Ready(Some(connection)) => {
-                    let local_addr = socketaddr_to_multiaddr(connection.local_addr(), self.version);
-                    let send_back_addr =
-                        socketaddr_to_multiaddr(&connection.remote_addr(), self.version);
+
+            match self.accept.poll_unpin(cx) {
+                Poll::Ready(Some(connecting)) => {
+                    let endpoint = self.endpoint.clone();
+                    self.accept = async move { endpoint.accept().await }.boxed();
+
+                    let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
+                    let remote_addr = connecting.remote_address();
+                    let send_back_addr = socketaddr_to_multiaddr(&remote_addr, self.version);
+
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::new(connection, self.handshake_timeout),
+                        upgrade: Connecting::new(connecting, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -616,19 +605,10 @@ impl<P: Provider> fmt::Debug for Listener<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Listener")
             .field("listener_id", &self.listener_id)
-            .field("endpoint_channel", &self.endpoint_channel)
-            .field("dialer_state", &self.dialer_state)
-            .field("new_connections_rx", &self.new_connections_rx)
             .field("handshake_timeout", &self.handshake_timeout)
             .field("is_closed", &self.is_closed)
             .field("pending_event", &self.pending_event)
             .finish()
-    }
-}
-
-impl<P: Provider> Drop for Listener<P> {
-    fn drop(&mut self) {
-        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
     }
 }
 
@@ -747,7 +727,7 @@ fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
             matches!(third, QuicV1)
         }
         && matches!(fourth, Some(P2p(_)) | None)
-        && matches!(fifth, None)
+        && fifth.is_none()
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
@@ -764,9 +744,8 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
-mod test {
+mod tests {
     use futures::future::poll_fn;
-    use futures_timer::Delay;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::*;
@@ -882,15 +861,6 @@ mod test {
                 .listen_on(id, "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
 
-            // Copy channel to use it later.
-            let mut channel = transport
-                .listeners
-                .iter()
-                .next()
-                .unwrap()
-                .endpoint_channel
-                .clone();
-
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {
                     listener_id,
@@ -923,14 +893,6 @@ mod test {
                 .now_or_never()
                 .is_none());
             assert!(transport.listeners.is_empty());
-
-            // Check that the [`Driver`] has shut down.
-            Delay::new(Duration::from_millis(10)).await;
-            poll_fn(|cx| {
-                assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
-                Poll::Ready(())
-            })
-            .await;
         }
     }
 
@@ -945,31 +907,8 @@ mod test {
             .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
             .unwrap();
 
-        // Expect a dialer and its background task to exist.
-        let mut channel = transport
-            .dialer
-            .get(&SocketFamily::Ipv4)
-            .unwrap()
-            .endpoint_channel
-            .clone();
+        assert!(transport.dialer.contains_key(&SocketFamily::Ipv4));
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
-
-        // Send dummy dial to check that the endpoint driver is running.
-        poll_fn(|cx| {
-            let (tx, _) = oneshot::channel();
-            let _ = channel
-                .try_send(
-                    ToEndpoint::Dial {
-                        addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-                        result: tx,
-                        version: ProtocolVersion::V1,
-                    },
-                    cx,
-                )
-                .unwrap();
-            Poll::Ready(())
-        })
-        .await;
 
         // Start listening so that the dialer and driver are dropped.
         transport
@@ -979,13 +918,30 @@ mod test {
             )
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+    }
 
-        // Check that the [`Driver`] has shut down.
-        Delay::new(Duration::from_millis(10)).await;
-        poll_fn(|cx| {
-            assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
-            Poll::Ready(())
-        })
-        .await;
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_listens_ipv4_ipv6_separately() {
+        let keypair = libp2p_identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::tokio::Transport::new(config);
+        let port = {
+            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+            socket.local_addr().unwrap().port()
+        };
+
+        transport
+            .listen_on(
+                ListenerId::next(),
+                format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse().unwrap(),
+            )
+            .unwrap();
+        transport
+            .listen_on(
+                ListenerId::next(),
+                format!("/ip6/::/udp/{port}/quic-v1").parse().unwrap(),
+            )
+            .unwrap();
     }
 }

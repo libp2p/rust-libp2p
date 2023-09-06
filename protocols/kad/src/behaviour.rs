@@ -52,7 +52,7 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
 use thiserror::Error;
@@ -114,6 +114,8 @@ pub struct Kademlia<TStore> {
     local_peer_id: PeerId,
 
     mode: Mode,
+    auto_mode: bool,
+    no_events_waker: Option<Waker>,
 
     /// The record storage.
     store: TStore,
@@ -456,6 +458,8 @@ where
             local_peer_id: id,
             connections: Default::default(),
             mode: Mode::Client,
+            auto_mode: true,
+            no_events_waker: None,
         }
     }
 
@@ -575,7 +579,9 @@ where
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(ToSwarm::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
+                            opts: DialOpts::peer_id(disconnected.into_preimage())
+                                .condition(dial_opts::PeerCondition::NotDialing)
+                                .build(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -659,7 +665,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -686,7 +692,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: record_priv::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -747,7 +753,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::PutRecord}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::PutRecord}`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -863,7 +869,7 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::Bootstrap}`] events,
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
@@ -907,7 +913,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record_priv::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -944,7 +950,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record_priv::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -988,6 +994,94 @@ where
             ));
         }
         id
+    }
+
+    /// Set the [`Mode`] in which we should operate.
+    ///
+    /// By default, we are in [`Mode::Client`] and will swap into [`Mode::Server`] as soon as we have a confirmed, external address via [`FromSwarm::ExternalAddrConfirmed`].
+    ///
+    /// Setting a mode via this function disables this automatic behaviour and unconditionally operates in the specified mode.
+    /// To reactivate the automatic configuration, pass [`None`] instead.
+    pub fn set_mode(&mut self, mode: Option<Mode>) {
+        match mode {
+            Some(mode) => {
+                self.mode = mode;
+                self.auto_mode = false;
+                self.reconfigure_mode();
+            }
+            None => {
+                self.auto_mode = true;
+                self.determine_mode_from_external_addresses();
+            }
+        }
+
+        if let Some(waker) = self.no_events_waker.take() {
+            waker.wake();
+        }
+    }
+
+    fn reconfigure_mode(&mut self) {
+        if self.connections.is_empty() {
+            return;
+        }
+
+        let num_connections = self.connections.len();
+
+        log::debug!(
+            "Re-configuring {} established connection{}",
+            num_connections,
+            if num_connections > 1 { "s" } else { "" }
+        );
+
+        self.queued_events
+            .extend(
+                self.connections
+                    .iter()
+                    .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
+                        peer_id: *peer_id,
+                        handler: NotifyHandler::One(*conn_id),
+                        event: KademliaHandlerIn::ReconfigureMode {
+                            new_mode: self.mode,
+                        },
+                    }),
+            );
+    }
+
+    fn determine_mode_from_external_addresses(&mut self) {
+        self.mode = match (self.external_addresses.as_slice(), self.mode) {
+            ([], Mode::Server) => {
+                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
+
+                Mode::Client
+            }
+            ([], Mode::Client) => {
+                // Previously client-mode, now also client-mode because no external addresses.
+
+                Mode::Client
+            }
+            (confirmed_external_addresses, Mode::Client) => {
+                if log::log_enabled!(log::Level::Debug) {
+                    let confirmed_external_addresses =
+                        to_comma_separated_list(confirmed_external_addresses);
+
+                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
+                }
+
+                Mode::Server
+            }
+            (confirmed_external_addresses, Mode::Server) => {
+                debug_assert!(
+                    !confirmed_external_addresses.is_empty(),
+                    "Previous match arm handled empty list"
+                );
+
+                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
+
+                Mode::Server
+            }
+        };
+
+        self.reconfigure_mode();
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -1214,6 +1308,7 @@ where
                                 if !self.connected_peers.contains(disconnected.preimage()) {
                                     self.queued_events.push_back(ToSwarm::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
+                                            .condition(dial_opts::PeerCondition::NotDialing)
                                             .build(),
                                     })
                                 }
@@ -1986,6 +2081,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
@@ -2008,6 +2104,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
@@ -2416,7 +2513,9 @@ where
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(ToSwarm::Dial {
-                                opts: DialOpts::peer_id(peer_id).build(),
+                                opts: DialOpts::peer_id(peer_id)
+                                    .condition(dial_opts::PeerCondition::NotDialing)
+                                    .build(),
                             });
                         }
                     }
@@ -2428,6 +2527,8 @@ where
             // If no new events have been queued either, signal `NotReady` to
             // be polled again later.
             if self.queued_events.is_empty() {
+                self.no_events_waker = Some(cx.waker().clone());
+
                 return Poll::Pending;
             }
         }
@@ -2437,60 +2538,8 @@ where
         self.listen_addresses.on_swarm_event(&event);
         let external_addresses_changed = self.external_addresses.on_swarm_event(&event);
 
-        self.mode = match (self.external_addresses.as_slice(), self.mode) {
-            ([], Mode::Server) => {
-                log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
-
-                Mode::Client
-            }
-            ([], Mode::Client) => {
-                // Previously client-mode, now also client-mode because no external addresses.
-
-                Mode::Client
-            }
-            (confirmed_external_addresses, Mode::Client) => {
-                if log::log_enabled!(log::Level::Debug) {
-                    let confirmed_external_addresses =
-                        to_comma_separated_list(confirmed_external_addresses);
-
-                    log::debug!("Switching to server-mode assuming that one of [{confirmed_external_addresses}] is externally reachable");
-                }
-
-                Mode::Server
-            }
-            (confirmed_external_addresses, Mode::Server) => {
-                debug_assert!(
-                    !confirmed_external_addresses.is_empty(),
-                    "Previous match arm handled empty list"
-                );
-
-                // Previously, server-mode, now also server-mode because > 1 external address. Don't log anything to avoid spam.
-
-                Mode::Server
-            }
-        };
-
-        if external_addresses_changed && !self.connections.is_empty() {
-            let num_connections = self.connections.len();
-
-            log::debug!(
-                "External addresses changed, re-configuring {} established connection{}",
-                num_connections,
-                if num_connections > 1 { "s" } else { "" }
-            );
-
-            self.queued_events
-                .extend(
-                    self.connections
-                        .iter()
-                        .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
-                            peer_id: *peer_id,
-                            handler: NotifyHandler::One(*conn_id),
-                            event: KademliaHandlerIn::ReconfigureMode {
-                                new_mode: self.mode,
-                            },
-                        }),
-                );
+        if self.auto_mode && external_addresses_changed {
+            self.determine_mode_from_external_addresses();
         }
 
         match event {
@@ -3242,6 +3291,7 @@ impl fmt::Display for NoKnownPeers {
 impl std::error::Error for NoKnownPeers {}
 
 /// The possible outcomes of [`Kademlia::add_address`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingUpdate {
     /// The given peer and address has been added to the routing
     /// table.

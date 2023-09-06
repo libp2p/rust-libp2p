@@ -77,24 +77,7 @@ impl DecodingError {
         }
     }
 
-    #[cfg(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    ))]
-    pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
-        Self {
-            msg: format!("decoding {key_type} key from Protobuf is unsupported"),
-            source: None,
-        }
-    }
-
-    #[cfg(any(
-        all(feature = "rsa", not(target_arch = "wasm32")),
-        feature = "secp256k1",
-        feature = "ecdsa"
-    ))]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
         Self {
             msg: format!("encoding {key_type} key to Protobuf is unsupported"),
@@ -124,7 +107,7 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
-    #[cfg(any(feature = "secp256k1", feature = "rsa"))]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub(crate) fn new<S: ToString>(msg: S) -> Self {
         Self {
             msg: msg.to_string(),
@@ -132,7 +115,7 @@ impl SigningError {
         }
     }
 
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
         Self {
             source: Some(Box::new(source)),

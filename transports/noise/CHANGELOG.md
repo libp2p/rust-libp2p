@@ -1,4 +1,8 @@
-## 0.43.0 
+## 0.43.1
+
+- Update dependencies.
+
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
