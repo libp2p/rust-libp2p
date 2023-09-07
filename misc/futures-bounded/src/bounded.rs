@@ -1,35 +1,25 @@
 use std::future::Future;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use futures_timer::Delay;
-use futures_util::future::{select, BoxFuture, Either};
-use futures_util::stream::FuturesUnordered;
-use futures_util::{ready, FutureExt, StreamExt};
+use futures_util::future::BoxFuture;
 
-use crate::Timeout;
+use crate::{PushError, Timeout, UniqueWorkers};
 
 /// Represents a set of (Worker)-[Future]s.
 ///
 /// This wraps [FuturesUnordered] but bounds it by time and size.
 /// In other words, each worker must finish within the specified time and the set never outgrows its capacity.
 pub struct BoundedWorkers<O> {
-    timeout: Duration,
-    capacity: usize,
-    inner: FuturesUnordered<BoxFuture<'static, Result<O, Timeout>>>,
-
-    empty_waker: Option<Waker>,
-    full_waker: Option<Waker>,
+    id: i32,
+    inner: UniqueWorkers<i32, O>,
 }
 
 impl<O> BoundedWorkers<O> {
     pub fn new(timeout: Duration, capacity: usize) -> Self {
         Self {
-            timeout,
-            capacity,
-            inner: Default::default(),
-            empty_waker: None,
-            full_waker: None,
+            id: i32::MIN,
+            inner: UniqueWorkers::new(timeout, capacity),
         }
     }
 }
@@ -40,30 +30,19 @@ impl<O> BoundedWorkers<O> {
     /// If the length of the set is equal to the capacity,
     /// this method returns a error that contains the passed worker.
     /// In that case, the worker is not added to the set.
-    pub fn try_push<F>(&mut self, worker: F) -> Result<(), F>
+    pub fn try_push<F>(&mut self, worker: F) -> Result<(), BoxFuture<O>>
     where
         F: Future<Output = O> + Send + 'static + Unpin,
     {
-        if self.inner.len() >= self.capacity {
-            return Err(worker);
-        }
+        (self.id, _) = self.id.overflowing_add(1);
 
-        let timeout = Delay::new(self.timeout);
-        self.inner.push(
-            async move {
-                match select(worker, timeout).await {
-                    Either::Left((out, _)) => Ok(out),
-                    Either::Right(((), _)) => Err(Timeout::new()),
-                }
+        match self.inner.try_push(self.id, worker) {
+            Ok(()) => Ok(()),
+            Err(PushError::BeyondCapacity(w)) => Err(w),
+            Err(PushError::ReplacedWorker(_)) => {
+                unreachable!()
             }
-            .boxed(),
-        );
-
-        if let Some(waker) = self.empty_waker.take() {
-            waker.wake();
         }
-
-        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -71,27 +50,13 @@ impl<O> BoundedWorkers<O> {
     }
 
     pub fn poll_ready_unpin(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        if self.inner.len() < self.capacity {
-            return Poll::Ready(());
-        }
-
-        self.full_waker = Some(cx.waker().clone());
-        Poll::Pending
+        self.inner.poll_ready_unpin(cx)
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<O, Timeout>> {
-        match ready!(self.inner.poll_next_unpin(cx)) {
-            None => {
-                self.empty_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            Some(result) => {
-                if let Some(waker) = self.full_waker.take() {
-                    waker.wake();
-                }
-
-                Poll::Ready(result)
-            }
+        match self.inner.poll_unpin(cx) {
+            Poll::Ready((_, res)) => Poll::Ready(res),
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -101,6 +66,7 @@ mod tests {
     use std::future::{pending, poll_fn, ready};
     use std::pin::Pin;
     use std::time::Instant;
+    use futures_timer::Delay;
 
     use super::*;
 
