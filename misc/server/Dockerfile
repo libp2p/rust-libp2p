@@ -1,4 +1,4 @@
-FROM rust:1.67-bullseye as builder
+FROM rust:1.72-bullseye as builder
 WORKDIR /usr/src/rust-libp2p-server
 
 # Run with access to the target cache to speed up builds
