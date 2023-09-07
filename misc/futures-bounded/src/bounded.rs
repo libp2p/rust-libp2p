@@ -8,8 +8,7 @@ use crate::{PushError, Timeout, UniqueWorkers};
 
 /// Represents a set of (Worker)-[Future]s.
 ///
-/// This wraps [FuturesUnordered] but bounds it by time and size.
-/// In other words, each worker must finish within the specified time and the set never outgrows its capacity.
+/// Each worker must finish within the specified time and the set never outgrows its capacity.
 pub struct BoundedWorkers<O> {
     id: i32,
     inner: UniqueWorkers<i32, O>,
