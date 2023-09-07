@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.2]
 ### Changed
-- Add libp2p-lookup to Dockerfile to enable healthchecks
+- Add libp2p-lookup to Dockerfile to enable healthchecks.
 
 ## [0.12.2]
 ### Fixed
