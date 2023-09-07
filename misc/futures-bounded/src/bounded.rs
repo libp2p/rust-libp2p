@@ -63,10 +63,10 @@ impl<O> BoundedWorkers<O> {
 
 #[cfg(test)]
 mod tests {
+    use futures_timer::Delay;
     use std::future::{pending, poll_fn, ready};
     use std::pin::Pin;
     use std::time::Instant;
-    use futures_timer::Delay;
 
     use super::*;
 
