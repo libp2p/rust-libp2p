@@ -25,7 +25,6 @@ use std::{
     collections::{HashMap, VecDeque},
     error::Error,
     hash::{Hash, Hasher},
-    marker::PhantomData,
     net::{self, IpAddr, SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
     pin::Pin,
@@ -33,7 +32,7 @@ use std::{
     time::Duration,
 };
 
-use crate::provider::{is_addr_global, Gateway, Provider};
+use crate::tokio::{is_addr_global, Gateway};
 use futures::{channel::oneshot, Future, StreamExt};
 use futures_timer::Delay;
 use igd_next::PortMappingProtocol;
@@ -207,10 +206,7 @@ impl MappingList {
 
 /// A [`NetworkBehaviour`] for UPnP port mapping. Automatically tries to map the external port
 /// to an internal address on the gateway on a [`FromSwarm::NewListenAddr`].
-pub struct Behaviour<P>
-where
-    P: Provider,
-{
+pub struct Behaviour {
     /// UPnP interface state.
     state: GatewayState,
 
@@ -219,29 +215,19 @@ where
 
     /// Pending behaviour events to be emitted.
     pending_events: VecDeque<Event>,
-
-    /// Provider.
-    provider: PhantomData<P>,
 }
 
-impl<P> Default for Behaviour<P>
-where
-    P: Provider + 'static,
-{
+impl Default for Behaviour {
     fn default() -> Self {
         Self {
-            state: GatewayState::Searching(P::search_gateway()),
+            state: GatewayState::Searching(crate::tokio::search_gateway()),
             mappings: Default::default(),
             pending_events: VecDeque::new(),
-            provider: PhantomData,
         }
     }
 }
 
-impl<P> NetworkBehaviour for Behaviour<P>
-where
-    P: Provider + 'static,
-{
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = dummy::ConnectionHandler;
 
     type ToSwarm = Event;

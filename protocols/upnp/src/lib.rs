@@ -27,15 +27,10 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-mod behaviour;
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-mod provider;
-
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-pub use behaviour::Event;
-
-#[cfg(feature = "async-std")]
-pub use provider::async_std;
 #[cfg(feature = "tokio")]
-pub use provider::tokio;
+mod behaviour;
+#[cfg(feature = "tokio")]
+pub mod tokio;
+
+#[cfg(feature = "tokio")]
+pub use behaviour::Event;
