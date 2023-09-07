@@ -5,7 +5,7 @@ WORKDIR /usr/src/rust-libp2p-server
 WORKDIR /workspace
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install --root /usr/local libp2p-lookup
+    cargo install --root /usr/local libp2p-lookup  --version 0.6.4
 
 ADD . .
 RUN --mount=type=cache,target=./target \
