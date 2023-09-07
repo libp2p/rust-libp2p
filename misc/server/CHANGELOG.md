@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.12.2]
+### Changed
+- Add libp2p-lookup to Dockerfile to enable healthchecks
+
+## [0.12.2]
 ### Fixed
 - Adhere to `--metrics-path` flag and listen on `0.0.0.0:8888` (default IPFS metrics port).
   [PR 4392]
