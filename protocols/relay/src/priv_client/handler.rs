@@ -560,7 +560,7 @@ impl ConnectionHandler for Handler {
             }) => {
                 if self
                     .open_circuit_futs
-                    .try_push(inbound_stop::handle_open_circuit(stream).boxed())
+                    .try_push(inbound_stop::handle_open_circuit(stream))
                     .is_err()
                 {
                     log::warn!("Dropping inbound stream because we are at capacity")
