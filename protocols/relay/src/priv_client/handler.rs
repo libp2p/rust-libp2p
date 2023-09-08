@@ -367,8 +367,7 @@ impl ConnectionHandler for Handler {
                     ))
                 }
                 Ok(None) => None,
-                Err(err) => {
-                    let res = match err {
+                Err(outbound_hop::UpgradeError::CircuitFailed(e)) => {
                         outbound_hop::UpgradeError::CircuitFailed(e) => {
                             ConnectionHandlerEvent::NotifyBehaviour(
                                 Event::OutboundCircuitReqFailed {
