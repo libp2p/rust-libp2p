@@ -579,7 +579,6 @@ impl ConnectionHandler for Handler {
                             .reserve_futs
                             .try_push(
                                 outbound_hop::handle_reserve_message_response(stream, to_listener)
-                                    .boxed(),
                             )
                             .is_err()
                         {
