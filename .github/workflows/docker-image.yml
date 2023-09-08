@@ -36,4 +36,4 @@ jobs:
           context: .
           file: ./misc/server/Dockerfile
           push: true
-          tags: ghcr.io/${REPO}-server:${{ steps.ref-name.outputs.ref }}
+          tags: ghcr.io/${{ env.REPO }}-server:${{ steps.ref-name.outputs.ref }}
