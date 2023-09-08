@@ -63,20 +63,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(event) => match event {
-                upnp::Event::NewExternalAddr(addr) => {
-                    println!("New external address: {addr}");
-                }
-                upnp::Event::GatewayNotFound => {
-                    println!("Gateway does not support UPnP");
-                    break;
-                }
-                upnp::Event::NonRoutableGateway => {
-                    println!("Gateway is not exposed directly to the public Internet, i.e. it itself has a private IP address.");
-                    break;
-                }
-                _ => {}
-            },
+            SwarmEvent::Behaviour(upnp::Event::NewExternalAddr(addr)) => {
+                println!("New external address: {addr}");
+            }
+            SwarmEvent::Behaviour(upnp::Event::GatewayNotFound) => {
+                println!("Gateway does not support UPnP");
+                break;
+            }
+            SwarmEvent::Behaviour(upnp::Event::NonRoutableGateway) => {
+                println!("Gateway is not exposed directly to the public Internet, i.e. it itself has a private IP address.");
+                break;
+            }
             _ => {}
         }
     }
