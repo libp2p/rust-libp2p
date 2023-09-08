@@ -32,6 +32,10 @@ pub(crate) struct PollDataChannel {
     close_waker: Rc<AtomicWaker>,
 
     /// Whether we've been overloaded with data by the remote.
+    ///
+    /// This is set to `true` in case `read_buffer` overflows, i.e. the remote is sending us messages faster than we can read them.
+    /// In that case, we return an [`std::io::Error`] from [`AsyncRead`] or [`AsyncWrite`], depending which one gets called earlier.
+    /// Failing these will (very likely), cause the application developer to drop the stream which resets it.
     overloaded: Rc<AtomicBool>,
 
     // Store the closures for proper garbage collection.
