@@ -1,8 +1,8 @@
-mod bounded;
-mod unique;
+mod list;
+mod map;
 
-pub use bounded::BoundedWorkers;
-pub use unique::{PushError, UniqueWorkers};
+pub use list::FuturesList;
+pub use map::{FuturesMap, PushError};
 
 #[derive(Debug)]
 pub struct Timeout {

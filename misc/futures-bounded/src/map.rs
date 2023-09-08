@@ -10,10 +10,10 @@ use futures_util::FutureExt;
 
 use crate::Timeout;
 
-/// Represents a set of (Worker)-[Future]s.
+/// Represents a map of [Future]s.
 ///
-/// Each worker must finish within the specified time and the set never outgrows its capacity.
-pub struct UniqueWorkers<ID, O> {
+/// Each future must finish within the specified time and the map never outgrows its capacity.
+pub struct FuturesMap<ID, O> {
     timeout: Duration,
     capacity: usize,
     inner: HashMap<ID, (BoxFuture<'static, O>, Delay)>,
@@ -21,16 +21,16 @@ pub struct UniqueWorkers<ID, O> {
     full_waker: Option<Waker>,
 }
 
-/// Error of a worker pushing
+/// Error of a future pushing
 #[derive(PartialEq, Debug)]
 pub enum PushError<F> {
     /// The length of the set is equal to the capacity
     BeyondCapacity(F),
-    /// The set already contains the given worker's ID
-    ReplacedWorker(F),
+    /// The set already contains the given future's ID
+    ReplacedFuture(F),
 }
 
-impl<ID, O> UniqueWorkers<ID, O> {
+impl<ID, O> FuturesMap<ID, O> {
     pub fn new(timeout: Duration, capacity: usize) -> Self {
         Self {
             timeout,
@@ -42,28 +42,28 @@ impl<ID, O> UniqueWorkers<ID, O> {
     }
 }
 
-impl<ID, O> UniqueWorkers<ID, O>
+impl<ID, O> FuturesMap<ID, O>
 where
     ID: Clone + Hash + Eq + Send + 'static,
 {
-    /// Push a worker into the set.
+    /// Push a future into the map.
     ///
-    /// This method adds the given worker with defined `worker_id` to the set.
-    /// If the length of the set is equal to the capacity, this method returns [PushError::BeyondCapacity],
-    /// that contains the passed worker. In that case, the worker is not added to the set.
-    /// If a worker with the given `worker_id` already exists, then the old worker will be replaced by a new one.
-    /// In that case, the returned error [PushError::ReplacedWorker] contains the old worker.
-    pub fn try_push<F>(&mut self, worker_id: ID, worker: F) -> Result<(), PushError<BoxFuture<O>>>
+    /// This method inserts the given future with defined `future_id` to the set.
+    /// If the length of the map is equal to the capacity, this method returns [PushError::BeyondCapacity],
+    /// that contains the passed future. In that case, the future is not inserted to the map.
+    /// If a future with the given `future_id` already exists, then the old future will be replaced by a new one.
+    /// In that case, the returned error [PushError::ReplacedFuture] contains the old future.
+    pub fn try_push<F>(&mut self, future_id: ID, future: F) -> Result<(), PushError<BoxFuture<O>>>
     where
         F: Future<Output = O> + Send + 'static,
     {
         if self.inner.len() >= self.capacity {
-            return Err(PushError::BeyondCapacity(worker.boxed()));
+            return Err(PushError::BeyondCapacity(future.boxed()));
         }
 
         let val = self.inner.insert(
-            worker_id.clone(),
-            (worker.boxed(), Delay::new(self.timeout)),
+            future_id.clone(),
+            (future.boxed(), Delay::new(self.timeout)),
         );
 
         if let Some(waker) = self.empty_waker.take() {
@@ -71,7 +71,7 @@ where
         }
 
         match val {
-            Some((old_worker, _)) => Err(PushError::ReplacedWorker(old_worker)),
+            Some((old_future, _)) => Err(PushError::ReplacedFuture(old_future)),
             None => Ok(()),
         }
     }
@@ -94,13 +94,13 @@ where
         let res = self
             .inner
             .iter_mut()
-            .find_map(|(worker_id, (worker, timeout))| {
+            .find_map(|(future_id, (future, timeout))| {
                 if timeout.poll_unpin(cx).is_ready() {
-                    return Some((worker_id.clone(), Err(Timeout::new())));
+                    return Some((future_id.clone(), Err(Timeout::new())));
                 }
 
-                match worker.poll_unpin(cx) {
-                    Poll::Ready(output) => Some((worker_id.clone(), Ok(output))),
+                match future.poll_unpin(cx) {
+                    Poll::Ready(output) => Some((future_id.clone(), Ok(output))),
                     Poll::Pending => None,
                 }
             });
@@ -111,14 +111,14 @@ where
 
                 Poll::Pending
             }
-            Some((worker_id, worker_res)) => {
-                self.inner.remove(&worker_id);
+            Some((future_id, future_res)) => {
+                self.inner.remove(&future_id);
 
                 if let Some(waker) = self.full_waker.take() {
                     waker.wake();
                 }
 
-                Poll::Ready((worker_id, worker_res))
+                Poll::Ready((future_id, future_res))
             }
         }
     }
@@ -134,65 +134,65 @@ mod tests {
 
     #[test]
     fn cannot_push_more_than_capacity_tasks() {
-        let mut workers = UniqueWorkers::new(Duration::from_secs(10), 1);
+        let mut futures = FuturesMap::new(Duration::from_secs(10), 1);
 
-        assert!(workers.try_push("ID_1", ready(())).is_ok());
+        assert!(futures.try_push("ID_1", ready(())).is_ok());
         matches!(
-            workers.try_push("ID_2", ready(())),
+            futures.try_push("ID_2", ready(())),
             Err(PushError::BeyondCapacity(_))
         );
     }
 
     #[test]
     fn cannot_push_the_same_id_few_times() {
-        let mut workers = UniqueWorkers::new(Duration::from_secs(10), 5);
+        let mut futures = FuturesMap::new(Duration::from_secs(10), 5);
 
-        assert!(workers.try_push("ID", ready(())).is_ok());
+        assert!(futures.try_push("ID", ready(())).is_ok());
         matches!(
-            workers.try_push("ID", ready(())),
-            Err(PushError::ReplacedWorker(_))
+            futures.try_push("ID", ready(())),
+            Err(PushError::ReplacedFuture(_))
         );
     }
 
     #[tokio::test]
-    async fn workers_timeout() {
-        let mut workers = UniqueWorkers::new(Duration::from_millis(100), 1);
+    async fn futures_timeout() {
+        let mut futures = FuturesMap::new(Duration::from_millis(100), 1);
 
-        let _ = workers.try_push("ID", pending::<()>());
+        let _ = futures.try_push("ID", pending::<()>());
         Delay::new(Duration::from_millis(150)).await;
-        let (_, result) = poll_fn(|cx| workers.poll_unpin(cx)).await;
+        let (_, result) = poll_fn(|cx| futures.poll_unpin(cx)).await;
 
         assert!(result.is_err())
     }
 
-    // Each worker causes a delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
-    // We stop after NUM_WORKERS tasks, meaning the overall execution must at least take DELAY * NUM_WORKERS.
+    // Each future causes a delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
+    // We stop after NUM_FUTURES tasks, meaning the overall execution must at least take DELAY * NUM_FUTURES.
     #[tokio::test]
     async fn backpressure() {
         const DELAY: Duration = Duration::from_millis(100);
-        const NUM_WORKERS: u32 = 10;
+        const NUM_FUTURES: u32 = 10;
 
         let start = Instant::now();
-        Task::new(DELAY, NUM_WORKERS, 1).await;
+        Task::new(DELAY, NUM_FUTURES, 1).await;
         let duration = start.elapsed();
 
-        assert!(duration >= DELAY * NUM_WORKERS);
+        assert!(duration >= DELAY * NUM_FUTURES);
     }
 
     struct Task {
-        worker: Duration,
-        num_workers: usize,
+        future: Duration,
+        num_futures: usize,
         num_processed: usize,
-        inner: UniqueWorkers<u8, ()>,
+        inner: FuturesMap<u8, ()>,
     }
 
     impl Task {
-        fn new(worker: Duration, num_workers: u32, capacity: usize) -> Self {
+        fn new(future: Duration, num_futures: u32, capacity: usize) -> Self {
             Self {
-                worker,
-                num_workers: num_workers as usize,
+                future,
+                num_futures: num_futures as usize,
                 num_processed: 0,
-                inner: UniqueWorkers::new(Duration::from_secs(60), capacity),
+                inner: FuturesMap::new(Duration::from_secs(60), capacity),
             }
         }
     }
@@ -203,10 +203,10 @@ mod tests {
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
             let this = self.get_mut();
 
-            while this.num_processed < this.num_workers {
+            while this.num_processed < this.num_futures {
                 if let Poll::Ready((_, result)) = this.inner.poll_unpin(cx) {
                     if result.is_err() {
-                        panic!("Timeout is great than worker delay")
+                        panic!("Timeout is great than future delay")
                     }
 
                     this.num_processed += 1;
@@ -214,10 +214,10 @@ mod tests {
                 }
 
                 if let Poll::Ready(()) = this.inner.poll_ready_unpin(cx) {
-                    // We push the constant worker's ID to prove that user can use the same ID
-                    // if the worker's future was finished
-                    let maybe_worker = this.inner.try_push(1u8, Delay::new(this.worker));
-                    assert!(maybe_worker.is_ok(), "we polled for readiness");
+                    // We push the constant future's ID to prove that user can use the same ID
+                    // if the future was finished
+                    let maybe_future = this.inner.try_push(1u8, Delay::new(this.future));
+                    assert!(maybe_future.is_ok(), "we polled for readiness");
 
                     continue;
                 }

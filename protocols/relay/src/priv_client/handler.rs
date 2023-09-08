@@ -137,8 +137,8 @@ pub struct Handler {
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
     reserve_futs:
-        futures_bounded::BoundedWorkers<Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
-    circuit_connection_futs: futures_bounded::BoundedWorkers<
+        futures_bounded::FuturesList<Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
+    circuit_connection_futs: futures_bounded::FuturesList<
         Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>,
     >,
 
@@ -154,12 +154,11 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs: futures_bounded::BoundedWorkers<
+    open_circuit_futs: futures_bounded::FuturesList<
         Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>,
     >,
 
-    circuit_deny_futs:
-        futures_bounded::UniqueWorkers<PeerId, Result<(), inbound_stop::UpgradeError>>,
+    circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::UpgradeError>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -177,21 +176,21 @@ impl Handler {
             queued_events: Default::default(),
             pending_error: Default::default(),
             wait_for_outbound_stream: Default::default(),
-            reserve_futs: futures_bounded::BoundedWorkers::new(
+            reserve_futs: futures_bounded::FuturesList::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            circuit_connection_futs: futures_bounded::BoundedWorkers::new(
+            circuit_connection_futs: futures_bounded::FuturesList::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
-            open_circuit_futs: futures_bounded::BoundedWorkers::new(
+            open_circuit_futs: futures_bounded::FuturesList::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            circuit_deny_futs: futures_bounded::UniqueWorkers::new(
+            circuit_deny_futs: futures_bounded::FuturesMap::new(
                 DENYING_CIRCUIT_TIMEOUT,
                 MAX_NUMBER_DENYING_CIRCUIT,
             ),
@@ -280,7 +279,7 @@ impl Handler {
                 "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                 src_peer_id
             ),
-            Err(PushError::ReplacedWorker(_)) => log::warn!(
+            Err(PushError::ReplacedFuture(_)) => log::warn!(
                 "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
                 src_peer_id
             ),
@@ -367,20 +366,14 @@ impl ConnectionHandler for Handler {
                     ))
                 }
                 Ok(None) => None,
-                Err(outbound_hop::UpgradeError::CircuitFailed(e)) => {
-                    Some(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundCircuitReqFailed {
-                            error: StreamUpgradeError::Apply(e),
-                        },
-                    ))
-                }
-                Err(outbound_hop::UpgradeError::Fatal(e)) => {
-                    Some(
-                        ConnectionHandlerEvent::Close(
-                            StreamUpgradeError::Apply(Either::Right(e)),
-                        )
-                    )
-                }
+                Err(outbound_hop::UpgradeError::CircuitFailed(e)) => Some(
+                    ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundCircuitReqFailed {
+                        error: StreamUpgradeError::Apply(e),
+                    }),
+                ),
+                Err(outbound_hop::UpgradeError::Fatal(e)) => Some(ConnectionHandlerEvent::Close(
+                    StreamUpgradeError::Apply(Either::Right(e)),
+                )),
                 Err(outbound_hop::UpgradeError::ReservationFailed(_)) => {
                     unreachable!("do not emit `ReservationFailed` for connection")
                 }
@@ -576,9 +569,10 @@ impl ConnectionHandler for Handler {
                     OutboundStreamInfo::Reserve(to_listener) => {
                         if self
                             .reserve_futs
-                            .try_push(
-                                outbound_hop::handle_reserve_message_response(stream, to_listener)
-                            )
+                            .try_push(outbound_hop::handle_reserve_message_response(
+                                stream,
+                                to_listener,
+                            ))
                             .is_err()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")
@@ -590,14 +584,12 @@ impl ConnectionHandler for Handler {
 
                         if self
                             .circuit_connection_futs
-                            .try_push(
-                                outbound_hop::handle_connection_message_response(
-                                    stream,
-                                    self.remote_peer_id,
-                                    cmd,
-                                    tx,
-                                )
-                            )
+                            .try_push(outbound_hop::handle_connection_message_response(
+                                stream,
+                                self.remote_peer_id,
+                                cmd,
+                                tx,
+                            ))
                             .is_err()
                         {
                             log::warn!("Dropping outbound stream because we are at capacity")

@@ -385,13 +385,13 @@ pub struct Handler {
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
     stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
-    protocol_futs: futures_bounded::BoundedWorkers<RelayConnectionHandlerEvent>,
+    protocol_futs: futures_bounded::FuturesList<RelayConnectionHandlerEvent>,
 }
 
 impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
-            protocol_futs: futures_bounded::BoundedWorkers::new(
+            protocol_futs: futures_bounded::FuturesList::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -413,16 +413,14 @@ impl Handler {
     fn on_fully_negotiated_inbound(&mut self, stream: Stream) {
         if self
             .protocol_futs
-            .try_push(
-                inbound_hop::handle_inbound_request(
-                    stream,
-                    self.config.reservation_duration,
-                    self.config.max_circuit_duration,
-                    self.config.max_circuit_bytes,
-                    self.endpoint.clone(),
-                    self.active_reservation.is_some(),
-                )
-            )
+            .try_push(inbound_hop::handle_inbound_request(
+                stream,
+                self.config.reservation_duration,
+                self.config.max_circuit_duration,
+                self.config.max_circuit_bytes,
+                self.endpoint.clone(),
+                self.active_reservation.is_some(),
+            ))
             .is_err()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
@@ -440,7 +438,11 @@ impl Handler {
 
         if self
             .protocol_futs
-            .try_push(outbound_stop::handle_stop_message_response(stream, stop_command, tx))
+            .try_push(outbound_stop::handle_stop_message_response(
+                stream,
+                stop_command,
+                tx,
+            ))
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
