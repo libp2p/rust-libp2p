@@ -136,5 +136,5 @@ fn maybe_local_firefox() -> bool {
     // - iceape
     // AND hostname is either localhost or  "127.0.0.1"
     (ua.contains("firefox") || ua.contains("seamonkey") || ua.contains("iceape"))
-        && (hostname == "localhost" || hostname == "127.0.0.1")
+        && (hostname == "localhost" || hostname == "127.0.0.1" || hostname == "[::1]")
 }
