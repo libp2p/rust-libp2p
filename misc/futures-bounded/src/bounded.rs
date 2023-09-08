@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 
 use futures_util::future::BoxFuture;
@@ -53,10 +53,9 @@ impl<O> BoundedWorkers<O> {
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<O, Timeout>> {
-        match self.inner.poll_unpin(cx) {
-            Poll::Ready((_, res)) => Poll::Ready(res),
-            Poll::Pending => Poll::Pending,
-        }
+        let (_, res) = ready!(self.inner.poll_unpin(cx));
+
+        Poll::Ready(res)
     }
 }
 
