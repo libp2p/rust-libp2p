@@ -34,9 +34,7 @@ pub struct Connection {
     /// Because the browser's WebRTC API is event-based, we need to use a channel to obtain all inbound data channels.
     inbound_data_channels: SendWrapper<mpsc::Receiver<RtcDataChannel>>,
     /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
-    /// Currently unimplemented, will be implemented in a future PR.
     drop_listeners: FuturesUnordered<DropListener>,
-    /// Currently unimplemented, will be implemented in a future PR.
     no_drop_listeners_waker: Option<Waker>,
 
     _ondatachannel_closure: SendWrapper<Closure<dyn FnMut(RtcDataChannelEvent)>>,
