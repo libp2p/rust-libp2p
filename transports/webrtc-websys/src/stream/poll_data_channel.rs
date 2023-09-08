@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::io;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::task::{Context, Poll};
 
@@ -29,6 +30,9 @@ pub(crate) struct PollDataChannel {
 
     /// Waker for when we are waiting for the DC to be closed.
     close_waker: Rc<AtomicWaker>,
+
+    /// Whether we've been overloaded with data by the remote.
+    overloaded: Rc<AtomicBool>,
 
     // Store the closures for proper garbage collection.
     // These are wrapped in an [`Rc`] so we can implement [`Clone`].
@@ -76,10 +80,12 @@ impl PollDataChannel {
 
         let new_data_waker = Rc::new(AtomicWaker::new());
         let read_buffer = Rc::new(Mutex::new(BytesMut::new())); // We purposely don't use `with_capacity` so we don't eagerly allocate `MAX_READ_BUFFER` per stream.
+        let overloaded = Rc::new(AtomicBool::new(false));
 
         let on_message_closure = Closure::<dyn FnMut(_)>::new({
             let new_data_waker = new_data_waker.clone();
             let read_buffer = read_buffer.clone();
+            let overloaded = overloaded.clone();
 
             move |ev: MessageEvent| {
                 let data = js_sys::Uint8Array::new(&ev.data());
@@ -87,12 +93,8 @@ impl PollDataChannel {
                 let mut read_buffer = read_buffer.lock().unwrap();
 
                 if read_buffer.len() + data.length() as usize > MAX_MSG_LEN {
-                    // TODO: Should we take as much of the data as we can or drop the entire message?
-
-                    log::warn!(
-                        "Remote is overloading us with messages, dropping {} bytes of data",
-                        data.length()
-                    );
+                    overloaded.store(true, Ordering::SeqCst);
+                    log::warn!("Remote is overloading us with messages, resetting stream",);
                     return;
                 }
 
@@ -109,6 +111,7 @@ impl PollDataChannel {
             open_waker,
             write_waker,
             close_waker,
+            overloaded,
             _on_open_closure: Rc::new(on_open_closure),
             _on_write_closure: Rc::new(on_write_closure),
             _on_close_closure: Rc::new(on_close_closure),
@@ -130,13 +133,22 @@ impl PollDataChannel {
         match self.ready_state() {
             RtcDataChannelState::Connecting => {
                 self.open_waker.register(cx.waker());
-                Poll::Pending
+                return Poll::Pending;
             }
             RtcDataChannelState::Closing | RtcDataChannelState::Closed => {
-                Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+                return Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
             }
-            RtcDataChannelState::Open | RtcDataChannelState::__Nonexhaustive => Poll::Ready(Ok(())),
+            RtcDataChannelState::Open | RtcDataChannelState::__Nonexhaustive => {}
         }
+
+        if self.overloaded.load(Ordering::SeqCst) {
+            return Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "remote overloaded us with messages",
+            )));
+        }
+
+        Poll::Ready(Ok(()))
     }
 }
 
