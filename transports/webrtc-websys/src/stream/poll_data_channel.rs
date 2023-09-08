@@ -129,7 +129,8 @@ impl PollDataChannel {
         self.inner.buffered_amount() as usize
     }
 
-    fn poll_open(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
+    /// Whether the data channel is ready for reading or writing.
+    fn poll_ready(&mut self, cx: &mut Context) -> Poll<io::Result<()>> {
         match self.ready_state() {
             RtcDataChannelState::Connecting => {
                 self.open_waker.register(cx.waker());
@@ -160,7 +161,7 @@ impl AsyncRead for PollDataChannel {
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
 
-        futures::ready!(this.poll_open(cx))?;
+        futures::ready!(this.poll_ready(cx))?;
 
         let mut read_buffer = this.read_buffer.lock().unwrap();
 
@@ -190,7 +191,7 @@ impl AsyncWrite for PollDataChannel {
     ) -> Poll<io::Result<usize>> {
         let this = self.get_mut();
 
-        futures::ready!(this.poll_open(cx))?;
+        futures::ready!(this.poll_ready(cx))?;
 
         debug_assert!(this.buffered_amount() <= MAX_MSG_LEN);
         let remaining_space = MAX_MSG_LEN - this.buffered_amount();
