@@ -599,7 +599,6 @@ impl ConnectionHandler for Handler {
                                     cmd,
                                     tx,
                                 )
-                                .boxed(),
                             )
                             .is_err()
                         {
