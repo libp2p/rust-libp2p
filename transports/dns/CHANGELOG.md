@@ -1,12 +1,14 @@
+## 0.41.0
+
+- Make DnsConfig::custom constructor infallible
+[PR 4464]: https://github.com/libp2p/rust-libp2p/pull/4464
+
 ## 0.40.0 
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
-
-- make DnsConfig::custom infallible
-[PR 4464]: https://github.com/libp2p/rust-libp2p/pull/4464
 
 ## 0.39.0
 
