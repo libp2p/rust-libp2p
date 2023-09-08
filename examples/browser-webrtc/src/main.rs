@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
 
-    let address_webrtc = Multiaddr::from(Ipv6Addr::LOCALHOST)
+    let address_webrtc = Multiaddr::from(Ipv6Addr::UNSPECIFIED)
         .with(Protocol::Udp(0))
         .with(Protocol::WebRTCDirect);
 
