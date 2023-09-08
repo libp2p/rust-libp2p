@@ -47,6 +47,7 @@ where
     ID: Clone + Hash + Eq + Send + 'static,
 {
     /// Push a worker into the set.
+    ///
     /// This method adds the given worker with defined `worker_id` to the set.
     /// If the length of the set is equal to the capacity, this method returns [PushError::BeyondCapacity],
     /// that contains the passed worker. In that case, the worker is not added to the set.
