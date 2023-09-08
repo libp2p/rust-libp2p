@@ -741,7 +741,7 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns)),
+                DnsConfig::custom(CustomTransport, config, opts).then(run),
             );
         }
 
