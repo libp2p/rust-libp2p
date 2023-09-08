@@ -55,7 +55,7 @@ where
     /// In that case, the returned error [PushError::ReplacedWorker] contains the old worker.
     pub fn try_push<F>(&mut self, worker_id: ID, worker: F) -> Result<(), PushError<BoxFuture<O>>>
     where
-        F: Future<Output = O> + Send + 'static + Unpin,
+        F: Future<Output = O> + Send + 'static,
     {
         if self.inner.len() >= self.capacity {
             return Err(PushError::BeyondCapacity(worker.boxed()));

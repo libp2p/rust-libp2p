@@ -422,7 +422,6 @@ impl Handler {
                     self.endpoint.clone(),
                     self.active_reservation.is_some(),
                 )
-                .boxed(),
             )
             .is_err()
         {
@@ -441,7 +440,7 @@ impl Handler {
 
         if self
             .protocol_futs
-            .try_push(outbound_stop::handle_stop_message_response(stream, stop_command, tx).boxed())
+            .try_push(outbound_stop::handle_stop_message_response(stream, stop_command, tx))
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")

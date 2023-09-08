@@ -274,7 +274,7 @@ impl Handler {
 
         match self.circuit_deny_futs.try_push(
             src_peer_id,
-            circuit.deny(proto::Status::NO_RESERVATION).boxed(),
+            circuit.deny(proto::Status::NO_RESERVATION),
         ) {
             Err(PushError::BeyondCapacity(_)) => log::warn!(
                 "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
@@ -368,22 +368,21 @@ impl ConnectionHandler for Handler {
                 }
                 Ok(None) => None,
                 Err(outbound_hop::UpgradeError::CircuitFailed(e)) => {
-                        outbound_hop::UpgradeError::CircuitFailed(e) => {
-                            ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::OutboundCircuitReqFailed {
-                                    error: StreamUpgradeError::Apply(e),
-                                },
-                            )
-                        }
-                        outbound_hop::UpgradeError::Fatal(e) => ConnectionHandlerEvent::Close(
+                    Some(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitReqFailed {
+                            error: StreamUpgradeError::Apply(e),
+                        },
+                    ))
+                }
+                Err(outbound_hop::UpgradeError::Fatal(e)) => {
+                    Some(
+                        ConnectionHandlerEvent::Close(
                             StreamUpgradeError::Apply(Either::Right(e)),
-                        ),
-                        outbound_hop::UpgradeError::ReservationFailed(_) => {
-                            unreachable!("do not emit `ReservationFailed` for connection")
-                        }
-                    };
-
-                    Some(res)
+                        )
+                    )
+                }
+                Err(outbound_hop::UpgradeError::ReservationFailed(_)) => {
+                    unreachable!("do not emit `ReservationFailed` for connection")
                 }
                 _ => unreachable!("do not emit 'Output::Reservation' for connection"),
             };

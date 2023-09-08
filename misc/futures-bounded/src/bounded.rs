@@ -31,7 +31,7 @@ impl<O> BoundedWorkers<O> {
     /// In that case, the worker is not added to the set.
     pub fn try_push<F>(&mut self, worker: F) -> Result<(), BoxFuture<O>>
     where
-        F: Future<Output = O> + Send + 'static + Unpin,
+        F: Future<Output = O> + Send + 'static,
     {
         (self.id, _) = self.id.overflowing_add(1);
 
