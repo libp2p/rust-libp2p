@@ -1,6 +1,8 @@
-## 0.41.0
+## 0.41.0 - unreleased
 
-- Make DnsConfig::custom constructor infallible
+- Make DnsConfig::custom constructor infallible.
+  See [PR 4464].
+
 [PR 4464]: https://github.com/libp2p/rust-libp2p/pull/4464
 
 ## 0.40.0 
