@@ -63,6 +63,14 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if maybe_local_firefox() {
+            return Err(TransportError::Other(
+                "Firefox does not support WebRTC over localhost or 127.0.0.1"
+                    .to_string()
+                    .into(),
+            ));
+        }
+
         let (sock_addr, server_fingerprint) = libp2p_webrtc_utils::parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
@@ -98,4 +106,35 @@ impl libp2p_core::Transport for Transport {
     fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }
+}
+
+/// Checks if local Firefox.
+///
+/// See: https://bugzilla.mozilla.org/show_bug.cgi?id=1659672 for more details
+fn maybe_local_firefox() -> bool {
+    let window = &web_sys::window().expect("window should be available");
+    let ua = match window.navigator().user_agent() {
+        Ok(agent) => agent.to_lowercase(),
+        Err(_) => return false,
+    };
+
+    let hostname = match window
+        .document()
+        .expect("should be valid document")
+        .location()
+    {
+        Some(location) => match location.hostname() {
+            Ok(hostname) => hostname,
+            Err(_) => return false,
+        },
+        None => return false,
+    };
+
+    // check if web_sys::Navigator::user_agent() matches any of the following:
+    // - firefox
+    // - seamonkey
+    // - iceape
+    // AND hostname is either localhost or  "127.0.0.1"
+    (ua.contains("firefox") || ua.contains("seamonkey") || ua.contains("iceape"))
+        && (hostname == "localhost" || hostname == "127.0.0.1")
 }
