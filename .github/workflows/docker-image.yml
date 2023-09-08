@@ -32,4 +32,4 @@ jobs:
           context: .
           file: ./misc/server/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}-server:${{ steps.ref-name.outputs.ref }}
+          tags: ghcr.io/${{ github.repository.lowercase }}-server:${{ steps.ref-name.outputs.ref }}
