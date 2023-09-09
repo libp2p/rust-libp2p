@@ -323,10 +323,7 @@ impl ConnectionHandler for Handler {
                     break;
                 }
                 None => match self.interval.poll_unpin(cx) {
-                    Poll::Pending => {
-                        self.outbound = None;
-                        break;
-                    }
+                    Poll::Pending => break,
                     Poll::Ready(()) => {
                         self.outbound = Some(OutboundState::OpenStream);
                         let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
