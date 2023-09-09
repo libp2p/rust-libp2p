@@ -91,6 +91,12 @@ where
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<(ID, Result<O, Timeout>)> {
+        if self.inner.is_empty() {
+            self.empty_waker = Some(cx.waker().clone());
+
+            return Poll::Pending;
+        }
+
         let res = self
             .inner
             .iter_mut()
@@ -106,11 +112,7 @@ where
             });
 
         match res {
-            None => {
-                self.empty_waker = Some(cx.waker().clone());
-
-                Poll::Pending
-            }
+            None => Poll::Pending,
             Some((future_id, future_res)) => {
                 self.inner.remove(&future_id);
 
