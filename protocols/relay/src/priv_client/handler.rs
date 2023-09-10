@@ -137,7 +137,7 @@ pub struct Handler {
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
     reserve_futs:
-        futures_bounded::FuturesList<Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
+        futures_bounded::FuturesList<Result<outbound_hop::Reservation, outbound_hop::UpgradeError>>,
     circuit_connection_futs: futures_bounded::FuturesList<Option<ClientConnectionHandlerEvent>>,
 
     reservation: Reservation,
@@ -369,7 +369,7 @@ impl ConnectionHandler for Handler {
             };
 
             let event = match res {
-                Ok(outbound_hop::Output::Reservation {
+                Ok(outbound_hop::Reservation {
                     renewal_timeout,
                     addrs,
                     limit,
@@ -398,7 +398,6 @@ impl ConnectionHandler for Handler {
                         unreachable!("do not emit `CircuitFailed` for reservation")
                     }
                 },
-                _ => unreachable!("do not emit 'Output::Circuit' for reservation"),
             };
 
             return Poll::Ready(event);

@@ -101,22 +101,17 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
-pub(crate) enum Output {
-    Reservation {
-        renewal_timeout: Delay,
-        addrs: Vec<Multiaddr>,
-        limit: Option<Limit>,
-        to_listener: mpsc::Sender<transport::ToListenerMsg>,
-    },
-    Circuit {
-        limit: Option<Limit>,
-    },
+pub(crate) struct Reservation {
+    pub(crate) renewal_timeout: Delay,
+    pub(crate) addrs: Vec<Multiaddr>,
+    pub(crate) limit: Option<Limit>,
+    pub(crate) to_listener: mpsc::Sender<transport::ToListenerMsg>,
 }
 
 pub(crate) async fn handle_reserve_message_response(
     protocol: Stream,
     to_listener: mpsc::Sender<transport::ToListenerMsg>,
-) -> Result<Output, UpgradeError> {
+) -> Result<Reservation, UpgradeError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::RESERVE,
         peer: None,
@@ -191,14 +186,12 @@ pub(crate) async fn handle_reserve_message_response(
 
     substream.close().await?;
 
-    let output = Output::Reservation {
+    Ok(Reservation {
         renewal_timeout,
         addrs,
         limit,
         to_listener,
-    };
-
-    Ok(output)
+    })
 }
 
 pub(crate) async fn handle_connection_message_response(
