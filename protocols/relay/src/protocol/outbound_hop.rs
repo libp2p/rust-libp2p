@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use asynchronous_codec::{Framed, FramedParts};
+use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use futures_timer::Delay;
@@ -29,9 +30,10 @@ use void::Void;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::Stream;
+use libp2p_swarm::{ConnectionHandlerEvent, Stream, StreamUpgradeError};
 
-use crate::priv_client::transport;
+use crate::priv_client::handler::ClientConnectionHandlerEvent;
+use crate::priv_client::{handler, transport};
 use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
 use crate::{priv_client, proto};
 
@@ -204,7 +206,7 @@ pub(crate) async fn handle_connection_message_response(
     remote_peer_id: PeerId,
     con_command: Command,
     tx: oneshot::Sender<Void>,
-) -> Result<Option<Output>, UpgradeError> {
+) -> Option<ClientConnectionHandlerEvent> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::CONNECT,
         peer: Some(proto::Peer {
@@ -218,46 +220,84 @@ pub(crate) async fn handle_connection_message_response(
 
     let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
-    substream.send(msg).await?;
+    if substream.send(msg).await.is_err() {
+        return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+            Either::Right(FatalUpgradeError::StreamClosed),
+        )));
+    }
+
     let proto::HopMessage {
         type_pb,
         peer: _,
         reservation: _,
         limit,
         status,
-    } = substream
-        .next()
-        .await
-        .ok_or(FatalUpgradeError::StreamClosed)??;
+    } = match substream.next().await {
+        Some(Ok(r)) => r,
+        _ => {
+            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                Either::Right(FatalUpgradeError::StreamClosed),
+            )))
+        }
+    };
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(FatalUpgradeError::UnexpectedTypeConnect.into());
+            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                Either::Right(FatalUpgradeError::UnexpectedTypeConnect),
+            )));
         }
         proto::HopMessageType::RESERVE => {
-            return Err(FatalUpgradeError::UnexpectedTypeReserve.into());
+            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                Either::Right(FatalUpgradeError::UnexpectedTypeReserve),
+            )));
         }
         proto::HopMessageType::STATUS => {}
     }
 
-    let limit = limit.map(Into::into);
-
-    match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
-        proto::Status::OK => {}
-        proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-            return Err(CircuitFailedReason::ResourceLimitExceeded.into());
+    match status {
+        Some(proto::Status::OK) => {}
+        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
+            return Some(ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundCircuitReqFailed {
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
+                },
+            ));
         }
-        proto::Status::CONNECTION_FAILED => {
-            return Err(CircuitFailedReason::ConnectionFailed.into());
+        Some(proto::Status::CONNECTION_FAILED) => {
+            return Some(ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundCircuitReqFailed {
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::ConnectionFailed),
+                },
+            ));
         }
-        proto::Status::NO_RESERVATION => {
-            return Err(CircuitFailedReason::NoReservation.into());
+        Some(proto::Status::NO_RESERVATION) => {
+            return Some(ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundCircuitReqFailed {
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::NoReservation),
+                },
+            ));
         }
-        proto::Status::PERMISSION_DENIED => {
-            return Err(CircuitFailedReason::PermissionDenied.into());
+        Some(proto::Status::PERMISSION_DENIED) => {
+            return Some(ConnectionHandlerEvent::NotifyBehaviour(
+                handler::Event::OutboundCircuitReqFailed {
+                    error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
+                },
+            ));
         }
-        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+        Some(s) => {
+            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                Either::Right(FatalUpgradeError::UnexpectedStatus(s)),
+            )));
+        }
+        None => {
+            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                Either::Right(FatalUpgradeError::MissingStatusField),
+            )));
+        }
     }
+
+    let limit = limit.map(Into::into);
 
     let FramedParts {
         io,
@@ -270,10 +310,12 @@ pub(crate) async fn handle_connection_message_response(
         "Expect a flushed Framed to have empty write buffer."
     );
 
-    let output = match con_command.send_back.send(Ok(priv_client::Connection {
+    match con_command.send_back.send(Ok(priv_client::Connection {
         state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
     })) {
-        Ok(()) => Some(Output::Circuit { limit }),
+        Ok(()) => Some(ConnectionHandlerEvent::NotifyBehaviour(
+            handler::Event::OutboundCircuitEstablished { limit },
+        )),
         Err(_) => {
             debug!(
                 "Oneshot to `client::transport::Dial` future dropped. \
@@ -283,9 +325,7 @@ pub(crate) async fn handle_connection_message_response(
 
             None
         }
-    };
-
-    Ok(output)
+    }
 }
 
 pub(crate) enum OutboundStreamInfo {

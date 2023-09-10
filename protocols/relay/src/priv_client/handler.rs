@@ -112,6 +112,13 @@ pub enum Event {
     },
 }
 
+pub(crate) type ClientConnectionHandlerEvent = ConnectionHandlerEvent<
+    <Handler as ConnectionHandler>::OutboundProtocol,
+    <Handler as ConnectionHandler>::OutboundOpenInfo,
+    <Handler as ConnectionHandler>::ToBehaviour,
+    <Handler as ConnectionHandler>::Error,
+>;
+
 pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
@@ -126,21 +133,12 @@ pub struct Handler {
     keep_alive: KeepAlive,
 
     /// Queue of events to return when polled.
-    queued_events: VecDeque<
-        ConnectionHandlerEvent<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
-        >,
-    >,
+    queued_events: VecDeque<ClientConnectionHandlerEvent>,
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
     reserve_futs:
         futures_bounded::FuturesList<Result<outbound_hop::Output, outbound_hop::UpgradeError>>,
-    circuit_connection_futs: futures_bounded::FuturesList<
-        Result<Option<outbound_hop::Output>, outbound_hop::UpgradeError>,
-    >,
+    circuit_connection_futs: futures_bounded::FuturesList<Option<ClientConnectionHandlerEvent>>,
 
     reservation: Reservation,
 
@@ -352,37 +350,13 @@ impl ConnectionHandler for Handler {
 
         // Circuit connections
         if let Poll::Ready(worker_res) = self.circuit_connection_futs.poll_unpin(cx) {
-            let res = match worker_res {
-                Ok(r) => r,
+            match worker_res {
+                Ok(None) => {}
+                Ok(Some(event)) => return Poll::Ready(event),
                 Err(Timeout { .. }) => {
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
                 }
             };
-
-            let opt = match res {
-                Ok(Some(outbound_hop::Output::Circuit { limit })) => {
-                    Some(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::OutboundCircuitEstablished { limit },
-                    ))
-                }
-                Ok(None) => None,
-                Err(outbound_hop::UpgradeError::CircuitFailed(e)) => Some(
-                    ConnectionHandlerEvent::NotifyBehaviour(Event::OutboundCircuitReqFailed {
-                        error: StreamUpgradeError::Apply(e),
-                    }),
-                ),
-                Err(outbound_hop::UpgradeError::Fatal(e)) => Some(ConnectionHandlerEvent::Close(
-                    StreamUpgradeError::Apply(Either::Right(e)),
-                )),
-                Err(outbound_hop::UpgradeError::ReservationFailed(_)) => {
-                    unreachable!("do not emit `ReservationFailed` for connection")
-                }
-                _ => unreachable!("do not emit 'Output::Reservation' for connection"),
-            };
-
-            if let Some(event) = opt {
-                return Poll::Ready(event);
-            }
         }
 
         // Reservations

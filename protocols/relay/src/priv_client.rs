@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
-mod handler;
+pub(crate) mod handler;
 pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
