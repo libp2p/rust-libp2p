@@ -3065,7 +3065,7 @@ dependencies = [
  "quick-protobuf-codec",
  "quickcheck",
  "rand 0.8.5",
- "rcgen 0.10.0",
+ "rcgen 0.11.1",
  "serde",
  "sha2 0.10.7",
  "stun 0.4.4",
