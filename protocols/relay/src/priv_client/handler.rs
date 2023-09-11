@@ -218,7 +218,7 @@ impl Handler {
                         self.pending_error = Some(StreamUpgradeError::Io(e));
                         return;
                     }
-                    StreamUpgradeError::Apply(_) => unreachable!("should not update"),
+                    StreamUpgradeError::Apply(v) => void::unreachable(v),
                 };
 
                 if self.pending_error.is_none() {
@@ -253,7 +253,7 @@ impl Handler {
                         self.pending_error = Some(StreamUpgradeError::Io(e));
                         return;
                     }
-                    StreamUpgradeError::Apply(_) => unreachable!("should not update"),
+                    StreamUpgradeError::Apply(v) => void::unreachable(v),
                 };
 
                 let _ = cmd.send_back.send(Err(()));
