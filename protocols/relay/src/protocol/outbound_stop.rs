@@ -74,7 +74,8 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
-pub(crate) async fn handle_stop_message_response(
+/// Attempts to _connect_ to a peer via the given stream.
+pub(crate) async fn connect(
     io: Stream,
     stop_command: StopCommand,
     tx: oneshot::Sender<()>,

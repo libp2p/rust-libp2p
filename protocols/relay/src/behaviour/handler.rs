@@ -438,11 +438,7 @@ impl Handler {
 
         if self
             .protocol_futs
-            .try_push(outbound_stop::handle_stop_message_response(
-                stream,
-                stop_command,
-                tx,
-            ))
+            .try_push(outbound_stop::connect(stream, stop_command, tx))
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
