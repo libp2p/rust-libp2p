@@ -28,7 +28,7 @@ webpki-roots = "0.25"
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-dns = { workspace = true, features = ["async-std"] }
 async-std = { version = "1.6.5", features = ["attributes"] }
-rcgen = "0.10.0"
+rcgen = "0.11.1"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

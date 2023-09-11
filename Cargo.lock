@@ -3264,7 +3264,7 @@ dependencies = [
  "libp2p-identity",
  "libp2p-swarm",
  "libp2p-yamux",
- "rcgen 0.10.0",
+ "rcgen 0.11.1",
  "ring",
  "rustls 0.21.7",
  "rustls-webpki",
@@ -3323,7 +3323,7 @@ dependencies = [
  "quick-protobuf-codec",
  "quickcheck",
  "rand 0.8.5",
- "rcgen 0.10.0",
+ "rcgen 0.11.1",
  "serde",
  "sha2 0.10.7",
  "stun",
@@ -3351,7 +3351,7 @@ dependencies = [
  "log",
  "parking_lot",
  "quicksink",
- "rcgen 0.10.0",
+ "rcgen 0.11.1",
  "rw-stream-sink",
  "soketto",
  "url",
@@ -4021,6 +4021,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pem"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
+dependencies = [
+ "base64 0.21.3",
+ "serde",
+]
+
+[[package]]
 name = "pem-rfc7468"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4499,7 +4509,7 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6413f3de1edee53342e6138e75b56d32e7bc6e332b3bd62d497b1929d4cfbcdd"
 dependencies = [
- "pem",
+ "pem 1.1.1",
  "ring",
  "time",
  "yasna",
@@ -4511,10 +4521,22 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
 dependencies = [
- "pem",
+ "pem 1.1.1",
  "ring",
  "time",
  "x509-parser 0.14.0",
+ "yasna",
+]
+
+[[package]]
+name = "rcgen"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4954fbc00dcd4d8282c987710e50ba513d351400dbdd00e803a05172a90d8976"
+dependencies = [
+ "pem 2.0.1",
+ "ring",
+ "time",
  "yasna",
 ]
 
@@ -6314,7 +6336,7 @@ dependencies = [
  "interceptor",
  "lazy_static",
  "log",
- "pem",
+ "pem 1.1.1",
  "rand 0.8.5",
  "rcgen 0.10.0",
  "regex",
@@ -6381,7 +6403,7 @@ dependencies = [
  "oid-registry 0.6.1",
  "p256 0.11.1",
  "p384",
- "pem",
+ "pem 1.1.1",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rcgen 0.9.3",
