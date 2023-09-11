@@ -471,7 +471,7 @@ impl Handler {
                 self.pending_error = Some(StreamUpgradeError::Io(e));
                 return;
             }
-            StreamUpgradeError::Apply(_) => unreachable!("Should not emit handle errors"),
+            StreamUpgradeError::Apply(v) => void::unreachable(v),
         };
 
         let stop_command = self
