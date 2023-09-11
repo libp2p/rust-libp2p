@@ -115,7 +115,8 @@ where
                 self.empty_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
-            Some(result) => Poll::Ready(result),
+            Some((id, Ok(output))) => Poll::Ready((id, Ok(output))),
+            Some((id, Err(_timeout))) => Poll::Ready((id, Err(Timeout::new(self.timeout)))),
         }
     }
 }
@@ -129,11 +130,11 @@ impl<F> Future for TimeoutFuture<F>
 where
     F: Future + Unpin,
 {
-    type Output = Result<F::Output, Timeout>;
+    type Output = Result<F::Output, ()>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if self.timeout.poll_unpin(cx).is_ready() {
-            return Poll::Ready(Err(Timeout::new()));
+            return Poll::Ready(Err(()));
         }
 
         self.inner.poll_unpin(cx).map(Ok)
