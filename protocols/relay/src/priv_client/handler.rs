@@ -351,62 +351,57 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
-        // Circuit connections
+        // Inbound circuits
         loop {
-            if let Poll::Ready(worker_res) = self.outbound_circuits.poll_unpin(cx) {
-                match worker_res {
-                    Ok(Ok(Either::Left(Ok(outbound_hop::Reservation {
-                        renewal_timeout,
-                        addrs,
-                        limit,
-                        to_listener,
-                    })))) => {
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                            self.reservation.accepted(
-                                renewal_timeout,
-                                addrs,
-                                to_listener,
-                                self.local_peer_id,
-                                limit,
-                            ),
-                        ))
-                    }
-                    Ok(Ok(Either::Right(Ok(Some(outbound_hop::Circuit { limit }))))) => {
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                            Event::OutboundCircuitEstablished { limit },
-                        ));
-                    }
-                    Ok(Ok(Either::Right(Ok(None)))) => continue,
-                    Ok(Ok(Either::Right(Err(e)))) => {
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                            Event::OutboundCircuitReqFailed {
-                                error: StreamUpgradeError::Apply(e),
-                            },
-                        ));
-                    }
-                    Ok(Ok(Either::Left(Err(e)))) => {
-                        let renewal = self.reservation.failed();
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                            Event::ReservationReqFailed {
-                                renewal,
-                                error: StreamUpgradeError::Apply(e),
-                            },
-                        ));
-                    }
-                    Ok(Err(e)) => {
-                        return Poll::Ready(ConnectionHandlerEvent::Close(
-                            StreamUpgradeError::Apply(Either::Right(e)),
-                        ))
-                    }
-                    Err(Timeout { .. }) => {
-                        return Poll::Ready(ConnectionHandlerEvent::Close(
-                            StreamUpgradeError::Timeout,
-                        ));
-                    }
-                };
+            match self.outbound_circuits.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(Either::Left(Ok(outbound_hop::Reservation {
+                    renewal_timeout,
+                    addrs,
+                    limit,
+                    to_listener,
+                }))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        self.reservation.accepted(
+                            renewal_timeout,
+                            addrs,
+                            to_listener,
+                            self.local_peer_id,
+                            limit,
+                        ),
+                    ))
+                }
+                Poll::Ready(Ok(Ok(Either::Right(Ok(Some(outbound_hop::Circuit { limit })))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitEstablished { limit },
+                    ));
+                }
+                Poll::Ready(Ok(Ok(Either::Right(Ok(None))))) => continue,
+                Poll::Ready(Ok(Ok(Either::Right(Err(e))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitReqFailed {
+                            error: StreamUpgradeError::Apply(e),
+                        },
+                    ));
+                }
+                Poll::Ready(Ok(Ok(Either::Left(Err(e))))) => {
+                    let renewal = self.reservation.failed();
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqFailed {
+                            renewal,
+                            error: StreamUpgradeError::Apply(e),
+                        },
+                    ));
+                }
+                Poll::Ready(Ok(Err(e))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                        Either::Right(e),
+                    )))
+                }
+                Poll::Ready(Err(Timeout { .. })) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+                Poll::Pending => break,
             }
-
-            break;
         }
 
         // Return queued events.
