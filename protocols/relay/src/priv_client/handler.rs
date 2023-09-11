@@ -276,12 +276,10 @@ impl Handler {
             circuit.deny(proto::Status::NO_RESERVATION),
         ) {
             Err(PushError::BeyondCapacity(_)) => log::warn!(
-                "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
-                src_peer_id
+                "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
             ),
             Err(PushError::ReplacedFuture(_)) => log::warn!(
-                "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
-                src_peer_id
+                "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
             ),
             Ok(()) => {}
         }
