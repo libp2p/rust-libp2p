@@ -6,7 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.3] - unreleased
 ### Fixed
-- Filter out otherwise identical `/quic` listen addresses in favor of `/quic-v1` listen addresses to prevent "Address already in use" error by OS.
+
+- Disable QUIC `draft-29` support.
+  Listening on `/quic` and `/quic-v1` addresses with the same port would otherwise result in an "Address already in use" error by the OS.
   See [PR 4467].
 
 [PR 4467]: https://github.com/libp2p/rust-libp2p/pull/4467
