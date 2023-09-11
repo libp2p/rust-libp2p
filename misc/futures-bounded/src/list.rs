@@ -25,9 +25,9 @@ impl<O> FuturesList<O> {
 
 impl<O> FuturesList<O> {
     /// Push a future into the list.
+    ///
     /// This method adds the given future to the list.
-    /// If the length of the list is equal to the capacity,
-    /// this method returns a error that contains the passed future.
+    /// If the length of the list is equal to the capacity, this method returns a error that contains the passed future.
     /// In that case, the future is not added to the set.
     pub fn try_push<F>(&mut self, future: F) -> Result<(), BoxFuture<O>>
     where
