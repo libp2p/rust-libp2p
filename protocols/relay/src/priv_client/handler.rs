@@ -112,13 +112,6 @@ pub enum Event {
     },
 }
 
-pub(crate) type ClientConnectionHandlerEvent = ConnectionHandlerEvent<
-    <Handler as ConnectionHandler>::OutboundProtocol,
-    <Handler as ConnectionHandler>::OutboundOpenInfo,
-    <Handler as ConnectionHandler>::ToBehaviour,
-    <Handler as ConnectionHandler>::Error,
->;
-
 pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
@@ -133,7 +126,14 @@ pub struct Handler {
     keep_alive: KeepAlive,
 
     /// Queue of events to return when polled.
-    queued_events: VecDeque<ClientConnectionHandlerEvent>,
+    queued_events: VecDeque<
+        ConnectionHandlerEvent<
+            <Handler as ConnectionHandler>::OutboundProtocol,
+            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            <Handler as ConnectionHandler>::ToBehaviour,
+            <Handler as ConnectionHandler>::Error,
+        >,
+    >,
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
     outbound_circuits: futures_bounded::FuturesList<
