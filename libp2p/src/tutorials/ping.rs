@@ -182,7 +182,7 @@
 //! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
 //! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
 //! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
-//! (In our example, [env_logger] is used)
+//! (In our example, `env_logger` is used)
 //!
 //! ```rust
 //! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
