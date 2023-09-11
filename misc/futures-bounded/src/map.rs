@@ -1,12 +1,14 @@
-use std::collections::HashMap;
 use std::future::Future;
 use std::hash::Hash;
+use std::mem;
+use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use futures_timer::Delay;
 use futures_util::future::BoxFuture;
-use futures_util::FutureExt;
+use futures_util::stream::FuturesUnordered;
+use futures_util::{FutureExt, StreamExt};
 
 use crate::Timeout;
 
@@ -16,7 +18,7 @@ use crate::Timeout;
 pub struct FuturesMap<ID, O> {
     timeout: Duration,
     capacity: usize,
-    inner: HashMap<ID, (BoxFuture<'static, O>, Delay)>,
+    inner: FuturesUnordered<TaggedFuture<ID, TimeoutFuture<BoxFuture<'static, O>>>>,
     empty_waker: Option<Waker>,
     full_waker: Option<Waker>,
 }
@@ -44,7 +46,7 @@ impl<ID, O> FuturesMap<ID, O> {
 
 impl<ID, O> FuturesMap<ID, O>
 where
-    ID: Clone + Hash + Eq + Send + 'static,
+    ID: Clone + Hash + Eq + Send + Unpin + 'static,
 {
     /// Push a future into the map.
     ///
@@ -61,18 +63,33 @@ where
             return Err(PushError::BeyondCapacity(future.boxed()));
         }
 
-        let val = self.inner.insert(
-            future_id.clone(),
-            (future.boxed(), Delay::new(self.timeout)),
-        );
-
         if let Some(waker) = self.empty_waker.take() {
             waker.wake();
         }
 
-        match val {
-            Some((old_future, _)) => Err(PushError::ReplacedFuture(old_future)),
-            None => Ok(()),
+        match self.inner.iter_mut().find(|tagged| tagged.tag == future_id) {
+            None => {
+                self.inner.push(TaggedFuture {
+                    tag: future_id,
+                    inner: TimeoutFuture {
+                        inner: future.boxed(),
+                        timeout: Delay::new(self.timeout),
+                    },
+                });
+
+                Ok(())
+            }
+            Some(existing) => {
+                let old_future = mem::replace(
+                    &mut existing.inner,
+                    TimeoutFuture {
+                        inner: future.boxed(),
+                        timeout: Delay::new(self.timeout),
+                    },
+                );
+
+                Err(PushError::ReplacedFuture(old_future.inner))
+            }
         }
     }
 
@@ -91,38 +108,54 @@ where
     }
 
     pub fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<(ID, Result<O, Timeout>)> {
-        if self.inner.is_empty() {
-            self.empty_waker = Some(cx.waker().clone());
+        let maybe_result = futures_util::ready!(self.inner.poll_next_unpin(cx));
 
-            return Poll::Pending;
-        }
-
-        let res = self
-            .inner
-            .iter_mut()
-            .find_map(|(future_id, (future, timeout))| {
-                if timeout.poll_unpin(cx).is_ready() {
-                    return Some((future_id.clone(), Err(Timeout::new())));
-                }
-
-                match future.poll_unpin(cx) {
-                    Poll::Ready(output) => Some((future_id.clone(), Ok(output))),
-                    Poll::Pending => None,
-                }
-            });
-
-        match res {
-            None => Poll::Pending,
-            Some((future_id, future_res)) => {
-                self.inner.remove(&future_id);
-
-                if let Some(waker) = self.full_waker.take() {
-                    waker.wake();
-                }
-
-                Poll::Ready((future_id, future_res))
+        match maybe_result {
+            None => {
+                self.empty_waker = Some(cx.waker().clone());
+                Poll::Pending
             }
+            Some(result) => Poll::Ready(result),
         }
+    }
+}
+
+struct TimeoutFuture<F> {
+    inner: F,
+    timeout: Delay,
+}
+
+impl<F> Future for TimeoutFuture<F>
+where
+    F: Future + Unpin,
+{
+    type Output = Result<F::Output, Timeout>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.timeout.poll_unpin(cx).is_ready() {
+            return Poll::Ready(Err(Timeout::new()));
+        }
+
+        self.inner.poll_unpin(cx).map(Ok)
+    }
+}
+
+struct TaggedFuture<T, F> {
+    tag: T,
+    inner: F,
+}
+
+impl<T, F> Future for TaggedFuture<T, F>
+where
+    T: Clone + Unpin,
+    F: Future + Unpin,
+{
+    type Output = (T, F::Output);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let output = futures_util::ready!(self.inner.poll_unpin(cx));
+
+        Poll::Ready((self.tag.clone(), output))
     }
 }
 
