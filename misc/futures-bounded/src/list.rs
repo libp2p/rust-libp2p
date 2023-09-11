@@ -38,9 +38,7 @@ impl<O> FuturesList<O> {
         match self.inner.try_push(self.id, future) {
             Ok(()) => Ok(()),
             Err(PushError::BeyondCapacity(w)) => Err(w),
-            Err(PushError::ReplacedFuture(_)) => {
-                unreachable!()
-            }
+            Err(PushError::ReplacedFuture(_)) => unreachable!("we never reuse IDs"),
         }
     }
 
