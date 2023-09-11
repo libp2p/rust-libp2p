@@ -77,7 +77,7 @@ pub enum FatalUpgradeError {
 /// Attempts to _connect_ to a peer via the given stream.
 pub(crate) async fn connect(
     io: Stream,
-    stop_command: StopCommand,
+    stop_command: PendingConnect,
     tx: oneshot::Sender<()>,
 ) -> handler::RelayConnectionHandlerEvent {
     let msg = proto::StopMessage {
@@ -191,7 +191,7 @@ pub(crate) async fn connect(
     })
 }
 
-pub(crate) struct StopCommand {
+pub(crate) struct PendingConnect {
     pub(crate) circuit_id: CircuitId,
     pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
     pub(crate) src_peer_id: PeerId,
@@ -200,7 +200,7 @@ pub(crate) struct StopCommand {
     max_circuit_bytes: u64,
 }
 
-impl StopCommand {
+impl PendingConnect {
     pub(crate) fn new(
         circuit_id: CircuitId,
         inbound_circuit_req: inbound_hop::CircuitReq,

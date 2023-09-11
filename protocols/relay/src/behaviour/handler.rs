@@ -384,7 +384,7 @@ pub struct Handler {
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
-    stop_requested_streams: VecDeque<outbound_stop::StopCommand>,
+    pending_connect_requests: VecDeque<outbound_stop::PendingConnect>,
     protocol_futs: futures_bounded::FuturesList<RelayConnectionHandlerEvent>,
 }
 
@@ -406,7 +406,7 @@ impl Handler {
             circuits: Default::default(),
             active_reservation: Default::default(),
             keep_alive: KeepAlive::Yes,
-            stop_requested_streams: Default::default(),
+            pending_connect_requests: Default::default(),
         }
     }
 
@@ -429,7 +429,7 @@ impl Handler {
 
     fn on_fully_negotiated_outbound(&mut self, stream: Stream) {
         let stop_command = self
-            .stop_requested_streams
+            .pending_connect_requests
             .pop_front()
             .expect("opened a stream without a pending stop command");
 
@@ -471,7 +471,7 @@ impl Handler {
         };
 
         let stop_command = self
-            .stop_requested_streams
+            .pending_connect_requests
             .pop_front()
             .expect("failed to open a stream without a pending stop command");
 
@@ -554,8 +554,8 @@ impl ConnectionHandler for Handler {
                 src_peer_id,
                 src_connection_id,
             } => {
-                self.stop_requested_streams
-                    .push_back(outbound_stop::StopCommand::new(
+                self.pending_connect_requests
+                    .push_back(outbound_stop::PendingConnect::new(
                         circuit_id,
                         inbound_circuit_req,
                         src_peer_id,
