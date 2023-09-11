@@ -110,7 +110,7 @@ quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = "0.18.0"
-multihash = "0.19.0"
+multihash = "0.19.1"
 
 [patch.crates-io]
 
