@@ -9,6 +9,7 @@ use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
+use std::io;
 use std::pin::Pin;
 use std::task::Waker;
 use std::task::{ready, Context, Poll};
@@ -120,8 +121,9 @@ impl StreamMuxer for Connection {
                 Poll::Ready(Ok(stream))
             }
             None => {
-                self.no_drop_listeners_waker = Some(cx.waker().clone());
-                Poll::Pending
+                // This only happens if the [`RtcPeerConnection::ondatachannel`] closure gets freed which means we are most likely shutting down the connection.
+                log::debug!("`Sender` for inbound data channels has been dropped");
+                Poll::Ready(Err(Error::Connection("connection closed".to_owned())))
             }
         }
     }
