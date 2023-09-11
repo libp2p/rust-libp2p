@@ -18,40 +18,33 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::{Duration, SystemTime};
+
 use asynchronous_codec::{Framed, FramedParts};
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use futures_timer::Delay;
 use log::debug;
-use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use void::Void;
 
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::{ConnectionHandlerEvent, Stream, StreamUpgradeError};
+use libp2p_swarm::Stream;
 
-use crate::priv_client::handler::ClientConnectionHandlerEvent;
-use crate::priv_client::{handler, transport};
+use crate::priv_client::transport;
 use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
 use crate::{priv_client, proto};
-
-#[derive(Debug, Error)]
-pub(crate) enum UpgradeError {
-    #[error("Reservation failed")]
-    ReservationFailed(#[from] ReservationFailedReason),
-    #[error("Circuit failed")]
-    CircuitFailed(#[from] CircuitFailedReason),
-    #[error("Fatal")]
-    Fatal(#[from] FatalUpgradeError),
-}
-
-impl From<quick_protobuf_codec::Error> for UpgradeError {
-    fn from(error: quick_protobuf_codec::Error) -> Self {
-        Self::Fatal(error.into())
-    }
-}
+//
+// #[derive(Debug, Error)]
+// pub(crate) enum UpgradeError {
+//     #[error("Reservation failed")]
+//     ReservationFailed(#[from] ReservationFailedReason),
+//     #[error("Circuit failed")]
+//     CircuitFailed(#[from] CircuitFailedReason),
+//     #[error("Fatal")]
+//     Fatal(#[from] FatalUpgradeError),
+// }
 
 #[derive(Debug, Error)]
 pub enum CircuitFailedReason {
@@ -108,10 +101,14 @@ pub(crate) struct Reservation {
     pub(crate) to_listener: mpsc::Sender<transport::ToListenerMsg>,
 }
 
+pub(crate) struct Circuit {
+    pub(crate) limit: Option<Limit>,
+}
+
 pub(crate) async fn handle_reserve_message_response(
     protocol: Stream,
     to_listener: mpsc::Sender<transport::ToListenerMsg>,
-) -> Result<Reservation, UpgradeError> {
+) -> Result<Result<Reservation, ReservationFailedReason>, FatalUpgradeError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::RESERVE,
         peer: None,
@@ -136,31 +133,31 @@ pub(crate) async fn handle_reserve_message_response(
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Err(FatalUpgradeError::UnexpectedTypeConnect.into());
+            return Err(FatalUpgradeError::UnexpectedTypeConnect);
         }
         proto::HopMessageType::RESERVE => {
-            return Err(FatalUpgradeError::UnexpectedTypeReserve.into());
+            return Err(FatalUpgradeError::UnexpectedTypeReserve);
         }
         proto::HopMessageType::STATUS => {}
     }
 
     let limit = limit.map(Into::into);
 
-    match status.ok_or(UpgradeError::Fatal(FatalUpgradeError::MissingStatusField))? {
+    match status.ok_or(FatalUpgradeError::MissingStatusField)? {
         proto::Status::OK => {}
         proto::Status::RESERVATION_REFUSED => {
-            return Err(ReservationFailedReason::Refused.into());
+            return Ok(Err(ReservationFailedReason::Refused));
         }
         proto::Status::RESOURCE_LIMIT_EXCEEDED => {
-            return Err(ReservationFailedReason::ResourceLimitExceeded.into());
+            return Ok(Err(ReservationFailedReason::ResourceLimitExceeded));
         }
-        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
+        s => return Err(FatalUpgradeError::UnexpectedStatus(s)),
     }
 
     let reservation = reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
 
     if reservation.addrs.is_empty() {
-        return Err(FatalUpgradeError::NoAddressesInReservation.into());
+        return Err(FatalUpgradeError::NoAddressesInReservation);
     }
 
     let addrs = reservation
@@ -186,12 +183,12 @@ pub(crate) async fn handle_reserve_message_response(
 
     substream.close().await?;
 
-    Ok(Reservation {
+    Ok(Ok(Reservation {
         renewal_timeout,
         addrs,
         limit,
         to_listener,
-    })
+    }))
 }
 
 pub(crate) async fn handle_connection_message_response(
@@ -199,7 +196,7 @@ pub(crate) async fn handle_connection_message_response(
     remote_peer_id: PeerId,
     con_command: Command,
     tx: oneshot::Sender<Void>,
-) -> Option<ClientConnectionHandlerEvent> {
+) -> Result<Result<Option<Circuit>, CircuitFailedReason>, FatalUpgradeError> {
     let msg = proto::HopMessage {
         type_pb: proto::HopMessageType::CONNECT,
         peer: Some(proto::Peer {
@@ -214,9 +211,7 @@ pub(crate) async fn handle_connection_message_response(
     let mut substream = Framed::new(protocol, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     if substream.send(msg).await.is_err() {
-        return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-            Either::Right(FatalUpgradeError::StreamClosed),
-        )));
+        return Err(FatalUpgradeError::StreamClosed);
     }
 
     let proto::HopMessage {
@@ -227,23 +222,15 @@ pub(crate) async fn handle_connection_message_response(
         status,
     } = match substream.next().await {
         Some(Ok(r)) => r,
-        _ => {
-            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                Either::Right(FatalUpgradeError::StreamClosed),
-            )))
-        }
+        _ => return Err(FatalUpgradeError::StreamClosed),
     };
 
     match type_pb {
         proto::HopMessageType::CONNECT => {
-            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                Either::Right(FatalUpgradeError::UnexpectedTypeConnect),
-            )));
+            return Err(FatalUpgradeError::UnexpectedTypeConnect);
         }
         proto::HopMessageType::RESERVE => {
-            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                Either::Right(FatalUpgradeError::UnexpectedTypeReserve),
-            )));
+            return Err(FatalUpgradeError::UnexpectedTypeReserve);
         }
         proto::HopMessageType::STATUS => {}
     }
@@ -251,42 +238,22 @@ pub(crate) async fn handle_connection_message_response(
     match status {
         Some(proto::Status::OK) => {}
         Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
-            return Some(ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundCircuitReqFailed {
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
-                },
-            ));
+            return Ok(Err(CircuitFailedReason::ResourceLimitExceeded));
         }
         Some(proto::Status::CONNECTION_FAILED) => {
-            return Some(ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundCircuitReqFailed {
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::ConnectionFailed),
-                },
-            ));
+            return Ok(Err(CircuitFailedReason::ConnectionFailed));
         }
         Some(proto::Status::NO_RESERVATION) => {
-            return Some(ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundCircuitReqFailed {
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::NoReservation),
-                },
-            ));
+            return Ok(Err(CircuitFailedReason::NoReservation));
         }
         Some(proto::Status::PERMISSION_DENIED) => {
-            return Some(ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundCircuitReqFailed {
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
-                },
-            ));
+            return Ok(Err(CircuitFailedReason::PermissionDenied));
         }
         Some(s) => {
-            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                Either::Right(FatalUpgradeError::UnexpectedStatus(s)),
-            )));
+            return Err(FatalUpgradeError::UnexpectedStatus(s));
         }
         None => {
-            return Some(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                Either::Right(FatalUpgradeError::MissingStatusField),
-            )));
+            return Err(FatalUpgradeError::MissingStatusField);
         }
     }
 
@@ -306,9 +273,7 @@ pub(crate) async fn handle_connection_message_response(
     match con_command.send_back.send(Ok(priv_client::Connection {
         state: priv_client::ConnectionState::new_outbound(io, read_buffer.freeze(), tx),
     })) {
-        Ok(()) => Some(ConnectionHandlerEvent::NotifyBehaviour(
-            handler::Event::OutboundCircuitEstablished { limit },
-        )),
+        Ok(()) => Ok(Ok(Some(Circuit { limit }))),
         Err(_) => {
             debug!(
                 "Oneshot to `client::transport::Dial` future dropped. \
@@ -316,7 +281,7 @@ pub(crate) async fn handle_connection_message_response(
                 remote_peer_id,
             );
 
-            None
+            Ok(Ok(None))
         }
     }
 }
