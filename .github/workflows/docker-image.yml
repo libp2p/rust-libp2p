@@ -3,9 +3,10 @@ name: Publish docker images
 on:
   push:
     branches:
-      - '**'
+      - 'master'
     tags:
       - 'libp2p-server-**'
+  pull_request:
 
 jobs:
   server:
