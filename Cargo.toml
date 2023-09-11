@@ -84,7 +84,7 @@ libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
 libp2p-noise = { version = "0.43.1", path = "transports/noise" }
 libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
-libp2p-ping = { version = "0.43.0", path = "protocols/ping" }
+libp2p-ping = { version = "0.43.1", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.40.0", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.23.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.9.2", path = "transports/quic" }
@@ -108,7 +108,7 @@ quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
 quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = "0.18.0"
-multihash = "0.19.0"
+multihash = "0.19.1"
 
 
 [patch.crates-io]
