@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = { workspace = true }
 description = "The libp2p swarm"
-version = "0.43.3"
+version = "0.43.4"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
