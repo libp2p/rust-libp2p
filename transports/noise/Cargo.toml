@@ -23,7 +23,7 @@ rand = "0.8.3"
 sha2 = "0.10.7"
 static_assertions = "1"
 thiserror = "1.0.48"
-x25519-dalek = "1.1.0"
+x25519-dalek = "2.0.0"
 zeroize = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
