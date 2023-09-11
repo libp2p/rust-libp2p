@@ -35,16 +35,6 @@ use libp2p_swarm::Stream;
 use crate::priv_client::transport;
 use crate::protocol::{Limit, MAX_MESSAGE_SIZE};
 use crate::{priv_client, proto};
-//
-// #[derive(Debug, Error)]
-// pub(crate) enum UpgradeError {
-//     #[error("Reservation failed")]
-//     ReservationFailed(#[from] ReservationFailedReason),
-//     #[error("Circuit failed")]
-//     CircuitFailed(#[from] CircuitFailedReason),
-//     #[error("Fatal")]
-//     Fatal(#[from] FatalUpgradeError),
-// }
 
 #[derive(Debug, Error)]
 pub enum CircuitFailedReason {
