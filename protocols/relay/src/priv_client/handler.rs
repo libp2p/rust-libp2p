@@ -573,11 +573,11 @@ impl ConnectionHandler for Handler {
                     }
                 }
             }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                void::unreachable(listen_upgrade_error.error)
+            }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
-            }
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError { error, .. }) => {
-                void::unreachable(error)
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::LocalProtocolsChange(_)
