@@ -15,6 +15,4 @@ wasm-pack build --target web --out-dir static
 cargo run
 ```
 
-3. Open the following in a Chromium-based[^1] browser: http://localhost:8080
-
-[^1]: Support in other browsers has not been verified.
+3. Open the URL printed in the terminal

@@ -17,10 +17,7 @@ use libp2p::{
 };
 use libp2p_webrtc as webrtc;
 use rand::thread_rng;
-use std::{
-    net::Ipv6Addr,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-};
+use std::net::{Ipv4Addr, SocketAddr};
 use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
@@ -46,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
 
-    let address_webrtc = Multiaddr::from(Ipv6Addr::UNSPECIFIED)
+    let address_webrtc = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
         .with(Protocol::Udp(0))
         .with(Protocol::WebRTCDirect);
 
@@ -54,6 +51,14 @@ async fn main() -> anyhow::Result<()> {
 
     let address = loop {
         if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
+            if address
+                .iter()
+                .any(|e| e == Protocol::Ip4(Ipv4Addr::LOCALHOST))
+            {
+                log::debug!("Ignoring localhost address to make sure the example works in Firefox");
+                continue;
+            }
+
             log::info!("Listening on: {address}");
 
             break address;
@@ -91,6 +96,11 @@ struct StaticFiles;
 
 /// Serve the Multiaddr we are listening on and the host files.
 pub(crate) async fn serve(libp2p_transport: Multiaddr) {
+    let listen_addr = match libp2p_transport.iter().next() {
+        Some(Protocol::Ip4(addr)) => addr,
+        _ => panic!("Expected 1st protocol to be IP4"),
+    };
+
     let server = Router::new()
         .route("/", get(get_index))
         .route("/index.html", get(get_index))
@@ -103,7 +113,7 @@ pub(crate) async fn serve(libp2p_transport: Multiaddr) {
                 .allow_methods([Method::GET]),
         );
 
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
+    let addr = SocketAddr::new(listen_addr.into(), 8080);
 
     log::info!("Serving client files at http://{addr}");
 
