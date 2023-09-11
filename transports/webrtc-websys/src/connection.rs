@@ -9,7 +9,6 @@ use js_sys::{Object, Reflect};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_webrtc_utils::Fingerprint;
 use send_wrapper::SendWrapper;
-use std::io;
 use std::pin::Pin;
 use std::task::Waker;
 use std::task::{ready, Context, Poll};
