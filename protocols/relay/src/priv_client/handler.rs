@@ -36,7 +36,6 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,

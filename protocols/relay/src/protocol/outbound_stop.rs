@@ -21,15 +21,14 @@
 use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
-use either::Either;
+use bytes::Bytes;
 use futures::channel::oneshot::{self};
 use futures::prelude::*;
 use thiserror::Error;
 
 use libp2p_identity::PeerId;
-use libp2p_swarm::{ConnectionHandlerEvent, ConnectionId, Stream, StreamUpgradeError};
+use libp2p_swarm::{ConnectionId, Stream, StreamUpgradeError};
 
-use crate::behaviour::handler;
 use crate::behaviour::handler::Config;
 use crate::protocol::{inbound_hop, MAX_MESSAGE_SIZE};
 use crate::{proto, CircuitId};
@@ -79,7 +78,7 @@ pub(crate) async fn connect(
     io: Stream,
     stop_command: PendingConnect,
     tx: oneshot::Sender<()>,
-) -> handler::RelayConnectionHandlerEvent {
+) -> Result<Result<Circuit, CircuitFailed>, FatalUpgradeError> {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
         peer: Some(proto::Peer {
@@ -102,17 +101,13 @@ pub(crate) async fn connect(
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
     if substream.send(msg).await.is_err() {
-        return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-            FatalUpgradeError::StreamClosed,
-        )));
+        return Err(FatalUpgradeError::StreamClosed);
     }
 
     let res = substream.next().await;
 
     if let None | Some(Err(_)) = res {
-        return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-            FatalUpgradeError::StreamClosed,
-        )));
+        return Err(FatalUpgradeError::StreamClosed);
     }
 
     let proto::StopMessage {
@@ -123,50 +118,34 @@ pub(crate) async fn connect(
     } = res.unwrap().expect("should be ok");
 
     match type_pb {
-        proto::StopMessageType::CONNECT => {
-            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-                FatalUpgradeError::UnexpectedTypeConnect,
-            )))
-        }
+        proto::StopMessageType::CONNECT => return Err(FatalUpgradeError::UnexpectedTypeConnect),
         proto::StopMessageType::STATUS => {}
     }
 
     match status {
         Some(proto::Status::OK) => {}
         Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
-            return ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundConnectNegotiationFailed {
-                    circuit_id: stop_command.circuit_id,
-                    src_peer_id: stop_command.src_peer_id,
-                    src_connection_id: stop_command.src_connection_id,
-                    inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
-                },
-            )
+            return Ok(Err(CircuitFailed {
+                circuit_id: stop_command.circuit_id,
+                src_peer_id: stop_command.src_peer_id,
+                src_connection_id: stop_command.src_connection_id,
+                inbound_circuit_req: stop_command.inbound_circuit_req,
+                status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
+                error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
+            }))
         }
         Some(proto::Status::PERMISSION_DENIED) => {
-            return ConnectionHandlerEvent::NotifyBehaviour(
-                handler::Event::OutboundConnectNegotiationFailed {
-                    circuit_id: stop_command.circuit_id,
-                    src_peer_id: stop_command.src_peer_id,
-                    src_connection_id: stop_command.src_connection_id,
-                    inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status: proto::Status::PERMISSION_DENIED,
-                    error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
-                },
-            )
+            return Ok(Err(CircuitFailed {
+                circuit_id: stop_command.circuit_id,
+                src_peer_id: stop_command.src_peer_id,
+                src_connection_id: stop_command.src_connection_id,
+                inbound_circuit_req: stop_command.inbound_circuit_req,
+                status: proto::Status::PERMISSION_DENIED,
+                error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
+            }))
         }
-        Some(s) => {
-            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-                FatalUpgradeError::UnexpectedStatus(s),
-            )))
-        }
-        None => {
-            return ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(Either::Right(
-                FatalUpgradeError::MissingStatusField,
-            )))
-        }
+        Some(s) => return Err(FatalUpgradeError::UnexpectedStatus(s)),
+        None => return Err(FatalUpgradeError::MissingStatusField),
     }
 
     let FramedParts {
@@ -180,7 +159,7 @@ pub(crate) async fn connect(
         "Expect a flushed Framed to have an empty write buffer."
     );
 
-    ConnectionHandlerEvent::NotifyBehaviour(handler::Event::OutboundConnectNegotiated {
+    Ok(Ok(Circuit {
         circuit_id: stop_command.circuit_id,
         src_peer_id: stop_command.src_peer_id,
         src_connection_id: stop_command.src_connection_id,
@@ -188,7 +167,26 @@ pub(crate) async fn connect(
         dst_handler_notifier: tx,
         dst_stream: io,
         dst_pending_data: read_buffer.freeze(),
-    })
+    }))
+}
+
+pub(crate) struct Circuit {
+    pub(crate) circuit_id: CircuitId,
+    pub(crate) src_peer_id: PeerId,
+    pub(crate) src_connection_id: ConnectionId,
+    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
+    pub(crate) dst_handler_notifier: oneshot::Sender<()>,
+    pub(crate) dst_stream: Stream,
+    pub(crate) dst_pending_data: Bytes,
+}
+
+pub(crate) struct CircuitFailed {
+    pub(crate) circuit_id: CircuitId,
+    pub(crate) src_peer_id: PeerId,
+    pub(crate) src_connection_id: ConnectionId,
+    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
+    pub(crate) status: proto::Status,
+    pub(crate) error: StreamUpgradeError<CircuitFailedReason>,
 }
 
 pub(crate) struct PendingConnect {
