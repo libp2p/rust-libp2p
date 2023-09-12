@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 address,
                 listener_id,
             } => {
-                // swarm.add_external_address(address); // We know that in our testing network setup, that we are listening on a "publicly-reachable" address.
+                swarm.add_external_address(address.clone()); // We know that in our testing network setup, that we are listening on a "publicly-reachable" address.
 
                 info!("Listening on {address}");
 

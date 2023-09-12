@@ -25,8 +25,8 @@ RUN --mount=type=cache,target=/var/cache/apt apt-get install -y tcpdump ncat ipu
 
 
 COPY ./hole-punching-tests/host/run.sh /scripts/
-COPY --from=builder /usr/local/bin/hp_client /usr/local/bin/hp_client
-COPY --from=builder /usr/local/bin/relay /usr/local/bin/relay
+COPY --from=builder /usr/local/bin/hp_client /usr/bin/hp_client
+COPY --from=builder /usr/local/bin/relay /usr/bin/relay
 
 RUN chmod +x /scripts/*.sh
 
