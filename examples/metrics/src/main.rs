@@ -26,7 +26,7 @@ use futures::stream::StreamExt;
 use libp2p::core::{upgrade::Version, Multiaddr, Transport};
 use libp2p::identity::PeerId;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{dummy, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
@@ -90,13 +90,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`dummy::Behaviour`]) behaviour so the ping actually happen
-/// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    dummy_behaviour: dummy::Behaviour,
     ping: ping::Behaviour,
 }
 
@@ -108,7 +104,6 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_pub_key,
             )),
-            dummy_behaviour: dummy::Behaviour,
         }
     }
 }

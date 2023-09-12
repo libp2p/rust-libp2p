@@ -501,7 +501,6 @@ mod tests {
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour<S> {
         list: super::Behaviour<S>,
-        dummy_behaviour: libp2p_swarm::dummy::Behaviour,
     }
 
     impl<S> Behaviour<S>
@@ -515,7 +514,6 @@ mod tests {
                     close_connections: VecDeque::new(),
                     state: S::default(),
                 },
-                dummy_behaviour: libp2p_swarm::dummy::Behaviour,
             }
         }
     }
