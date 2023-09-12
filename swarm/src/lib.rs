@@ -1841,14 +1841,8 @@ mod tests {
         Disconnecting,
     }
 
-    fn new_test_swarm<T, O>(
-        handler_proto: T,
-    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<T, O>>>
-    where
-        T: ConnectionHandler + Clone,
-        T::ToBehaviour: Clone,
-        O: Send + 'static,
-    {
+    fn new_test_swarm(
+    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>> {
         let id_keys = identity::Keypair::generate_ed25519();
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
@@ -1858,13 +1852,15 @@ mod tests {
             })
             .multiplex(yamux::Config::default())
             .boxed();
-        let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        match ThreadPool::new().ok() {
+        let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
+        let builder = match ThreadPool::new().ok() {
             Some(tp) => {
                 SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), tp)
             }
             None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
-        }
+        };
+
+        builder.idle_connection_timeout(Duration::from_secs(5))
     }
 
     fn swarms_connected<TBehaviour>(
@@ -1915,16 +1911,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_swarm_disconnect() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = dummy::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -1985,16 +1973,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_all() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = dummy::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2059,16 +2039,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_one() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = dummy::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone())
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto)
-            .idle_connection_timeout(Duration::from_secs(5))
-            .build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2146,8 +2118,7 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler)
-                    .idle_connection_timeout(Duration::from_secs(5))
+                let mut swarm = new_test_swarm()
                     .dial_concurrency_factor(concurrency_factor.0)
                     .build();
 
@@ -2215,8 +2186,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2275,7 +2246,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm().build();
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2335,7 +2306,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let swarm = new_test_swarm().build();
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2346,7 +2317,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm().build();
 
         let addresses = HashSet::from([
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
@@ -2392,8 +2363,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut listener = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut dialer = new_test_swarm().build();
+        let mut listener = new_test_swarm().build();
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
