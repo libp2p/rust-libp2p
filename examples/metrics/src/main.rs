@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Behaviour::new(local_pub_key),
         local_peer_id,
     )
-    .idle_connection_timeout(Duration::from_secs(5))
+    .idle_connection_timeout(Duration::from_secs(60))
     .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

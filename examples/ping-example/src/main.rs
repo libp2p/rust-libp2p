@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm =
         SwarmBuilder::with_async_std_executor(transport, ping::Behaviour::default(), local_peer_id)
-            .idle_connection_timeout(Duration::from_secs(5))
+            .idle_connection_timeout(Duration::from_secs(60)) // For illustrative purposes, keep idle connections alive for a minute so we can observe a few pings.
             .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
