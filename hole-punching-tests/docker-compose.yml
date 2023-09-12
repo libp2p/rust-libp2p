@@ -5,7 +5,7 @@ services:
   relay:
     depends_on: [redis]
     build:
-      dockerfile: ./hole-punching-tests/host/Dockerfile
+      dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: relay
     init: true
@@ -29,7 +29,7 @@ services:
   alice:
     depends_on: [redis, relay]
     build:
-      dockerfile: ./hole-punching-tests/host/Dockerfile
+      dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: alice
     init: true
@@ -54,7 +54,7 @@ services:
   bob:
     depends_on: [redis, relay]
     build:
-      dockerfile: ./hole-punching-tests/host/Dockerfile
+      dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: bob
     init: true
