@@ -48,7 +48,7 @@ pub(crate) async fn metrics_server(
 }
 
 #[derive(Debug)]
-pub struct MetricServerError(pub String);
+pub(crate) struct MetricServerError(pub(crate) String);
 
 impl From<hyper::Error> for MetricServerError {
     fn from(e: hyper::Error) -> Self {
