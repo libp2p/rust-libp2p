@@ -32,8 +32,8 @@ use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, THandler, THandlerOutEvent,
 };
 use libp2p_swarm::{
-    ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError,
-    THandlerInEvent, ToSwarm,
+    ExternalAddresses, NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent,
+    ToSwarm,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -345,11 +345,7 @@ impl NetworkBehaviour for Behaviour {
         };
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

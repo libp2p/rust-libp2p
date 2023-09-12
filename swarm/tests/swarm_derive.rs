@@ -457,7 +457,7 @@ fn multiple_behaviour_attributes() {
 #[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p_identity::PeerId;
-    use libp2p_swarm::{ConnectionId, PollParameters, ToSwarm};
+    use libp2p_swarm::{ConnectionId, ToSwarm};
     use std::task::Context;
     use std::task::Poll;
 
@@ -500,8 +500,7 @@ fn custom_out_event_no_type_parameters() {
 
         fn poll(
             &mut self,
-            _ctx: &mut Context,
-            _: &mut impl PollParameters,
+            _: &mut Context<'_>,
         ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
             Poll::Pending
         }

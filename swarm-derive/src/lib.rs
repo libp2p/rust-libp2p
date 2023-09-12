@@ -72,7 +72,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
-    let poll_parameters = quote! { #prelude_path::PollParameters };
     let from_swarm = quote! { #prelude_path::FromSwarm };
     let connection_established = quote! { #prelude_path::ConnectionEstablished };
     let address_change = quote! { #prelude_path::AddressChange };
@@ -727,7 +726,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
         };
 
         quote!{
-            match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
+            match #trait_to_impl::poll(&mut self.#field, cx) {
                 #generate_event_match_arm
                 std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
@@ -836,7 +835,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 }
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
+            fn poll(&mut self, cx: &mut std::task::Context) -> std::task::Poll<#network_behaviour_action<Self::ToSwarm, #t_handler_in_event<Self>>> {
                 use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending

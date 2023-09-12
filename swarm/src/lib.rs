@@ -96,7 +96,6 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
     pub use crate::NetworkBehaviour;
-    pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
     pub use crate::THandlerOutEvent;
@@ -114,7 +113,7 @@ pub use behaviour::{
     AddressChange, CloseConnection, ConnectionClosed, DialFailure, ExpiredListenAddr,
     ExternalAddrExpired, ExternalAddresses, FromSwarm, ListenAddresses, ListenFailure,
     ListenerClosed, ListenerError, NetworkBehaviour, NewExternalAddrCandidate, NewListenAddr,
-    NotifyHandler, PollParameters, ToSwarm,
+    NotifyHandler, ToSwarm,
 };
 pub use connection::pool::ConnectionCounters;
 pub use connection::{ConnectionError, ConnectionId, SupportedProtocols};
@@ -1168,26 +1167,16 @@ where
                     }
                 },
                 // No pending event. Allow the [`NetworkBehaviour`] to make progress.
-                None => {
-                    let behaviour_poll = {
-                        let mut parameters = SwarmPollParameters {
-                            supported_protocols: &this.supported_protocols,
-                        };
-                        this.behaviour.poll(cx, &mut parameters)
-                    };
-
-                    match behaviour_poll {
-                        Poll::Pending => {}
-                        Poll::Ready(behaviour_event) => {
-                            if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event)
-                            {
-                                return Poll::Ready(swarm_event);
-                            }
-
-                            continue;
+                None => match this.behaviour.poll(cx) {
+                    Poll::Pending => {}
+                    Poll::Ready(behaviour_event) => {
+                        if let Some(swarm_event) = this.handle_behaviour_event(behaviour_event) {
+                            return Poll::Ready(swarm_event);
                         }
+
+                        continue;
                     }
-                }
+                },
             }
 
             // Poll the known peers.
@@ -1332,21 +1321,6 @@ where
         false
     }
 }
-
-/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
-// TODO: #[derive(Debug)]
-pub struct SwarmPollParameters<'a> {
-    supported_protocols: &'a [Vec<u8>],
-}
-
-impl<'a> PollParameters for SwarmPollParameters<'a> {
-    type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
-
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
-        self.supported_protocols.iter().cloned()
-    }
-}
-
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
 pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,

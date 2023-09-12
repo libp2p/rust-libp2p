@@ -44,8 +44,8 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, NotifyHandler, StreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -2413,7 +2413,6 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         let now = Instant::now();
 

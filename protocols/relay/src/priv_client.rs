@@ -40,8 +40,8 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionId, DialFailure, NetworkBehaviour,
-    NotifyHandler, PollParameters, Stream, StreamUpgradeError, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NotifyHandler, Stream, StreamUpgradeError, THandler, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -287,7 +287,6 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _poll_parameters: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action);

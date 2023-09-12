@@ -29,8 +29,8 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, NotifyHandler, StreamUpgradeError, THandlerInEvent, THandlerOutEvent,
+    ToSwarm,
 };
 use void::Void;
 

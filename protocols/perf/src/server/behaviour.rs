@@ -27,8 +27,7 @@ use std::{
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    ConnectionId, FromSwarm, NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::server::handler::Handler;
