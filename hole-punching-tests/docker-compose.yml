@@ -9,8 +9,7 @@ services:
       context: ..
     container_name: relay
     init: true
-    environment:
-      COMPONENT: /usr/bin/relay --listen-addr 17.0.0.10
+    command: /usr/bin/relay --listen-addr 17.0.0.10
     networks:
       internet:
         ipv4_address: 17.0.0.10
@@ -34,10 +33,7 @@ services:
       context: ..
     container_name: alice
     init: true
-    environment:
-      COMPONENT: /usr/bin/hp_client --mode dial --transport tcp
-      ROUTER: "192.168.0.10"
-      INTERNET: "17.0.0.0/16"
+    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.0.10 dev eth0 && /usr/bin/hp_client --mode dial --transport tcp"]
     networks:
       alice_lan:
         ipv4_address: 192.168.0.11
@@ -62,10 +58,7 @@ services:
       context: ..
     container_name: bob
     init: true
-    environment:
-      COMPONENT: /usr/bin/hp_client --mode listen --transport tcp
-      ROUTER: "192.168.1.10"
-      INTERNET: "17.0.0.0/16"
+    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.1.10 dev eth0 && /usr/bin/hp_client --mode listen --transport tcp"]
     networks:
       bob_lan:
         ipv4_address: 192.168.1.11
