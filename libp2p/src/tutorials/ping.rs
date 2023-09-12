@@ -158,16 +158,6 @@
 //!
 //!     Ok(())
 //! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
-//! }
 //! ```
 //!
 //! ## Swarm
@@ -197,16 +187,6 @@
 //!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 //!
 //!     Ok(())
-//! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::
-//! /// KeepAlive) behaviour so a continuous sequence of pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
@@ -267,16 +247,6 @@
 //!
 //!     Ok(())
 //! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
-//! }
 //! ```
 //!
 //! ## Continuously polling the Swarm
@@ -322,16 +292,6 @@
 //!             _ => {}
 //!         }
 //!     }
-//! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
