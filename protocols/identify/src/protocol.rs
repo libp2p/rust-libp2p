@@ -67,7 +67,7 @@ impl Push<OutboundPush> {
 #[derive(Debug, Clone)]
 pub struct Info {
     /// The public key of the local peer.
-    pub public_key: PublicKey,
+    pub public_key: Option<PublicKey>,
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
@@ -162,12 +162,12 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.encode_protobuf();
+    let pubkey_bytes = info.public_key.map(|key| key.encode_protobuf());
 
     let message = proto::Identify {
         agentVersion: Some(info.agent_version),
         protocolVersion: Some(info.protocol_version),
-        publicKey: Some(pubkey_bytes),
+        publicKey: pubkey_bytes,
         listenAddrs: listen_addrs,
         observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
@@ -228,7 +228,13 @@ impl TryFrom<proto::Identify> for Info {
             addrs
         };
 
-        let public_key = PublicKey::try_decode_protobuf(&msg.publicKey.unwrap_or_default())?;
+        let public_key = msg.publicKey.and_then(|key| match PublicKey::try_decode_protobuf(&key) {
+            Ok(k) => Some(k),
+            Err(e) => {
+                debug!("Unable to decode public key: {e:?}");
+                None
+            }
+        });
 
         let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
             Ok(a) => a,

@@ -204,7 +204,7 @@ impl Handler {
 
     fn build_info(&mut self) -> Info {
         Info {
-            public_key: self.public_key.clone(),
+            public_key: Some(self.public_key.clone()),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs: Vec::from_iter(self.external_addresses.iter().cloned()),
