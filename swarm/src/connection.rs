@@ -364,6 +364,9 @@ where
                 (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
                     *shutdown = Shutdown::Asap;
                 }
+                (Shutdown::Later(_, _), KeepAlive::No) => {
+                    // Do nothing, i.e. let the shutdown timer continue to tick.
+                }
                 (_, KeepAlive::No) => {
                     let deadline = Instant::now() + *idle_timeout;
                     *shutdown = Shutdown::Later(Delay::new(*idle_timeout), deadline);
@@ -768,20 +771,26 @@ mod tests {
         ))
     }
 
-    #[test]
-    fn test_idle_timeout() {
-        // Create a custom idle timeout
+    #[tokio::test]
+    async fn idle_timeout() {
+        let idle_timeout = Duration::from_millis(100);
 
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
             dummy::ConnectionHandler,
             None,
             0,
-            Duration::from_secs(5),
+            idle_timeout,
         );
 
-        let poll_result = connection.poll_noop_waker();
-        assert!(poll_result.is_pending());
+        assert!(connection.poll_noop_waker().is_pending());
+
+        tokio::time::sleep(idle_timeout).await;
+
+        assert!(matches!(
+            connection.poll_noop_waker(),
+            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
+        ));
     }
 
     #[test]
