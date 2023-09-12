@@ -21,7 +21,7 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::{error, info};
+use log::info;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
@@ -30,11 +30,10 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
-
 pub(crate) async fn metrics_server(
     registry: Registry,
     metrics_path: String,
-) -> Result<(), std::io::Error> {
+) -> Result<(), MetricServerError> {
     // Serve on localhost.
     let addr = ([0, 0, 0, 0], 8888).into();
 
@@ -44,10 +43,25 @@ pub(crate) async fn metrics_server(
         server.local_addr(),
         metrics_path
     );
-    if let Err(e) = server.await {
-        error!("server error: {}", e);
-    }
+    server.await?;
     Ok(())
+}
+
+#[derive(Debug)]
+pub struct MetricServerError(pub String);
+
+impl From<hyper::Error> for MetricServerError {
+    fn from(e: hyper::Error) -> Self {
+        MetricServerError(format!("server error: {}", e))
+    }
+}
+
+impl std::error::Error for MetricServerError {}
+
+impl std::fmt::Display for MetricServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "server error")
+    }
 }
 
 pub(crate) struct MetricService {
