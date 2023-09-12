@@ -361,15 +361,12 @@ where
                         *shutdown = Shutdown::Later(Delay::new(dur), t)
                     }
                 }
+                (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
+                    *shutdown = Shutdown::Asap;
+                }
                 (_, KeepAlive::No) => {
-                    // handle idle_timeout
-                    let duration = *idle_timeout; // Default timeout is 0 seconds
-                    if duration > Duration::ZERO {
-                        let deadline = Instant::now() + duration;
-                        *shutdown = Shutdown::Later(Delay::new(duration), deadline);
-                    } else {
-                        *shutdown = Shutdown::Asap;
-                    }
+                    let deadline = Instant::now() + *idle_timeout;
+                    *shutdown = Shutdown::Later(Delay::new(*idle_timeout), deadline);
                 }
                 (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
             };
