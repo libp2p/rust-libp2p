@@ -47,10 +47,9 @@ fn select_proto_basic() {
 
         let client = async_std::task::spawn(async move {
             let protos = vec!["/proto3", "/proto2"];
-            let (proto, mut io) =
-                dialer_select_proto(client_connection, protos.into_iter(), version)
-                    .await
-                    .unwrap();
+            let (proto, mut io) = dialer_select_proto(client_connection, protos, version)
+                .await
+                .unwrap();
             assert_eq!(proto, "/proto2");
 
             io.write_all(b"ping").await.unwrap();
@@ -99,25 +98,21 @@ fn negotiation_failed() {
             }
         });
 
-        let client =
-            async_std::task::spawn(async move {
-                let mut io =
-                    match dialer_select_proto(client_connection, dial_protos.into_iter(), version)
-                        .await
-                    {
-                        Err(NegotiationError::Failed) => return,
-                        Ok((_, io)) => io,
-                        Err(_) => panic!(),
-                    };
-                // The dialer may write a payload that is even sent before it
-                // got confirmation of the last proposed protocol, when `V1Lazy`
-                // is used.
-                io.write_all(&dial_payload).await.unwrap();
-                match io.complete().await {
-                    Err(NegotiationError::Failed) => {}
-                    _ => panic!(),
-                }
-            });
+        let client = async_std::task::spawn(async move {
+            let mut io = match dialer_select_proto(client_connection, dial_protos, version).await {
+                Err(NegotiationError::Failed) => return,
+                Ok((_, io)) => io,
+                Err(_) => panic!(),
+            };
+            // The dialer may write a payload that is even sent before it
+            // got confirmation of the last proposed protocol, when `V1Lazy`
+            // is used.
+            io.write_all(&dial_payload).await.unwrap();
+            match io.complete().await {
+                Err(NegotiationError::Failed) => {}
+                _ => panic!(),
+            }
+        });
 
         server.await;
         client.await;
@@ -185,10 +180,9 @@ async fn v1_lazy_do_not_wait_for_negotiation_on_poll_close() {
     let client = async_std::task::spawn(async move {
         // Single protocol to allow for lazy (or optimistic) protocol negotiation.
         let protos = vec!["/proto1"];
-        let (proto, mut io) =
-            dialer_select_proto(client_connection, protos.into_iter(), Version::V1Lazy)
-                .await
-                .unwrap();
+        let (proto, mut io) = dialer_select_proto(client_connection, protos, Version::V1Lazy)
+            .await
+            .unwrap();
         assert_eq!(proto, "/proto1");
 
         // client can close the connection even though protocol negotiation is not yet done, i.e.

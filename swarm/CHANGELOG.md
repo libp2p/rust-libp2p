@@ -1,4 +1,36 @@
-## 0.43.0 
+## 0.43.4 - unreleased
+
+- Implement `Debug` for event structs.
+  See [PR 4426].
+
+- Improve error message when `DialPeerCondition` prevents a dial.
+  See [PR 4409].
+
+[PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
+[PR 4409]: https://github.com/libp2p/rust-libp2p/pull/4409
+
+## 0.43.3
+
+- Implement `Display` for `ConnectionId`.
+  See [PR 4278].
+
+[PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
+
+## 0.43.2
+- Display the cause of a `ListenError::Denied`.
+  See [PR 4232]
+
+[PR 4232]: https://github.com/libp2p/rust-libp2p/pull/4158
+
+## 0.43.1
+
+- Do not announce external address candidate before address translation, unless translation does not apply.
+  This will prevent ephemeral TCP addresses being announced as external address candidates.
+  See [PR 4158].
+
+[PR 4158]: https://github.com/libp2p/rust-libp2p/pull/4158
+
+## 0.43.0
 
 - Allow `NetworkBehaviours` to create and remove listeners.
   See [PR 3292].

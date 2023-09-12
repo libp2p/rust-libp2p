@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Gossipsub protocol for libp2p"
-version = "0.45.0"
+version = "0.45.1"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -15,10 +15,10 @@ wasm-bindgen = ["getrandom/js", "instant/wasm-bindgen"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-base64 = "0.21.2"
+base64 = "0.21.4"
 byteorder = "1.3.4"
-bytes = "1.4"
-either = "1.5"
+bytes = "1.5"
+either = "1.9"
 fnv = "1.0.7"
 futures = "0.3.28"
 futures-ticker = "0.0.3"
@@ -28,19 +28,19 @@ instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-swarm = { workspace = true }
-log = "0.4.19"
+log = "0.4.20"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-regex = "1.8.3"
+regex = "1.9.5"
 serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.7"
-smallvec = "1.6.1"
-unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
+smallvec = "1.11.0"
+unsigned-varint = { version = "0.7.2", features = ["asynchronous_codec"] }
 void = "1.0.2"
 
 # Metrics dependencies
-prometheus-client = "0.21.0"
+prometheus-client = "0.21.2"
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }

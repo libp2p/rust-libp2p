@@ -12,12 +12,12 @@ concurrency:
 jobs:
   run-multidim-interop:
     name: Run multidimensional interoperability tests
-    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "xlarge"]' || '"ubuntu-latest"') }}
+    runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
     strategy:
       matrix:
         flavour: [chromium, native]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v2
       - name: Build ${{ matrix.flavour }} image
         run: docker buildx build --load -t ${{ matrix.flavour }}-rust-libp2p-head . -f interop-tests/Dockerfile.${{ matrix.flavour }}
@@ -29,3 +29,4 @@ jobs:
           s3-cache-bucket: libp2p-by-tf-aws-bootstrap
           s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
           s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          worker-count: 16

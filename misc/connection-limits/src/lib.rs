@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
+    behaviour::{ConnectionEstablished, DialFailure, ListenFailure},
     dummy, ConnectionClosed, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour,
     PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
@@ -249,12 +250,6 @@ impl NetworkBehaviour for Behaviour {
             Kind::EstablishedTotal,
         )?;
 
-        self.established_inbound_connections.insert(connection_id);
-        self.established_per_peer
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
-
         Ok(dummy::ConnectionHandler)
     }
 
@@ -305,12 +300,6 @@ impl NetworkBehaviour for Behaviour {
             Kind::EstablishedTotal,
         )?;
 
-        self.established_outbound_connections.insert(connection_id);
-        self.established_per_peer
-            .entry(peer)
-            .or_default()
-            .insert(connection_id);
-
         Ok(dummy::ConnectionHandler)
     }
 
@@ -328,10 +317,33 @@ impl NetworkBehaviour for Behaviour {
                     .or_default()
                     .remove(&connection_id);
             }
-            FromSwarm::ConnectionEstablished(_) => {}
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                endpoint,
+                connection_id,
+                ..
+            }) => {
+                match endpoint {
+                    ConnectedPoint::Listener { .. } => {
+                        self.established_inbound_connections.insert(connection_id);
+                    }
+                    ConnectedPoint::Dialer { .. } => {
+                        self.established_outbound_connections.insert(connection_id);
+                    }
+                }
+
+                self.established_per_peer
+                    .entry(peer_id)
+                    .or_default()
+                    .insert(connection_id);
+            }
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.pending_outbound_connections.remove(&connection_id);
+            }
             FromSwarm::AddressChange(_) => {}
-            FromSwarm::DialFailure(_) => {}
-            FromSwarm::ListenFailure(_) => {}
+            FromSwarm::ListenFailure(ListenFailure { connection_id, .. }) => {
+                self.pending_inbound_connections.remove(&connection_id);
+            }
             FromSwarm::NewListener(_) => {}
             FromSwarm::NewListenAddr(_) => {}
             FromSwarm::ExpiredListenAddr(_) => {}
@@ -364,7 +376,9 @@ impl NetworkBehaviour for Behaviour {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_swarm::{dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent};
+    use libp2p_swarm::{
+        behaviour::toggle::Toggle, dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent,
+    };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
 
@@ -466,19 +480,122 @@ mod tests {
         quickcheck(prop as fn(_));
     }
 
+    /// Another sibling [`NetworkBehaviour`] implementation might deny established connections in
+    /// [`handle_established_outbound_connection`] or [`handle_established_inbound_connection`].
+    /// [`Behaviour`] must not increase the established counters in
+    /// [`handle_established_outbound_connection`] or [`handle_established_inbound_connection`], but
+    /// in [`SwarmEvent::ConnectionEstablished`] as the connection might still be denied by a
+    /// sibling [`NetworkBehaviour`] in the former case. Only in the latter case
+    /// ([`SwarmEvent::ConnectionEstablished`]) can the connection be seen as established.
+    #[test]
+    fn support_other_behaviour_denying_connection() {
+        let mut swarm1 = Swarm::new_ephemeral(|_| {
+            Behaviour::new_with_connection_denier(ConnectionLimits::default())
+        });
+        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ConnectionLimits::default()));
+
+        async_std::task::block_on(async {
+            // Have swarm2 dial swarm1.
+            let (listen_addr, _) = swarm1.listen().await;
+            swarm2.dial(listen_addr).unwrap();
+            async_std::task::spawn(swarm2.loop_on_next());
+
+            // Wait for the ConnectionDenier of swarm1 to deny the established connection.
+            let cause = swarm1
+                .wait(|event| match event {
+                    SwarmEvent::IncomingConnectionError {
+                        error: ListenError::Denied { cause },
+                        ..
+                    } => Some(cause),
+                    _ => None,
+                })
+                .await;
+
+            cause.downcast::<std::io::Error>().unwrap();
+
+            assert_eq!(
+                0,
+                swarm1
+                    .behaviour_mut()
+                    .limits
+                    .established_inbound_connections
+                    .len(),
+                "swarm1 connection limit behaviour to not count denied established connection as established connection"
+            )
+        });
+    }
+
     #[derive(libp2p_swarm_derive::NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
         limits: super::Behaviour,
-        dummy_behaviour: libp2p_swarm::dummy::Behaviour,
+        connection_denier: Toggle<ConnectionDenier>,
     }
 
     impl Behaviour {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                dummy_behaviour: libp2p_swarm::dummy::Behaviour,
+                connection_denier: None.into(),
             }
+        }
+        fn new_with_connection_denier(limits: ConnectionLimits) -> Self {
+            Self {
+                limits: super::Behaviour::new(limits),
+                connection_denier: Some(ConnectionDenier {}).into(),
+            }
+        }
+    }
+
+    struct ConnectionDenier {}
+
+    impl NetworkBehaviour for ConnectionDenier {
+        type ConnectionHandler = dummy::ConnectionHandler;
+        type ToSwarm = Void;
+
+        fn handle_established_inbound_connection(
+            &mut self,
+            _connection_id: ConnectionId,
+            _peer: PeerId,
+            _local_addr: &Multiaddr,
+            _remote_addr: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Err(ConnectionDenied::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "ConnectionDenier",
+            )))
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _connection_id: ConnectionId,
+            _peer: PeerId,
+            _addr: &Multiaddr,
+            _role_override: Endpoint,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Err(ConnectionDenied::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "ConnectionDenier",
+            )))
+        }
+
+        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+
+        fn on_connection_handler_event(
+            &mut self,
+            _peer_id: PeerId,
+            _connection_id: ConnectionId,
+            event: THandlerOutEvent<Self>,
+        ) {
+            void::unreachable(event)
+        }
+
+        fn poll(
+            &mut self,
+            _cx: &mut Context<'_>,
+            _params: &mut impl PollParameters,
+        ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+            Poll::Pending
         }
     }
 }

@@ -1,4 +1,26 @@
-## 0.44.2 - unreleased
+## 0.44.4
+
+- Implement common traits on `RoutingUpdate`.
+  See [PR 4270].
+- Reduce noise of "remote supports our protocol" log.
+  See [PR 4278].
+
+[PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
+[PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
+
+## 0.44.3
+
+- Prevent simultaneous dials to peers.
+  See [PR 4224].
+
+[PR 4224]: https://github.com/libp2p/rust-libp2p/pull/4224
+
+- Rename missed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed` in documentation.
+  See [PR 4257].
+
+[PR 4257]: https://github.com/libp2p/rust-libp2p/pull/4257
+
+## 0.44.2
 
 - Allow to explicitly set `Mode::{Client,Server}`.
   See [PR 4132]

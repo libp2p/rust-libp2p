@@ -1066,14 +1066,8 @@ where
                 self.pending_event = Some((peer_id, handler, event));
             }
             ToSwarm::NewExternalAddrCandidate(addr) => {
-                self.behaviour
-                    .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
-                        NewExternalAddrCandidate { addr: &addr },
-                    ));
-
-                // Generate more candidates based on address translation.
+                // Apply address translation to the candidate address.
                 // For TCP without port-reuse, the observed address contains an ephemeral port which needs to be replaced by the port of a listen address.
-
                 let translated_addresses = {
                     let mut addrs: Vec<_> = self
                         .listened_addrs
@@ -1087,11 +1081,20 @@ where
                     addrs.dedup();
                     addrs
                 };
-                for addr in translated_addresses {
+
+                // If address translation yielded nothing, broacast the original candidate address.
+                if translated_addresses.is_empty() {
                     self.behaviour
                         .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
                             NewExternalAddrCandidate { addr: &addr },
                         ));
+                } else {
+                    for addr in translated_addresses {
+                        self.behaviour
+                            .on_swarm_event(FromSwarm::NewExternalAddrCandidate(
+                                NewExternalAddrCandidate { addr: &addr },
+                            ));
+                    }
                 }
             }
             ToSwarm::ExternalAddrConfirmed(addr) => {
@@ -1589,9 +1592,9 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: tried to dial local peer id at {endpoint:?}."
             ),
-            DialError::DialPeerConditionFalse(c) => {
-                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
-            }
+            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
+            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
+            DialError::DialPeerConditionFalse(PeerCondition::Always) => unreachable!("Dial peer condition is by definition true."),
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
@@ -1693,8 +1696,8 @@ impl fmt::Display for ListenError {
             ListenError::Transport(_) => {
                 write!(f, "Listen error: Failed to negotiate transport protocol(s)")
             }
-            ListenError::Denied { .. } => {
-                write!(f, "Listen error")
+            ListenError::Denied { cause } => {
+                write!(f, "Listen error: Denied: {cause}")
             }
             ListenError::LocalPeerId { endpoint } => {
                 write!(f, "Listen error: Local peer ID at {endpoint:?}.")

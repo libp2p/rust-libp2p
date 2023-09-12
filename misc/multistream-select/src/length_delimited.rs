@@ -411,7 +411,7 @@ mod tests {
         assert!(len < (1 << 15));
         let frame = (0..len).map(|n| (n & 0xff) as u8).collect::<Vec<_>>();
         let mut data = vec![(len & 0x7f) as u8 | 0x80, (len >> 7) as u8];
-        data.extend(frame.clone().into_iter());
+        data.extend(frame.clone());
         let mut framed = LengthDelimited::new(Cursor::new(data));
         let recved = futures::executor::block_on(async move { framed.next().await }).unwrap();
         assert_eq!(recved.unwrap(), frame);

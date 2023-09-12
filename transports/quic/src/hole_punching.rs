@@ -1,19 +1,20 @@
-use std::{net::SocketAddr, time::Duration};
+use crate::{provider::Provider, Error};
 
 use futures::future::Either;
+
 use rand::{distributions, Rng};
 
-use crate::{
-    endpoint::{self, ToEndpoint},
-    Error, Provider,
+use std::{
+    net::{SocketAddr, UdpSocket},
+    time::Duration,
 };
 
 pub(crate) async fn hole_puncher<P: Provider>(
-    endpoint_channel: endpoint::Channel,
+    socket: UdpSocket,
     remote_addr: SocketAddr,
     timeout_duration: Duration,
 ) -> Error {
-    let punch_holes_future = punch_holes::<P>(endpoint_channel, remote_addr);
+    let punch_holes_future = punch_holes::<P>(socket, remote_addr);
     futures::pin_mut!(punch_holes_future);
     match futures::future::select(P::sleep(timeout_duration), punch_holes_future).await {
         Either::Left(_) => Error::HandshakeTimedOut,
@@ -21,27 +22,18 @@ pub(crate) async fn hole_puncher<P: Provider>(
     }
 }
 
-async fn punch_holes<P: Provider>(
-    mut endpoint_channel: endpoint::Channel,
-    remote_addr: SocketAddr,
-) -> Error {
+async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) -> Error {
     loop {
         let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
         P::sleep(sleep_duration).await;
 
-        let random_udp_packet = ToEndpoint::SendUdpPacket(quinn_proto::Transmit {
-            destination: remote_addr,
-            ecn: None,
-            contents: rand::thread_rng()
-                .sample_iter(distributions::Standard)
-                .take(64)
-                .collect(),
-            segment_size: None,
-            src_ip: None,
-        });
+        let contents: Vec<u8> = rand::thread_rng()
+            .sample_iter(distributions::Standard)
+            .take(64)
+            .collect();
 
-        if endpoint_channel.send(random_udp_packet).await.is_err() {
-            return Error::EndpointDriverCrashed;
+        if let Err(e) = P::send_to(&socket, &contents, remote_addr).await {
+            return Error::Io(e);
         }
     }
 }

@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, ping, Multiaddr, PeerId};
+use libp2p::{identify, identity, ping, swarm::NetworkBehaviour, Multiaddr, PeerId};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -27,13 +27,19 @@ pub async fn run_test(
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let redis_client = RedisClient::new(redis_addr).context("Could not connect to redis")?;
-    let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
     // Build the transport from the passed ENV var.
-    let (boxed_transport, local_addr) = build_transport(local_key, ip, transport)?;
+    let (boxed_transport, local_addr) = build_transport(local_key.clone(), ip, transport)?;
     let mut swarm = swarm_builder(
         boxed_transport,
-        ping::Behaviour::new(cfg.clone()),
+        Behaviour {
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(10))),
+            // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/interop-tests".to_owned(),
+                local_key.public(),
+            )),
+        },
         local_peer_id,
     )
     .idle_connection_timeout(Duration::from_secs(5))
@@ -66,9 +72,10 @@ pub async fn run_test(
             log::info!("Test instance, dialing multiaddress on: {}.", other);
 
             let rtt = loop {
-                if let Some(SwarmEvent::Behaviour(ping::Event {
-                    result: Ok(rtt), ..
-                })) = swarm.next().await
+                if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                    result: Ok(rtt),
+                    ..
+                }))) = swarm.next().await
                 {
                     log::info!("Ping successful: {rtt:?}");
                     break rtt.as_micros() as f32 / 1000.;
@@ -229,6 +236,12 @@ impl FromStr for SecProtocol {
             other => bail!("unknown security protocol {other}"),
         })
     }
+}
+
+#[derive(NetworkBehaviour)]
+struct Behaviour {
+    ping: ping::Behaviour,
+    identify: identify::Behaviour,
 }
 
 /// Helper function to get a ENV variable into an test parameter like `Transport`.

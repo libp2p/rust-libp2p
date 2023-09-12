@@ -35,7 +35,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, Stream, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::trace;
@@ -94,6 +94,9 @@ pub struct KademliaHandler {
     protocol_status: ProtocolStatus,
 
     remote_supported_protocols: SupportedProtocols,
+
+    /// The ID of this connection.
+    connection_id: ConnectionId,
 }
 
 /// The states of protocol confirmation that a connection
@@ -474,6 +477,7 @@ impl KademliaHandler {
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
+        connection_id: ConnectionId,
     ) -> Self {
         match &endpoint {
             ConnectedPoint::Dialer { .. } => {
@@ -504,6 +508,7 @@ impl KademliaHandler {
             keep_alive,
             protocol_status: ProtocolStatus::Unknown,
             remote_supported_protocols: Default::default(),
+            connection_id,
         }
     }
 
@@ -803,17 +808,19 @@ impl ConnectionHandler for KademliaHandler {
                     match (remote_supports_our_kademlia_protocols, self.protocol_status) {
                         (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
                         (true, _) => {
-                            log::info!(
-                                "Remote {} now supports our kademlia protocol",
-                                self.remote_peer_id
+                            log::debug!(
+                                "Remote {} now supports our kademlia protocol on connection {}",
+                                self.remote_peer_id,
+                                self.connection_id,
                             );
 
                             self.protocol_status = ProtocolStatus::Confirmed;
                         }
                         (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            log::info!(
-                                "Remote {} no longer supports our kademlia protocol",
-                                self.remote_peer_id
+                            log::debug!(
+                                "Remote {} no longer supports our kademlia protocol on connection {}",
+                                self.remote_peer_id,
+                                self.connection_id,
                             );
 
                             self.protocol_status = ProtocolStatus::NotSupported;

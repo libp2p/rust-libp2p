@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-asynchronous-codec = "0.6.1"
+asynchronous-codec = "0.6.2"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
@@ -32,7 +32,7 @@ serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
-tokio = { version = "1.28", features = ["net"], optional = true}
+tokio = { version = "1.32", features = ["net"], optional = true}
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 webrtc = { version = "0.8.0", optional = true }
 
@@ -46,7 +46,7 @@ env_logger = "0.10"
 hex-literal = "0.4"
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-ping = { workspace = true }
-tokio = { version = "1.28", features = ["full"] }
+tokio = { version = "1.32", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 quickcheck = "1.0.3"
