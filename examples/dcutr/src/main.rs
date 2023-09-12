@@ -87,7 +87,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
 
     let (relay_transport, client) = relay::client::new(local_peer_id);
 

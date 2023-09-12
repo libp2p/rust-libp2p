@@ -112,6 +112,7 @@ pub trait StreamMuxer {
 }
 
 /// An event produced by a [`StreamMuxer`].
+#[derive(Debug)]
 pub enum StreamMuxerEvent {
     /// The address of the remote has changed.
     AddressChange(Multiaddr),
