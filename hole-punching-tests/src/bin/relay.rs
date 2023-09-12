@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with(Protocol::QuicV1);
     let quic_listener_id = swarm.listen_on(listen_addr_quic)?;
 
-    let client = redis::Client::open("redis://10.0.0.2:6379/")?;
+    let client = redis::Client::open("redis://redis:6379/")?;
     let mut connection = client
         .get_async_connection()
         .await
@@ -98,21 +98,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.next().await.expect("Infinite Stream.") {
-            SwarmEvent::Behaviour(event) => {
-                if let BehaviourEvent::Identify(identify::Event::Received {
-                    info: identify::Info { observed_addr, .. },
-                    ..
-                }) = &event
-                {
-                    swarm.add_external_address(observed_addr.clone());
-                }
-
-                info!("{event:?}")
-            }
             SwarmEvent::NewListenAddr {
                 address,
                 listener_id,
             } => {
+                // swarm.add_external_address(address); // We know that in our testing network setup, that we are listening on a "publicly-reachable" address.
+
                 info!("Listening on {address}");
 
                 let address = address

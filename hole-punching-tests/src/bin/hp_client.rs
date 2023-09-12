@@ -21,6 +21,7 @@
 use anyhow::Result;
 use clap::Parser;
 use futures::{future::Either, stream::StreamExt};
+use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
@@ -34,6 +35,7 @@ use libp2p::{
 };
 use log::{info, LevelFilter};
 use redis::AsyncCommands;
+use std::collections::HashMap;
 use std::pin::pin;
 use std::str::FromStr;
 
@@ -100,16 +102,10 @@ async fn main() -> Result<()> {
         dcutr: dcutr::Behaviour::new(local_peer_id),
     };
 
-    let client = redis::Client::open("redis://10.0.0.2:6379")?;
+    let client = redis::Client::open("redis://redis:6379")?;
     let mut connection = client.get_async_connection().await?;
 
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
-
-    if opts.mode == Mode::Listen {
-        connection
-            .rpush("LISTEN_CLIENT_PEER_ID", swarm.local_peer_id().to_string())
-            .await?;
-    }
 
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -140,47 +136,38 @@ async fn main() -> Result<()> {
     };
 
     let relay_address = connection
-        .blpop::<_, String>(redis_key, 10)
+        .blpop::<_, HashMap<String, String>>(redis_key, 10)
         .await?
+        .remove(redis_key)
+        .expect("key that we asked for to be present")
         .parse::<Multiaddr>()?;
 
     // Connect to the relay server. Not for the reservation or relayed connection, but to (a) learn
     // our local public address and (b) enable a freshly started relay to learn its public address.
-    swarm.dial(relay_address.clone())?;
-    let mut learned_observed_addr = false;
-    let mut told_relay_observed_addr = false;
+
+    let dial_opts = DialOpts::from(relay_address.clone());
+    let relay_connection_id = dial_opts.connection_id();
+
+    swarm.dial(dial_opts)?;
 
     loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::NewListenAddr { .. } => {}
-            SwarmEvent::Dialing { .. } => {}
-            SwarmEvent::ConnectionEstablished { .. } => {}
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
-            SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent { .. })) => {
-                info!("Told relay its public address.");
-                told_relay_observed_addr = true;
+        if let SwarmEvent::ConnectionEstablished { connection_id, .. } = swarm.next().await.unwrap()
+        {
+            if connection_id == relay_connection_id {
+                break;
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
-                info: identify::Info { observed_addr, .. },
-                ..
-            })) => {
-                info!("Relay told us our public address: {:?}", observed_addr);
-                swarm.add_external_address(observed_addr);
-                learned_observed_addr = true;
-            }
-            event => panic!("{event:?}"),
-        }
-
-        if learned_observed_addr && told_relay_observed_addr {
-            break;
         }
     }
+
+    info!("Connected to the relay");
 
     match opts.mode {
         Mode::Dial => {
             let remote_peer_id = connection
-                .blpop::<_, String>("LISTEN_CLIENT_PEER_ID", 10)
+                .blpop::<_, HashMap<String, String>>("LISTEN_CLIENT_PEER_ID", 10)
                 .await?
+                .remove("LISTEN_CLIENT_PEER_ID")
+                .expect("key that we asked for to be present")
                 .parse()?;
 
             swarm.dial(
@@ -204,6 +191,10 @@ async fn main() -> Result<()> {
             )) => {
                 assert!(opts.mode == Mode::Listen);
                 info!("Relay accepted our reservation request.");
+
+                connection
+                    .rpush("LISTEN_CLIENT_PEER_ID", swarm.local_peer_id().to_string())
+                    .await?;
             }
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                 info!("{:?}", event)
@@ -214,9 +205,7 @@ async fn main() -> Result<()> {
                 info!("Successfully hole-punched to {remote_peer_id}");
                 return Ok(());
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
-                info!("{:?}", event)
-            }
+            SwarmEvent::Behaviour(BehaviourEvent::Identify(_)) => {}
             SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 info!("Connected to {peer_id}");

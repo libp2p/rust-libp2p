@@ -1,0 +1,98 @@
+version: "3.5"
+
+services:
+  # The relay, sitting on the "public internet"
+  relay:
+    depends_on: [redis]
+    build:
+      dockerfile: ./hole-punching-tests/host/Dockerfile
+      context: ..
+    container_name: relay
+    init: true
+    environment:
+      COMPONENT: /usr/bin/relay --listen-addr 17.0.0.10
+    networks:
+      internet:
+        ipv4_address: 17.0.0.10
+      control:
+
+  # Alice's LAN
+  alice_router:
+    build: ./router
+    container_name: alice_router
+    networks:
+      alice_lan:
+        ipv4_address: 192.168.0.10
+      internet:
+        ipv4_address: 17.0.0.11
+    cap_add: 
+      - NET_ADMIN
+  alice:
+    depends_on: [redis, relay]
+    build:
+      dockerfile: ./hole-punching-tests/host/Dockerfile
+      context: ..
+    container_name: alice
+    init: true
+    environment:
+      COMPONENT: /usr/bin/hp_client --mode dial --transport tcp
+      ROUTER: "192.168.0.10"
+      INTERNET: "17.0.0.0/16"
+    networks:
+      alice_lan:
+        ipv4_address: 192.168.0.11
+      control:
+    cap_add:
+      - NET_ADMIN
+
+  # Bob's LAN
+  bob_router:
+    build: ./router
+    container_name: bob_router
+    networks:
+      bob_lan:
+        ipv4_address: 192.168.1.10
+      internet:
+    cap_add:
+      - NET_ADMIN
+  bob:
+    depends_on: [redis, relay]
+    build:
+      dockerfile: ./hole-punching-tests/host/Dockerfile
+      context: ..
+    container_name: bob
+    init: true
+    environment:
+      COMPONENT: /usr/bin/hp_client --mode listen --transport tcp
+      ROUTER: "192.168.1.10"
+      INTERNET: "17.0.0.0/16"
+    networks:
+      bob_lan:
+        ipv4_address: 192.168.1.11
+      control:
+    cap_add: 
+      - NET_ADMIN
+
+  # Redis for test coordination
+  redis:
+    image: redis
+    networks:
+      control:
+
+networks:
+  alice_lan:
+    ipam:
+      config:
+        - subnet: 192.168.0.0/24
+  bob_lan:
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+  internet:
+    ipam:
+      config:
+        - subnet: 17.0.0.0/16
+  control: # Control network to facilitate the test setup
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24
