@@ -142,7 +142,7 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
@@ -170,7 +170,7 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
@@ -201,7 +201,7 @@
 //! Thus, without any other behaviour in place, we would not be able to observe the pings.
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -252,7 +252,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
@@ -295,7 +295,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
