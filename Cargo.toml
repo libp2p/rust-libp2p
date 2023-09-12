@@ -2,7 +2,7 @@
 members = [
     "core",
     "examples/autonat",
-    "examples/chat-example",
+    "examples/chat",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
@@ -10,7 +10,7 @@ members = [
     "examples/ipfs-kad",
     "examples/ipfs-private",
     "examples/metrics",
-    "examples/ping-example",
+    "examples/ping",
     "examples/relay-server",
     "examples/rendezvous",
     "identity",
