@@ -2070,7 +2070,7 @@ dependencies = [
  "tokio",
  "waitgroup",
  "webrtc-srtp",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -3068,7 +3068,7 @@ dependencies = [
  "rcgen 0.11.1",
  "serde",
  "sha2 0.10.7",
- "stun 0.4.4",
+ "stun",
  "thiserror",
  "tinytemplate",
  "tokio",
@@ -3271,15 +3271,6 @@ name = "memchr"
 version = "2.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f232d6ef707e1956a43342693d2a31e72989554d58299d7a88738cc95b0d35c"
-
-[[package]]
-name = "memoffset"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
 
 [[package]]
 name = "memoffset"
@@ -3520,7 +3511,6 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "libc",
- "memoffset 0.6.5",
 ]
 
 [[package]]
@@ -4472,7 +4462,7 @@ checksum = "3677908cadfbecb4cc1da9a56a32524fae4ebdfa7c2ea93886e1b1e846488cb9"
 dependencies = [
  "bytes",
  "thiserror",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -4501,7 +4491,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "thiserror",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5084,25 +5074,6 @@ checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "stun"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7e94b1ec00bad60e6410e058b52f1c66de3dc5fe4d62d09b3e52bb7d3b73e25"
-dependencies = [
- "base64 0.13.1",
- "crc",
- "lazy_static",
- "md-5",
- "rand 0.8.5",
- "ring",
- "subtle",
- "thiserror",
- "tokio",
- "url",
- "webrtc-util 0.7.0",
-]
-
-[[package]]
-name = "stun"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7beb1624a3ea34778d58d30e2b8606b4d29fe65e87c4d50b87ed30afd5c3830c"
@@ -5117,7 +5088,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "url",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -5637,10 +5608,10 @@ dependencies = [
  "md-5",
  "rand 0.8.5",
  "ring",
- "stun 0.5.0",
+ "stun",
  "thiserror",
  "tokio",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6014,7 +5985,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "smol_str",
- "stun 0.5.0",
+ "stun",
  "thiserror",
  "time",
  "tokio",
@@ -6028,7 +5999,7 @@ dependencies = [
  "webrtc-media",
  "webrtc-sctp",
  "webrtc-srtp",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6042,7 +6013,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "webrtc-sctp",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6077,7 +6048,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "tokio",
- "webrtc-util 0.8.0",
+ "webrtc-util",
  "x25519-dalek 2.0.0",
  "x509-parser",
 ]
@@ -6095,7 +6066,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_json",
- "stun 0.5.0",
+ "stun",
  "thiserror",
  "tokio",
  "turn",
@@ -6103,7 +6074,7 @@ dependencies = [
  "uuid",
  "waitgroup",
  "webrtc-mdns",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6116,7 +6087,7 @@ dependencies = [
  "socket2 0.5.3",
  "thiserror",
  "tokio",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6146,7 +6117,7 @@ dependencies = [
  "rand 0.8.5",
  "thiserror",
  "tokio",
- "webrtc-util 0.8.0",
+ "webrtc-util",
 ]
 
 [[package]]
@@ -6169,28 +6140,7 @@ dependencies = [
  "subtle",
  "thiserror",
  "tokio",
- "webrtc-util 0.8.0",
-]
-
-[[package]]
-name = "webrtc-util"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93f1db1727772c05cf7a2cfece52c3aca8045ca1e176cd517d323489aa3c6d87"
-dependencies = [
- "async-trait",
- "bitflags 1.3.2",
- "bytes",
- "cc",
- "ipnet",
- "lazy_static",
- "libc",
- "log",
- "nix 0.24.3",
- "rand 0.8.5",
- "thiserror",
- "tokio",
- "winapi",
+ "webrtc-util",
 ]
 
 [[package]]
