@@ -79,7 +79,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         (peer_id, keypair)
     };
-    info!("Local peer id: {local_peer_id}");
 
     let transport = {
         let tcp_transport =

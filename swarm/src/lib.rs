@@ -1520,6 +1520,7 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
+        log::info!("Local peer id: {}", self.local_peer_id);
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
