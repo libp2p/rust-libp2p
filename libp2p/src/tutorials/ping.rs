@@ -204,6 +204,7 @@
 //! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
+//! use std::time::Duration;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -254,6 +255,7 @@
 //! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
+//! use std::time::Duration;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
@@ -296,6 +298,7 @@
 //! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
+//! use std::time::Duration;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
