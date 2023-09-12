@@ -88,11 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .multiplex(yamux::Config::default())
                 .timeout(Duration::from_secs(20));
 
-        let quic_transport = {
-            let mut config = quic::Config::new(&local_keypair);
-            config.support_draft_29 = true;
-            quic::tokio::Transport::new(config)
-        };
+        let quic_transport = quic::tokio::Transport::new(quic::Config::new(&local_keypair));
 
         dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(
             quic_transport,
@@ -125,6 +121,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => return Err(e.into()),
         }
     }
+
     if config.addresses.append_announce.is_empty() {
         warn!("No external addresses configured.");
     }
