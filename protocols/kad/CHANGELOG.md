@@ -8,7 +8,7 @@
 
 [PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
 [PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
-[PR 4500]: https://github.com/libp2p/rust-libp2p/pull/4500
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 
 ## 0.44.3
 
