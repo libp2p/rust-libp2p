@@ -338,12 +338,14 @@ async fn fetch_server_addr() -> Multiaddr {
         .unwrap()
 }
 
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn create_stream(conn: &mut Connection) -> Stream {
     poll_fn(|cx| Pin::new(&mut *conn).poll_outbound(cx))
         .await
         .unwrap()
 }
 
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn incoming_stream(conn: &mut Connection) -> Stream {
     let mut stream = poll_fn(|cx| Pin::new(&mut *conn).poll_inbound(cx))
         .await

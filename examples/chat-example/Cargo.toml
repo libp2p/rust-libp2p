@@ -10,5 +10,4 @@ async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux"] }
-libp2p-quic = { path = "../../transports/quic", features = ["async-std"] }
+libp2p = { path = "../../libp2p", features = ["async-std", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }

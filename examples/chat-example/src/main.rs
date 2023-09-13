@@ -24,12 +24,11 @@ use async_std::io;
 use futures::{future::Either, prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
-    gossipsub, identity, mdns, noise,
+    gossipsub, identity, mdns, noise, quic,
     swarm::NetworkBehaviour,
     swarm::{SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
-use libp2p_quic as quic;
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
@@ -45,9 +44,9 @@ struct MyBehaviour {
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
+    env_logger::init();
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(id_keys.public());
-    println!("Local peer id: {local_peer_id}");
 
     // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
     let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))

@@ -1,4 +1,4 @@
-## 0.25.1 - unreleased
+## 0.25.1
 
 - Replace unmaintained `serde_cbor` dependency with `cbor4ii`.
   See [PR 4187].

@@ -669,7 +669,7 @@ where
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetClosestPeers}`].
     pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
@@ -696,7 +696,7 @@ where
     /// Performs a lookup for a record in the DHT.
     ///
     /// The result of this operation is delivered in a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetRecord}`].
     pub fn get_record(&mut self, key: record_priv::Key) -> QueryId {
         let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
@@ -757,7 +757,7 @@ where
     /// Returns `Ok` if a record has been stored locally, providing the
     /// `QueryId` of the initial query that replicates the record in the DHT.
     /// The result of the query is eventually reported as a
-    /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::PutRecord}`].
+    /// [`KademliaEvent::OutboundQueryProgressed{QueryResult::PutRecord}`].
     ///
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
@@ -873,7 +873,7 @@ where
     ///
     /// Returns `Ok` if bootstrapping has been initiated with a self-lookup, providing the
     /// `QueryId` for the entire bootstrapping process. The progress of bootstrapping is
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::Bootstrap}`] events,
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::Bootstrap}`] events,
     /// with one such event per bootstrapping query.
     ///
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
@@ -917,7 +917,7 @@ where
     /// of the libp2p Kademlia provider API.
     ///
     /// The results of the (repeated) provider announcements sent by this node are
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::StartProviding}`].
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::StartProviding}`].
     pub fn start_providing(&mut self, key: record_priv::Key) -> Result<QueryId, store::Error> {
         // Note: We store our own provider records locally without local addresses
         // to avoid redundant storage and outdated addresses. Instead these are
@@ -954,7 +954,7 @@ where
     /// Performs a lookup for providers of a value to the given key.
     ///
     /// The result of this operation is delivered in a
-    /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
+    /// reported via [`KademliaEvent::OutboundQueryProgressed{QueryResult::GetProviders}`].
     pub fn get_providers(&mut self, key: record_priv::Key) -> QueryId {
         let providers: HashSet<_> = self
             .store
@@ -2085,6 +2085,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
@@ -2107,6 +2108,7 @@ where
             connected_point,
             peer,
             self.mode,
+            connection_id,
         ))
     }
 
