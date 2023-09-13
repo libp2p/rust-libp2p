@@ -28,19 +28,17 @@
 
 use crate::proto;
 use crate::record_priv::{self, Record};
-use asynchronous_codec::Framed;
+use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
-use codec::UviBytes;
 use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::{BytesReader, Writer};
+use std::marker::PhantomData;
 use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
-use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -179,6 +177,47 @@ impl UpgradeInfo for KademliaProtocolConfig {
     }
 }
 
+/// Codec for Kademlia inbound and outbound message framing.
+pub struct KadCodec<A, B> {
+    codec: quick_protobuf_codec::Codec<proto::Message>,
+    __phantom: PhantomData<(A, B)>,
+}
+impl<A, B> KadCodec<A, B> {
+    fn new(max_packet_size: usize) -> Self {
+        KadCodec {
+            codec: quick_protobuf_codec::Codec::new(max_packet_size),
+            __phantom: PhantomData,
+        }
+    }
+}
+
+impl<A: Into<proto::Message>, B> Encoder for KadCodec<A, B> {
+    type Error = io::Error;
+    type Item = A;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        self.codec
+            .encode(item.into(), dst)
+            .map_err(|err| err.into())
+    }
+}
+impl<A, B: TryFrom<proto::Message, Error = io::Error>> Decoder for KadCodec<A, B> {
+    type Error = io::Error;
+    type Item = B;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        self.codec
+            .decode(src)?
+            .map(|msg| B::try_from(msg))
+            .transpose()
+    }
+}
+
+/// Sink of responses and stream of requests.
+pub(crate) type KadInStreamSink<S> = Framed<S, KadCodec<KadResponseMsg, KadRequestMsg>>;
+/// Sink of requests and stream of responses.
+pub(crate) type KadOutStreamSink<S> = Framed<S, KadCodec<KadRequestMsg, KadResponseMsg>>;
+
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
@@ -188,32 +227,9 @@ where
     type Error = io::Error;
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        use quick_protobuf::{MessageRead, MessageWrite};
+        let codec = KadCodec::new(self.max_packet_size);
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(self.max_packet_size);
-
-        future::ok(
-            Framed::new(incoming, codec)
-                .err_into()
-                .with::<_, _, fn(_) -> _, _>(|response| {
-                    let proto_struct = resp_msg_to_proto(response);
-                    let mut buf = Vec::with_capacity(proto_struct.get_size());
-                    let mut writer = Writer::new(&mut buf);
-                    proto_struct
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
-                    future::ready(Ok(io::Cursor::new(buf)))
-                })
-                .and_then::<_, fn(_) -> _>(|bytes| {
-                    let mut reader = BytesReader::from_bytes(&bytes);
-                    let request = match proto::Message::from_reader(&mut reader, &bytes) {
-                        Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into())),
-                    };
-                    future::ready(proto_to_req_msg(request))
-                }),
-        )
+        future::ok(Framed::new(incoming, codec))
     }
 }
 
@@ -226,50 +242,11 @@ where
     type Error = io::Error;
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        use quick_protobuf::{MessageRead, MessageWrite};
+        let codec = KadCodec::new(self.max_packet_size);
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(self.max_packet_size);
-
-        future::ok(
-            Framed::new(incoming, codec)
-                .err_into()
-                .with::<_, _, fn(_) -> _, _>(|request| {
-                    let proto_struct = req_msg_to_proto(request);
-                    let mut buf = Vec::with_capacity(proto_struct.get_size());
-                    let mut writer = Writer::new(&mut buf);
-                    proto_struct
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
-                    future::ready(Ok(io::Cursor::new(buf)))
-                })
-                .and_then::<_, fn(_) -> _>(|bytes| {
-                    let mut reader = BytesReader::from_bytes(&bytes);
-                    let response = match proto::Message::from_reader(&mut reader, &bytes) {
-                        Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into())),
-                    };
-                    future::ready(proto_to_resp_msg(response))
-                }),
-        )
+        future::ok(Framed::new(incoming, codec))
     }
 }
-
-/// Sink of responses and stream of requests.
-pub(crate) type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
-/// Sink of requests and stream of responses.
-pub(crate) type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
-pub(crate) type KadStreamSink<S, A, B> = stream::AndThen<
-    sink::With<
-        stream::ErrInto<Framed<S, UviBytes<io::Cursor<Vec<u8>>>>, io::Error>,
-        io::Cursor<Vec<u8>>,
-        A,
-        future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
-        fn(A) -> future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
-    >,
-    future::Ready<Result<B, io::Error>>,
-    fn(BytesMut) -> future::Ready<Result<B, io::Error>>,
->;
 
 /// Request that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,6 +321,31 @@ pub enum KadResponseMsg {
         /// Value of the record.
         value: Vec<u8>,
     },
+}
+
+impl From<KadRequestMsg> for proto::Message {
+    fn from(kad_msg: KadRequestMsg) -> Self {
+        req_msg_to_proto(kad_msg)
+    }
+}
+impl From<KadResponseMsg> for proto::Message {
+    fn from(kad_msg: KadResponseMsg) -> Self {
+        resp_msg_to_proto(kad_msg)
+    }
+}
+impl TryFrom<proto::Message> for KadRequestMsg {
+    type Error = io::Error;
+
+    fn try_from(message: proto::Message) -> Result<Self, Self::Error> {
+        proto_to_req_msg(message)
+    }
+}
+impl TryFrom<proto::Message> for KadResponseMsg {
+    type Error = io::Error;
+
+    fn try_from(message: proto::Message) -> Result<Self, Self::Error> {
+        proto_to_resp_msg(message)
+    }
 }
 
 /// Converts a `KadRequestMsg` into the corresponding protobuf message for sending.
