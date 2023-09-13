@@ -139,9 +139,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "A metric with a constant '1' value labeled by version",
         build_info,
     );
-    tokio::spawn(
-        async move { http_service::metrics_server(metric_registry, opt.metrics_path).await },
-    );
+    tokio::spawn(http_service::metrics_server(
+        metric_registry,
+        opt.metrics_path,
+    ));
 
     let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
 

@@ -33,7 +33,7 @@ const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;v
 pub(crate) async fn metrics_server(
     registry: Registry,
     metrics_path: String,
-) -> Result<(), MetricServerError> {
+) -> Result<(), hyper::Error> {
     // Serve on localhost.
     let addr = ([0, 0, 0, 0], 8888).into();
 
@@ -46,24 +46,6 @@ pub(crate) async fn metrics_server(
     server.await?;
     Ok(())
 }
-
-#[derive(Debug)]
-pub(crate) struct MetricServerError(pub(crate) String);
-
-impl From<hyper::Error> for MetricServerError {
-    fn from(e: hyper::Error) -> Self {
-        MetricServerError(format!("server error: {}", e))
-    }
-}
-
-impl std::error::Error for MetricServerError {}
-
-impl std::fmt::Display for MetricServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "server error")
-    }
-}
-
 pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
     metrics_path: String,
