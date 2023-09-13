@@ -1,4 +1,11 @@
-## 0.40.0 
+## 0.40.1 - unreleased
+
+- Implement `Debug` for `StreamMuxerEvent`.
+  See [PR 4426].
+
+[PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
+
+## 0.40.0
 
 - Allow `ListenerId` to be user-controlled, i.e. to be provided on `Transport::listen_on`.
   See [PR 3567].

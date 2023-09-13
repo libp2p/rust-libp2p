@@ -86,12 +86,7 @@ impl BackoffStorage {
                 backoffs_by_heartbeat[index].insert(pair);
                 HeartbeatIndex(index)
             };
-        match self
-            .backoffs
-            .entry(topic.clone())
-            .or_insert_with(HashMap::new)
-            .entry(*peer)
-        {
+        match self.backoffs.entry(topic.clone()).or_default().entry(*peer) {
             Entry::Occupied(mut o) => {
                 let (backoff, index) = o.get();
                 if backoff < &instant {
