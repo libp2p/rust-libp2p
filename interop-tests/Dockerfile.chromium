@@ -6,8 +6,7 @@ ADD . .
 
 RUN rustup target add wasm32-unknown-unknown
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install wasm-pack@0.11.1 --locked
+RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C ~/tmp --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
 
 RUN --mount=type=cache,target=./target \
     --mount=type=cache,target=/usr/local/cargo/registry \
