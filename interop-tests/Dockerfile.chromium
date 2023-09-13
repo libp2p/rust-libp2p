@@ -7,10 +7,11 @@ ADD . .
 RUN rustup target add wasm32-unknown-unknown
 
 RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C /usr/local/bin --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
+RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_115/binaryen-version_115-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
 
 RUN --mount=type=cache,target=./target \
     --mount=type=cache,target=/usr/local/cargo/registry \
-    wasm-pack build --dev --target web interop-tests
+    wasm-pack build --target web interop-tests
 
 RUN --mount=type=cache,target=./target \
     --mount=type=cache,target=/usr/local/cargo/registry \
