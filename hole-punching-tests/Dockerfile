@@ -12,9 +12,7 @@ RUN --mount=type=cache,target=./target \
     cargo build --release --package hole-punching-tests --target x86_64-unknown-linux-musl
 
 RUN --mount=type=cache,target=./target \
-    mv ./target/x86_64-unknown-linux-musl/release/hp_client /usr/local/bin/hp_client
-RUN --mount=type=cache,target=./target \
-    mv ./target/x86_64-unknown-linux-musl/release/relay /usr/local/bin/relay
+    mv ./target/x86_64-unknown-linux-musl/release/hole-punching-tests /usr/local/bin/hole-punching-tests
 
 FROM ubuntu:jammy
 
@@ -23,7 +21,6 @@ RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install -
 # Debugging tools
 RUN --mount=type=cache,target=/var/cache/apt apt-get install -y tcpdump ncat iputils-ping
 
-COPY --from=builder /usr/local/bin/hp_client /usr/bin/hp_client
-COPY --from=builder /usr/local/bin/relay /usr/bin/relay
+COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punching-tests
 
 ENV RUST_BACKTRACE=1

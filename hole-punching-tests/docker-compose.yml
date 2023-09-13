@@ -9,7 +9,9 @@ services:
       context: ..
     container_name: relay
     init: true
-    command: /usr/bin/relay --listen-addr 17.0.0.10
+    command: /usr/bin/hole-punching-tests relay
+    environment:
+      LISTEN_ADDR: 17.0.0.10
     networks:
       internet:
         ipv4_address: 17.0.0.10
@@ -32,8 +34,9 @@ services:
       dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: alice
-    init: true
-    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.0.10 dev eth0 && /usr/bin/hp_client --mode dial --transport tcp"]
+    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.0.10 dev eth0 && /usr/bin/hole-punching-tests dial"]
+    environment:
+      TRANSPORT: tcp
     networks:
       alice_lan:
         ipv4_address: 192.168.0.11
@@ -57,8 +60,9 @@ services:
       dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: bob
-    init: true
-    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.1.10 dev eth0 && /usr/bin/hp_client --mode listen --transport tcp"]
+    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.1.10 dev eth0 && /usr/bin/hole-punching-tests listen"]
+    environment:
+      TRANSPORT: tcp
     networks:
       bob_lan:
         ipv4_address: 192.168.1.11
