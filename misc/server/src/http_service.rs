@@ -21,7 +21,7 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::{error, info};
+use log::info;
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
@@ -30,31 +30,22 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
-
 pub(crate) async fn metrics_server(
     registry: Registry,
     metrics_path: String,
-) -> Result<(), std::io::Error> {
+) -> Result<(), hyper::Error> {
     // Serve on localhost.
     let addr = ([0, 0, 0, 0], 8888).into();
 
-    // Use the tokio runtime to run the hyper server.
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let server =
-            Server::bind(&addr).serve(MakeMetricService::new(registry, metrics_path.clone()));
-        info!(
-            "Metrics server on http://{}{}",
-            server.local_addr(),
-            metrics_path
-        );
-        if let Err(e) = server.await {
-            error!("server error: {}", e);
-        }
-        Ok(())
-    })
+    let server = Server::bind(&addr).serve(MakeMetricService::new(registry, metrics_path.clone()));
+    info!(
+        "Metrics server on http://{}{}",
+        server.local_addr(),
+        metrics_path
+    );
+    server.await?;
+    Ok(())
 }
-
 pub(crate) struct MetricService {
     reg: Arc<Mutex<Registry>>,
     metrics_path: String,

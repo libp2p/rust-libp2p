@@ -3,9 +3,10 @@ name: Publish docker images
 on:
   push:
     branches:
-      - '**'
+      - 'master'
     tags:
       - 'libp2p-server-**'
+  pull_request:
 
 jobs:
   server:
@@ -22,14 +23,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Get branch or tag name
-        id: ref-name
-        run: echo ::set-output name=ref::${GITHUB_REF#refs/*/}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository }}-server
 
       - name: Build and push
         uses: docker/build-push-action@v4
         with:
           context: .
           file: ./misc/server/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository }}-server:${{ steps.ref-name.outputs.ref }}
+          push: ${{ ! github.event.pull_request.head.repo.fork }} # Only push image if we have the required permissions, i.e. not running from a fork
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2023 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -23,27 +23,30 @@
 use futures::prelude::*;
 use libp2p::core::upgrade::Version;
 use libp2p::{
-    identity, noise, ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    identity, noise,
+    swarm::{SwarmBuilder, SwarmEvent},
+    tcp, upnp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+    println!("Local peer id: {local_peer_id:?}");
 
-    let transport = tcp::async_io::Transport::default()
+    let transport = tcp::tokio::Transport::default()
         .upgrade(Version::V1Lazy)
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
-            .build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(
+        transport,
+        upnp::tokio::Behaviour::default(),
+        local_peer_id,
+    )
+    .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
@@ -60,18 +63,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
-            SwarmEvent::Behaviour(event) => println!("{event:?}"),
+            SwarmEvent::Behaviour(upnp::Event::NewExternalAddr(addr)) => {
+                println!("New external address: {addr}");
+            }
+            SwarmEvent::Behaviour(upnp::Event::GatewayNotFound) => {
+                println!("Gateway does not support UPnP");
+                break;
+            }
+            SwarmEvent::Behaviour(upnp::Event::NonRoutableGateway) => {
+                println!("Gateway is not exposed directly to the public Internet, i.e. it itself has a private IP address.");
+                break;
+            }
             _ => {}
         }
     }
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](keep_alive::Behaviour) behaviour so a continuous sequence of
-/// pings can be observed.
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
+    Ok(())
 }
