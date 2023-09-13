@@ -35,8 +35,7 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/ping/1.0.0"
 ///
 /// At most a single inbound and outbound substream is kept open at
 /// any time. In case of a ping timeout or another error on a substream, the
-/// substream is dropped. If a configurable number of consecutive
-/// outbound pings fail, the connection is closed.
+/// substream is dropped.
 ///
 /// Successful pings report the round-trip time.
 ///

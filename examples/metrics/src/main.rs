@@ -41,7 +41,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let local_pub_key = local_key.public();
-    info!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()

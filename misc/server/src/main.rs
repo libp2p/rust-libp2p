@@ -1,6 +1,5 @@
 use base64::Engine;
 use clap::Parser;
-use futures::executor::block_on;
 use futures::future::Either;
 use futures::stream::StreamExt;
 use futures_timer::Delay;
@@ -26,7 +25,6 @@ use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::task::Poll;
-use std::thread;
 use std::time::Duration;
 use zeroize::Zeroizing;
 
@@ -79,7 +77,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         (peer_id, keypair)
     };
-    info!("Local peer id: {local_peer_id}");
 
     let transport = {
         let tcp_transport =
@@ -89,11 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .multiplex(yamux::Config::default())
                 .timeout(Duration::from_secs(20));
 
-        let quic_transport = {
-            let mut config = quic::Config::new(&local_keypair);
-            config.support_draft_29 = true;
-            quic::tokio::Transport::new(config)
-        };
+        let quic_transport = quic::tokio::Transport::new(quic::Config::new(&local_keypair));
 
         dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(
             quic_transport,
@@ -126,6 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => return Err(e.into()),
         }
     }
+
     if config.addresses.append_announce.is_empty() {
         warn!("No external addresses configured.");
     }
@@ -145,11 +139,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "A metric with a constant '1' value labeled by version",
         build_info,
     );
-    thread::spawn(move || {
-        block_on(http_service::metrics_server(
-            metric_registry,
-            opt.metrics_path,
-        ))
+    tokio::spawn(async move {
+        if let Err(e) = http_service::metrics_server(metric_registry, opt.metrics_path).await {
+            log::error!("Metrics server failed: {e}");
+        }
     });
 
     let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
