@@ -97,7 +97,7 @@ where
         self.inner.is_empty()
     }
 
-    #[allow(clippy::needless_pass_by_ref_mut)] // &mut Context is idiomatic.
+    #[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // &mut Context is idiomatic.
     pub fn poll_ready_unpin(&mut self, cx: &mut Context<'_>) -> Poll<()> {
         if self.inner.len() < self.capacity {
             return Poll::Ready(());
