@@ -57,8 +57,6 @@ async fn main() {
     let external_address = "/ip4/127.0.0.1/tcp/0".parse::<Multiaddr>().unwrap();
     swarm.add_external_address(external_address);
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
-
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
     while let Some(event) = swarm.next().await {

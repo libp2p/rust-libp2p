@@ -54,8 +54,6 @@ async fn main() {
     .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
-
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());
 
     while let Some(event) = swarm.next().await {

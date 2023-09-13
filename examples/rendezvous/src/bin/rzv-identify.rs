@@ -56,8 +56,6 @@ async fn main() {
     .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
-
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();

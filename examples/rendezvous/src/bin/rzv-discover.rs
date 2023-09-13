@@ -56,8 +56,6 @@ async fn main() {
     .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
-
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
     let mut discover_tick = tokio::time::interval(Duration::from_secs(30));
