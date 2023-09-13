@@ -15,10 +15,5 @@ RUN --mount=type=cache,target=./target \
     mv ./target/x86_64-unknown-linux-musl/release/hole-punching-tests /usr/local/bin/hole-punching-tests
 
 FROM alpine:3
-
-ARG DEBIAN_FRONTEND=noninteractive
-RUN --mount=type=cache,target=/var/cache/apk apk add nftables
-
 COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punching-tests
-
 ENV RUST_BACKTRACE=1
