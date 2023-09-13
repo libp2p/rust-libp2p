@@ -21,6 +21,7 @@ services:
   alice_router:
     build: ./router
     container_name: alice_router
+    init: true
     networks:
       alice_lan:
         ipv4_address: 192.168.0.10
@@ -48,6 +49,7 @@ services:
   bob_router:
     build: ./router
     container_name: bob_router
+    init: true
     networks:
       bob_lan:
         ipv4_address: 192.168.1.10
