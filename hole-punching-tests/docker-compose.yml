@@ -34,7 +34,7 @@ services:
       dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: alice
-    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.0.10 dev eth0 && /usr/bin/hole-punching-tests dial"]
+    command: ["/bin/sh", "-c", "ip route add 17.0.0.0/16 via 192.168.0.10 dev eth0 && /usr/bin/hole-punching-tests dial"]
     environment:
       TRANSPORT: tcp
     networks:
@@ -60,7 +60,7 @@ services:
       dockerfile: ./hole-punching-tests/Dockerfile
       context: ..
     container_name: bob
-    command: ["/bin/bash", "-c", "ip route add 17.0.0.0/16 via 192.168.1.10 dev eth0 && /usr/bin/hole-punching-tests listen"]
+    command: ["/bin/sh", "-c", "ip route add 17.0.0.0/16 via 192.168.1.10 dev eth0 && /usr/bin/hole-punching-tests listen"]
     environment:
       TRANSPORT: tcp
     networks:

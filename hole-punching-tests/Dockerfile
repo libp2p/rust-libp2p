@@ -14,12 +14,10 @@ RUN --mount=type=cache,target=./target \
 RUN --mount=type=cache,target=./target \
     mv ./target/x86_64-unknown-linux-musl/release/hole-punching-tests /usr/local/bin/hole-punching-tests
 
-FROM ubuntu:jammy
+FROM alpine:3
 
 ARG DEBIAN_FRONTEND=noninteractive
-RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install -y iproute2
-# Debugging tools
-RUN --mount=type=cache,target=/var/cache/apt apt-get install -y tcpdump ncat iputils-ping
+RUN --mount=type=cache,target=/var/cache/apk apk add nftables
 
 COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punching-tests
 
