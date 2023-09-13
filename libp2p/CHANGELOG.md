@@ -18,10 +18,14 @@
 - Add `json` feature which exposes `request_response::json`.
   See [PR 4188].
 
+- Add support for UPnP via the IGD protocol.
+  See [PR 4156].
+
 - Add `libp2p-memory-connection-limits` providing memory usage based connection limit configurations.
   See [PR 4281].
 
 [PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
+[PR 4156]: https://github.com/libp2p/rust-libp2p/pull/4156
 [PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
 [PR 4281]: https://github.com/libp2p/rust-libp2p/pull/4281
 

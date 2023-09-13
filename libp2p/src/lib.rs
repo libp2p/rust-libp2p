@@ -127,6 +127,10 @@ pub use libp2p_tls as tls;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "upnp")]
+#[cfg(not(target_arch = "wasm32"))]
+#[doc(inline)]
+pub use libp2p_upnp as upnp;
 #[cfg(feature = "wasm-ext")]
 #[deprecated(
     note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websocket-websys`."
