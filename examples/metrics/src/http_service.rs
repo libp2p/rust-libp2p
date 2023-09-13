@@ -21,7 +21,7 @@
 use hyper::http::StatusCode;
 use hyper::service::Service;
 use hyper::{Body, Method, Request, Response, Server};
-use log::info;
+use log::{error, info};
 use prometheus_client::encoding::text::encode;
 use prometheus_client::registry::Registry;
 use std::future::Future;
@@ -31,33 +31,20 @@ use std::task::{Context, Poll};
 
 const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
 
-pub(crate) async fn metrics_server(registry: Registry) -> Result<(), MetricServerError> {
+pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
     let addr = ([127, 0, 0, 1], 8080).into();
 
     // Use the tokio runtime to run the hyper server.
-
-    let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-    info!("Metrics server on http://{}/metrics", server.local_addr());
-    server.await?;
-    Ok(())
-}
-
-#[derive(Debug)]
-pub(crate) struct MetricServerError(pub(crate) String);
-
-impl From<hyper::Error> for MetricServerError {
-    fn from(e: hyper::Error) -> Self {
-        MetricServerError(format!("server error: {}", e))
-    }
-}
-
-impl std::error::Error for MetricServerError {}
-
-impl std::fmt::Display for MetricServerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "server error")
-    }
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
+        info!("Metrics server on http://{}/metrics", server.local_addr());
+        if let Err(e) = server.await {
+            error!("server error: {}", e);
+        }
+        Ok(())
+    })
 }
 
 pub(crate) struct MetricService {
