@@ -15,5 +15,5 @@ RUN --mount=type=cache,target=./target \
     mv ./target/x86_64-unknown-linux-musl/release/hole-punching-tests /usr/local/bin/hole-punching-tests
 
 FROM alpine:3
-COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punching-tests
+COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punch-client
 ENV RUST_BACKTRACE=1
