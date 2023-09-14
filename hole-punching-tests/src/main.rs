@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
 use futures::{future::Either, stream::StreamExt};
 use libp2p::{
     core::{
@@ -34,33 +33,9 @@ use libp2p::{
 };
 use redis::AsyncCommands;
 use std::collections::HashMap;
+use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
-
-#[derive(Debug, Parser)]
-struct Opts {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Debug, Subcommand)]
-enum Command {
-    Relay {
-        /// Which local address to listen on.
-        #[clap(env)]
-        listen_addr: IpAddr,
-    },
-    Dial {
-        /// The transport (tcp or quic).
-        #[clap(env)]
-        transport: TransportProtocol,
-    },
-    Listen {
-        /// The transport (tcp or quic).
-        #[clap(env)]
-        transport: TransportProtocol,
-    },
-}
 
 /// The redis key we push the relay's TCP listen address to.
 const RELAY_TCP_ADDRESS: &str = "RELAY_TCP_ADDRESS";
@@ -76,51 +51,19 @@ async fn main() -> Result<()> {
         .parse_default_env()
         .init();
 
-    let opts = Opts::parse();
+    let mode = get_env::<Mode>("MODE")?;
+    let transport = get_env::<TransportProtocol>("TRANSPORT")?;
 
     let mut redis = RedisClient::new("redis", 6379).await?;
 
-    match opts.command {
-        Command::Relay { listen_addr } => {
-            let mut swarm = make_relay_swarm()?;
-
-            let tcp_listener_id = swarm.listen_on(tcp_addr(listen_addr))?;
-            let quic_listener_id = swarm.listen_on(quic_addr(listen_addr))?;
-
-            loop {
-                if let SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } = swarm.next().await.expect("Infinite Stream.")
-                {
-                    swarm.add_external_address(address.clone()); // We know that in our testing network setup, that we are listening on a "publicly-reachable" address.
-
-                    log::info!("Listening on {address}");
-
-                    let address = address
-                        .with(Protocol::P2p(*swarm.local_peer_id()))
-                        .to_string();
-
-                    // Push each address twice because we need to connect two clients.
-
-                    if listener_id == tcp_listener_id {
-                        redis.push(RELAY_TCP_ADDRESS, &address).await?;
-                        redis.push(RELAY_TCP_ADDRESS, &address).await?;
-                    }
-                    if listener_id == quic_listener_id {
-                        redis.push(RELAY_QUIC_ADDRESS, &address).await?;
-                        redis.push(RELAY_QUIC_ADDRESS, &address).await?;
-                    }
-                }
-            }
-        }
-        Command::Dial { transport } => {
+    match mode {
+        Mode::Dial => {
             let relay_addr = match transport {
                 TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
-                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
+                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
             };
 
-            let mut swarm = make_client_swarm()?;
+            let mut swarm = make_swarm()?;
             client_listen_on_transport(&mut swarm, transport).await?;
             client_connect_to_relay(&mut swarm, relay_addr.clone()).await?;
 
@@ -134,13 +77,13 @@ async fn main() -> Result<()> {
 
             loop {
                 match swarm.next().await.unwrap() {
-                    SwarmEvent::Behaviour(ClientBehaviourEvent::Dcutr(
+                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
                         dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
                     )) => {
                         log::info!("Successfully hole-punched to {remote_peer_id}");
                         return Ok(());
                     }
-                    SwarmEvent::Behaviour(ClientBehaviourEvent::Dcutr(
+                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
                         dcutr::Event::DirectConnectionUpgradeFailed {
                             remote_peer_id,
                             error,
@@ -156,13 +99,13 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Command::Listen { transport } => {
+        Mode::Listen => {
             let relay_addr = match transport {
                 TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
-                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
+                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
             };
 
-            let mut swarm = make_client_swarm()?;
+            let mut swarm = make_swarm()?;
             client_listen_on_transport(&mut swarm, transport).await?;
             client_connect_to_relay(&mut swarm, relay_addr.clone()).await?;
 
@@ -170,7 +113,7 @@ async fn main() -> Result<()> {
 
             loop {
                 match swarm.next().await.unwrap() {
-                    SwarmEvent::Behaviour(ClientBehaviourEvent::RelayClient(
+                    SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
                         relay::client::Event::ReservationReqAccepted { .. },
                     )) => {
                         log::info!("Relay accepted our reservation request.");
@@ -179,13 +122,13 @@ async fn main() -> Result<()> {
                             .push(LISTEN_CLIENT_PEER_ID, swarm.local_peer_id())
                             .await?;
                     }
-                    SwarmEvent::Behaviour(ClientBehaviourEvent::Dcutr(
+                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
                         dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
                     )) => {
                         log::info!("Successfully hole-punched to {remote_peer_id}");
                         return Ok(());
                     }
-                    SwarmEvent::Behaviour(ClientBehaviourEvent::Dcutr(
+                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
                         dcutr::Event::DirectConnectionUpgradeFailed {
                             remote_peer_id,
                             error,
@@ -204,15 +147,28 @@ async fn main() -> Result<()> {
     }
 }
 
+fn get_env<T>(key: &'static str) -> Result<T>
+where
+    T: FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    let val = std::env::var(key)
+        .with_context(|| format!("Missing env var `{key}`"))?
+        .parse()
+        .with_context(|| format!("Failed to parse `{key}`)"))?;
+
+    Ok(val)
+}
+
 async fn client_connect_to_relay(
-    swarm: &mut Swarm<ClientBehaviour>,
+    swarm: &mut Swarm<Behaviour>,
     relay_addr: Multiaddr,
 ) -> Result<()> {
     // Connect to the relay server.
     swarm.dial(relay_addr.clone())?;
 
     loop {
-        if let SwarmEvent::Behaviour(ClientBehaviourEvent::Identify(identify::Event::Received {
+        if let SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
             info: identify::Info { observed_addr, .. },
             ..
         })) = swarm.next().await.unwrap()
@@ -228,7 +184,7 @@ async fn client_connect_to_relay(
 }
 
 async fn client_listen_on_transport(
-    swarm: &mut Swarm<ClientBehaviour>,
+    swarm: &mut Swarm<Behaviour>,
     transport: TransportProtocol,
 ) -> Result<()> {
     let listen_addr = match transport {
@@ -269,7 +225,7 @@ fn quic_addr(addr: IpAddr) -> Multiaddr {
         .with(Protocol::QuicV1)
 }
 
-fn make_client_swarm() -> Result<Swarm<ClientBehaviour>> {
+fn make_swarm() -> Result<Swarm<Behaviour>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     log::info!("Local peer id: {local_peer_id}");
@@ -294,39 +250,13 @@ fn make_client_swarm() -> Result<Swarm<ClientBehaviour>> {
             .boxed()
     };
 
-    let behaviour = ClientBehaviour {
+    let behaviour = Behaviour {
         relay_client: client,
         identify: identify::Behaviour::new(identify::Config::new(
             "/hole-punch-tests/1".to_owned(),
             local_key.public(),
         )),
         dcutr: dcutr::Behaviour::new(local_peer_id),
-    };
-
-    Ok(SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build())
-}
-
-fn make_relay_swarm() -> Result<Swarm<RelayBehaviour>> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    log::info!("Local peer id: {local_peer_id}");
-
-    let transport = tcp::tokio::Transport::new(tcp::Config::default().port_reuse(true))
-        .upgrade(upgrade::Version::V1)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .or_transport(quic::tokio::Transport::new(quic::Config::new(&local_key)))
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
-    let behaviour = RelayBehaviour {
-        relay: relay::Behaviour::new(local_peer_id, relay::Config::default()),
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/hole-punch-tests/1".to_owned(),
-            local_key.public(),
-        )),
     };
 
     Ok(SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build())
@@ -371,32 +301,49 @@ impl RedisClient {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Parser)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum TransportProtocol {
     Tcp,
     Quic,
 }
 
 impl FromStr for TransportProtocol {
-    type Err = String;
+    type Err = io::Error;
     fn from_str(mode: &str) -> Result<Self, Self::Err> {
         match mode {
             "tcp" => Ok(TransportProtocol::Tcp),
             "quic" => Ok(TransportProtocol::Quic),
-            _ => Err("Expected either 'tcp' or 'quic'".to_string()),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Expected either 'tcp' or 'quic'",
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mode {
+    Dial,
+    Listen,
+}
+
+impl FromStr for Mode {
+    type Err = io::Error;
+    fn from_str(mode: &str) -> Result<Self, Self::Err> {
+        match mode {
+            "dial" => Ok(Mode::Dial),
+            "listen" => Ok(Mode::Listen),
+            _ => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Expected either 'dial' or 'listen'",
+            )),
         }
     }
 }
 
 #[derive(NetworkBehaviour)]
-struct ClientBehaviour {
+struct Behaviour {
     relay_client: relay::client::Behaviour,
     identify: identify::Behaviour,
     dcutr: dcutr::Behaviour,
-}
-
-#[derive(NetworkBehaviour)]
-struct RelayBehaviour {
-    relay: relay::Behaviour,
-    identify: identify::Behaviour,
 }

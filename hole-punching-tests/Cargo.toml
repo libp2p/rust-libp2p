@@ -6,11 +6,10 @@ publish = false
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.3.8", features = ["derive", "env"] }
+anyhow = "1"
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros", "noise", "ping", "relay", "tcp", "yamux", "quic"] }
 log = "0.4"
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 tokio = { version = "1.29.1", features = ["full"] }
-anyhow = "1"
