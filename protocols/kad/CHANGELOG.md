@@ -1,6 +1,7 @@
 ## 0.45.0 - unreleased
 
 - Emit `ModeChanged` event whenever we automatically reconfigure the mode.
+  See [PR 4341].
 
 [PR 4341]: https://github.com/libp2p/rust-libp2p/pull/4341
 
