@@ -1,10 +1,15 @@
+## 0.44.5
+- Migrate to `quick-protobuf-codec` crate for codec logic.
+  see [PR 4501].
+
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
+
 ## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.
   See [PR 4270].
 - Reduce noise of "remote supports our protocol" log.
   See [PR 4278].
-- Depend on `quick-protobuf-codec` crate for codec logic.
 
 [PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
 [PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278

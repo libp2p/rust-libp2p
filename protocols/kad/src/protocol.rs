@@ -178,45 +178,40 @@ impl UpgradeInfo for KademliaProtocolConfig {
 }
 
 /// Codec for Kademlia inbound and outbound message framing.
-pub struct KadCodec<A, B> {
+pub struct Codec<A, B> {
     codec: quick_protobuf_codec::Codec<proto::Message>,
     __phantom: PhantomData<(A, B)>,
 }
-impl<A, B> KadCodec<A, B> {
+impl<A, B> Codec<A, B> {
     fn new(max_packet_size: usize) -> Self {
-        KadCodec {
+        Codec {
             codec: quick_protobuf_codec::Codec::new(max_packet_size),
             __phantom: PhantomData,
         }
     }
 }
 
-impl<A: Into<proto::Message>, B> Encoder for KadCodec<A, B> {
+impl<A: Into<proto::Message>, B> Encoder for Codec<A, B> {
     type Error = io::Error;
     type Item = A;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.codec
-            .encode(item.into(), dst)
-            .map_err(|err| err.into())
+        Ok(self.codec.encode(item.into(), dst)?)
     }
 }
-impl<A, B: TryFrom<proto::Message, Error = io::Error>> Decoder for KadCodec<A, B> {
+impl<A, B: TryFrom<proto::Message, Error = io::Error>> Decoder for Codec<A, B> {
     type Error = io::Error;
     type Item = B;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        self.codec
-            .decode(src)?
-            .map(|msg| B::try_from(msg))
-            .transpose()
+        self.codec.decode(src)?.map(B::try_from).transpose()
     }
 }
 
 /// Sink of responses and stream of requests.
-pub(crate) type KadInStreamSink<S> = Framed<S, KadCodec<KadResponseMsg, KadRequestMsg>>;
+pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestMsg>>;
 /// Sink of requests and stream of responses.
-pub(crate) type KadOutStreamSink<S> = Framed<S, KadCodec<KadRequestMsg, KadResponseMsg>>;
+pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
 
 impl<C> InboundUpgrade<C> for KademliaProtocolConfig
 where
@@ -227,7 +222,7 @@ where
     type Error = io::Error;
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        let codec = KadCodec::new(self.max_packet_size);
+        let codec = Codec::new(self.max_packet_size);
 
         future::ok(Framed::new(incoming, codec))
     }
@@ -242,7 +237,7 @@ where
     type Error = io::Error;
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        let codec = KadCodec::new(self.max_packet_size);
+        let codec = Codec::new(self.max_packet_size);
 
         future::ok(Framed::new(incoming, codec))
     }
