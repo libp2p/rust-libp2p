@@ -20,6 +20,7 @@
 
 use anyhow::{Context, Result};
 use futures::{future::Either, stream::StreamExt};
+use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
@@ -56,17 +57,22 @@ async fn main() -> Result<()> {
 
     let mut redis = RedisClient::new("redis", 6379).await?;
 
+    let relay_addr = match transport {
+        TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
+        TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
+    };
+
+    let mut swarm = make_swarm()?;
+    client_listen_on_transport(&mut swarm, transport).await?;
+    client_connect_to_relay(&mut swarm, relay_addr.clone())
+        .await
+        .context("Failed to connect to relay")?;
+
     match mode {
+        Mode::Listen => {
+            swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+        }
         Mode::Dial => {
-            let relay_addr = match transport {
-                TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
-                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
-            };
-
-            let mut swarm = make_swarm()?;
-            client_listen_on_transport(&mut swarm, transport).await?;
-            client_connect_to_relay(&mut swarm, relay_addr.clone()).await?;
-
             let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
 
             swarm.dial(
@@ -74,75 +80,39 @@ async fn main() -> Result<()> {
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(remote_peer_id)),
             )?;
-
-            loop {
-                match swarm.next().await.unwrap() {
-                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                        dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
-                    )) => {
-                        log::info!("Successfully hole-punched to {remote_peer_id}");
-                        return Ok(());
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                        dcutr::Event::DirectConnectionUpgradeFailed {
-                            remote_peer_id,
-                            error,
-                        },
-                    )) => {
-                        log::info!("Failed to hole-punched to {remote_peer_id}");
-                        return Err(anyhow::Error::new(error));
-                    }
-                    SwarmEvent::OutgoingConnectionError { error, .. } => {
-                        anyhow::bail!(error)
-                    }
-                    _ => {}
-                }
-            }
         }
-        Mode::Listen => {
-            let relay_addr = match transport {
-                TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
-                TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
-            };
+    }
 
-            let mut swarm = make_swarm()?;
-            client_listen_on_transport(&mut swarm, transport).await?;
-            client_connect_to_relay(&mut swarm, relay_addr.clone()).await?;
+    loop {
+        match swarm.next().await.unwrap() {
+            SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
+                relay::client::Event::ReservationReqAccepted { .. },
+            )) => {
+                log::info!("Relay accepted our reservation request.");
 
-            swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
-
-            loop {
-                match swarm.next().await.unwrap() {
-                    SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
-                        relay::client::Event::ReservationReqAccepted { .. },
-                    )) => {
-                        log::info!("Relay accepted our reservation request.");
-
-                        redis
-                            .push(LISTEN_CLIENT_PEER_ID, swarm.local_peer_id())
-                            .await?;
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                        dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
-                    )) => {
-                        log::info!("Successfully hole-punched to {remote_peer_id}");
-                        return Ok(());
-                    }
-                    SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                        dcutr::Event::DirectConnectionUpgradeFailed {
-                            remote_peer_id,
-                            error,
-                        },
-                    )) => {
-                        log::info!("Failed to hole-punched to {remote_peer_id}");
-                        return Err(anyhow::Error::new(error));
-                    }
-                    SwarmEvent::OutgoingConnectionError { error, .. } => {
-                        anyhow::bail!(error)
-                    }
-                    _ => {}
-                }
+                redis
+                    .push(LISTEN_CLIENT_PEER_ID, swarm.local_peer_id())
+                    .await?;
             }
+            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
+                dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
+            )) => {
+                log::info!("Successfully hole-punched to {remote_peer_id}");
+                return Ok(());
+            }
+            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
+                dcutr::Event::DirectConnectionUpgradeFailed {
+                    remote_peer_id,
+                    error,
+                },
+            )) => {
+                log::info!("Failed to hole-punched to {remote_peer_id}");
+                return Err(anyhow::Error::new(error));
+            }
+            SwarmEvent::OutgoingConnectionError { error, .. } => {
+                anyhow::bail!(error)
+            }
+            _ => {}
         }
     }
 }
@@ -164,22 +134,34 @@ async fn client_connect_to_relay(
     swarm: &mut Swarm<Behaviour>,
     relay_addr: Multiaddr,
 ) -> Result<()> {
+    let opts = DialOpts::from(relay_addr);
+    let relay_connection_id = opts.connection_id();
+
     // Connect to the relay server.
-    swarm.dial(relay_addr.clone())?;
+    swarm.dial(opts)?;
 
     loop {
-        if let SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
-            info: identify::Info { observed_addr, .. },
-            ..
-        })) = swarm.next().await.unwrap()
-        {
-            log::info!("Relay told us our public address: {observed_addr}");
-            swarm.add_external_address(observed_addr);
-            break;
+        match swarm.next().await.unwrap() {
+            SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
+                info: identify::Info { observed_addr, .. },
+                ..
+            })) => {
+                log::info!("Relay told us our public address: {observed_addr}");
+                swarm.add_external_address(observed_addr);
+                break;
+            }
+            SwarmEvent::ConnectionEstablished { connection_id, .. }
+                if connection_id == relay_connection_id =>
+            {
+                log::info!("Connected to the relay");
+            }
+            SwarmEvent::OutgoingConnectionError { error, .. } => {
+                anyhow::bail!(error)
+            }
+            _ => {}
         }
     }
 
-    log::info!("Connected to the relay");
     Ok(())
 }
 
