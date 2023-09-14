@@ -1,6 +1,6 @@
-## 0.44.5
+## 0.44.5 - unreleased
 - Migrate to `quick-protobuf-codec` crate for codec logic.
-  see [PR 4501].
+  See [PR 4501].
 
 [PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 
@@ -13,7 +13,6 @@
 
 [PR 4270]: https://github.com/libp2p/rust-libp2p/pull/4270
 [PR 4278]: https://github.com/libp2p/rust-libp2p/pull/4278
-[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 
 ## 0.44.3
 
