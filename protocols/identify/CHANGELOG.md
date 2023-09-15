@@ -1,6 +1,6 @@
 ## 0.44.0
 
-- Added `Info` to the `libp2p-identify::Event::Pushed` to report what was pushed.
+- Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
 
 ## 0.43.0
 
