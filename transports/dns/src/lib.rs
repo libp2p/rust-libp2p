@@ -21,17 +21,17 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`GenDnsConfig`] with its instantiations
-//! [`DnsConfig`] and `TokioDnsConfig` for use with `async-std` and `tokio`,
+//! This crate provides the type [`async_std::Config`] and [`tokio::Config`]
+//! for use with `async-std` and `tokio`,
 //! respectively.
 //!
-//! A [`GenDnsConfig`] is an address-rewriting [`Transport`] wrapper around
+//! A [`Config`] is an address-rewriting [`Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
 //! transport, except that [`Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the `DnsConfig` are
+//! The `async-std` feature and hence the `async_std::Config` are
 //! enabled by default. Tokio users can furthermore opt-in
 //! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
 //! features. For more information about these features, please
@@ -49,7 +49,7 @@
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
 //! If the implementation requires different characteristics, one should
-//! consider providing their own implementation of [`GenDnsConfig`] or use
+//! consider providing their own implementation of [`Config`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
@@ -112,17 +112,8 @@ const MAX_DNS_LOOKUPS: usize = 32;
 /// result of a single `/dnsaddr` lookup.
 const MAX_TXT_RECORDS: usize = 16;
 
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-/// using `async-std` for all async I/O.
-// #[cfg(feature = "async-std")]
-// pub type DnsConfig<T> = Config<T, AsyncStdResolver>;
-
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-/// using `tokio` for all async I/O.
-// #[cfg(feature = "tokio")]
-// pub type TokioDnsConfig<T> = Config<T, TokioAsyncResolver>;
-
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
+/// You shouldn't need to use this type directly. Use [`tokio::Config`] or [`async_std::Config`] instead.
 #[derive(Debug)]
 pub struct Config<T, R> {
     /// The underlying transport.
@@ -336,7 +327,7 @@ where
     }
 }
 
-/// The possible errors of a [`GenDnsConfig`] wrapped transport.
+/// The possible errors of a [`Config`] wrapped transport.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum DnsErr<TErr> {
