@@ -34,7 +34,7 @@ use libp2p::{
         upgrade,
     },
     dcutr,
-    dns::DnsConfig,
+    dns::async_std::Config,
     identify, identity, noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 &local_key,
             )));
 
-        block_on(DnsConfig::system(relay_tcp_quic_transport))
+        block_on(Config::system(relay_tcp_quic_transport))
             .unwrap()
             .map(|either_output, _| match either_output {
                 Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),

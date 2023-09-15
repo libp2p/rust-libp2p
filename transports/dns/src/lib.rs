@@ -57,8 +57,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod config;
+
 #[cfg(feature = "async-std")]
-use async_std_resolver::AsyncStdResolver;
+pub use config::async_std;
+
+#[cfg(feature = "tokio")]
+pub use config::tokio;
+
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
@@ -80,10 +86,6 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-use trust_dns_resolver::system_conf;
-#[cfg(feature = "tokio")]
-use trust_dns_resolver::TokioAsyncResolver;
 
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
@@ -112,75 +114,24 @@ const MAX_TXT_RECORDS: usize = 16;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `async-std` for all async I/O.
-#[cfg(feature = "async-std")]
-pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdResolver>;
+// #[cfg(feature = "async-std")]
+// pub type DnsConfig<T> = Config<T, AsyncStdResolver>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `tokio` for all async I/O.
-#[cfg(feature = "tokio")]
-pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioAsyncResolver>;
+// #[cfg(feature = "tokio")]
+// pub type TokioDnsConfig<T> = Config<T, TokioAsyncResolver>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
 #[derive(Debug)]
-pub struct GenDnsConfig<T, R> {
+pub struct Config<T, R> {
     /// The underlying transport.
     inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: R,
 }
 
-#[cfg(feature = "async-std")]
-impl<T> DnsConfig<T>
-where
-    T: Send,
-{
-    /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
-    pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
-        let (cfg, opts) = system_conf::read_system_conf()?;
-        Self::custom(inner, cfg, opts).await
-    }
-
-    /// Creates a [`DnsConfig`] with a custom resolver configuration and options.
-    pub async fn custom(
-        inner: T,
-        cfg: ResolverConfig,
-        opts: ResolverOpts,
-    ) -> Result<DnsConfig<T>, io::Error> {
-        // TODO: Make infallible in next breaking release. Or deprecation?
-        Ok(DnsConfig {
-            inner: Arc::new(Mutex::new(inner)),
-            resolver: async_std_resolver::resolver(cfg, opts).await,
-        })
-    }
-}
-
-#[cfg(feature = "tokio")]
-impl<T> TokioDnsConfig<T>
-where
-    T: Send,
-{
-    /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
-    pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {
-        let (cfg, opts) = system_conf::read_system_conf()?;
-        Self::custom(inner, cfg, opts)
-    }
-
-    /// Creates a [`TokioDnsConfig`] with a custom resolver configuration
-    /// and options.
-    pub fn custom(
-        inner: T,
-        cfg: ResolverConfig,
-        opts: ResolverOpts,
-    ) -> Result<TokioDnsConfig<T>, io::Error> {
-        // TODO: Make infallible in next breaking release. Or deprecation?
-        Ok(TokioDnsConfig {
-            inner: Arc::new(Mutex::new(inner)),
-            resolver: TokioAsyncResolver::tokio(cfg, opts),
-        })
-    }
-}
-
-impl<T, R> Transport for GenDnsConfig<T, R>
+impl<T, R> Transport for Config<T, R>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send,
@@ -238,7 +189,7 @@ where
     }
 }
 
-impl<T, R> GenDnsConfig<T, R>
+impl<T, R> Config<T, R>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send,
@@ -664,7 +615,7 @@ mod tests {
             }
         }
 
-        async fn run<T, R>(mut transport: GenDnsConfig<T, R>)
+        async fn run<T, R>(mut transport: Config<T, R>)
         where
             T: Transport + Clone + Send + Unpin + 'static,
             T::Error: Send,
@@ -746,7 +697,8 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                DnsConfig::custom(CustomTransport, config, opts).then(|dns| run(dns.unwrap())),
+                async_std::Config::custom(CustomTransport, config, opts)
+                    .then(|dns| run(dns.unwrap())),
             );
         }
 
@@ -761,8 +713,9 @@ mod tests {
                 .enable_time()
                 .build()
                 .unwrap();
+
             rt.block_on(run(
-                TokioDnsConfig::custom(CustomTransport, config, opts).unwrap()
+                tokio::Config::custom(CustomTransport, config, opts).unwrap()
             ));
         }
     }

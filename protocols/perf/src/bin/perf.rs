@@ -405,7 +405,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp))?;
+        let dns = libp2p_dns::tokio::Config::system(OrTransport::new(quic, tcp))?;
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
