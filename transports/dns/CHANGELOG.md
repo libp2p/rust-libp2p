@@ -1,3 +1,11 @@
+## 0.41.0
+
+- Rename types with `Dns` prefix (`TokioDnsConfig`, and `DnsConfig`)
+- Integrate `GenDnsConfig` into `Config`
+    See [PR 4505].
+
+[PR 4505]: https://github.com/libp2p/rust-libp2p/pull/4505
+
 ## 0.40.0 
 
 - Raise MSRV to 1.65.
