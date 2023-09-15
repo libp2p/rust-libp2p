@@ -2573,7 +2573,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.44.4"
+version = "0.44.5"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2594,6 +2594,7 @@ dependencies = [
  "libp2p-yamux",
  "log",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
  "serde",

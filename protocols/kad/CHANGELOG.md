@@ -1,3 +1,9 @@
+## 0.44.5 - unreleased
+- Migrate to `quick-protobuf-codec` crate for codec logic.
+  See [PR 4501].
+
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
+
 ## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.

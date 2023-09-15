@@ -78,7 +78,7 @@ libp2p-floodsub = { version = "0.43.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.45.1", path = "protocols/gossipsub" }
 libp2p-identify = { version = "0.43.0", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.3" }
-libp2p-kad = { version = "0.44.4", path = "protocols/kad" }
+libp2p-kad = { version = "0.44.5", path = "protocols/kad" }
 libp2p-mdns = { version = "0.44.0", path = "protocols/mdns" }
 libp2p-memory-connection-limits = { version = "0.1.0", path = "misc/memory-connection-limits" }
 libp2p-metrics = { version = "0.13.1", path = "misc/metrics" }
