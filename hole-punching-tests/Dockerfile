@@ -16,4 +16,6 @@ RUN --mount=type=cache,target=./target \
 
 FROM alpine:3
 COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punch-client
+RUN --mount=type=cache,target=/var/cache/apk apk add bind-utils
+
 ENV RUST_BACKTRACE=1
