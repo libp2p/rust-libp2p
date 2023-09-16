@@ -1,4 +1,6 @@
 use libp2p_core::{muxing::StreamMuxerBox, Transport};
+use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_swarm::{NetworkBehaviour, Swarm};
 use std::convert::Infallible;
 use std::io;
@@ -127,6 +129,61 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
         self.with_tcp_config(Default::default())
     }
 
+    pub fn with_tcp_2<D, SecU, E, MuxU, MuxE, MuxM>(
+        self,
+        security_upgrade: SecU,
+        multiplexer_upgrade: MuxU,
+    ) -> Result<
+        SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+        AuthenticationError,
+    >
+    where
+        D: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecU: IntoSecurityUpgrade,
+        SecU::Upgrade: InboundUpgrade<
+            Negotiated<libp2p_tcp::tokio::TcpStream>,
+            Output = (PeerId, D),
+            Error = E,
+        >,
+    <SecU::Upgrade as InboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>>>::Future: Send,
+        SecU::Upgrade: OutboundUpgrade<
+            Negotiated<libp2p_tcp::tokio::TcpStream>,
+        Output = (PeerId, D),
+        Error = E,
+        > + Clone
+        + Send + 'static,
+
+    <SecU::Upgrade as OutboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>>>::Future: Send,
+        E: std::error::Error + Send + Sync + 'static,
+    <<<SecU as IntoSecurityUpgrade>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecU as IntoSecurityUpgrade>::Upgrade as UpgradeInfo>::Info: Send,
+
+        MuxM: StreamMuxer + Send + 'static,
+        MuxM::Substream: Send + 'static,
+        MuxM::Error: Send + Sync + 'static,
+
+        MuxU: IntoMultiplexerUpgrade,
+        MuxU::Upgrade: InboundUpgrade<Negotiated<D>, Output = MuxM, Error = MuxE>,
+    <MuxU::Upgrade as InboundUpgrade<Negotiated<D>>>::Future: Send,
+        MuxU::Upgrade: OutboundUpgrade<Negotiated<D>, Output = MuxM, Error = MuxE> + Clone + Send + 'static,
+    <MuxU::Upgrade as OutboundUpgrade<Negotiated<D>>>::Future: Send,
+        MuxE: std::error::Error + Send + Sync + 'static,
+    <<<MuxU as IntoMultiplexerUpgrade>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxU as IntoMultiplexerUpgrade>::Upgrade as UpgradeInfo>::Info: Send,
+    {
+        Ok(SwarmBuilder {
+            phase: QuicPhase {
+                transport: libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
+                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                    .authenticate(security_upgrade.into_security_upgrade(&self.keypair))
+                    .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+                    .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
+            },
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
+    }
+
     pub fn with_tcp_config(
         self,
         tcp_config: libp2p_tcp::Config,
@@ -136,6 +193,37 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
             phantom: PhantomData,
             phase: TcpTlsPhase { tcp_config },
         }
+    }
+}
+
+pub trait IntoSecurityUpgrade {
+    type Upgrade;
+
+    fn into_security_upgrade(self, keypair: &Keypair) -> Self::Upgrade;
+}
+
+impl<T, F> IntoSecurityUpgrade for F
+where
+    F: for<'a> FnOnce(&'a Keypair) -> T,
+{
+    type Upgrade = T;
+
+    fn into_security_upgrade(self, keypair: &Keypair) -> Self::Upgrade {
+        self(keypair)
+    }
+}
+
+pub trait IntoMultiplexerUpgrade {
+    type Upgrade;
+
+    fn into_multiplexer_upgrade(self) -> Self::Upgrade;
+}
+
+impl<U> IntoMultiplexerUpgrade for U {
+    type Upgrade = Self;
+
+    fn into_multiplexer_upgrade(self) -> Self::Upgrade {
+        self
     }
 }
 
@@ -1609,6 +1697,22 @@ mod tests {
             .with_tls()
             .unwrap()
             .with_noise()
+            .unwrap()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
+    fn tcp2() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_tcp_2(
+                // TODO: Handle unwrap
+                |keypair: &Keypair| libp2p_tls::Config::new(keypair).unwrap(),
+                libp2p_yamux::Config::default(),
+            )
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
