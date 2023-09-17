@@ -30,7 +30,7 @@ use std::{
 
 use crate::proto::{Flag, Message};
 use crate::{
-    stream::drop_listener::DropMessage,
+    stream::drop_listener::GracefullyClosed,
     stream::framed_dc::FramedDc,
     stream::state::{Closing, State},
 };
@@ -62,7 +62,7 @@ pub struct Stream<T> {
     state: State,
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
-    drop_notifier: Option<oneshot::Sender<DropMessage>>,
+    drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
 impl<T> Stream<T>
@@ -139,28 +139,20 @@ where
                 ..
             } = &mut *self;
 
-            match ready!(io_poll_next(io, cx)) {
-                Ok(Some((flag, message))) => {
+            match ready!(io_poll_next(io, cx))? {
+                Some((flag, message)) => {
                     if let Some(flag) = flag {
                         state.handle_inbound_flag(flag, read_buffer);
                     }
 
+                    debug_assert!(read_buffer.is_empty());
                     if let Some(message) = message {
                         *read_buffer = message.into();
                     }
                 }
-                Ok(None) => {
+                None => {
                     state.handle_inbound_flag(Flag::FIN, read_buffer);
                     return Poll::Ready(Ok(0));
-                }
-                Err(e) => {
-                    log::error!("Error while reading next message: {:?}", e);
-                    let _ = self
-                        .drop_notifier
-                        .take()
-                        .expect("should be able to take drop_notifier value")
-                        .send(DropMessage::SendReset);
-                    return Poll::Ready(Err(e));
                 }
             }
         }
@@ -239,7 +231,7 @@ where
                         .drop_notifier
                         .take()
                         .expect("to not close twice")
-                        .send(DropMessage::GracefullyClosed);
+                        .send(GracefullyClosed {});
 
                     return Poll::Ready(Ok(()));
                 }

@@ -36,7 +36,7 @@ pub struct DropListener<T> {
 }
 
 impl<T> DropListener<T> {
-    pub fn new(stream: FramedDc<T>, receiver: oneshot::Receiver<DropMessage>) -> Self {
+    pub fn new(stream: FramedDc<T>, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
         Self {
             state: State::Idle { stream, receiver },
         }
@@ -47,7 +47,7 @@ enum State<T> {
     /// The [`DropListener`] is idle and waiting to be activated.
     Idle {
         stream: FramedDc<T>,
-        receiver: oneshot::Receiver<DropMessage>,
+        receiver: oneshot::Receiver<GracefullyClosed>,
     },
     /// The stream got dropped and we are sending a reset flag.
     SendingReset {
@@ -75,13 +75,8 @@ where
                     stream,
                     mut receiver,
                 } => match receiver.poll_unpin(cx) {
-                    Poll::Ready(Ok(DropMessage::GracefullyClosed)) => {
+                    Poll::Ready(Ok(GracefullyClosed {})) => {
                         return Poll::Ready(Ok(()));
-                    }
-                    Poll::Ready(Ok(DropMessage::SendReset)) => {
-                        log::info!("Stream gracefully errored, sending Reset");
-                        *state = State::SendingReset { stream };
-                        continue;
                     }
                     Poll::Ready(Err(Canceled)) => {
                         log::info!("Stream dropped without graceful close, sending Reset");
@@ -122,10 +117,5 @@ where
     }
 }
 
-/// The reason we are dropping the Stream.
-pub enum DropMessage {
-    /// The stream was closed gracefully.
-    GracefullyClosed,
-    /// The stream errored (such as receiving too much data) and we are sending a reset signal
-    SendReset,
-}
+/// Indicates that our stream got gracefully closed.
+pub struct GracefullyClosed {}
