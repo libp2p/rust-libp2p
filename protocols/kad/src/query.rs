@@ -225,6 +225,12 @@ impl<TInner> QueryPool<TInner> {
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct QueryId(usize);
 
+impl<T: Into<usize>> From<T> for QueryId {
+    fn from(id: T) -> Self {
+        QueryId(id.into())
+    }
+}
+
 /// The configuration for queries in a `QueryPool`.
 #[derive(Debug, Clone)]
 pub(crate) struct QueryConfig {
