@@ -130,7 +130,7 @@ where
     R: Clone + Send + Sync + Resolver + 'static,
 {
     type Output = T::Output;
-    type Error = DnsErr<T::Error>;
+    type Error = Error<T::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
@@ -145,7 +145,7 @@ where
         self.inner
             .lock()
             .listen_on(id, addr)
-            .map_err(|e| e.map(DnsErr::Transport))
+            .map_err(|e| e.map(Error::Transport))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -174,8 +174,8 @@ where
         let mut inner = self.inner.lock();
         Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
             event
-                .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
-                .map_err(DnsErr::Transport)
+                .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(Error::Transport))
+                .map_err(Error::Transport)
         })
     }
 }
@@ -221,7 +221,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
-                        last_err = Some(DnsErr::TooManyLookups);
+                        last_err = Some(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -286,12 +286,12 @@ where
                             // actually accepted, i.e. for which it produced
                             // a dialing future.
                             dial_attempts += 1;
-                            out.await.map_err(DnsErr::Transport)
+                            out.await.map_err(Error::Transport)
                         }
                         Err(TransportError::MultiaddrNotSupported(a)) => {
-                            Err(DnsErr::MultiaddrNotSupported(a))
+                            Err(Error::MultiaddrNotSupported(a))
                         }
-                        Err(TransportError::Other(err)) => Err(DnsErr::Transport(err)),
+                        Err(TransportError::Other(err)) => Err(Error::Transport(err)),
                     };
 
                     match result {
@@ -319,7 +319,7 @@ where
             // for the given address to begin with (i.e. DNS lookups succeeded but
             // produced no records relevant for the given `addr`).
             Err(last_err.unwrap_or_else(|| {
-                DnsErr::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
+                Error::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
             }))
         }
         .boxed()
@@ -330,7 +330,7 @@ where
 /// The possible errors of a [`Config`] wrapped transport.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum DnsErr<TErr> {
+pub enum Error<TErr> {
     /// The underlying transport encountered an error.
     Transport(TErr),
     /// DNS resolution failed.
@@ -346,30 +346,30 @@ pub enum DnsErr<TErr> {
     TooManyLookups,
 }
 
-impl<TErr> fmt::Display for DnsErr<TErr>
+impl<TErr> fmt::Display for Error<TErr>
 where
     TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DnsErr::Transport(err) => write!(f, "{err}"),
-            DnsErr::ResolveError(err) => write!(f, "{err}"),
-            DnsErr::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
-            DnsErr::TooManyLookups => write!(f, "Too many DNS lookups"),
+            Error::Transport(err) => write!(f, "{err}"),
+            Error::ResolveError(err) => write!(f, "{err}"),
+            Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
+            Error::TooManyLookups => write!(f, "Too many DNS lookups"),
         }
     }
 }
 
-impl<TErr> error::Error for DnsErr<TErr>
+impl<TErr> error::Error for Error<TErr>
 where
     TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            DnsErr::Transport(err) => Some(err),
-            DnsErr::ResolveError(err) => Some(err),
-            DnsErr::MultiaddrNotSupported(_) => None,
-            DnsErr::TooManyLookups => None,
+            Error::Transport(err) => Some(err),
+            Error::ResolveError(err) => Some(err),
+            Error::MultiaddrNotSupported(_) => None,
+            Error::TooManyLookups => None,
         }
     }
 }
@@ -395,7 +395,7 @@ enum Resolved<'a> {
 fn resolve<'a, E: 'a + Send, R: Resolver>(
     proto: &Protocol<'a>,
     resolver: &'a R,
-) -> BoxFuture<'a, Result<Resolved<'a>, DnsErr<E>>> {
+) -> BoxFuture<'a, Result<Resolved<'a>, Error<E>>> {
     match proto {
         Protocol::Dns(ref name) => resolver
             .lookup_ip(name.clone().into_owned())
@@ -417,7 +417,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(one)))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dns4(ref name) => resolver
@@ -441,7 +441,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dns6(ref name) => resolver
@@ -465,7 +465,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dnsaddr(ref name) => {
@@ -490,7 +490,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         }
                         Ok(Resolved::Addrs(addrs))
                     }
-                    Err(e) => Err(DnsErr::ResolveError(e)),
+                    Err(e) => Err(Error::ResolveError(e)),
                 })
                 .boxed()
         }
@@ -661,7 +661,7 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(DnsErr::ResolveError(_)) => {}
+                Err(Error::ResolveError(_)) => {}
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
@@ -672,7 +672,7 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(DnsErr::ResolveError(e)) => match e.kind() {
+                Err(Error::ResolveError(e)) => match e.kind() {
                     ResolveErrorKind::NoRecordsFound { .. } => {}
                     _ => panic!("Unexpected DNS error: {e:?}"),
                 },
