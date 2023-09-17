@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.6.0-alpha"
+version = "0.6.1-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 async-trait = "0.1"
-asynchronous-codec = "0.6.2"
 bytes = "1"
 futures = "0.3"
 futures-timer = "3"
@@ -21,11 +20,9 @@ if-watch = "3.0"
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
+libp2p-webrtc-utils = { workspace = true }
 log = "0.4"
-sha2 = "0.10.7"
-multihash = { workspace = true  }
-quick-protobuf = "0.8"
-quick-protobuf-codec = { workspace = true }
+multihash = { workspace = true }
 rand = "0.8"
 rcgen = "0.11.1"
 serde = { version = "1.0", features = ["derive"] }
