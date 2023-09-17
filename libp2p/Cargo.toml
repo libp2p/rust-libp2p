@@ -144,6 +144,7 @@ env_logger = "0.10.0"
 clap = { version = "4.1.6", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
+libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 

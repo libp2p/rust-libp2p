@@ -23,7 +23,7 @@ use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 
 /// Upgrade applying a function to an inner upgrade.
 #[derive(Debug, Clone)]
-pub(crate) struct Upgrade<U, F> {
+pub struct Upgrade<U, F> {
     upgrade: U,
     fun: F,
 }
