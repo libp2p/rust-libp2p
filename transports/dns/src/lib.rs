@@ -62,8 +62,16 @@ mod config;
 #[cfg(feature = "async-std")]
 pub use config::async_std;
 
+#[cfg(feature = "async-std")]
+#[deprecated(since = "0.40.0", note = "Use `async_std::Config` instead.")]
+pub type DnsConfig<T> = async_std::Config<T>;
+
 #[cfg(feature = "tokio")]
 pub use config::tokio;
+
+#[cfg(feature = "tokio")]
+#[deprecated(since = "0.40.0", note = "Use `tokio::Config` instead.")]
+pub type TokioDnsConfig<T> = tokio::Config<T>;
 
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
@@ -121,6 +129,12 @@ pub struct Config<T, R> {
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: R,
 }
+
+#[deprecated(
+    since = "0.40.0",
+    note = "Use `async_std::Config` or `tokio::Config` instead."
+)]
+pub type GenDnsConfig<T, R> = Config<T, R>;
 
 impl<T, R> Transport for Config<T, R>
 where
@@ -345,6 +359,9 @@ pub enum Error<TErr> {
     /// should be investigated.
     TooManyLookups,
 }
+
+#[deprecated(since = "0.40.0", note = "Use `Error` instead.")]
+pub type DnsError<TErr> = Error<TErr>;
 
 impl<TErr> fmt::Display for Error<TErr>
 where
