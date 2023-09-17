@@ -28,3 +28,8 @@ web-sys = { version = "0.3.61", features = ["BinaryType", "CloseEvent", "Message
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+libp2p-yamux = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-identity = { workspace = true }
