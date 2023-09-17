@@ -201,6 +201,7 @@ pub(crate) mod wasm {
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::{noise, yamux, PeerId, Transport as _};
     use libp2p_mplex as mplex;
+    use libp2p_webrtc_websys as webrtc;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
@@ -264,7 +265,11 @@ pub(crate) mod wasm {
             (Transport::Ws, _, None) => {
                 bail!("Missing muxer protocol for WS")
             }
-            (Transport::WebRtcDirect | Transport::QuicV1 | Transport::Tcp, _, _) => {
+            Transport::WebRtcDirect => Ok((
+                webrtc::Transport::new(webrtc::Config::new(&local_key)).boxed(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+            )),
+            (Transport::QuicV1 | Transport::Tcp, _, _) => {
                 bail!("{transport:?} is not supported in WASM")
             }
         })
