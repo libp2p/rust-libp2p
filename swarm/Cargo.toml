@@ -45,7 +45,7 @@ env_logger = "0.10"
 futures = "0.3.28"
 libp2p-identify = { path = "../protocols/identify" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-identity = { workspace = true, features = ["ed25519"] }
-libp2p-kad = { path = "../protocols/kad" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks re
+libp2p-kad = { path = "../protocols/kad" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-ping = { path = "../protocols/ping" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-plaintext = { path = "../transports/plaintext" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 libp2p-swarm-derive = { path = "../swarm-derive" } # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
