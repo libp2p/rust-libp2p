@@ -270,16 +270,16 @@ impl Connection {
         let onmessage_closure = Closure::<dyn FnMut(_)>::new({
             let read_buffer = read_buffer.clone();
             let new_data_waker = new_data_waker.clone();
+            let errored = errored.clone();
             move |e: MessageEvent| {
                 let data = js_sys::Uint8Array::new(&e.data());
 
                 let mut read_buffer = read_buffer.lock().unwrap();
 
                 if read_buffer.len() + data.length() as usize > MAX_BUFFER {
-                    log::warn!(
-                        "Remote is overloading us with messages, dropping {} bytes of data",
-                        data.length()
-                    );
+                    log::warn!("Remote is overloading us with messages, closing connection");
+                    errored.store(true, Ordering::SeqCst);
+
                     return;
                 }
 
