@@ -26,9 +26,8 @@ pub(crate) mod native {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::websocket::WsConfig;
-    use libp2p::{noise, tcp, tls, yamux, PeerId, Transport as _};
+    use libp2p::{noise, quic, tcp, tls, yamux, PeerId, Transport as _};
     use libp2p_mplex as mplex;
-    use libp2p_quic as quic;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
@@ -160,6 +159,7 @@ pub(crate) mod wasm {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
     use libp2p::PeerId;
+    use libp2p_webrtc_websys as webrtc;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
@@ -182,16 +182,19 @@ pub(crate) mod wasm {
         ip: &str,
         transport: Transport,
     ) -> Result<(BoxedTransport, String)> {
-        if let Transport::Webtransport = transport {
-            Ok((
+        match transport {
+            Transport::Webtransport => Ok((
                 libp2p::webtransport_websys::Transport::new(
                     libp2p::webtransport_websys::Config::new(&local_key),
                 )
                 .boxed(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
-            ))
-        } else {
-            bail!("Only webtransport supported with wasm")
+            )),
+            Transport::WebRtcDirect => Ok((
+                webrtc::Transport::new(webrtc::Config::new(&local_key)).boxed(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+            )),
+            _ => bail!("Only webtransport and webrtc-direct are supported with wasm"),
         }
     }
 

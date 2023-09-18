@@ -78,6 +78,11 @@ pub use libp2p_kad as kad;
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "memory-connection-limits")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory-connection-limits")))]
+#[doc(inline)]
+pub use libp2p_memory_connection_limits as memory_connection_limits;
 #[cfg(feature = "metrics")]
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
@@ -93,6 +98,9 @@ pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "quic")]
+#[cfg(not(target_arch = "wasm32"))]
+pub use libp2p_quic as quic;
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -119,6 +127,10 @@ pub use libp2p_tls as tls;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "upnp")]
+#[cfg(not(target_arch = "wasm32"))]
+#[doc(inline)]
+pub use libp2p_upnp as upnp;
 #[cfg(feature = "wasm-ext")]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;

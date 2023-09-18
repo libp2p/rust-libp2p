@@ -303,6 +303,7 @@ impl ConnectionHandler for Handler {
                         return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Ok(rtt)));
                     }
                     Poll::Ready(Err(e)) => {
+                        self.interval.reset(self.config.interval);
                         self.pending_errors.push_front(e);
                     }
                 },
@@ -321,13 +322,16 @@ impl ConnectionHandler for Handler {
                     self.outbound = Some(OutboundState::OpenStream);
                     break;
                 }
-                None => {
-                    self.outbound = Some(OutboundState::OpenStream);
-                    let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol,
-                    });
-                }
+                None => match self.interval.poll_unpin(cx) {
+                    Poll::Pending => break,
+                    Poll::Ready(()) => {
+                        self.outbound = Some(OutboundState::OpenStream);
+                        let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ());
+                        return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                            protocol,
+                        });
+                    }
+                },
             }
         }
 

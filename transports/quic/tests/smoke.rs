@@ -414,6 +414,49 @@ async fn write_after_peer_dropped_stream() {
     stream_b.close().await.expect("Close failed.");
 }
 
+/// - A listens on 0.0.0.0:0
+/// - B listens on 127.0.0.1:0
+/// - A dials B
+/// - Source port of A at B is the A's listen port
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn test_local_listener_reuse() {
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
+
+    a_transport
+        .listen_on(
+            ListenerId::next(),
+            "/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap(),
+        )
+        .unwrap();
+
+    // wait until a listener reports a loopback address
+    let a_listen_addr = 'outer: loop {
+        let ev = a_transport.next().await.unwrap();
+        let listen_addr = ev.into_new_address().unwrap();
+        for proto in listen_addr.iter() {
+            if let Protocol::Ip4(ip4) = proto {
+                if ip4.is_loopback() {
+                    break 'outer listen_addr;
+                }
+            }
+        }
+    };
+    // If we do not poll until the end, `NewAddress` events may be `Ready` and `connect` function
+    // below will panic due to an unexpected event.
+    poll_fn(|cx| {
+        let mut pinned = Pin::new(&mut a_transport);
+        while pinned.as_mut().poll(cx).is_ready() {}
+        Poll::Ready(())
+    })
+    .await;
+
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let (_, send_back_addr, _) = connect(&mut b_transport, &mut a_transport, b_addr).await.0;
+    assert_eq!(send_back_addr, a_listen_addr);
+}
+
 async fn smoke<P: Provider>() {
     let _ = env_logger::try_init();
 
@@ -687,6 +730,7 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
 }
 
 /// Helper function for driving two transports until they established a connection.
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn connect(
     listener: &mut Boxed<(PeerId, StreamMuxerBox)>,
     dialer: &mut Boxed<(PeerId, StreamMuxerBox)>,
