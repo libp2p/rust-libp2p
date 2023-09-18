@@ -23,7 +23,7 @@ rand = "0.8"
 axum = "0.6.19"
 libp2p = { path = "../../libp2p", features = ["ed25519", "macros", "ping", "wasm-bindgen", "tokio"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
-rust-embed = { version = "6.8.1", features = ["include-exclude", "interpolate-folder-path"] }
+rust-embed = { version = "8.0.0", features = ["include-exclude", "interpolate-folder-path"] }
 tokio = { version = "1.29", features = ["macros", "net", "rt", "signal"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 tower = "0.4"
