@@ -80,15 +80,6 @@ This makes rust-libp2p a truly end-to-end solution, enabling users to use rust-l
 
 Reduce maintenance burden and reduce dependency footprint.
 
-### Automate port-forwarding e.g. via UPnP
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/3903 |              |            |
-
-Leverage protocols like UPnP to configure port-forwarding on ones router when behind NAT and/or firewall.
-Another technique in addition to hole punching increasing the probability for a node to become publicly reachable when behind a firewall and/or NAT.
-
 ## Done
 
 ### Alpha QUIC support
@@ -176,3 +167,13 @@ Kademlia operations.
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`.
 Evaluate using `quinn` directly, replacing the wrapper.
+
+### Automate port-forwarding e.g. via UPnP
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | done   |                   | https://github.com/libp2p/rust-libp2p/pull/4156   |              |            |
+
+Leverage protocols like UPnP to configure port-forwarding on ones router when behind NAT and/or firewall.
+Another technique in addition to hole punching increasing the probability for a node to become publicly reachable when behind a firewall and/or NAT.
+

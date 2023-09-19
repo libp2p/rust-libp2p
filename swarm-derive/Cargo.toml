@@ -16,7 +16,7 @@ proc-macro = true
 [dependencies]
 heck = "0.4"
 quote = "1.0"
-syn = { version = "2.0.32", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+syn = { version = "2.0.37", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 proc-macro-warning = "0.4.2"
 proc-macro2 = "1.0"
 
