@@ -1,0 +1,23 @@
+<html>
+    <head>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type" />
+        <link
+            rel="icon"
+            href="https://docs.libp2p.io/logos/libp2p_color_symbol.svg"
+            sizes="any"
+        />
+    </head>
+
+    <body>
+        <div id="wrapper">
+            <h1>Rust Libp2p Demo!</h1>
+        </div>
+
+        <script type="module" defer>
+            import init, { run } from "./browser_webrtc_example.js"
+
+            await init();
+            run("__LIBP2P_ENDPOINT__"); // This placeholder will be replaced by the server at runtime with the actual listening address.
+        </script>
+    </body>
+</html>

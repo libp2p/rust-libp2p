@@ -730,6 +730,7 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
 }
 
 /// Helper function for driving two transports until they established a connection.
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn connect(
     listener: &mut Boxed<(PeerId, StreamMuxerBox)>,
     dialer: &mut Boxed<(PeerId, StreamMuxerBox)>,

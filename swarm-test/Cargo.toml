@@ -2,7 +2,7 @@
 name = "libp2p-swarm-test"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = { workspace = true }
 license = "MIT"
 description = "Test framework for code building on top of libp2p-swarm"
 repository = "https://github.com/libp2p/rust-libp2p"

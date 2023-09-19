@@ -1,0 +1,25 @@
+[package]
+name = "libp2p-upnp"
+edition = "2021"
+rust-version = "1.60.0"
+description = "UPnP support for libp2p transports"
+version = "0.1.0"
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+publish = false
+
+[dependencies]
+futures = "0.3.28"
+futures-timer = "3.0.2"
+igd-next = "0.14.2"
+libp2p-core = { workspace = true }
+libp2p-swarm = { workspace = true }
+log = "0.4.19"
+void = "1.0.2"
+tokio = { version = "1.29", default-features = false, features = ["rt"], optional = true }
+
+[features]
+tokio = ["igd-next/aio_tokio", "dep:tokio"]
+

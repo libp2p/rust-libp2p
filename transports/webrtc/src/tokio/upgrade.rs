@@ -18,15 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod noise;
+use libp2p_webrtc_utils::{noise, Fingerprint};
 
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data::data_channel::DataChannel;
@@ -38,9 +37,8 @@ use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-
-use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
+use crate::tokio::sdp::random_ufrag;
+use crate::tokio::{error::Error, sdp, stream::Stream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub(crate) async fn outbound(
@@ -59,7 +57,7 @@ pub(crate) async fn outbound(
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, &server_fingerprint, &ufrag);
+    let answer = sdp::answer(addr, server_fingerprint, &ufrag);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
@@ -155,18 +153,6 @@ async fn new_inbound_connection(
     Ok(connection)
 }
 
-/// Generates a random ufrag and adds a prefix according to the spec.
-fn random_ufrag() -> String {
-    format!(
-        "libp2p+webrtc+v1/{}",
-        thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect::<String>()
-    )
-}
-
 fn setting_engine(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     ufrag: &str,
@@ -203,9 +189,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::from_certificate(&cert_bytes)
 }
 
-async fn create_substream_for_noise_handshake(
-    conn: &RTCPeerConnection,
-) -> Result<Substream, Error> {
+async fn create_substream_for_noise_handshake(conn: &RTCPeerConnection) -> Result<Stream, Error> {
     // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on both ends.
     let data_channel = conn
         .create_data_channel(
@@ -234,7 +218,7 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    let (substream, drop_listener) = Substream::new(channel);
+    let (substream, drop_listener) = Stream::new(channel);
     drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
 
     Ok(substream)

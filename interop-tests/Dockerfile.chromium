@@ -6,11 +6,8 @@ ADD . .
 
 RUN rustup target add wasm32-unknown-unknown
 
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install wasm-pack@0.11.1 --locked
-
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo install wasm-opt@0.113.0 --locked
+RUN wget -q -O- https://github.com/rustwasm/wasm-pack/releases/download/v0.12.1/wasm-pack-v0.12.1-x86_64-unknown-linux-musl.tar.gz | tar -zx -C /usr/local/bin --strip-components 1 --wildcards "wasm-pack-*/wasm-pack"
+RUN wget -q -O- https://github.com/WebAssembly/binaryen/releases/download/version_115/binaryen-version_115-x86_64-linux.tar.gz | tar -zx -C /usr/local/bin --strip-components 2 --wildcards "binaryen-version_*/bin/wasm-opt"
 
 RUN --mount=type=cache,target=./target \
     --mount=type=cache,target=/usr/local/cargo/registry \
@@ -23,7 +20,7 @@ RUN --mount=type=cache,target=./target \
 RUN --mount=type=cache,target=./target \
     mv ./target/release/wasm_ping /usr/local/bin/testplan
 
-FROM selenium/standalone-chrome:112.0
+FROM selenium/standalone-chrome:115.0
 COPY --from=builder /usr/local/bin/testplan /usr/local/bin/testplan
 
 ENV RUST_BACKTRACE=1

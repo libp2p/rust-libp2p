@@ -50,6 +50,7 @@ pub async fn run_test(
     let mut maybe_id = None;
 
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
+    #[cfg(not(target_arch = "wasm32"))]
     if transport == Transport::WebRtcDirect {
         maybe_id = Some(swarm.listen_on(local_addr.parse()?)?);
     }
