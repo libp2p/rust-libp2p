@@ -12,7 +12,7 @@ use futures_util::{FutureExt, StreamExt};
 
 use crate::Timeout;
 
-/// Represents a map of [Future]s.
+/// Represents a map of [`Future`]s.
 ///
 /// Each future must finish within the specified time and the map never outgrows its capacity.
 pub struct FuturesMap<ID, O> {
