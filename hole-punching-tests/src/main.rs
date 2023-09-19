@@ -52,10 +52,11 @@ async fn main() -> Result<()> {
         .parse_default_env()
         .init();
 
-    let mode = get_env::<Mode>("MODE")?;
-    let transport = get_env::<TransportProtocol>("TRANSPORT")?;
+    let mode = get_env("MODE")?;
+    let transport = get_env("TRANSPORT")?;
+    let timeout = get_env("REDIS_TIMEOUT")?;
 
-    let mut redis = RedisClient::new("redis", 6379).await?;
+    let mut redis = RedisClient::new("redis", 6379, timeout).await?;
 
     let relay_addr = match transport {
         TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
@@ -246,10 +247,11 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
 
 struct RedisClient {
     inner: redis::aio::Connection,
+    timeout: usize,
 }
 
 impl RedisClient {
-    async fn new(host: &str, port: u16) -> Result<Self> {
+    async fn new(host: &str, port: u16, timeout: usize) -> Result<Self> {
         let client = redis::Client::open(format!("redis://{host}:{port}/"))
             .context("Bad redis server URL")?;
         let connection = client
@@ -257,7 +259,10 @@ impl RedisClient {
             .await
             .context("Failed to connect to redis server")?;
 
-        Ok(Self { inner: connection })
+        Ok(Self {
+            inner: connection,
+            timeout,
+        })
     }
 
     async fn push(&mut self, key: &str, value: impl ToString) -> Result<()> {
@@ -273,7 +278,7 @@ impl RedisClient {
     {
         let value = self
             .inner
-            .blpop::<_, HashMap<String, String>>(key, 10)
+            .blpop::<_, HashMap<String, String>>(key, self.timeout)
             .await?
             .remove(key)
             .expect("key that we asked for to be present")
