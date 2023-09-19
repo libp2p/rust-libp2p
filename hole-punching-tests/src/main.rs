@@ -21,7 +21,7 @@
 use anyhow::{Context, Result};
 use futures::{future::Either, stream::StreamExt};
 use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::keep_alive;
+use libp2p::swarm::{keep_alive, ConnectionId};
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
@@ -35,10 +35,10 @@ use libp2p::{
 };
 use redis::AsyncCommands;
 use std::collections::HashMap;
-use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 use std::time::Duration;
+use std::{fmt, io};
 
 /// The redis key we push the relay's TCP listen address to.
 const RELAY_TCP_ADDRESS: &str = "RELAY_TCP_ADDRESS";
@@ -56,9 +56,8 @@ async fn main() -> Result<()> {
 
     let mode = get_env("MODE")?;
     let transport = get_env("TRANSPORT")?;
-    let timeout = get_env("REDIS_TIMEOUT")?;
 
-    let mut redis = RedisClient::new("redis", 6379, timeout).await?;
+    let mut redis = RedisClient::new("redis", 6379).await?;
 
     let relay_addr = match transport {
         TransportProtocol::Tcp => redis.pop::<Multiaddr>(RELAY_TCP_ADDRESS).await?,
@@ -67,13 +66,15 @@ async fn main() -> Result<()> {
 
     let mut swarm = make_swarm()?;
     client_listen_on_transport(&mut swarm, transport).await?;
-    client_connect_to_relay(&mut swarm, relay_addr.clone())
+    let relay_conn_id = client_connect_to_relay(&mut swarm, relay_addr.clone())
         .await
         .context("Failed to connect to relay")?;
 
-    match mode {
+    let hole_punched_peer = match mode {
         Mode::Listen => {
             swarm.listen_on(relay_addr.with(Protocol::P2pCircuit))?;
+
+            None
         }
         Mode::Dial => {
             let remote_peer_id = redis.pop(LISTEN_CLIENT_PEER_ID).await?;
@@ -83,58 +84,95 @@ async fn main() -> Result<()> {
                     .with(Protocol::P2pCircuit)
                     .with(Protocol::P2p(remote_peer_id)),
             )?;
+
+            Some(remote_peer_id)
         }
-    }
+    };
 
-    let mut hole_punched_peer = None;
-
-    let mut rtts_reported = 0;
+    let mut hole_punched_peer_connection = None;
 
     loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
-                relay::client::Event::ReservationReqAccepted { .. },
-            )) => {
+        match (swarm.next().await.unwrap(), hole_punched_peer_connection) {
+            (
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                )),
+                _,
+            ) => {
                 log::info!("Relay accepted our reservation request.");
 
                 redis
                     .push(LISTEN_CLIENT_PEER_ID, swarm.local_peer_id())
                     .await?;
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
-            )) => {
+            (
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
+                    dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
+                )),
+                _,
+            ) => {
                 log::info!("Successfully hole-punched to {remote_peer_id}");
-                hole_punched_peer = Some(remote_peer_id)
-            }
-            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                peer,
-                result: Ok(rtt),
-                ..
-            })) if mode == Mode::Dial => {
-                if let Some(hole_punched_peer) = hole_punched_peer {
-                    if hole_punched_peer == peer {
-                        println!("{}", serde_json::to_string(&Report::new(rtt))?);
 
-                        rtts_reported += 1;
-
-                        if rtts_reported == 5 {
-                            return Ok(());
-                        }
-                    }
-                }
+                // Closing the connection to the relay will implicitly close the relayed connection to the other peer.
+                swarm.close_connection(relay_conn_id);
             }
-            SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                dcutr::Event::DirectConnectionUpgradeFailed {
-                    remote_peer_id,
-                    error,
-                },
-            )) => {
+            (
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                    connection,
+                    result: Ok(rtt),
+                    ..
+                })),
+                Some(hole_punched_connection),
+            ) if mode == Mode::Dial && connection == hole_punched_connection => {
+                println!("{}", serde_json::to_string(&Report::new(rtt))?);
+
+                return Ok(());
+            }
+            (
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
+                    dcutr::Event::DirectConnectionUpgradeFailed {
+                        remote_peer_id,
+                        error,
+                    },
+                )),
+                _,
+            ) => {
                 log::info!("Failed to hole-punched to {remote_peer_id}");
                 return Err(anyhow::Error::new(error));
             }
-            SwarmEvent::OutgoingConnectionError { error, .. } => {
+            (SwarmEvent::OutgoingConnectionError { error, .. }, _) => {
                 anyhow::bail!(error)
+            }
+            (
+                SwarmEvent::ConnectionEstablished {
+                    connection_id,
+                    endpoint,
+                    peer_id,
+                    ..
+                },
+                _,
+            ) if mode == Mode::Dial => {
+                log::info!(
+                    "Now connected to {peer_id} via {}",
+                    endpoint.get_remote_address()
+                );
+
+                let hole_punched_peer =
+                    hole_punched_peer.expect("dialer always knows remote peer id");
+
+                if hole_punched_peer != peer_id {
+                    continue;
+                }
+
+                if endpoint
+                    .get_remote_address()
+                    .iter()
+                    .any(|p| matches!(p, Protocol::P2pCircuit))
+                {
+                    continue;
+                }
+
+                hole_punched_peer_connection = Some(connection_id)
             }
             _ => {}
         }
@@ -170,7 +208,7 @@ where
 async fn client_connect_to_relay(
     swarm: &mut Swarm<Behaviour>,
     relay_addr: Multiaddr,
-) -> Result<()> {
+) -> Result<ConnectionId> {
     let opts = DialOpts::from(relay_addr);
     let relay_connection_id = opts.connection_id();
 
@@ -199,7 +237,7 @@ async fn client_connect_to_relay(
         }
     }
 
-    Ok(())
+    Ok(relay_connection_id)
 }
 
 async fn client_listen_on_transport(
@@ -254,9 +292,9 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
     let transport = {
         let relay_tcp_quic_transport = relay_transport
             .or_transport(tcp::tokio::Transport::new(
-                tcp::Config::default().port_reuse(true),
+                tcp::Config::default().port_reuse(true).nodelay(true),
             ))
-            .upgrade(upgrade::Version::V1)
+            .upgrade(upgrade::Version::V1Lazy)
             .authenticate(noise::Config::new(&local_key)?)
             .multiplex(yamux::Config::default())
             .or_transport(quic::tokio::Transport::new(quic::Config::new(&local_key)));
@@ -276,20 +314,23 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
             local_key.public(),
         )),
         dcutr: dcutr::Behaviour::new(local_peer_id),
-        ping: ping::Behaviour::default(),
+        ping: ping::Behaviour::new(ping::Config::default().with_interval(Duration::from_secs(1))),
         keep_alive: keep_alive::Behaviour,
     };
 
-    Ok(SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build())
+    Ok(
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id)
+            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .build(),
+    )
 }
 
 struct RedisClient {
     inner: redis::aio::Connection,
-    timeout: usize,
 }
 
 impl RedisClient {
-    async fn new(host: &str, port: u16, timeout: usize) -> Result<Self> {
+    async fn new(host: &str, port: u16) -> Result<Self> {
         let client = redis::Client::open(format!("redis://{host}:{port}/"))
             .context("Bad redis server URL")?;
         let connection = client
@@ -297,30 +338,35 @@ impl RedisClient {
             .await
             .context("Failed to connect to redis server")?;
 
-        Ok(Self {
-            inner: connection,
-            timeout,
-        })
+        Ok(Self { inner: connection })
     }
 
     async fn push(&mut self, key: &str, value: impl ToString) -> Result<()> {
-        self.inner.rpush(key, value.to_string()).await?;
+        let value = value.to_string();
+
+        log::debug!("Pushing {key}={value} to redis");
+
+        self.inner.rpush(key, value).await?;
 
         Ok(())
     }
 
     async fn pop<V>(&mut self, key: &str) -> Result<V>
     where
-        V: FromStr,
+        V: FromStr + fmt::Display,
         V::Err: std::error::Error + Send + Sync + 'static,
     {
+        log::debug!("Fetching {key} from redis");
+
         let value = self
             .inner
-            .blpop::<_, HashMap<String, String>>(key, self.timeout)
+            .blpop::<_, HashMap<String, String>>(key, 0)
             .await?
             .remove(key)
-            .expect("key that we asked for to be present")
+            .with_context(|| format!("Failed to get value for {key} from redis"))?
             .parse()?;
+
+        log::debug!("{key}={value}");
 
         Ok(value)
     }
