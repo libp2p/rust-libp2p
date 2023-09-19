@@ -87,6 +87,8 @@ async fn main() -> Result<()> {
 
     let mut hole_punched_peer = None;
 
+    let mut rtts_reported = 0;
+
     loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
@@ -113,7 +115,11 @@ async fn main() -> Result<()> {
                     if hole_punched_peer == peer {
                         println!("{}", serde_json::to_string(&Report::new(rtt))?);
 
-                        return Ok(());
+                        rtts_reported += 1;
+
+                        if rtts_reported == 5 {
+                            return Ok(());
+                        }
                     }
                 }
             }
