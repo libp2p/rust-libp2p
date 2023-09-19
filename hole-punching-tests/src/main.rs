@@ -21,6 +21,7 @@
 use anyhow::{Context, Result};
 use futures::{future::Either, stream::StreamExt};
 use libp2p::swarm::dial_opts::DialOpts;
+use libp2p::swarm::keep_alive;
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
@@ -276,6 +277,7 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
         )),
         dcutr: dcutr::Behaviour::new(local_peer_id),
         ping: ping::Behaviour::default(),
+        keep_alive: keep_alive::Behaviour,
     };
 
     Ok(SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build())
@@ -370,4 +372,5 @@ struct Behaviour {
     identify: identify::Behaviour,
     dcutr: dcutr::Behaviour,
     ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
 }
