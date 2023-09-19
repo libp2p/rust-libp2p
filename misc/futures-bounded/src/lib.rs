@@ -1,7 +1,7 @@
-mod list;
+mod set;
 mod map;
 
-pub use list::FuturesList;
+pub use set::FuturesSet;
 pub use map::{FuturesMap, PushError};
 use std::fmt;
 use std::fmt::Formatter;

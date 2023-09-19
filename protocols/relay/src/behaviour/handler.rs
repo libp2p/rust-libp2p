@@ -386,7 +386,7 @@ pub struct Handler {
 
     pending_connect_requests: VecDeque<outbound_stop::PendingConnect>,
 
-    workers: futures_bounded::FuturesList<
+    workers: futures_bounded::FuturesSet<
         Either<
             Result<
                 Either<inbound_hop::ReservationReq, inbound_hop::CircuitReq>,
@@ -403,7 +403,7 @@ pub struct Handler {
 impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
-            workers: futures_bounded::FuturesList::new(
+            workers: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),

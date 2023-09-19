@@ -136,7 +136,7 @@ pub struct Handler {
     >,
 
     wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
-    outbound_circuits: futures_bounded::FuturesList<
+    outbound_circuits: futures_bounded::FuturesSet<
         Result<
             Either<
                 Result<outbound_hop::Reservation, outbound_hop::ReservationFailedReason>,
@@ -158,7 +158,7 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs: futures_bounded::FuturesList<
+    open_circuit_futs: futures_bounded::FuturesSet<
         Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>,
     >,
 
@@ -180,13 +180,13 @@ impl Handler {
             queued_events: Default::default(),
             pending_error: Default::default(),
             wait_for_outbound_stream: Default::default(),
-            outbound_circuits: futures_bounded::FuturesList::new(
+            outbound_circuits: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
-            open_circuit_futs: futures_bounded::FuturesList::new(
+            open_circuit_futs: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),

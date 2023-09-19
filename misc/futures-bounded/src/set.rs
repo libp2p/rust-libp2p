@@ -9,21 +9,21 @@ use crate::{FuturesMap, PushError, Timeout};
 /// Represents a list of [Future]s.
 ///
 /// Each future must finish within the specified time and the list never outgrows its capacity.
-pub struct FuturesList<O> {
-    id: i32,
-    inner: FuturesMap<i32, O>,
+pub struct FuturesSet<O> {
+    id: u32,
+    inner: FuturesMap<u32, O>,
 }
 
-impl<O> FuturesList<O> {
+impl<O> FuturesSet<O> {
     pub fn new(timeout: Duration, capacity: usize) -> Self {
         Self {
-            id: i32::MIN,
+            id: 0,
             inner: FuturesMap::new(timeout, capacity),
         }
     }
 }
 
-impl<O> FuturesList<O> {
+impl<O> FuturesSet<O> {
     /// Push a future into the list.
     ///
     /// This method adds the given future to the list.
@@ -33,7 +33,7 @@ impl<O> FuturesList<O> {
     where
         F: Future<Output = O> + Send + 'static,
     {
-        (self.id, _) = self.id.overflowing_add(1);
+        self.id = self.id.wrapping_add(1);
 
         match self.inner.try_push(self.id, future) {
             Ok(()) => Ok(()),
