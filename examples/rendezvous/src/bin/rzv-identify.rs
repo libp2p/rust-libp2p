@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -50,10 +50,10 @@ async fn main() {
             )),
             rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
     )
+    .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
@@ -133,5 +133,4 @@ struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }
