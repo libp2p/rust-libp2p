@@ -28,7 +28,7 @@ use libp2p::{
         transport::Transport,
         upgrade,
     },
-    dcutr, identify, identity, noise, quic, relay,
+    dcutr, identify, identity, noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Swarm,
 };
@@ -37,6 +37,7 @@ use std::collections::HashMap;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
+use std::time::Duration;
 
 /// The redis key we push the relay's TCP listen address to.
 const RELAY_TCP_ADDRESS: &str = "RELAY_TCP_ADDRESS";
@@ -84,6 +85,8 @@ async fn main() -> Result<()> {
         }
     }
 
+    let mut hole_punched_peer = None;
+
     loop {
         match swarm.next().await.unwrap() {
             SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
@@ -99,7 +102,20 @@ async fn main() -> Result<()> {
                 dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id },
             )) => {
                 log::info!("Successfully hole-punched to {remote_peer_id}");
-                return Ok(());
+                hole_punched_peer = Some(remote_peer_id)
+            }
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                peer,
+                result: Ok(rtt),
+                ..
+            })) if mode == Mode::Dial => {
+                if let Some(hole_punched_peer) = hole_punched_peer {
+                    if hole_punched_peer == peer {
+                        println!("{}", serde_json::to_string(&Report::new(rtt))?);
+
+                        return Ok(());
+                    }
+                }
             }
             SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
                 dcutr::Event::DirectConnectionUpgradeFailed {
@@ -114,6 +130,19 @@ async fn main() -> Result<()> {
                 anyhow::bail!(error)
             }
             _ => {}
+        }
+    }
+}
+
+#[derive(serde::Serialize)]
+struct Report {
+    rtt_to_holepunched_peer_millis: u128,
+}
+
+impl Report {
+    fn new(rtt: Duration) -> Self {
+        Self {
+            rtt_to_holepunched_peer_millis: rtt.as_millis(),
         }
     }
 }
@@ -240,6 +269,7 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
             local_key.public(),
         )),
         dcutr: dcutr::Behaviour::new(local_peer_id),
+        ping: ping::Behaviour::default(),
     };
 
     Ok(SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build())
@@ -333,4 +363,5 @@ struct Behaviour {
     relay_client: relay::client::Behaviour,
     identify: identify::Behaviour,
     dcutr: dcutr::Behaviour,
+    ping: ping::Behaviour,
 }

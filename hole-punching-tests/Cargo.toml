@@ -13,3 +13,5 @@ libp2p = { path = "../libp2p", features = ["tokio", "dcutr", "identify", "macros
 log = "0.4"
 redis = { version = "0.23.0", default-features = false, features = ["tokio-comp"] }
 tokio = { version = "1.29.1", features = ["full"] }
+serde = "1.0.188"
+serde_json = "1.0.107"
