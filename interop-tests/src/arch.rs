@@ -265,10 +265,10 @@ pub(crate) mod wasm {
             (Transport::Ws, _, None) => {
                 bail!("Missing muxer protocol for WS")
             }
-            Transport::WebRtcDirect => Ok((
+            (Transport::WebRtcDirect, _, _) => (
                 webrtc::Transport::new(webrtc::Config::new(&local_key)).boxed(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
-            )),
+            ),
             (Transport::QuicV1 | Transport::Tcp, _, _) => {
                 bail!("{transport:?} is not supported in WASM")
             }
