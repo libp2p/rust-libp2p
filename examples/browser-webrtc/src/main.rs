@@ -13,11 +13,12 @@ use libp2p::{
     identity,
     multiaddr::{Multiaddr, Protocol},
     ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{SwarmBuilder, SwarmEvent},
 };
 use libp2p_webrtc as webrtc;
 use rand::thread_rng;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
@@ -36,12 +37,10 @@ async fn main() -> anyhow::Result<()> {
     .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
     .boxed();
 
-    let behaviour = Behaviour {
-        ping: ping::Behaviour::new(ping::Config::new()),
-        keep_alive: keep_alive::Behaviour,
-    };
-
-    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm =
+        SwarmBuilder::with_tokio_executor(transport, ping::Behaviour::default(), local_peer_id)
+            .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe the pings.
+            .build();
 
     let address_webrtc = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
         .with(Protocol::Udp(0))
@@ -82,12 +81,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-    ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }
 
 #[derive(rust_embed::RustEmbed)]

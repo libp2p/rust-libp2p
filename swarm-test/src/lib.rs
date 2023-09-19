@@ -218,7 +218,9 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id).build()
+        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id)
+            .idle_connection_timeout(Duration::from_secs(5)) // Some tests need connections to be kept alive beyond what the individual behaviour configures.
+            .build()
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)

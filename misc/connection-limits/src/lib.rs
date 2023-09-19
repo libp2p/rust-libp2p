@@ -529,7 +529,6 @@ mod tests {
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
         limits: super::Behaviour,
-        keep_alive: libp2p_swarm::keep_alive::Behaviour,
         connection_denier: Toggle<ConnectionDenier>,
     }
 
@@ -537,14 +536,12 @@ mod tests {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
                 connection_denier: None.into(),
             }
         }
         fn new_with_connection_denier(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
                 connection_denier: Some(ConnectionDenier {}).into(),
             }
         }
