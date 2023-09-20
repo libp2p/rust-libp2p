@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, identity, ping, Multiaddr, PeerId};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{identify, identity, ping, swarm::NetworkBehaviour, Multiaddr, PeerId};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -50,8 +50,7 @@ pub async fn run_test(
     let mut swarm = swarm_builder(
         boxed_transport,
         Behaviour {
-            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(10))),
             // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
             identify: identify::Behaviour::new(identify::Config::new(
                 "/interop-tests".to_owned(),
@@ -60,6 +59,7 @@ pub async fn run_test(
         },
         local_peer_id,
     )
+    .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
@@ -273,6 +273,5 @@ impl FromStr for SecProtocol {
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     identify: identify::Behaviour,
 }

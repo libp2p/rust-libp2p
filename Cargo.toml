@@ -19,6 +19,7 @@ members = [
     "interop-tests",
     "misc/allow-block-list",
     "misc/connection-limits",
+    "misc/futures-bounded",
     "misc/keygen",
     "misc/memory-connection-limits",
     "misc/metrics",
