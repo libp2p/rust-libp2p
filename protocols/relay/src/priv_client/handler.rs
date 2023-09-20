@@ -158,9 +158,8 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    open_circuit_futs: futures_bounded::FuturesSet<
-        Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>,
-    >,
+    open_circuit_futs:
+        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
 
     circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::UpgradeError>>,
 
