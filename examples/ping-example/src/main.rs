@@ -24,10 +24,11 @@ use futures::prelude::*;
 use libp2p::core::upgrade::Version;
 use libp2p::{
     identity, noise, ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
+use std::time::Duration;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -42,7 +43,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .boxed();
 
     let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, ping::Behaviour::default(), local_peer_id)
+            .idle_connection_timeout(Duration::from_secs(60)) // For illustrative purposes, keep idle connections alive for a minute so we can observe a few pings.
             .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -64,14 +66,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](keep_alive::Behaviour) behaviour so a continuous sequence of
-/// pings can be observed.
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
 }
