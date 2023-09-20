@@ -18,29 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-/// Examples for the rendezvous protocol:
-///
-/// 1. Run the rendezvous server:
-///     ```
-///     RUST_LOG=info cargo run --bin rendezvous-example
-///     ```
-/// 2. Register a peer:
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-register
-///     ```
-/// 3. Try to discover the peer from (2):
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-discover
-///     ```
-/// 4. Try to discover with identify:
-///     ```
-///     RUST_LOG=info cargo run --bin rzv-identify
-///     ```
+#![doc = include_str!("../README.md")]
+
 use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId, Transport,
 };
 use std::time::Duration;
@@ -64,13 +48,11 @@ async fn main() {
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
     )
+    .idle_connection_timeout(Duration::from_secs(5))
     .build();
-
-    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());
 
@@ -115,5 +97,4 @@ struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::server::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }

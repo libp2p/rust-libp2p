@@ -81,6 +81,14 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
         }
     }
 
+    pub(crate) fn is_initiator(&self) -> bool {
+        self.session.is_initiator()
+    }
+
+    pub(crate) fn is_responder(&self) -> bool {
+        !self.session.is_initiator()
+    }
+
     /// Converts the `NoiseFramed` into a `NoiseOutput` encrypted data stream
     /// once the handshake is complete, including the static DH [`PublicKey`]
     /// of the remote, if received.

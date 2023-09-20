@@ -16,7 +16,7 @@ bytes = "1"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.18"
+log = "0.4.20"
 quick-protobuf = "0.8"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
@@ -25,7 +25,7 @@ env_logger = "0.10.0"
 libp2p-identity = { workspace = true, features = ["ed25519"] }
 quickcheck = { workspace = true }
 rand = "0.8"
-futures_ringbuf = "0.3.1"
+futures_ringbuf = "0.4.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

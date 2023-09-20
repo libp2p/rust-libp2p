@@ -71,6 +71,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();
+    swarm.add_external_address(address.clone());
 
     (address, swarm)
 }
@@ -137,7 +138,7 @@ fn build_fully_connected_nodes_with_config(
     swarms
 }
 
-fn random_multihash() -> Multihash {
+fn random_multihash() -> Multihash<64> {
     Multihash::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
@@ -1101,7 +1102,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut bob = build_node();
 
     let key = Key::from(
-        Multihash::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
+        Multihash::<64>::wrap(SHA_256_MH, &thread_rng().gen::<[u8; 32]>())
             .expect("32 array to fit into 64 byte multihash"),
     );
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
@@ -1253,7 +1254,7 @@ fn manual_bucket_inserts() {
         .skip(2)
         .map(|(a, s)| {
             let pid = *Swarm::local_peer_id(s);
-            let addr = a.clone().with(Protocol::P2p(pid.into()));
+            let addr = a.clone().with(Protocol::P2p(pid));
             (addr, pid)
         })
         .collect::<HashMap<_, _>>();

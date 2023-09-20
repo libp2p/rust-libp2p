@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeError};
+use crate::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeError};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
@@ -37,7 +37,7 @@ pub(crate) fn apply<C, U>(
 ) -> Either<InboundUpgradeApply<C, U>, OutboundUpgradeApply<C, U>>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>> + OutboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>> + OutboundConnectionUpgrade<Negotiated<C>>,
 {
     match cp {
         ConnectedPoint::Dialer { role_override, .. } if role_override.is_dialer() => {
@@ -51,11 +51,11 @@ where
 pub(crate) fn apply_inbound<C, U>(conn: C, up: U) -> InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
-            future: multistream_select::listener_select_proto(conn, up.protocol_info().into_iter()),
+            future: multistream_select::listener_select_proto(conn, up.protocol_info()),
             upgrade: up,
         },
     }
@@ -65,7 +65,7 @@ where
 pub(crate) fn apply_outbound<C, U>(conn: C, up: U, v: Version) -> OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
@@ -79,7 +79,7 @@ where
 pub struct InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     inner: InboundUpgradeApplyState<C, U>,
 }
@@ -88,7 +88,7 @@ where
 enum InboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     Init {
         future: ListenerSelectFuture<C, U::Info>,
@@ -104,14 +104,14 @@ where
 impl<C, U> Unpin for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
 }
 
 impl<C, U> Future for InboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>>,
+    U: InboundConnectionUpgrade<Negotiated<C>>,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 
@@ -162,7 +162,7 @@ where
 pub struct OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     inner: OutboundUpgradeApplyState<C, U>,
 }
@@ -170,7 +170,7 @@ where
 enum OutboundUpgradeApplyState<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     Init {
         future: DialerSelectFuture<C, <U::InfoIter as IntoIterator>::IntoIter>,
@@ -186,14 +186,14 @@ where
 impl<C, U> Unpin for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
 }
 
 impl<C, U> Future for OutboundUpgradeApply<C, U>
 where
     C: AsyncRead + AsyncWrite + Unpin,
-    U: OutboundUpgrade<Negotiated<C>>,
+    U: OutboundConnectionUpgrade<Negotiated<C>>,
 {
     type Output = Result<U::Output, UpgradeError<U::Error>>;
 

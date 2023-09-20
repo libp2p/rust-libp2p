@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::{
     core::transport::upgrade::Version,
     identify, identity, noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -50,13 +50,11 @@ async fn main() {
             )),
             rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
     )
+    .idle_connection_timeout(Duration::from_secs(5))
     .build();
-
-    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
@@ -78,11 +76,14 @@ async fn main() {
             SwarmEvent::Behaviour(MyBehaviourEvent::Identify(identify::Event::Received {
                 ..
             })) => {
-                swarm.behaviour_mut().rendezvous.register(
+                if let Err(error) = swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
                     None,
-                );
+                ) {
+                    log::error!("Failed to register: {error}");
+                    return;
+                }
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
                 rendezvous::client::Event::Registered {
@@ -99,9 +100,18 @@ async fn main() {
                 );
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Rendezvous(
-                rendezvous::client::Event::RegisterFailed(error),
+                rendezvous::client::Event::RegisterFailed {
+                    rendezvous_node,
+                    namespace,
+                    error,
+                },
             )) => {
-                log::error!("Failed to register {}", error);
+                log::error!(
+                    "Failed to register: rendezvous_node={}, namespace={}, error_code={:?}",
+                    rendezvous_node,
+                    namespace,
+                    error
+                );
                 return;
             }
             SwarmEvent::Behaviour(MyBehaviourEvent::Ping(ping::Event {
@@ -123,5 +133,4 @@ struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }

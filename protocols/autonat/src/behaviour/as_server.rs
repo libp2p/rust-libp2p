@@ -338,7 +338,7 @@ impl<'a> AsServer<'a> {
 
                 let is_valid = addr.iter().all(|proto| match proto {
                     Protocol::P2pCircuit => false,
-                    Protocol::P2p(hash) => hash == peer.into(),
+                    Protocol::P2p(peer_id) => peer_id == peer,
                     _ => true,
                 });
 
@@ -346,7 +346,7 @@ impl<'a> AsServer<'a> {
                     return None;
                 }
                 if !addr.iter().any(|p| matches!(p, Protocol::P2p(_))) {
-                    addr.push(Protocol::P2p(peer.into()))
+                    addr.push(Protocol::P2p(peer))
                 }
                 // Only collect distinct addresses.
                 distinct.insert(addr.clone()).then_some(addr)
@@ -380,26 +380,26 @@ mod test {
         let observed_addr = Multiaddr::empty()
             .with(observed_ip.clone())
             .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         // Valid address with matching peer-id
         let demanded_1 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         // Invalid because peer_id does not match
         let demanded_2 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()));
+            .with(Protocol::P2p(PeerId::random()));
         // Valid address without peer-id
         let demanded_3 = Multiaddr::empty().with(random_ip()).with(random_port());
         // Invalid because relayed
         let demanded_4 = Multiaddr::empty()
             .with(random_ip())
             .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()))
+            .with(Protocol::P2p(PeerId::random()))
             .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         let demanded = vec![
             demanded_1.clone(),
             demanded_2,
@@ -413,7 +413,7 @@ mod test {
         let expected_2 = demanded_3
             .replace(0, |_| Some(observed_ip))
             .unwrap()
-            .with(Protocol::P2p(peer_id.into()));
+            .with(Protocol::P2p(peer_id));
         assert_eq!(filtered, vec![expected_1, expected_2]);
     }
 }

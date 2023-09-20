@@ -18,32 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
-use crate::handler;
-use crate::handler::outbound;
-use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::{InEvent, SubstreamConnectionHandler};
+use crate::codec::Message::*;
+use crate::codec::{Cookie, ErrorCode, Message, Namespace, NewRegistration, Registration, Ttl};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
-use instant::Duration;
 use libp2p_core::{Endpoint, Multiaddr, PeerRecord};
 use libp2p_identity::{Keypair, PeerId, SigningError};
-use libp2p_swarm::behaviour::FromSwarm;
+use libp2p_request_response::{ProtocolSupport, RequestId};
 use libp2p_swarm::{
-    CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, ExternalAddresses, FromSwarm, NetworkBehaviour, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
-use std::collections::{HashMap, VecDeque};
-use std::iter::FromIterator;
+use std::collections::HashMap;
+use std::iter;
 use std::task::{Context, Poll};
-use void::Void;
+use std::time::Duration;
 
 pub struct Behaviour {
-    events: VecDeque<ToSwarm<Event, InEvent<outbound::OpenInfo, Void, Void>>>,
+    inner: libp2p_request_response::Behaviour<crate::codec::Codec>,
+
     keypair: Keypair,
-    pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
+
+    waiting_for_register: HashMap<RequestId, (PeerId, Namespace)>,
+    waiting_for_discovery: HashMap<RequestId, (PeerId, Option<Namespace>)>,
 
     /// Hold addresses of all peers that we have discovered so far.
     ///
@@ -60,9 +59,14 @@ impl Behaviour {
     /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(keypair: Keypair) -> Self {
         Self {
-            events: Default::default(),
+            inner: libp2p_request_response::Behaviour::with_codec(
+                crate::codec::Codec::default(),
+                iter::once((crate::PROTOCOL_IDENT, ProtocolSupport::Outbound)),
+                libp2p_request_response::Config::default(),
+            ),
             keypair,
-            pending_register_requests: vec![],
+            waiting_for_register: Default::default(),
+            waiting_for_discovery: Default::default(),
             discovered_peers: Default::default(),
             expiring_registrations: FuturesUnordered::from_iter(vec![
                 futures::future::pending().boxed()
@@ -75,20 +79,32 @@ impl Behaviour {
     ///
     /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
     /// by other [`NetworkBehaviour`]s via [`ToSwarm::ExternalAddrConfirmed`].
-    pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
-        self.pending_register_requests
-            .push((namespace, rendezvous_node, ttl));
+    pub fn register(
+        &mut self,
+        namespace: Namespace,
+        rendezvous_node: PeerId,
+        ttl: Option<Ttl>,
+    ) -> Result<(), RegisterError> {
+        let external_addresses = self.external_addresses.iter().cloned().collect::<Vec<_>>();
+        if external_addresses.is_empty() {
+            return Err(RegisterError::NoExternalAddresses);
+        }
+
+        let peer_record = PeerRecord::new(&self.keypair, external_addresses)?;
+        let req_id = self.inner.send_request(
+            &rendezvous_node,
+            Register(NewRegistration::new(namespace.clone(), peer_record, ttl)),
+        );
+        self.waiting_for_register
+            .insert(req_id, (rendezvous_node, namespace));
+
+        Ok(())
     }
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
-        self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id: rendezvous_node,
-            event: handler::OutboundInEvent::NewSubstream {
-                open_info: OpenInfo::UnregisterRequest(namespace),
-            },
-            handler: NotifyHandler::Any,
-        });
+        self.inner
+            .send_request(&rendezvous_node, Unregister(namespace));
     }
 
     /// Discover other peers at a given rendezvous peer.
@@ -100,22 +116,22 @@ impl Behaviour {
     /// the cookie was acquired.
     pub fn discover(
         &mut self,
-        ns: Option<Namespace>,
+        namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<u64>,
         rendezvous_node: PeerId,
     ) {
-        self.events.push_back(ToSwarm::NotifyHandler {
-            peer_id: rendezvous_node,
-            event: handler::OutboundInEvent::NewSubstream {
-                open_info: OpenInfo::DiscoverRequest {
-                    namespace: ns,
-                    cookie,
-                    limit,
-                },
+        let req_id = self.inner.send_request(
+            &rendezvous_node,
+            Discover {
+                namespace: namespace.clone(),
+                cookie,
+                limit,
             },
-            handler: NotifyHandler::Any,
-        });
+        );
+
+        self.waiting_for_discovery
+            .insert(req_id, (rendezvous_node, namespace));
     }
 }
 
@@ -125,12 +141,6 @@ pub enum RegisterError {
     NoExternalAddresses,
     #[error("Failed to make a new PeerRecord")]
     FailedToMakeRecord(#[from] SigningError),
-    #[error("Failed to register with Rendezvous node")]
-    Remote {
-        rendezvous_node: PeerId,
-        namespace: Namespace,
-        error: ErrorCode,
-    },
 }
 
 #[derive(Debug)]
@@ -155,26 +165,136 @@ pub enum Event {
         namespace: Namespace,
     },
     /// We failed to register with the contained rendezvous node.
-    RegisterFailed(RegisterError),
+    RegisterFailed {
+        rendezvous_node: PeerId,
+        namespace: Namespace,
+        error: ErrorCode,
+    },
     /// The connection details we learned from this node expired.
     Expired { peer: PeerId },
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler =
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
+    type ConnectionHandler = <libp2p_request_response::Behaviour<
+        crate::codec::Codec,
+    > as NetworkBehaviour>::ConnectionHandler;
+
     type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: &Multiaddr,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_outbound_only(
-            Duration::from_secs(30),
-        ))
+        self.inner.handle_established_inbound_connection(
+            connection_id,
+            peer,
+            local_addr,
+            remote_addr,
+        )
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.inner
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
+        self.inner
+            .on_connection_handler_event(peer_id, connection_id, event);
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.external_addresses.on_swarm_event(&event);
+
+        self.inner.on_swarm_event(event);
+    }
+
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+        use libp2p_request_response as req_res;
+
+        loop {
+            match self.inner.poll(cx, params) {
+                Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::Message {
+                    message:
+                        req_res::Message::Response {
+                            request_id,
+                            response,
+                        },
+                    ..
+                })) => {
+                    if let Some(event) = self.handle_response(&request_id, response) {
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    }
+
+                    continue; // not a request we care about
+                }
+                Poll::Ready(ToSwarm::GenerateEvent(req_res::Event::OutboundFailure {
+                    request_id,
+                    ..
+                })) => {
+                    if let Some(event) = self.event_for_outbound_failure(&request_id) {
+                        return Poll::Ready(ToSwarm::GenerateEvent(event));
+                    }
+
+                    continue; // not a request we care about
+                }
+                Poll::Ready(ToSwarm::GenerateEvent(
+                    req_res::Event::InboundFailure { .. }
+                    | req_res::Event::ResponseSent { .. }
+                    | req_res::Event::Message {
+                        message: req_res::Message::Request { .. },
+                        ..
+                    },
+                )) => {
+                    unreachable!("rendezvous clients never receive requests")
+                }
+                Poll::Ready(
+                    other @ (ToSwarm::ExternalAddrConfirmed(_)
+                    | ToSwarm::ExternalAddrExpired(_)
+                    | ToSwarm::NewExternalAddrCandidate(_)
+                    | ToSwarm::NotifyHandler { .. }
+                    | ToSwarm::Dial { .. }
+                    | ToSwarm::CloseConnection { .. }
+                    | ToSwarm::ListenOn { .. }
+                    | ToSwarm::RemoveListener { .. }),
+                ) => {
+                    let new_to_swarm =
+                        other.map_out(|_| unreachable!("we manually map `GenerateEvent` variants"));
+
+                    return Poll::Ready(new_to_swarm);
+                }
+                Poll::Pending => {}
+            }
+
+            if let Poll::Ready(Some(expired_registration)) =
+                self.expiring_registrations.poll_next_unpin(cx)
+            {
+                self.discovered_peers.remove(&expired_registration);
+                return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired {
+                    peer: expired_registration.0,
+                }));
+            }
+
+            return Poll::Pending;
+        }
     }
 
     fn handle_pending_outbound_connection(
@@ -199,178 +319,103 @@ impl NetworkBehaviour for Behaviour {
 
         Ok(addresses)
     }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: &Multiaddr,
-        _: Endpoint,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(SubstreamConnectionHandler::new_outbound_only(
-            Duration::from_secs(30),
-        ))
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        event: THandlerOutEvent<Self>,
-    ) {
-        let new_events = match event {
-            handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
-            handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
-                message,
-                peer_id,
-                &mut self.discovered_peers,
-                &mut self.expiring_registrations,
-            ),
-            handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
-            handler::OutboundOutEvent::OutboundError { error, .. } => {
-                log::warn!("Connection with peer {} failed: {}", peer_id, error);
-
-                vec![ToSwarm::CloseConnection {
-                    peer_id,
-                    connection: CloseConnection::One(connection_id),
-                }]
-            }
-        };
-
-        self.events.extend(new_events);
-    }
-
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event);
-        }
-
-        if let Some((namespace, rendezvous_node, ttl)) = self.pending_register_requests.pop() {
-            // Update our external addresses based on the Swarm's current knowledge.
-            // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
-
-            let external_addresses = self.external_addresses.iter().cloned().collect::<Vec<_>>();
-
-            if external_addresses.is_empty() {
-                return Poll::Ready(ToSwarm::GenerateEvent(Event::RegisterFailed(
-                    RegisterError::NoExternalAddresses,
-                )));
-            }
-
-            let action = match PeerRecord::new(&self.keypair, external_addresses) {
-                Ok(peer_record) => ToSwarm::NotifyHandler {
-                    peer_id: rendezvous_node,
-                    event: handler::OutboundInEvent::NewSubstream {
-                        open_info: OpenInfo::RegisterRequest(NewRegistration {
-                            namespace,
-                            record: peer_record,
-                            ttl,
-                        }),
-                    },
-                    handler: NotifyHandler::Any,
-                },
-                Err(signing_error) => ToSwarm::GenerateEvent(Event::RegisterFailed(
-                    RegisterError::FailedToMakeRecord(signing_error),
-                )),
-            };
-
-            return Poll::Ready(action);
-        }
-
-        if let Some(expired_registration) =
-            futures::ready!(self.expiring_registrations.poll_next_unpin(cx))
-        {
-            self.discovered_peers.remove(&expired_registration);
-            return Poll::Ready(ToSwarm::GenerateEvent(Event::Expired {
-                peer: expired_registration.0,
-            }));
-        }
-
-        Poll::Pending
-    }
-
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarm_event(&event);
-
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
-        }
-    }
 }
 
-fn handle_outbound_event(
-    event: outbound::OutEvent,
-    peer_id: PeerId,
-    discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
-    expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<ToSwarm<Event, THandlerInEvent<Behaviour>>> {
-    match event {
-        outbound::OutEvent::Registered { namespace, ttl } => {
-            vec![ToSwarm::GenerateEvent(Event::Registered {
-                rendezvous_node: peer_id,
-                ttl,
+impl Behaviour {
+    fn event_for_outbound_failure(&mut self, req_id: &RequestId) -> Option<Event> {
+        if let Some((rendezvous_node, namespace)) = self.waiting_for_register.remove(req_id) {
+            return Some(Event::RegisterFailed {
+                rendezvous_node,
                 namespace,
-            })]
-        }
-        outbound::OutEvent::RegisterFailed(namespace, error) => {
-            vec![ToSwarm::GenerateEvent(Event::RegisterFailed(
-                RegisterError::Remote {
-                    rendezvous_node: peer_id,
-                    namespace,
-                    error,
-                },
-            ))]
-        }
-        outbound::OutEvent::Discovered {
-            registrations,
-            cookie,
-        } => {
-            discovered_peers.extend(registrations.iter().map(|registration| {
-                let peer_id = registration.record.peer_id();
-                let namespace = registration.namespace.clone();
+                error: ErrorCode::Unavailable,
+            });
+        };
 
-                let addresses = registration.record.addresses().to_vec();
+        if let Some((rendezvous_node, namespace)) = self.waiting_for_discovery.remove(req_id) {
+            return Some(Event::DiscoverFailed {
+                rendezvous_node,
+                namespace,
+                error: ErrorCode::Unavailable,
+            });
+        };
 
-                ((peer_id, namespace), addresses)
-            }));
-            expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
-                async move {
-                    // if the timer errors we consider it expired
-                    futures_timer::Delay::new(Duration::from_secs(registration.ttl)).await;
+        None
+    }
 
-                    (registration.record.peer_id(), registration.namespace)
+    fn handle_response(&mut self, request_id: &RequestId, response: Message) -> Option<Event> {
+        match response {
+            RegisterResponse(Ok(ttl)) => {
+                if let Some((rendezvous_node, namespace)) =
+                    self.waiting_for_register.remove(request_id)
+                {
+                    return Some(Event::Registered {
+                        rendezvous_node,
+                        ttl,
+                        namespace,
+                    });
                 }
-                .boxed()
-            }));
 
-            vec![ToSwarm::GenerateEvent(Event::Discovered {
-                rendezvous_node: peer_id,
-                registrations,
-                cookie,
-            })]
-        }
-        outbound::OutEvent::DiscoverFailed { namespace, error } => {
-            vec![ToSwarm::GenerateEvent(Event::DiscoverFailed {
-                rendezvous_node: peer_id,
-                namespace,
-                error,
-            })]
+                None
+            }
+            RegisterResponse(Err(error_code)) => {
+                if let Some((rendezvous_node, namespace)) =
+                    self.waiting_for_register.remove(request_id)
+                {
+                    return Some(Event::RegisterFailed {
+                        rendezvous_node,
+                        namespace,
+                        error: error_code,
+                    });
+                }
+
+                None
+            }
+            DiscoverResponse(Ok((registrations, cookie))) => {
+                if let Some((rendezvous_node, _ns)) = self.waiting_for_discovery.remove(request_id)
+                {
+                    self.discovered_peers
+                        .extend(registrations.iter().map(|registration| {
+                            let peer_id = registration.record.peer_id();
+                            let namespace = registration.namespace.clone();
+
+                            let addresses = registration.record.addresses().to_vec();
+
+                            ((peer_id, namespace), addresses)
+                        }));
+
+                    self.expiring_registrations
+                        .extend(registrations.iter().cloned().map(|registration| {
+                            async move {
+                                // if the timer errors we consider it expired
+                                futures_timer::Delay::new(Duration::from_secs(registration.ttl))
+                                    .await;
+
+                                (registration.record.peer_id(), registration.namespace)
+                            }
+                            .boxed()
+                        }));
+
+                    return Some(Event::Discovered {
+                        rendezvous_node,
+                        registrations,
+                        cookie,
+                    });
+                }
+
+                None
+            }
+            DiscoverResponse(Err(error_code)) => {
+                if let Some((rendezvous_node, ns)) = self.waiting_for_discovery.remove(request_id) {
+                    return Some(Event::DiscoverFailed {
+                        rendezvous_node,
+                        namespace: ns,
+                        error: error_code,
+                    });
+                }
+
+                None
+            }
+            _ => unreachable!("rendezvous clients never receive requests"),
         }
     }
 }

@@ -22,10 +22,9 @@ use async_trait::async_trait;
 use futures::future::Either;
 use futures::StreamExt;
 use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
-    Multiaddr, Transport,
+    multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
-use libp2p_identity::PeerId;
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
@@ -219,7 +218,9 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id).build()
+        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id)
+            .idle_connection_timeout(Duration::from_secs(5)) // Some tests need connections to be kept alive beyond what the individual behaviour configures.
+            .build()
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
@@ -313,7 +314,7 @@ where
         self.add_external_address(memory_multiaddr.clone());
 
         let tcp_addr_listener_id = self
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let tcp_multiaddr = self

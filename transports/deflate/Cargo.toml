@@ -20,7 +20,7 @@ async-std = "1.6.2"
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 quickcheck = { workspace = true }
 rand = "0.8"
-futures_ringbuf = "0.3.1"
+futures_ringbuf = "0.4.0"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

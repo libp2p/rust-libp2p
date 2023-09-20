@@ -29,8 +29,9 @@ This repository is the central place for Rust development of the [libp2p](https:
 - For **discussions and questions related to multiple libp2p implementations**
   please use the libp2p _Discourse_ forum https://discuss.libp2p.io.
 
-- For general project updates and discussions join the [biweekly libp2p Community
-  Calls](https://discuss.libp2p.io/t/libp2p-community-calls/1157).
+- For synchronous discussions join the [open rust-libp2p maintainer
+  calls](https://github.com/libp2p/rust-libp2p/discussions?discussions_q=open+maintainers+call+)
+  or the [biweekly libp2p community calls](https://discuss.libp2p.io/t/libp2p-community-calls/1157).
 
 ## Repository Structure
 
@@ -92,12 +93,14 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [HotShot](https://github.com/EspressoSystems/HotShot) - Decentralized sequencer in Rust developed by [Espresso Systems](https://www.espressosys.com/).
 - [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation
 used and maintained by [Actyx](https://www.actyx.com).
-- [iroh](https://github.com/n0-computer/iroh) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
+- [beetle](https://github.com/n0-computer/beetle) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [OpenMina](https://github.com/openmina/openmina) - In-browser Mina Rust implementation.
 - [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
+- [Safe Network](https://github.com/maidsafe/safe_network) - Safe Network implementation in Rust.
 - [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
 - [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
 - [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
 used by [Polkadot](https://www.parity.io/technologies/polkadot/).
-- [Ursa](https://github.com/fleek-network/ursa) - Decentralized Content Delivery & Edge Compute.
+- [Taple](https://github.com/opencanarias/taple-core) - Sustainable DLT for asset and process traceability by [OpenCanarias](https://www.opencanarias.com/en/).

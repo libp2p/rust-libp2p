@@ -20,7 +20,7 @@
 
 //! Error types that can result from gossipsub.
 
-use libp2p_core::identity::error::SigningError;
+use libp2p_identity::SigningError;
 
 /// Error associated with publishing a gossipsub message.
 #[derive(Debug)]

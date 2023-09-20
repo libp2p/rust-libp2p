@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.0"
+version = "0.2.3"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = { workspace = true }
@@ -14,17 +14,16 @@ categories = ["cryptography"]
 [dependencies]
 asn1_der = { version = "0.7.6", optional = true }
 bs58 = { version = "0.5.0", optional = true }
-ed25519-dalek = { version = "1.0.1", optional = true }
+ed25519-dalek = { version = "2.0", optional = true, features = ["rand_core"] }
 libsecp256k1 = { version = "0.7.0", optional = true }
 log = "0.4"
-multiaddr = { version = "0.17.1", optional = true }
-multihash = { version = "0.17.0", default-features = false, features = ["std"], optional = true }
+multihash = { version = "0.19.1", optional = true }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 quick-protobuf = "0.8.1"
 rand = { version = "0.8", optional = true }
 sec1 = { version = "0.7", default-features = false, optional = true }
 serde = { version = "1", optional = true, features = ["derive"] }
-sha2 = { version = "0.10.0", optional = true }
+sha2 = { version = "0.10.7", optional = true }
 thiserror = { version = "1.0", optional = true }
 void = { version = "1.0", optional = true }
 zeroize = { version = "1.6", optional = true }
@@ -37,13 +36,13 @@ secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:rand", "dep:sha2", "dep:z
 ecdsa = [ "dep:p256", "dep:rand", "dep:void", "dep:zeroize", "dep:sec1" ]
 rsa = [ "dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize" ]
 ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize" ]
-peerid = [ "dep:multihash", "dep:multiaddr", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
+peerid = [ "dep:multihash", "dep:bs58", "dep:rand", "dep:thiserror", "dep:sha2" ]
 
 [dev-dependencies]
 quickcheck = { workspace = true }
-base64 = "0.21.2"
+base64 = "0.21.4"
 serde_json = "1.0"
-rmp-serde = "1.0"
+rmp-serde = "1.1"
 criterion = "0.5"
 hex-literal = "0.4.1"
 

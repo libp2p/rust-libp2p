@@ -18,23 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! identify example
-//!
-//! In the first terminal window, run:
-//!
-//! ```sh
-//! cargo run
-//! ```
-//! It will print the [`PeerId`] and the listening addresses, e.g. `Listening on
-//! "/ip4/127.0.0.1/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//! The two nodes establish a connection, negotiate the identify protocol
-//! and will send each other identify info which is then printed to the console.
+#![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
 use libp2p::{
@@ -47,9 +31,9 @@ use std::error::Error;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)

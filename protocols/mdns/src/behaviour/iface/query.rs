@@ -26,7 +26,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use std::time::Instant;
-use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
+use std::{fmt, net::SocketAddr, str, time::Duration};
 use trust_dns_proto::{
     op::Message,
     rr::{Name, RData},
@@ -264,16 +264,12 @@ impl MdnsPeer {
                 };
                 match addr.pop() {
                     Some(Protocol::P2p(peer_id)) => {
-                        if let Ok(peer_id) = PeerId::try_from(peer_id) {
-                            if let Some(pid) = &my_peer_id {
-                                if peer_id != *pid {
-                                    return None;
-                                }
-                            } else {
-                                my_peer_id.replace(peer_id);
+                        if let Some(pid) = &my_peer_id {
+                            if peer_id != *pid {
+                                return None;
                             }
                         } else {
-                            return None;
+                            my_peer_id.replace(peer_id);
                         }
                     }
                     _ => return None,
@@ -329,8 +325,8 @@ mod tests {
 
         let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().expect("bad multiaddress");
         let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().expect("bad multiaddress");
-        addr1.push(Protocol::P2p(peer_id.into()));
-        addr2.push(Protocol::P2p(peer_id.into()));
+        addr1.push(Protocol::P2p(peer_id));
+        addr2.push(Protocol::P2p(peer_id));
 
         let packets = build_query_response(
             0xf8f8,

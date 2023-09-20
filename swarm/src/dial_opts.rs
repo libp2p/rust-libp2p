@@ -22,7 +22,6 @@
 use crate::ConnectionId;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::multihash::Multihash;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
@@ -81,9 +80,21 @@ impl DialOpts {
         WithoutPeerId {}
     }
 
-    /// Get the [`PeerId`] specified in a [`DialOpts`] if any.
+    /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to extract it
+    /// from the multihash in the `/p2p` part of the address, if present.
     pub fn get_peer_id(&self) -> Option<PeerId> {
-        self.peer_id
+        if let Some(peer_id) = self.peer_id {
+            return Some(peer_id);
+        }
+
+        let first_address = self.addresses.first()?;
+        let last_protocol = first_address.iter().last()?;
+
+        if let Protocol::P2p(p) = last_protocol {
+            return Some(p);
+        }
+
+        None
     }
 
     /// Get the [`ConnectionId`] of this dial attempt.
@@ -92,40 +103,6 @@ impl DialOpts {
     /// See [`DialFailure`](crate::DialFailure) and [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
     pub fn connection_id(&self) -> ConnectionId {
         self.connection_id
-    }
-
-    /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to parse it
-    /// from the multihash in the `/p2p` part of the address, if present.
-    ///
-    /// Note: A [`Multiaddr`] with something else other than a [`PeerId`] within the `/p2p` protocol is invalid as per specification.
-    /// Unfortunately, we are not making good use of the type system here.
-    /// Really, this function should be merged with [`DialOpts::get_peer_id`] above.
-    /// If it weren't for the parsing error, the function signatures would be the same.
-    ///
-    /// See <https://github.com/multiformats/rust-multiaddr/issues/73>.
-    pub(crate) fn get_or_parse_peer_id(&self) -> Result<Option<PeerId>, Multihash> {
-        if let Some(peer_id) = self.peer_id {
-            return Ok(Some(peer_id));
-        }
-
-        let first_address = match self.addresses.first() {
-            Some(first_address) => first_address,
-            None => return Ok(None),
-        };
-
-        let maybe_peer_id = first_address
-            .iter()
-            .last()
-            .and_then(|p| {
-                if let Protocol::P2p(ma) = p {
-                    Some(PeerId::try_from(ma))
-                } else {
-                    None
-                }
-            })
-            .transpose()?;
-
-        Ok(maybe_peer_id)
     }
 
     pub(crate) fn get_addresses(&self) -> Vec<Multiaddr> {

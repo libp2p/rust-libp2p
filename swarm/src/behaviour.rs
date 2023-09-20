@@ -28,6 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
+use crate::listen_opts::ListenOpts;
 use crate::{
     ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
     THandlerOutEvent,
@@ -250,6 +251,12 @@ pub enum ToSwarm<TOutEvent, TInEvent> {
     /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
     Dial { opts: DialOpts },
 
+    /// Instructs the [`Swarm`](crate::Swarm) to listen on the provided address.
+    ListenOn { opts: ListenOpts },
+
+    /// Instructs the [`Swarm`](crate::Swarm) to remove the listener.
+    RemoveListener { id: ListenerId },
+
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
     ///
@@ -324,6 +331,8 @@ impl<TOutEvent, TInEventOld> ToSwarm<TOutEvent, TInEventOld> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(e),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -353,6 +362,8 @@ impl<TOutEvent, THandlerIn> ToSwarm<TOutEvent, THandlerIn> {
         match self {
             ToSwarm::GenerateEvent(e) => ToSwarm::GenerateEvent(f(e)),
             ToSwarm::Dial { opts } => ToSwarm::Dial { opts },
+            ToSwarm::ListenOn { opts } => ToSwarm::ListenOn { opts },
+            ToSwarm::RemoveListener { id } => ToSwarm::RemoveListener { id },
             ToSwarm::NotifyHandler {
                 peer_id,
                 handler,
@@ -397,6 +408,7 @@ pub enum CloseConnection {
 
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
+#[derive(Debug)]
 pub enum FromSwarm<'a, Handler> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),
@@ -432,14 +444,14 @@ pub enum FromSwarm<'a, Handler> {
     ListenerClosed(ListenerClosed<'a>),
     /// Informs the behaviour that we have discovered a new candidate for an external address for us.
     NewExternalAddrCandidate(NewExternalAddrCandidate<'a>),
-    /// Informs the behaviour that an external address of the local node was removed.
+    /// Informs the behaviour that an external address of the local node was confirmed.
     ExternalAddrConfirmed(ExternalAddrConfirmed<'a>),
     /// Informs the behaviour that an external address of the local node expired, i.e. is no-longer confirmed.
     ExternalAddrExpired(ExternalAddrExpired<'a>),
 }
 
 /// [`FromSwarm`] variant that informs the behaviour about a newly established connection to a peer.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ConnectionEstablished<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
@@ -453,6 +465,7 @@ pub struct ConnectionEstablished<'a> {
 /// This event is always paired with an earlier
 /// [`FromSwarm::ConnectionEstablished`] with the same peer ID, connection ID
 /// and endpoint.
+#[derive(Debug)]
 pub struct ConnectionClosed<'a, Handler> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
@@ -463,7 +476,7 @@ pub struct ConnectionClosed<'a, Handler> {
 
 /// [`FromSwarm`] variant that informs the behaviour that the [`ConnectedPoint`] of an existing
 /// connection has changed.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct AddressChange<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
@@ -473,7 +486,7 @@ pub struct AddressChange<'a> {
 
 /// [`FromSwarm`] variant that informs the behaviour that the dial to a known
 /// or unknown node failed.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct DialFailure<'a> {
     pub peer_id: Option<PeerId>,
     pub error: &'a DialError,
@@ -485,7 +498,7 @@ pub struct DialFailure<'a> {
 ///
 /// This can include, for example, an error during the handshake of the encryption layer, or the
 /// connection unexpectedly closed.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
@@ -494,14 +507,14 @@ pub struct ListenFailure<'a> {
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct NewListener {
     pub listener_id: ListenerId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour
 /// that we have started listening on a new multiaddr.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct NewListenAddr<'a> {
     pub listener_id: ListenerId,
     pub addr: &'a Multiaddr,
@@ -510,41 +523,40 @@ pub struct NewListenAddr<'a> {
 /// [`FromSwarm`] variant that informs the behaviour that a multiaddr
 /// we were listening on has expired,
 /// which means that we are no longer listening on it.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExpiredListenAddr<'a> {
     pub listener_id: ListenerId,
     pub addr: &'a Multiaddr,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a listener experienced an error.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ListenerError<'a> {
     pub listener_id: ListenerId,
     pub err: &'a (dyn std::error::Error + 'static),
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a listener closed.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ListenerClosed<'a> {
     pub listener_id: ListenerId,
     pub reason: Result<(), &'a std::io::Error>,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour
-/// that we have discovered a new candidate for an external address for us.
-#[derive(Clone, Copy)]
+/// [`FromSwarm`] variant that informs the behaviour about a new candidate for an external address for us.
+#[derive(Debug, Clone, Copy)]
 pub struct NewExternalAddrCandidate<'a> {
     pub addr: &'a Multiaddr,
 }
 
-/// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
-#[derive(Clone, Copy)]
+/// [`FromSwarm`] variant that informs the behaviour that an external address was confirmed.
+#[derive(Debug, Clone, Copy)]
 pub struct ExternalAddrConfirmed<'a> {
     pub addr: &'a Multiaddr,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExternalAddrExpired<'a> {
     pub addr: &'a Multiaddr,
 }

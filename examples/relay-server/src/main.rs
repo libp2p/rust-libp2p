@@ -19,16 +19,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
-use futures::executor::block_on;
 use futures::stream::StreamExt;
+use futures::{executor::block_on, future::Either};
 use libp2p::{
     core::multiaddr::Protocol,
+    core::muxing::StreamMuxerBox,
     core::upgrade,
     core::{Multiaddr, Transport},
     identify, identity,
     identity::PeerId,
-    noise, ping, relay,
+    noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp,
 };
@@ -44,16 +47,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let tcp_transport = tcp::async_io::Transport::default();
 
-    let transport = tcp_transport
+    let tcp_transport = tcp_transport
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(
             noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
         )
-        .multiplex(libp2p::yamux::Config::default())
+        .multiplex(libp2p::yamux::Config::default());
+
+    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&local_key));
+
+    let transport = quic_transport
+        .or_transport(tcp_transport)
+        .map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
         .boxed();
 
     let behaviour = Behaviour {
@@ -68,18 +79,35 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build();
 
     // Listen on all interfaces
-    let listen_addr = Multiaddr::empty()
+    let listen_addr_tcp = Multiaddr::empty()
         .with(match opt.use_ipv6 {
             Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
             _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
         })
         .with(Protocol::Tcp(opt.port));
-    swarm.listen_on(listen_addr)?;
+    swarm.listen_on(listen_addr_tcp)?;
+
+    let listen_addr_quic = Multiaddr::empty()
+        .with(match opt.use_ipv6 {
+            Some(true) => Protocol::from(Ipv6Addr::UNSPECIFIED),
+            _ => Protocol::from(Ipv4Addr::UNSPECIFIED),
+        })
+        .with(Protocol::Udp(opt.port))
+        .with(Protocol::QuicV1);
+    swarm.listen_on(listen_addr_quic)?;
 
     block_on(async {
         loop {
             match swarm.next().await.expect("Infinite Stream.") {
                 SwarmEvent::Behaviour(event) => {
+                    if let BehaviourEvent::Identify(identify::Event::Received {
+                        info: identify::Info { observed_addr, .. },
+                        ..
+                    }) = &event
+                    {
+                        swarm.add_external_address(observed_addr.clone());
+                    }
+
                     println!("{event:?}")
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {

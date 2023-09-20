@@ -18,42 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Ping example
-//!
-//! See ../src/tutorial.rs for a step-by-step guide building the example below.
-//!
-//! In the first terminal window, run:
-//!
-//! ```sh
-//! cargo run
-//! ```
-//!
-//! It will print the PeerId and the listening addresses, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
-//!
-//! ```sh
-//! cargo run -- /ip4/127.0.0.1/tcp/24915
-//! ```
-//!
-//! The two nodes establish a connection, negotiate the ping protocol
-//! and begin pinging each other.
+#![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
 use libp2p::core::upgrade::Version;
 use libp2p::{
     identity, noise, ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
+use std::time::Duration;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::init();
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)
@@ -62,7 +43,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .boxed();
 
     let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, Behaviour::default(), local_peer_id)
+        SwarmBuilder::with_async_std_executor(transport, ping::Behaviour::default(), local_peer_id)
+            .idle_connection_timeout(Duration::from_secs(60)) // For illustrative purposes, keep idle connections alive for a minute so we can observe a few pings.
             .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -84,14 +66,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](keep_alive::Behaviour) behaviour so a continuous sequence of
-/// pings can be observed.
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
 }

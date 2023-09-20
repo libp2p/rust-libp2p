@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multiaddr::{Multiaddr, Protocol};
-use multihash::{Code, Error, MultihashGeneric};
 use rand::Rng;
 use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
@@ -30,7 +28,7 @@ use thiserror::Error;
 /// Must be big enough to accommodate for `MAX_INLINE_KEY_LENGTH`.
 /// 64 satisfies that and can hold 512 bit hashes which is what the ecosystem typically uses.
 /// Given that this appears in our type-signature, using a "common" number here makes us more compatible.
-type Multihash = MultihashGeneric<64>;
+type Multihash = multihash::Multihash<64>;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -80,9 +78,9 @@ impl PeerId {
     }
 
     /// Parses a `PeerId` from bytes.
-    pub fn from_bytes(data: &[u8]) -> Result<PeerId, Error> {
+    pub fn from_bytes(data: &[u8]) -> Result<PeerId, ParseError> {
         PeerId::from_multihash(Multihash::from_bytes(data)?)
-            .map_err(|mh| Error::UnsupportedCode(mh.code()))
+            .map_err(|mh| ParseError::UnsupportedCode(mh.code()))
     }
 
     /// Tries to turn a `Multihash` into a `PeerId`.
@@ -100,25 +98,13 @@ impl PeerId {
         }
     }
 
-    /// Tries to extract a [`PeerId`] from the given [`Multiaddr`].
-    ///
-    /// In case the given [`Multiaddr`] ends with `/p2p/<peer-id>`, this function
-    /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
-    pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
-        address.iter().last().and_then(|p| match p {
-            Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
-            _ => None,
-        })
-    }
-
     /// Generates a random peer ID from a cryptographically secure PRNG.
     ///
     /// This is useful for randomly walking on a DHT, or for testing purposes.
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
-            multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
-                .expect("The digest size is never too large"),
+            multihash: Multihash::wrap(0x0, &peer_id).expect("The digest size is never too large"),
         }
     }
 
@@ -130,19 +116,6 @@ impl PeerId {
     /// Returns a base-58 encoded string of this `PeerId`.
     pub fn to_base58(&self) -> String {
         bs58::encode(self.to_bytes()).into_string()
-    }
-
-    /// Checks whether the public key passed as parameter matches the public key of this `PeerId`.
-    ///
-    /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
-    /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &crate::PublicKey) -> Option<bool> {
-        use multihash::MultihashDigest as _;
-
-        let alg = Code::try_from(self.multihash.code())
-            .expect("Internal multihash is always a valid `Code`");
-        let enc = public_key.encode_protobuf();
-        Some(alg.digest(&enc) == self.multihash)
     }
 }
 
@@ -246,12 +219,15 @@ impl<'de> Deserialize<'de> for PeerId {
     }
 }
 
+/// Error when parsing a [`PeerId`] from string or bytes.
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error("base-58 decode error: {0}")]
     B58(#[from] bs58::decode::Error),
-    #[error("decoding multihash failed")]
-    MultiHash,
+    #[error("unsupported multihash code '{0}'")]
+    UnsupportedCode(u64),
+    #[error("invalid multihash")]
+    InvalidMultihash(#[from] multihash::Error),
 }
 
 impl FromStr for PeerId {
@@ -260,21 +236,15 @@ impl FromStr for PeerId {
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes = bs58::decode(s).into_vec()?;
-        PeerId::from_bytes(&bytes).map_err(|_| ParseError::MultiHash)
+        let peer_id = PeerId::from_bytes(&bytes)?;
+
+        Ok(peer_id)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    #[cfg(feature = "ed25519")]
-    fn peer_id_is_public_key() {
-        let key = crate::Keypair::generate_ed25519().public();
-        let peer_id = key.to_peer_id();
-        assert_eq!(peer_id.is_public_key(&key), Some(true));
-    }
 
     #[test]
     #[cfg(feature = "ed25519")]
@@ -298,31 +268,5 @@ mod tests {
             let peer_id = PeerId::random();
             assert_eq!(peer_id, PeerId::from_bytes(&peer_id.to_bytes()).unwrap());
         }
-    }
-
-    #[test]
-    fn extract_peer_id_from_multi_address() {
-        let address = "/memory/1234/p2p/12D3KooWGQmdpzHXCqLno4mMxWXKNFQHASBeF99gTm2JR8Vu5Bdc"
-            .to_string()
-            .parse()
-            .unwrap();
-
-        let peer_id = PeerId::try_from_multiaddr(&address).unwrap();
-
-        assert_eq!(
-            peer_id,
-            "12D3KooWGQmdpzHXCqLno4mMxWXKNFQHASBeF99gTm2JR8Vu5Bdc"
-                .parse()
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn no_panic_on_extract_peer_id_from_multi_address_if_not_present() {
-        let address = "/memory/1234".to_string().parse().unwrap();
-
-        let maybe_empty = PeerId::try_from_multiaddr(&address);
-
-        assert!(maybe_empty.is_none());
     }
 }

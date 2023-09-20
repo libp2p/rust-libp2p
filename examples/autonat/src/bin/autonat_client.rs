@@ -18,16 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Basic example that combines the AutoNAT and identify protocols.
-//!
-//! The identify protocol informs the local peer of its external addresses, that are then send in AutoNAT dial-back
-//! requests to the server.
-//!
-//! To run this example, follow the instructions in `examples/server` to start a server, then run in a new terminal:
-//! ```sh
-//! cargo run --bin autonat_client -- --server-address <server-addr> --server-peer-id <server-peer-id> --listen-port <port>
-//! ```
-//! The `listen-port` parameter is optional and allows to set a fixed port at which the local client should listen.
+#![doc = include_str!("../../README.md")]
 
 use clap::Parser;
 use futures::prelude::*;
@@ -60,7 +51,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)

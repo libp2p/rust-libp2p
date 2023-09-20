@@ -58,7 +58,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
-use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
+use async_std_resolver::AsyncStdResolver;
+use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
     connection::Endpoint,
@@ -69,10 +70,10 @@ use libp2p_core::{
 use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::io;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{
     convert::TryFrom,
     error, fmt, iter,
-    net::IpAddr,
     ops::DerefMut,
     pin::Pin,
     str,
@@ -81,12 +82,15 @@ use std::{
 };
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use trust_dns_resolver::system_conf;
-use trust_dns_resolver::{proto::xfer::dns_handle::DnsHandle, AsyncResolver, ConnectionProvider};
 #[cfg(feature = "tokio")]
-use trust_dns_resolver::{TokioAsyncResolver, TokioConnection, TokioConnectionProvider};
+use trust_dns_resolver::TokioAsyncResolver;
 
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
+use trust_dns_resolver::lookup::{Ipv4Lookup, Ipv6Lookup, TxtLookup};
+use trust_dns_resolver::lookup_ip::LookupIp;
+use trust_dns_resolver::name_server::ConnectionProvider;
+use trust_dns_resolver::AsyncResolver;
 
 /// The prefix for `dnsaddr` protocol TXT record lookups.
 const DNSADDR_PREFIX: &str = "_dnsaddr.";
@@ -109,27 +113,27 @@ const MAX_TXT_RECORDS: usize = 16;
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `async-std` for all async I/O.
 #[cfg(feature = "async-std")]
-pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdConnection, AsyncStdConnectionProvider>;
+pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdResolver>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `tokio` for all async I/O.
 #[cfg(feature = "tokio")]
-pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioConnection, TokioConnectionProvider>;
+pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioAsyncResolver>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
-pub struct GenDnsConfig<T, C, P>
-where
-    C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>,
-{
+#[derive(Debug)]
+pub struct GenDnsConfig<T, R> {
     /// The underlying transport.
     inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
-    resolver: AsyncResolver<C, P>,
+    resolver: R,
 }
 
 #[cfg(feature = "async-std")]
-impl<T> DnsConfig<T> {
+impl<T> DnsConfig<T>
+where
+    T: Send,
+{
     /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
     pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
         let (cfg, opts) = system_conf::read_system_conf()?;
@@ -142,15 +146,19 @@ impl<T> DnsConfig<T> {
         cfg: ResolverConfig,
         opts: ResolverOpts,
     ) -> Result<DnsConfig<T>, io::Error> {
+        // TODO: Make infallible in next breaking release. Or deprecation?
         Ok(DnsConfig {
             inner: Arc::new(Mutex::new(inner)),
-            resolver: async_std_resolver::resolver(cfg, opts).await?,
+            resolver: async_std_resolver::resolver(cfg, opts).await,
         })
     }
 }
 
 #[cfg(feature = "tokio")]
-impl<T> TokioDnsConfig<T> {
+impl<T> TokioDnsConfig<T>
+where
+    T: Send,
+{
     /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
     pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {
         let (cfg, opts) = system_conf::read_system_conf()?;
@@ -164,31 +172,20 @@ impl<T> TokioDnsConfig<T> {
         cfg: ResolverConfig,
         opts: ResolverOpts,
     ) -> Result<TokioDnsConfig<T>, io::Error> {
+        // TODO: Make infallible in next breaking release. Or deprecation?
         Ok(TokioDnsConfig {
             inner: Arc::new(Mutex::new(inner)),
-            resolver: TokioAsyncResolver::tokio(cfg, opts)?,
+            resolver: TokioAsyncResolver::tokio(cfg, opts),
         })
     }
 }
 
-impl<T, C, P> fmt::Debug for GenDnsConfig<T, C, P>
-where
-    C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>,
-    T: fmt::Debug,
-{
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_tuple("GenDnsConfig").field(&self.inner).finish()
-    }
-}
-
-impl<T, C, P> Transport for GenDnsConfig<T, C, P>
+impl<T, R> Transport for GenDnsConfig<T, R>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
-    C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>,
+    R: Clone + Send + Sync + Resolver + 'static,
 {
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
@@ -241,13 +238,12 @@ where
     }
 }
 
-impl<T, C, P> GenDnsConfig<T, C, P>
+impl<T, R> GenDnsConfig<T, R>
 where
     T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
-    C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>,
+    R: Clone + Send + Sync + Resolver + 'static,
 {
     fn do_dial(
         &mut self,
@@ -454,14 +450,10 @@ enum Resolved<'a> {
 /// Asynchronously resolves the domain name of a `Dns`, `Dns4`, `Dns6` or `Dnsaddr` protocol
 /// component. If the given protocol is of a different type, it is returned unchanged as a
 /// [`Resolved::One`].
-fn resolve<'a, E: 'a + Send, C, P>(
+fn resolve<'a, E: 'a + Send, R: Resolver>(
     proto: &Protocol<'a>,
-    resolver: &'a AsyncResolver<C, P>,
-) -> BoxFuture<'a, Result<Resolved<'a>, DnsErr<E>>>
-where
-    C: DnsHandle<Error = ResolveError>,
-    P: ConnectionProvider<Conn = C>,
-{
+    resolver: &'a R,
+) -> BoxFuture<'a, Result<Resolved<'a>, DnsErr<E>>> {
     match proto {
         Protocol::Dns(ref name) => resolver
             .lookup_ip(name.clone().into_owned())
@@ -499,12 +491,12 @@ where
                             iter::once(one)
                                 .chain(iter::once(two))
                                 .chain(ips)
-                                .map(IpAddr::from)
+                                .map(Ipv4Addr::from)
                                 .map(Protocol::from)
                                 .collect(),
                         ))
                     } else {
-                        Ok(Resolved::One(Protocol::from(IpAddr::from(one))))
+                        Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
                     }
                 }
                 Err(e) => Err(DnsErr::ResolveError(e)),
@@ -523,12 +515,12 @@ where
                             iter::once(one)
                                 .chain(iter::once(two))
                                 .chain(ips)
-                                .map(IpAddr::from)
+                                .map(Ipv6Addr::from)
                                 .map(Protocol::from)
                                 .collect(),
                         ))
                     } else {
-                        Ok(Resolved::One(Protocol::from(IpAddr::from(one))))
+                        Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
                     }
                 }
                 Err(e) => Err(DnsErr::ResolveError(e)),
@@ -575,6 +567,37 @@ fn parse_dnsaddr_txt(txt: &[u8]) -> io::Result<Multiaddr> {
 
 fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, e)
+}
+
+#[async_trait::async_trait]
+#[doc(hidden)]
+pub trait Resolver {
+    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError>;
+    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError>;
+    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError>;
+    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError>;
+}
+
+#[async_trait]
+impl<C> Resolver for AsyncResolver<C>
+where
+    C: ConnectionProvider,
+{
+    async fn lookup_ip(&self, name: String) -> Result<LookupIp, ResolveError> {
+        self.lookup_ip(name).await
+    }
+
+    async fn ipv4_lookup(&self, name: String) -> Result<Ipv4Lookup, ResolveError> {
+        self.ipv4_lookup(name).await
+    }
+
+    async fn ipv6_lookup(&self, name: String) -> Result<Ipv6Lookup, ResolveError> {
+        self.ipv6_lookup(name).await
+    }
+
+    async fn txt_lookup(&self, name: String) -> Result<TxtLookup, ResolveError> {
+        self.txt_lookup(name).await
+    }
 }
 
 #[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
@@ -641,13 +664,12 @@ mod tests {
             }
         }
 
-        async fn run<T, C, P>(mut transport: GenDnsConfig<T, C, P>)
+        async fn run<T, R>(mut transport: GenDnsConfig<T, R>)
         where
-            C: DnsHandle<Error = ResolveError>,
-            P: ConnectionProvider<Conn = C>,
             T: Transport + Clone + Send + Unpin + 'static,
             T::Error: Send,
             T::Dial: Send,
+            R: Clone + Send + Sync + Resolver + 'static,
         {
             // Success due to existing A record for example.com.
             let _ = transport

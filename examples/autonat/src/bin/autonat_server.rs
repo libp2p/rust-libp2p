@@ -18,13 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Basic example for a AutoNAT server that supports the /libp2p/autonat/1.0.0 and "/ipfs/0.1.0" protocols.
-//!
-//! To start the server run:
-//! ```sh
-//! cargo run --bin autonat_server -- --listen-port <port>
-//! ```
-//! The `listen-port` parameter is optional and allows to set a fixed port at which the local peer should listen.
+#![doc = include_str!("../../README.md")]
 
 use clap::Parser;
 use futures::prelude::*;
@@ -49,7 +43,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)

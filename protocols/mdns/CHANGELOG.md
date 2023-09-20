@@ -1,4 +1,4 @@
-## 0.44.0 - unreleased
+## 0.44.0 
 
 - Change `mdns::Event` to hold `Vec` and remove `DiscoveredAddrsIter` and `ExpiredAddrsIter`.
   See [PR 3621].

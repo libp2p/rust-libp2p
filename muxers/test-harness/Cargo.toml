@@ -12,4 +12,4 @@ libp2p-core = { workspace = true }
 futures = "0.3.28"
 log = "0.4"
 futures-timer = "3.0.2"
-futures_ringbuf = "0.3.1"
+futures_ringbuf = "0.4.0"

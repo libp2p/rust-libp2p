@@ -18,35 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Example demonstrating `libp2p-metrics`.
-//!
-//! In one terminal run:
-//!
-//! ```
-//! cargo run
-//! ```
-//!
-//! In a second terminal run:
-//!
-//! ```
-//! cargo run -- <listen-addr-of-first-node>
-//! ```
-//!
-//! Where `<listen-addr-of-first-node>` is replaced by the listen address of the
-//! first node reported in the first terminal. Look for `NewListenAddr`.
-//!
-//! In a third terminal run:
-//!
-//! ```
-//! curl localhost:<metrics-port-of-first-or-second-node>/metrics
-//! ```
-//!
-//! Where `<metrics-port-of-first-or-second-node>` is replaced by the listen
-//! port of the metrics server of the first or the second node. Look for
-//! `tide::server Server listening on`.
-//!
-//! You should see a long list of metrics printed to the terminal. Check the
-//! `libp2p_ping` metrics, they should be `>0`.
+#![doc = include_str!("../README.md")]
 
 use env_logger::Env;
 use futures::executor::block_on;
@@ -54,12 +26,13 @@ use futures::stream::StreamExt;
 use libp2p::core::{upgrade::Version, Multiaddr, Transport};
 use libp2p::identity::PeerId;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
+use std::time::Duration;
 
 mod http_service;
 
@@ -69,7 +42,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let local_pub_key = local_key.public();
-    info!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()
@@ -80,6 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Behaviour::new(local_pub_key),
         local_peer_id,
     )
+    .idle_connection_timeout(Duration::from_secs(60))
     .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -116,13 +89,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
-/// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
@@ -134,7 +103,6 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_pub_key,
             )),
-            keep_alive: keep_alive::Behaviour,
         }
     }
 }

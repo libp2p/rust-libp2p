@@ -99,6 +99,15 @@ where
             Entry::Vacant(entry) => entry.insert(default()),
         }
     }
+    pub(crate) fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
+        match self {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(V::default()),
+        }
+    }
 }
 
 impl<Key, Value> TimeCache<Key, Value>

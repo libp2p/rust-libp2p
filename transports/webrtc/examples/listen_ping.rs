@@ -4,8 +4,9 @@ use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::Transport;
 use libp2p_identity as identity;
 use libp2p_ping as ping;
-use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmBuilder};
+use libp2p_swarm::{Swarm, SwarmBuilder};
 use rand::thread_rng;
+use std::time::Duration;
 use void::Void;
 
 /// An example WebRTC server that will accept connections and run the ping protocol on them.
@@ -21,7 +22,7 @@ async fn main() -> Result<()> {
     }
 }
 
-fn create_swarm() -> Result<Swarm<Behaviour>> {
+fn create_swarm() -> Result<Swarm<ping::Behaviour>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
     let transport = libp2p_webrtc::tokio::Transport::new(
@@ -29,18 +30,16 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         libp2p_webrtc::tokio::Certificate::generate(&mut thread_rng())?,
     );
 
+    let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
     let transport = transport
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(SwarmBuilder::with_tokio_executor(transport, Behaviour::default(), peer_id).build())
-}
-
-#[derive(NetworkBehaviour, Default)]
-#[behaviour(to_swarm = "Event", prelude = "libp2p_swarm::derive_prelude")]
-struct Behaviour {
-    ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
+    Ok(
+        SwarmBuilder::with_tokio_executor(transport, ping::Behaviour::new(cfg.clone()), peer_id)
+            .idle_connection_timeout(Duration::from_secs(5))
+            .build(),
+    )
 }
 
 #[derive(Debug)]

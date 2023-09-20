@@ -18,27 +18,29 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![doc = include_str!("../README.md")]
+
 use clap::Parser;
 use futures::{
     executor::{block_on, ThreadPool},
-    future::FutureExt,
+    future::{Either, FutureExt},
     stream::StreamExt,
 };
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
-        transport::{OrTransport, Transport},
+        muxing::StreamMuxerBox,
+        transport::Transport,
         upgrade,
     },
     dcutr,
     dns::DnsConfig,
-    identify, identity, noise, ping, relay,
+    identify, identity, noise, ping, quic, relay,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
 };
 use log::info;
 use std::error::Error;
-use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 #[derive(Debug, Parser)]
@@ -85,23 +87,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = generate_ed25519(opts.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
 
     let (relay_transport, client) = relay::client::new(local_peer_id);
 
-    let transport = OrTransport::new(
-        relay_transport,
-        block_on(DnsConfig::system(tcp::async_io::Transport::new(
-            tcp::Config::default().port_reuse(true),
-        )))
-        .unwrap(),
-    )
-    .upgrade(upgrade::Version::V1Lazy)
-    .authenticate(
-        noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
-    )
-    .multiplex(yamux::Config::default())
-    .boxed();
+    let transport = {
+        let relay_tcp_quic_transport = relay_transport
+            .or_transport(tcp::async_io::Transport::new(
+                tcp::Config::default().port_reuse(true),
+            ))
+            .upgrade(upgrade::Version::V1)
+            .authenticate(noise::Config::new(&local_key).unwrap())
+            .multiplex(yamux::Config::default())
+            .or_transport(quic::async_std::Transport::new(quic::Config::new(
+                &local_key,
+            )));
+
+        block_on(DnsConfig::system(relay_tcp_quic_transport))
+            .unwrap()
+            .map(|either_output, _| match either_output {
+                Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+                Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            })
+            .boxed()
+    };
 
     #[derive(NetworkBehaviour)]
     #[behaviour(to_swarm = "Event")]
@@ -162,11 +170,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build();
 
     swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into())
-                .with(Protocol::Tcp(0)),
-        )
+        .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        .unwrap();
+    swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
 
     // Wait to listen on all interfaces.
@@ -212,6 +219,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     ..
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);
+                    swarm.add_external_address(observed_addr);
                     learned_observed_addr = true;
                 }
                 event => panic!("{event:?}"),
@@ -229,7 +237,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .dial(
                     opts.relay_address
                         .with(Protocol::P2pCircuit)
-                        .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
+                        .with(Protocol::P2p(opts.remote_peer_id.unwrap())),
                 )
                 .unwrap();
         }

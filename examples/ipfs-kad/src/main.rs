@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Demonstrates how to perform Kademlia queries on the IPFS network.
-//!
-//! You can pass as parameter a base58 peer ID to search for. If you don't pass any parameter, a
-//! peer ID will be generated randomly.
+#![doc = include_str!("../README.md")]
 
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
