@@ -87,7 +87,7 @@ where
 
     inbound_request_id: Arc<AtomicU64>,
 
-    worker_streams: futures_bounded::WorkerFutures<RequestId, Result<Event<TCodec>, io::Error>>,
+    worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
 }
 
 impl<TCodec> Handler<TCodec>
@@ -115,7 +115,7 @@ where
             inbound_sender,
             pending_events: VecDeque::new(),
             inbound_request_id,
-            worker_streams: futures_bounded::WorkerFutures::new(
+            worker_streams: futures_bounded::FuturesMap::new(
                 substream_timeout,
                 max_concurrent_streams,
             ),
@@ -164,7 +164,7 @@ where
         if self
             .worker_streams
             .try_push(request_id, recv.boxed())
-            .is_some()
+            .is_err()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
         }
@@ -204,7 +204,7 @@ where
         if self
             .worker_streams
             .try_push(request_id, send.boxed())
-            .is_some()
+            .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
         }
