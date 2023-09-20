@@ -55,6 +55,7 @@ pub enum Event {
     },
     DirectConnectionUpgradeSucceeded {
         remote_peer_id: PeerId,
+        connection_id: ConnectionId,
     },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
@@ -263,6 +264,7 @@ impl NetworkBehaviour for Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(
                 Event::DirectConnectionUpgradeSucceeded {
                     remote_peer_id: peer,
+                    connection_id: relayed_connection_id,
                 },
             )]);
         }

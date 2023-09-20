@@ -66,9 +66,10 @@ impl From<&libp2p_dcutr::Event> for EventType {
                 remote_peer_id: _,
                 remote_relayed_addr: _,
             } => EventType::RemoteInitiatedDirectConnectionUpgrade,
-            libp2p_dcutr::Event::DirectConnectionUpgradeSucceeded { remote_peer_id: _ } => {
-                EventType::DirectConnectionUpgradeSucceeded
-            }
+            libp2p_dcutr::Event::DirectConnectionUpgradeSucceeded {
+                remote_peer_id: _,
+                connection_id: _,
+            } => EventType::DirectConnectionUpgradeSucceeded,
             libp2p_dcutr::Event::DirectConnectionUpgradeFailed {
                 remote_peer_id: _,
                 error: _,

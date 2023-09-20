@@ -1,3 +1,10 @@
+## 0.11.0
+
+- Add ConnectionId to dcutr::Event::DirectConnectionUpgradeSucceeded
+  See [PR XXXX]
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.10.0 
 
 - Raise MSRV to 1.65.
