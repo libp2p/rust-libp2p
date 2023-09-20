@@ -417,6 +417,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
     Ok(
         SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
             .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .idle_connection_timeout(Duration::from_secs(60 * 5))
             .build(),
     )
 }

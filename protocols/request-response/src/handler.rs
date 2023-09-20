@@ -27,6 +27,7 @@ use crate::handler::protocol::{RequestProtocol, ResponseProtocol};
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
+use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
@@ -56,9 +57,14 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
+    /// The keep-alive timeout of idle connections. A connection is considered
+    /// idle if there are no outbound substreams.
+    keep_alive_timeout: Duration,
     /// The timeout for inbound and outbound substreams (i.e. request
     /// and response processing).
     substream_timeout: Duration,
+    /// The current connection keep-alive.
+    keep_alive: KeepAlive,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -86,12 +92,15 @@ where
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
         codec: TCodec,
+        keep_alive_timeout: Duration,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
     ) -> Self {
         Self {
             inbound_protocols,
             codec,
+            keep_alive: KeepAlive::Yes,
+            keep_alive_timeout,
             substream_timeout,
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
@@ -271,19 +280,12 @@ where
     }
 
     fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
+        self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if !self.outbound.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.inbound.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        KeepAlive::No
+        self.keep_alive
     }
 
     fn poll(
@@ -304,6 +306,7 @@ where
             match result {
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
+                    self.keep_alive = KeepAlive::Yes;
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
                         request_id: id,
                         request: rq,
@@ -331,6 +334,14 @@ where
 
         if self.outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.outbound.shrink_to_fit();
+        }
+
+        if self.inbound.is_empty() && self.keep_alive.is_yes() {
+            // No new inbound or outbound requests. However, we may just have
+            // started the latest inbound or outbound upgrade(s), so make sure
+            // the keep-alive timeout is preceded by the substream timeout.
+            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
+            self.keep_alive = KeepAlive::Until(until);
         }
 
         Poll::Pending
