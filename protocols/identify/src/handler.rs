@@ -55,7 +55,7 @@ pub struct Handler {
     >,
 
     /// Pending identification replies, awaiting being sent.
-    pending_replies: FuturesUnordered<BoxFuture<'static, Result<(), UpgradeError>>>,
+    pending_replies: FuturesUnordered<BoxFuture<'static, Result<Info, UpgradeError>>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -182,10 +182,9 @@ impl Handler {
                         remote_info,
                     )));
             }
-            future::Either::Right(()) => {
-                let local_info = self.build_info();
+            future::Either::Right(info) => {
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed(local_info),
+                    Event::IdentificationPushed(info),
                 ));
             }
         }
@@ -332,7 +331,7 @@ impl ConnectionHandler for Handler {
         // Check for pending replies to send.
         if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
             let event = result
-                .map(|()| Event::Identification)
+                .map(|_| Event::Identification)
                 .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
             self.exchanged_one_periodic_identify = true;
 

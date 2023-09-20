@@ -141,7 +141,7 @@ impl<C> OutboundUpgrade<C> for Push<OutboundPush>
 where
     C: AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = ();
+    type Output = Info;
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -150,11 +150,13 @@ where
     }
 }
 
-pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send<T>(io: T, info: Info) -> Result<Info, UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
     trace!("Sending: {:?}", info);
+
+    let info_sent = info.clone();
 
     let listen_addrs = info
         .listen_addrs
@@ -181,7 +183,7 @@ where
     framed_io.send(message).await?;
     framed_io.close().await?;
 
-    Ok(())
+    Ok(info_sent)
 }
 
 async fn recv<T>(socket: T) -> Result<Info, UpgradeError>
