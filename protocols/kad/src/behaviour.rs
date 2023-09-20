@@ -2684,9 +2684,9 @@ pub enum KademliaEvent {
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
 
-    /// This peer's mode has been updated.
+    /// This peer's mode has been updated automatically.
     ///
-    /// This usually happens in response to an address change or a new external
+    /// This happens in response to an external
     /// address being added or removed.
     ModeChanged { new_mode: Mode },
 }
