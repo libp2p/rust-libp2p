@@ -27,38 +27,13 @@
 use std::fmt::Display;
 
 use instant::Duration;
-use libp2p_swarm::{keep_alive, StreamProtocol};
+use libp2p_swarm::StreamProtocol;
 
 pub mod client;
 mod protocol;
 pub mod server;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
-
-#[derive(libp2p_swarm::NetworkBehaviour, Default)]
-#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-pub struct Behaviour<T> {
-    pub inner: T,
-    keep_alive: keep_alive::Behaviour,
-}
-
-impl Behaviour<client::Behaviour> {
-    pub fn client() -> Self {
-        Self {
-            inner: client::Behaviour::default(),
-            keep_alive: keep_alive::Behaviour,
-        }
-    }
-}
-
-impl Behaviour<server::Behaviour> {
-    pub fn server() -> Self {
-        Self {
-            inner: server::Behaviour::default(),
-            keep_alive: keep_alive::Behaviour,
-        }
-    }
-}
 
 /// Parameters for a single run, i.e. one stream, sending and receiving data.
 ///
