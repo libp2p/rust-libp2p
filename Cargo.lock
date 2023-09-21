@@ -2215,7 +2215,6 @@ dependencies = [
  "libp2p-mplex",
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
- "log",
  "mime_guess",
  "rand 0.8.5",
  "redis",

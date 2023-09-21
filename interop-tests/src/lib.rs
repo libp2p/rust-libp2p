@@ -45,7 +45,7 @@ pub async fn run_test(
     .idle_connection_timeout(Duration::from_secs(5))
     .build();
 
-    log::info!("Running ping test: {}", swarm.local_peer_id());
+    tracing::info!(local_peer=%swarm.local_peer_id(), "Running ping test");
 
     let mut maybe_id = None;
 
@@ -70,7 +70,7 @@ pub async fn run_test(
             let handshake_start = Instant::now();
 
             swarm.dial(other.parse::<Multiaddr>()?)?;
-            log::info!("Test instance, dialing multiaddress on: {}.", other);
+            tracing::info!("Test instance, dialing multiaddress on: {}.", other);
 
             let rtt = loop {
                 if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -78,7 +78,7 @@ pub async fn run_test(
                     ..
                 }))) = swarm.next().await
                 {
-                    log::info!("Ping successful: {rtt:?}");
+                    tracing::info!(?rtt, "Ping successful");
                     break rtt.as_micros() as f32 / 1000.;
                 }
             };
@@ -97,9 +97,9 @@ pub async fn run_test(
                 Some(id) => id,
             };
 
-            log::info!(
-                "Test instance, listening for incoming connections on: {:?}.",
-                local_addr
+            tracing::info!(
+                address=%local_addr,
+                "Test instance, listening for incoming connections on address"
             );
 
             loop {
@@ -147,7 +147,7 @@ pub async fn run_test_wasm(
     base_url: &str,
 ) -> Result<(), JsValue> {
     let result = run_test(transport, ip, is_dialer, test_timeout_secs, base_url).await;
-    log::info!("Sending test result: {result:?}");
+    tracing::info!("Sending test result: {result:?}");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
         .json(&result.map_err(|e| e.to_string()))
