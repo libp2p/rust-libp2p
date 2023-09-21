@@ -41,8 +41,8 @@ pub trait SwarmExt {
 
     /// Create a new [`Swarm`] with an ephemeral identity.
     ///
-    /// The swarm will use a [`MemoryTransport`] together with [`Config`] authentication layer and
-    /// yamux as the multiplexer. However, these details should not be relied upon by the test
+    /// The swarm will use a [`MemoryTransport`] together with a [`plaintext::Config`] authentication layer and
+    /// [`yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
     /// and may change at any time.
     fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
     where
