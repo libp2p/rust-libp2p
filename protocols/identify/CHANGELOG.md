@@ -1,4 +1,4 @@
-## 0.43.0 - unreleased
+## 0.43.0 
 
 - Observed addresses (aka. external address candidates) of the local node, reported by a remote node via `libp2p-identify`, are no longer automatically considered confirmed external addresses, in other words they are no longer trusted by default.
   Instead users need to confirm the reported observed address either manually, or by using `libp2p-autonat`.

@@ -1,4 +1,18 @@
-## 0.5.0-alpha - unreleased
+## 0.6.1-alpha - unreleased
+
+- Move common dependencies to `libp2p-webrtc-utils` crate.
+  See [PR 4248].
+
+[PR 4248]: https://github.com/libp2p/rust-libp2p/pull/4248
+
+## 0.6.0-alpha
+
+- Update `webrtc` dependency to `v0.8.0`.
+  See [PR 4099].
+
+[PR 4099]: https://github.com/libp2p/rust-libp2p/pull/4099
+
+## 0.5.0-alpha
 
 - Raise MSRV to 1.65.
   See [PR 3715].

@@ -24,7 +24,7 @@ use libp2p::{
     identity,
     multiaddr::Protocol,
     noise, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::time::Duration;
@@ -50,13 +50,11 @@ async fn main() {
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(key_pair.public()),
     )
+    .idle_connection_timeout(Duration::from_secs(5))
     .build();
-
-    log::info!("Local peer id: {}", swarm.local_peer_id());
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
@@ -129,5 +127,4 @@ async fn main() {
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }

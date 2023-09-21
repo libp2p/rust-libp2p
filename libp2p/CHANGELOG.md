@@ -1,4 +1,34 @@
-## 0.52.0 - unreleased
+## 0.52.3
+
+- Add `libp2p-quic` stable release.
+
+## 0.52.2
+
+- Include gossipsub when compiling for wasm.
+  See [PR 4217].
+
+- Add `json` feature which exposes `request_response::json`.
+  See [PR 4188].
+
+- Add support for UPnP via the IGD protocol.
+  See [PR 4156].
+
+- Add `libp2p-memory-connection-limits` providing memory usage based connection limit configurations.
+  See [PR 4281].
+
+[PR 4188]: https://github.com/libp2p/rust-libp2p/pull/4188
+[PR 4156]: https://github.com/libp2p/rust-libp2p/pull/4156
+[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+[PR 4281]: https://github.com/libp2p/rust-libp2p/pull/4281
+
+## 0.52.1
+
+- Add `libp2p-webtransport-websys` providing WebTransport for WASM environments.
+  See [PR 4015].
+
+[PR 4015]: https://github.com/libp2p/rust-libp2p/pull/4015
+
+## 0.52.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

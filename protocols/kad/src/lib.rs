@@ -68,7 +68,7 @@ pub use behaviour::{
     AddProviderContext, AddProviderError, AddProviderOk, AddProviderPhase, AddProviderResult,
     BootstrapError, BootstrapOk, BootstrapResult, GetClosestPeersError, GetClosestPeersOk,
     GetClosestPeersResult, GetProvidersError, GetProvidersOk, GetProvidersResult, GetRecordError,
-    GetRecordOk, GetRecordResult, InboundRequest, NoKnownPeers, PeerRecord, PutRecordContext,
+    GetRecordOk, GetRecordResult, InboundRequest, Mode, NoKnownPeers, PeerRecord, PutRecordContext,
     PutRecordError, PutRecordOk, PutRecordPhase, PutRecordResult, QueryInfo, QueryMut, QueryRef,
     QueryResult, QueryStats, RoutingUpdate,
 };
@@ -76,7 +76,7 @@ pub use behaviour::{
     Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
     KademliaStoreInserts, ProgressStep, Quorum,
 };
-pub use kbucket::{EntryView, KBucketRef, Key as KBucketKey};
+pub use kbucket::{Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey};
 pub use protocol::KadConnectionType;
 pub use query::QueryId;
 pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};

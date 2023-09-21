@@ -1,9 +1,9 @@
 [package]
 name = "libp2p"
 edition = "2021"
-rust-version = "1.65.0"
+rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.52.0"
+version = "0.52.3"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,14 +23,17 @@ full = [
     "floodsub",
     "gossipsub",
     "identify",
+    "json",
     "kad",
     "macros",
     "mdns",
+    "memory-connection-limits",
     "metrics",
     "noise",
     "ping",
     "plaintext",
     "pnet",
+    "quic",
     "relay",
     "rendezvous",
     "request-response",
@@ -45,10 +48,12 @@ full = [
     "wasm-ext",
     "wasm-ext-websocket",
     "websocket",
+    "webtransport-websys",
     "yamux",
+    "upnp"
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
+async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
@@ -59,14 +64,17 @@ ed25519 = ["libp2p-identity/ed25519"]
 floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
+json = ["libp2p-request-response?/json"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
+memory-connection-limits = ["dep:libp2p-memory-connection-limits"]
 metrics = ["dep:libp2p-metrics"]
 noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
+quic = ["dep:libp2p-quic"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 rendezvous = ["dep:libp2p-rendezvous"]
 request-response = ["dep:libp2p-request-response"]
@@ -75,13 +83,15 @@ secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
+webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
+upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
 bytes = "1"
@@ -110,6 +120,7 @@ libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
 libp2p-wasm-ext = { workspace = true, optional = true }
+libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 
 multiaddr = { workspace = true }
@@ -119,9 +130,12 @@ pin-project = "1.0.0"
 libp2p-deflate = { workspace = true, optional = true }
 libp2p-dns = { workspace = true, optional = true }
 libp2p-mdns = { workspace = true, optional = true }
+libp2p-memory-connection-limits = { workspace = true, optional = true }
+libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
+libp2p-upnp = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]

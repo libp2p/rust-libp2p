@@ -854,7 +854,7 @@ fn test_handle_received_subscriptions() {
     // UNSUBSCRIBE  - Remove topic from peer_topics for peer.
     //              - Remove peer from topic_peers.
 
-    let topics = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();
@@ -1276,7 +1276,7 @@ fn test_handle_graft_is_not_subscribed() {
 #[test]
 // tests multiple topics in a single graft message
 fn test_handle_graft_multiple_topics() {
-    let topics: Vec<String> = vec!["topic1", "topic2", "topic3", "topic4"]
+    let topics: Vec<String> = ["topic1", "topic2", "topic3", "topic4"]
         .iter()
         .map(|&t| String::from(t))
         .collect();

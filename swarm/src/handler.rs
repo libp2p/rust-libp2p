@@ -233,6 +233,42 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     RemoteProtocolsChange(ProtocolsChange<'a>),
 }
 
+impl<'a, IP, OP, IOI, OOI> fmt::Debug for ConnectionEvent<'a, IP, OP, IOI, OOI>
+where
+    IP: InboundUpgradeSend + fmt::Debug,
+    IP::Output: fmt::Debug,
+    IP::Error: fmt::Debug,
+    OP: OutboundUpgradeSend + fmt::Debug,
+    OP::Output: fmt::Debug,
+    OP::Error: fmt::Debug,
+    IOI: fmt::Debug,
+    OOI: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectionEvent::FullyNegotiatedInbound(v) => {
+                f.debug_tuple("FullyNegotiatedInbound").field(v).finish()
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(v) => {
+                f.debug_tuple("FullyNegotiatedOutbound").field(v).finish()
+            }
+            ConnectionEvent::AddressChange(v) => f.debug_tuple("AddressChange").field(v).finish(),
+            ConnectionEvent::DialUpgradeError(v) => {
+                f.debug_tuple("DialUpgradeError").field(v).finish()
+            }
+            ConnectionEvent::ListenUpgradeError(v) => {
+                f.debug_tuple("ListenUpgradeError").field(v).finish()
+            }
+            ConnectionEvent::LocalProtocolsChange(v) => {
+                f.debug_tuple("LocalProtocolsChange").field(v).finish()
+            }
+            ConnectionEvent::RemoteProtocolsChange(v) => {
+                f.debug_tuple("RemoteProtocolsChange").field(v).finish()
+            }
+        }
+    }
+}
+
 impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
     ConnectionEvent<'a, IP, OP, IOI, OOI>
 {
@@ -273,6 +309,7 @@ impl<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI>
 /// of simultaneously open negotiated inbound substreams. In other words it is up to the
 /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
 /// an excessive amount of inbound substreams.
+#[derive(Debug)]
 pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
     pub protocol: IP::Output,
     pub info: IOI,
@@ -282,18 +319,20 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
 ///
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
+#[derive(Debug)]
 pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
     pub protocol: OP::Output,
     pub info: OOI,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
+#[derive(Debug)]
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler about a change in the protocols supported on the connection.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum ProtocolsChange<'a> {
     Added(ProtocolsAdded<'a>),
     Removed(ProtocolsRemoved<'a>),
@@ -363,7 +402,7 @@ impl<'a> ProtocolsChange<'a> {
 }
 
 /// An [`Iterator`] over all protocols that have been added.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ProtocolsAdded<'a> {
     protocols: Peekable<Difference<'a, StreamProtocol, RandomState>>,
 }
@@ -377,7 +416,7 @@ impl<'a> ProtocolsAdded<'a> {
 }
 
 /// An [`Iterator`] over all protocols that have been removed.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ProtocolsRemoved<'a> {
     protocols: Either<
         Peekable<Difference<'a, StreamProtocol, RandomState>>,
@@ -410,6 +449,7 @@ impl<'a> Iterator for ProtocolsRemoved<'a> {
 
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an outbound substream to the given protocol has failed.
+#[derive(Debug)]
 pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
     pub info: OOI,
     pub error: StreamUpgradeError<OP::Error>,
@@ -417,6 +457,7 @@ pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
 
 /// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an inbound substream to the given protocol has failed.
+#[derive(Debug)]
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,
     pub error: IP::Error,

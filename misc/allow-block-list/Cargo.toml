@@ -17,5 +17,5 @@ void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-libp2p-swarm-derive = { workspace = true }
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-derive = { path = "../../swarm-derive" }
+libp2p-swarm-test = { path = "../../swarm-test" }

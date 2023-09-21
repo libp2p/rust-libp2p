@@ -30,10 +30,10 @@ use std::time::Duration;
 
 /// Allows rate limiting access to some resource based on the [`PeerId`] and
 /// [`Multiaddr`] of a remote peer.
-///
-/// See [`new_per_peer`] and [`new_per_ip`] for precast implementations. Use
-/// [`GenericRateLimiter`] to build your own, e.g. based on the autonomous system
-/// number of a peers IP address.
+//
+// See [`new_per_peer`] and [`new_per_ip`] for precast implementations. Use
+// [`GenericRateLimiter`] to build your own, e.g. based on the autonomous system
+// number of a peers IP address.
 pub trait RateLimiter: Send {
     fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;
 }
@@ -80,9 +80,9 @@ pub(crate) struct GenericRateLimiter<Id> {
 /// Configuration for a [`GenericRateLimiter`].
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GenericRateLimiterConfig {
-    /// The maximum number of tokens in the bucket at any point in time.
+    // The maximum number of tokens in the bucket at any point in time.
     pub(crate) limit: NonZeroU32,
-    /// The interval at which a single token is added to the bucket.
+    // The interval at which a single token is added to the bucket.
     pub(crate) interval: Duration,
 }
 

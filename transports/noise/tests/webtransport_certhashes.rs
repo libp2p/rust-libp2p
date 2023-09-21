@@ -40,9 +40,10 @@ fn webtransport_server_empty_certhashes() {
 
     // Invalid case, because a MITM attacker may strip certificates of the server.
     let Err(noise::Error::UnknownWebTransportCerthashes(expected, received)) =
-        handshake_with_certhashes(vec![certhash1, certhash2], vec![]) else {
-            panic!("unexpected result");
-        };
+        handshake_with_certhashes(vec![certhash1, certhash2], vec![])
+    else {
+        panic!("unexpected result");
+    };
 
     assert_eq!(expected, HashSet::from([certhash1, certhash2]));
     assert_eq!(received, HashSet::new());
@@ -68,9 +69,10 @@ fn webtransport_server_uninit_certhashes() {
 
     // Invalid case, because a MITM attacker may strip certificates of the server.
     let Err(noise::Error::UnknownWebTransportCerthashes(expected, received)) =
-        handshake_with_certhashes(vec![certhash1, certhash2], None) else {
-            panic!("unexpected result");
-        };
+        handshake_with_certhashes(vec![certhash1, certhash2], None)
+    else {
+        panic!("unexpected result");
+    };
 
     assert_eq!(expected, HashSet::from([certhash1, certhash2]));
     assert_eq!(received, HashSet::new());
@@ -81,9 +83,10 @@ fn webtransport_different_server_certhashes() {
     let (certhash1, certhash2, certhash3) = certhashes();
 
     let Err(noise::Error::UnknownWebTransportCerthashes(expected, received)) =
-        handshake_with_certhashes(vec![certhash1, certhash3], vec![certhash1, certhash2]) else {
-            panic!("unexpected result");
-        };
+        handshake_with_certhashes(vec![certhash1, certhash3], vec![certhash1, certhash2])
+    else {
+        panic!("unexpected result");
+    };
 
     assert_eq!(expected, HashSet::from([certhash1, certhash3]));
     assert_eq!(received, HashSet::from([certhash1, certhash2]));
@@ -94,9 +97,10 @@ fn webtransport_superset_of_certhashes() {
     let (certhash1, certhash2, _) = certhashes();
 
     let Err(noise::Error::UnknownWebTransportCerthashes(expected, received)) =
-        handshake_with_certhashes(vec![certhash1, certhash2], vec![certhash1]) else {
-            panic!("unexpected result");
-        };
+        handshake_with_certhashes(vec![certhash1, certhash2], vec![certhash1])
+    else {
+        panic!("unexpected result");
+    };
 
     assert_eq!(expected, HashSet::from([certhash1, certhash2]));
     assert_eq!(received, HashSet::from([certhash1]));

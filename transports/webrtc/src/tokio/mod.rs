@@ -24,7 +24,7 @@ mod error;
 mod fingerprint;
 mod req_res_chan;
 mod sdp;
-mod substream;
+mod stream;
 mod transport;
 mod udp_mux;
 mod upgrade;

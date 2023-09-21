@@ -14,19 +14,14 @@ categories = ["network-programming", "asynchronous"]
 bytes = "1"
 futures = "0.3"
 log = "0.4"
-pin-project = "1.1.0"
-smallvec = "1.6.1"
+pin-project = "1.1.3"
+smallvec = "1.11.0"
 unsigned-varint = "0.7"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.10"
 futures_ringbuf = "0.4.0"
-libp2p-core = { workspace = true }
-libp2p-yamux = { workspace = true }
-libp2p-plaintext = { workspace = true }
-libp2p-swarm = { workspace = true, features = ["async-std"] }
-libp2p-identity = { workspace = true, features = ["ed25519"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 rw-stream-sink = { workspace = true }

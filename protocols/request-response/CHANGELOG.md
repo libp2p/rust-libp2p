@@ -1,4 +1,11 @@
-## 0.25.0 - unreleased
+## 0.25.1
+
+- Replace unmaintained `serde_cbor` dependency with `cbor4ii`.
+  See [PR 4187].
+
+[PR 4187]: https://github.com/libp2p/rust-libp2p/pull/4187
+
+## 0.25.0
 
 - Add `request_response::json::Behaviour` and `request_response::cbor::Behaviour` building on top of the `serde` traits.
   To conveniently construct these, we remove the `Codec` parameter from `Behaviour::new` and add `Behaviour::with_codec`.
