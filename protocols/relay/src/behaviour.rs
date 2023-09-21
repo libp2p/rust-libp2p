@@ -41,7 +41,6 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -230,7 +229,7 @@ pub struct Behaviour {
     circuits: CircuitsTracker,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<Action>,
+    queued_actions: VecDeque<ToSwarm<Event, THandlerInEvent<Self>>>,
 
     external_addresses: ExternalAddresses,
 }
@@ -269,14 +268,12 @@ impl Behaviour {
             // Only emit [`CircuitClosed`] for accepted requests.
             .filter(|c| matches!(c.status, CircuitStatus::Accepted))
         {
-            self.queued_actions.push_back(
-                ToSwarm::GenerateEvent(Event::CircuitClosed {
+            self.queued_actions
+                .push_back(ToSwarm::GenerateEvent(Event::CircuitClosed {
                     src_peer_id: circuit.src_peer_id,
                     dst_peer_id: circuit.dst_peer_id,
                     error: Some(std::io::ErrorKind::ConnectionAborted.into()),
-                })
-                .into(),
-            );
+                }));
         }
     }
 }
@@ -414,7 +411,6 @@ impl NetworkBehaviour for Behaviour {
                             status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
-                    .into()
                 } else {
                     // Accept reservation.
                     self.reservations
@@ -439,7 +435,6 @@ impl NetworkBehaviour for Behaviour {
                                 .collect(),
                         }),
                     }
-                    .into()
                 };
 
                 self.queued_actions.push_back(action);
@@ -452,39 +447,35 @@ impl NetworkBehaviour for Behaviour {
                     .or_default()
                     .insert(connection);
 
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::ReservationReqAccepted {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::ReservationReqAccepted {
                         src_peer_id: event_source,
                         renewed,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::ReservationReqAcceptFailed { error } => {
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::ReservationReqAcceptFailed {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::ReservationReqAcceptFailed {
                         src_peer_id: event_source,
                         error,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::ReservationReqDenied {} => {
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::ReservationReqDenied {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::ReservationReqDenied {
                         src_peer_id: event_source,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::ReservationReqDenyFailed { error } => {
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::ReservationReqDenyFailed {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::ReservationReqDenyFailed {
                         src_peer_id: event_source,
                         error,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::ReservationTimedOut {} => {
                 match self.reservations.entry(event_source) {
@@ -503,12 +494,10 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
 
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::ReservationTimedOut {
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::ReservationTimedOut {
                         src_peer_id: event_source,
-                    })
-                    .into(),
-                );
+                    }));
             }
             handler::Event::CircuitReqReceived {
                 inbound_circuit_req,
@@ -578,7 +567,7 @@ impl NetworkBehaviour for Behaviour {
                         }),
                     }
                 };
-                self.queued_actions.push_back(action.into());
+                self.queued_actions.push_back(action);
             }
             handler::Event::CircuitReqDenied {
                 circuit_id,
@@ -588,13 +577,11 @@ impl NetworkBehaviour for Behaviour {
                     self.circuits.remove(circuit_id);
                 }
 
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqDenied {
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::CircuitReqDenied {
                         src_peer_id: event_source,
                         dst_peer_id,
-                    })
-                    .into(),
-                );
+                    }));
             }
             handler::Event::CircuitReqDenyFailed {
                 circuit_id,
@@ -605,14 +592,13 @@ impl NetworkBehaviour for Behaviour {
                     self.circuits.remove(circuit_id);
                 }
 
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqDenyFailed {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::CircuitReqDenyFailed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::OutboundConnectNegotiated {
                 circuit_id,
@@ -623,21 +609,18 @@ impl NetworkBehaviour for Behaviour {
                 dst_stream,
                 dst_pending_data,
             } => {
-                self.queued_actions.push_back(
-                    ToSwarm::NotifyHandler {
-                        handler: NotifyHandler::One(src_connection_id),
-                        peer_id: src_peer_id,
-                        event: Either::Left(handler::In::AcceptAndDriveCircuit {
-                            circuit_id,
-                            dst_peer_id: event_source,
-                            inbound_circuit_req,
-                            dst_handler_notifier,
-                            dst_stream,
-                            dst_pending_data,
-                        }),
-                    }
-                    .into(),
-                );
+                self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                    handler: NotifyHandler::One(src_connection_id),
+                    peer_id: src_peer_id,
+                    event: Either::Left(handler::In::AcceptAndDriveCircuit {
+                        circuit_id,
+                        dst_peer_id: event_source,
+                        inbound_circuit_req,
+                        dst_handler_notifier,
+                        dst_stream,
+                        dst_pending_data,
+                    }),
+                });
             }
             handler::Event::OutboundConnectNegotiationFailed {
                 circuit_id,
@@ -647,39 +630,33 @@ impl NetworkBehaviour for Behaviour {
                 status,
                 error,
             } => {
-                self.queued_actions.push_back(
-                    ToSwarm::NotifyHandler {
-                        handler: NotifyHandler::One(src_connection_id),
-                        peer_id: src_peer_id,
-                        event: Either::Left(handler::In::DenyCircuitReq {
-                            circuit_id: Some(circuit_id),
-                            inbound_circuit_req,
-                            status,
-                        }),
-                    }
-                    .into(),
-                );
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
+                self.queued_actions.push_back(ToSwarm::NotifyHandler {
+                    handler: NotifyHandler::One(src_connection_id),
+                    peer_id: src_peer_id,
+                    event: Either::Left(handler::In::DenyCircuitReq {
+                        circuit_id: Some(circuit_id),
+                        inbound_circuit_req,
+                        status,
+                    }),
+                });
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::CircuitReqOutboundConnectFailed {
                         src_peer_id,
                         dst_peer_id: event_source,
                         error,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::CircuitReqAccepted {
                 dst_peer_id,
                 circuit_id,
             } => {
                 self.circuits.accepted(circuit_id);
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqAccepted {
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::CircuitReqAccepted {
                         src_peer_id: event_source,
                         dst_peer_id,
-                    })
-                    .into(),
-                );
+                    }));
             }
             handler::Event::CircuitReqAcceptFailed {
                 dst_peer_id,
@@ -687,14 +664,13 @@ impl NetworkBehaviour for Behaviour {
                 error,
             } => {
                 self.circuits.remove(circuit_id);
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitReqAcceptFailed {
+                self.queued_actions.push_back(ToSwarm::GenerateEvent(
+                    Event::CircuitReqAcceptFailed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
-                    })
-                    .into(),
-                );
+                    },
+                ));
             }
             handler::Event::CircuitClosed {
                 dst_peer_id,
@@ -703,14 +679,12 @@ impl NetworkBehaviour for Behaviour {
             } => {
                 self.circuits.remove(circuit_id);
 
-                self.queued_actions.push_back(
-                    ToSwarm::GenerateEvent(Event::CircuitClosed {
+                self.queued_actions
+                    .push_back(ToSwarm::GenerateEvent(Event::CircuitClosed {
                         src_peer_id: event_source,
                         dst_peer_id,
                         error,
-                    })
-                    .into(),
-                );
+                    }));
             }
         }
     }
@@ -720,7 +694,7 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(Action::Done(to_swarm)) = self.queued_actions.pop_front() {
+        if let Some(to_swarm) = self.queued_actions.pop_front() {
             return Poll::Ready(to_swarm);
         }
 
@@ -815,18 +789,5 @@ impl Add<u64> for CircuitId {
 
     fn add(self, rhs: u64) -> Self {
         CircuitId(self.0 + rhs)
-    }
-}
-
-/// A [`ToSwarm`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`Behaviour::poll`].
-#[allow(clippy::large_enum_variant)]
-enum Action {
-    Done(ToSwarm<Event, Either<handler::In, Void>>),
-}
-
-impl From<ToSwarm<Event, Either<handler::In, Void>>> for Action {
-    fn from(action: ToSwarm<Event, Either<handler::In, Void>>) -> Self {
-        Self::Done(action)
     }
 }
