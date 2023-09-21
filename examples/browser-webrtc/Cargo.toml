@@ -16,8 +16,8 @@ crate-type = ["cdylib"]
 anyhow = "1.0.72"
 env_logger = "0.10"
 futures = "0.3.28"
-log = "0.4"
 rand = "0.8"
+tracing = { version = "0.1.37", features = ["log"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.6.19"
