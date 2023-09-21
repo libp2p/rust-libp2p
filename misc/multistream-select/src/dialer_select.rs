@@ -131,7 +131,7 @@ where
                     if let Err(err) = Pin::new(&mut io).start_send(Message::Protocol(p.clone())) {
                         return Poll::Ready(Err(From::from(err)));
                     }
-                    log::debug!("Dialer: Proposed protocol: {}", p);
+                    tracing::debug!(protocol=%p, "Dialer: Proposed protocol");
 
                     if this.protocols.peek().is_some() {
                         *this.state = State::FlushProtocol { io, protocol }
@@ -143,7 +143,7 @@ where
                             // the dialer supports for this negotiation. Notably,
                             // the dialer expects a regular `V1` response.
                             Version::V1Lazy => {
-                                log::debug!("Dialer: Expecting proposed protocol: {}", p);
+                                tracing::debug!(protocol=%p, "Dialer: Expecting proposed protocol");
                                 let hl = HeaderLine::from(Version::V1Lazy);
                                 let io = Negotiated::expecting(io.into_reader(), p, Some(hl));
                                 return Poll::Ready(Ok((protocol, io)));
@@ -180,14 +180,14 @@ where
                             *this.state = State::AwaitProtocol { io, protocol };
                         }
                         Message::Protocol(ref p) if p.as_ref() == protocol.as_ref() => {
-                            log::debug!("Dialer: Received confirmation for protocol: {}", p);
+                            tracing::debug!(protocol=%p, "Dialer: Received confirmation for protocol");
                             let io = Negotiated::completed(io.into_inner());
                             return Poll::Ready(Ok((protocol, io)));
                         }
                         Message::NotAvailable => {
-                            log::debug!(
-                                "Dialer: Received rejection of protocol: {}",
-                                protocol.as_ref()
+                            tracing::debug!(
+                                protocol=%protocol.as_ref(),
+                                "Dialer: Received rejection of protocol"
                             );
                             let protocol = this.protocols.next().ok_or(NegotiationError::Failed)?;
                             *this.state = State::SendProtocol { io, protocol }
