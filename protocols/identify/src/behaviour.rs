@@ -431,7 +431,8 @@ pub enum Event {
     Pushed {
         /// The peer that the information has been sent to.
         peer_id: PeerId,
-        /// The information pushed to the peer.
+        /// The full Info struct we pushed to the remote peer. Clients must
+        /// do some diff'ing to know what has changed since the last push.
         info: Info,
     },
     /// Error while attempting to identify the remote.
