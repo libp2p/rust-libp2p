@@ -149,10 +149,10 @@ where
                     .push_back(Event::OutboundUnsupportedProtocols(info));
             }
             StreamUpgradeError::Apply(e) => {
-                tracing::debug!("outbound stream {info} failed: {e}");
+                tracing::debug!(request=%info, "outbound stream request failed: {e}");
             }
             StreamUpgradeError::Io(e) => {
-                tracing::debug!("outbound stream {info} failed: {e}");
+                tracing::debug!(request=%info, "outbound stream failed: {e}");
             }
         }
     }
@@ -163,7 +163,7 @@ where
             <Self as ConnectionHandler>::InboundProtocol,
         >,
     ) {
-        tracing::debug!("inbound stream {info} failed: {error}");
+        tracing::debug!(request=%info, "inbound stream failed: {error}");
     }
 }
 

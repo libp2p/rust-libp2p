@@ -196,7 +196,9 @@ impl NetworkBehaviour for Behaviour {
                         error,
                     }) => {
                         tracing::warn!(
-                            "Inbound request {request_id} with peer {peer} failed: {error}"
+                            %peer,
+                            request=%request_id,
+                            "Inbound request with peer failed: {error}"
                         );
 
                         continue;
