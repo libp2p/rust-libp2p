@@ -39,7 +39,6 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, yamux, PeerId,
 };
-use log::info;
 use std::error::Error;
 use std::str::FromStr;
 use tracing::level_filters::LevelFilter;
@@ -190,7 +189,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 event = swarm.next() => {
                     match event.unwrap() {
                         SwarmEvent::NewListenAddr { address, .. } => {
-                            info!("Listening on {:?}", address);
+                            tracing::info!(%address, "Listening on address");
                         }
                         event => panic!("{event:?}"),
                     }
@@ -217,14 +216,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
                 SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
-                    info!("Told relay its public address.");
+                    tracing::info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
                 SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
                     info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
-                    info!("Relay told us our public address: {:?}", observed_addr);
+                    tracing::info!(address=%observed_addr, "Relay told us our public address");
                     swarm.add_external_address(observed_addr);
                     learned_observed_addr = true;
                 }
@@ -258,31 +257,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("Listening on {:?}", address);
+                    tracing::info!(%address, "Listening on address");
                 }
                 SwarmEvent::Behaviour(Event::Relay(
                     relay::client::Event::ReservationReqAccepted { .. },
                 )) => {
                     assert!(opts.mode == Mode::Listen);
-                    info!("Relay accepted our reservation request.");
+                    tracing::info!("Relay accepted our reservation request.");
                 }
                 SwarmEvent::Behaviour(Event::Relay(event)) => {
-                    info!("{:?}", event)
+                    tracing::info!(?event)
                 }
                 SwarmEvent::Behaviour(Event::Dcutr(event)) => {
-                    info!("{:?}", event)
+                    tracing::info!(?event)
                 }
                 SwarmEvent::Behaviour(Event::Identify(event)) => {
-                    info!("{:?}", event)
+                    tracing::info!(?event)
                 }
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    tracing::info!(peer=%peer_id, endpoint=?endpoint, "Established connection to peer via endpoint");
                 }
                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                    info!("Outgoing connection error to {:?}: {:?}", peer_id, error);
+                    tracing::info!(peer=?peer_id, "Outgoing connection error to peer: {:?}", error);
                 }
                 _ => {}
             }

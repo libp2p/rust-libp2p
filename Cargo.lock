@@ -1237,7 +1237,6 @@ dependencies = [
  "futures",
  "futures-timer",
  "libp2p",
- "log",
  "tracing",
  "tracing-subscriber",
 ]
