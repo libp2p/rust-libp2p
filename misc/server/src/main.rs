@@ -17,7 +17,6 @@ use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp;
 use libp2p::yamux;
 use libp2p::Transport;
-use log::{debug, info, warn};
 use prometheus_client::metrics::info::Info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -108,25 +107,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
 
     if config.addresses.swarm.is_empty() {
-        warn!("No listen addresses configured.");
+        tracing::warn!("No listen addresses configured.");
     }
     for address in &config.addresses.swarm {
         match swarm.listen_on(address.clone()) {
             Ok(_) => {}
             Err(e @ libp2p::TransportError::MultiaddrNotSupported(_)) => {
-                warn!("Failed to listen on {address}, continuing anyways, {e}")
+                tracing::warn!("Failed to listen on {address}, continuing anyways, {e}")
             }
             Err(e) => return Err(e.into()),
         }
     }
 
     if config.addresses.append_announce.is_empty() {
-        warn!("No external addresses configured.");
+        tracing::warn!("No external addresses configured.");
     }
     for address in &config.addresses.append_announce {
         swarm.add_external_address(address.clone())
     }
-    info!(
+    tracing::info!(
         "External addresses: {:?}",
         swarm.external_addresses().collect::<Vec<_>>()
     );
@@ -141,7 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     tokio::spawn(async move {
         if let Err(e) = http_service::metrics_server(metric_registry, opt.metrics_path).await {
-            log::error!("Metrics server failed: {e}");
+            tracing::error!("Metrics server failed: {e}");
         }
     });
 
@@ -161,7 +160,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         metrics.record(&event);
         match event {
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Identify(e)) => {
-                info!("{:?}", e);
+                tracing::info!("{:?}", e);
                 metrics.record(&e);
 
                 if let identify::Event::Received {
@@ -186,24 +185,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Ping(e)) => {
-                debug!("{:?}", e);
+                tracing::debug!("{:?}", e);
                 metrics.record(&e);
             }
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Kademlia(e)) => {
-                debug!("{:?}", e);
+                tracing::debug!("{:?}", e);
                 metrics.record(&e);
             }
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Relay(e)) => {
-                info!("{:?}", e);
+                tracing::info!("{:?}", e);
                 metrics.record(&e)
             }
             SwarmEvent::Behaviour(behaviour::BehaviourEvent::Autonat(e)) => {
-                info!("{:?}", e);
+                tracing::info!("{:?}", e);
                 // TODO: Add metric recording for `NatStatus`.
                 // metrics.record(&e)
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                info!("Listening on {address:?}");
+                tracing::info!("Listening on {address:?}");
             }
             _ => {}
         }
