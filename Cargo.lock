@@ -1227,7 +1227,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dcutr"
+name = "dcutr-example"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -1316,7 +1316,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "distributed-key-value-store"
+name = "distributed-key-value-store-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -1528,7 +1528,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0870c84016d4b481be5c9f323c24f65e31e901ae618f0e80f4308fb00de1d2d"
 
 [[package]]
-name = "file-sharing"
+name = "file-sharing-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -1594,6 +1594,15 @@ dependencies = [
  "futures-sink",
  "futures-task",
  "futures-util",
+]
+
+[[package]]
+name = "futures-bounded"
+version = "0.1.0"
+dependencies = [
+ "futures-timer",
+ "futures-util",
+ "tokio",
 ]
 
 [[package]]
@@ -2052,7 +2061,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "identify"
+name = "identify-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2240,7 +2249,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipfs-kad"
+name = "ipfs-kad-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2251,7 +2260,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipfs-private"
+name = "ipfs-private-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2933,6 +2942,7 @@ dependencies = [
  "either",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
  "futures-timer",
  "instant",
  "libp2p-core",
@@ -3170,20 +3180,16 @@ dependencies = [
 name = "libp2p-webrtc"
 version = "0.6.1-alpha"
 dependencies = [
- "anyhow",
  "async-trait",
  "bytes",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "hex",
- "hex-literal",
  "if-watch",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
- "libp2p-ping",
- "libp2p-swarm",
  "libp2p-webrtc-utils",
  "log",
  "multihash",
@@ -3196,8 +3202,6 @@ dependencies = [
  "tinytemplate",
  "tokio",
  "tokio-util",
- "unsigned-varint",
- "void",
  "webrtc",
 ]
 
