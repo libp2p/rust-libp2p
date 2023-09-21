@@ -33,7 +33,7 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
-use tracing_subscriber::{EnvFilter, filter::LevelFilter};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 /// Builds the transport that serves as a common ground for all connections.
 pub fn build_transport(

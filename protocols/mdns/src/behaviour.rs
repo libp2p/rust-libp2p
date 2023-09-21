@@ -272,7 +272,9 @@ where
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }
-                            Err(err) => tracing::error!("failed to create `InterfaceState`: {}", err),
+                            Err(err) => {
+                                tracing::error!("failed to create `InterfaceState`: {}", err)
+                            }
                         }
                     }
                 }

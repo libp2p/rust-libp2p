@@ -31,7 +31,7 @@ use libp2p::{core::Multiaddr, multiaddr::Protocol};
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
-use tracing_subscriber::{EnvFilter, filter::LevelFilter};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {

@@ -36,10 +36,10 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use tracing::Level;
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
+use tracing::Level;
 
 /// Protocol handler for sending and receiving identification requests.
 ///

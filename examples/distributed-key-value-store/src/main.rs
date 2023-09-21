@@ -35,7 +35,7 @@ use libp2p::{
     tcp, yamux, PeerId, Transport,
 };
 use std::error::Error;
-use tracing_subscriber::{EnvFilter, filter::LevelFilter};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {

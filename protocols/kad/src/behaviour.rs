@@ -47,7 +47,6 @@ use libp2p_swarm::{
     NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use tracing::Level;
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
@@ -56,6 +55,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 use std::vec;
 use thiserror::Error;
+use tracing::Level;
 
 pub use crate::query::QueryStats;
 
@@ -1287,7 +1287,10 @@ where
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(event));
                             }
                             kbucket::InsertResult::Full => {
-                                tracing::debug!("Bucket full. Peer not added to routing table: {}", peer);
+                                tracing::debug!(
+                                    "Bucket full. Peer not added to routing table: {}",
+                                    peer
+                                );
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                                     KademliaEvent::RoutablePeer { peer, address },
@@ -1660,7 +1663,10 @@ where
                     }),
                     PutRecordContext::Replicate => match phase {
                         PutRecordPhase::GetClosestPeers => {
-                            tracing::warn!("Locating closest peers for replication failed: {:?}", err);
+                            tracing::warn!(
+                                "Locating closest peers for replication failed: {:?}",
+                                err
+                            );
                             None
                         }
                         PutRecordPhase::PutRecord { .. } => {
@@ -1869,7 +1875,8 @@ where
             if addrs.remove(address).is_ok() {
                 tracing::debug!(
                     "Address '{}' removed from peer '{}' due to error.",
-                    address, peer_id
+                    address,
+                    peer_id
                 );
             } else {
                 // Despite apparently having no reachable address (any longer),
@@ -1883,7 +1890,8 @@ where
                 // within `Kademlia::poll`.
                 tracing::debug!(
                     "Last remaining address '{}' of peer '{}' is unreachable.",
-                    address, peer_id,
+                    address,
+                    peer_id,
                 )
             }
         }
@@ -1951,20 +1959,26 @@ where
             if addrs.replace(old, new) {
                 tracing::debug!(
                     "Address '{}' replaced with '{}' for peer '{}'.",
-                    old, new, peer
+                    old,
+                    new,
+                    peer
                 );
             } else {
                 tracing::debug!(
                     "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
                      present.",
-                    old, new, peer
+                    old,
+                    new,
+                    peer
                 );
             }
         } else {
             tracing::debug!(
                 "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
                  routing table.",
-                old, new, peer
+                old,
+                new,
+                peer
             );
         }
 

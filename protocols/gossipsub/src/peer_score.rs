@@ -348,7 +348,8 @@ impl PeerScore {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             tracing::debug!(
                 "[Penalty] Behavioral penalty for peer {}, count = {}.",
-                peer_id, count
+                peer_id,
+                count
             );
             peer_stats.behaviour_penalty += count as f64;
         }

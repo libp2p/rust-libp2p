@@ -20,8 +20,8 @@
 
 use crate::types::Subscription;
 use crate::TopicHash;
-use tracing::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use tracing::debug;
 
 pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
