@@ -1,6 +1,6 @@
 ## 0.44.0 - unreleased
 
-- Add `PeerCondition` variant `DisconnectedAndNotDialing`, combining pre-existing conditions.
+- Add `PeerCondition` variant `DisconnectedAndNotDialing`, combining pre-existing conditions. This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
   See [PR 4225].
 
