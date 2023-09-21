@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
-publish = false
+publish = true
 
 [dependencies]
 futures = "0.3.28"
@@ -22,4 +22,3 @@ tokio = { version = "1.29", default-features = false, features = ["rt"], optiona
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]
-
