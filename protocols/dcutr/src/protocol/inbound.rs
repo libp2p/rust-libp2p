@@ -68,7 +68,7 @@ impl upgrade::InboundUpgrade<Stream> for Upgrade {
                     // Filter out relayed addresses.
                     .filter(|a| {
                         if a.iter().any(|p| p == Protocol::P2pCircuit) {
-                            tracing::debug!("Dropping relayed address {a}");
+                            tracing::debug!(address=%a, "Dropping relayed address");
                             false
                         } else {
                             true

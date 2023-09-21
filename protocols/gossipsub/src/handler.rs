@@ -426,7 +426,7 @@ impl ConnectionHandler for Handler {
                 }
             },
             Handler::Disabled(_) => {
-                tracing::debug!("Handler is disabled. Dropping message {:?}", message);
+                tracing::debug!(?message, "Handler is disabled. Dropping message");
             }
         }
     }

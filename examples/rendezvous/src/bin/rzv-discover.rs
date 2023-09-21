@@ -92,7 +92,7 @@ async fn main() {
                         for registration in registrations {
                             for address in registration.record.addresses() {
                                 let peer = registration.record.peer_id();
-                                tracing::info!("Discovered peer {} at {}", peer, address);
+                                tracing::info!(%peer, %address, "Discovered peer");
 
                                 let p2p_suffix = Protocol::P2p(peer);
                                 let address_with_p2p =
@@ -111,7 +111,7 @@ async fn main() {
                         result: Ok(rtt),
                         ..
                     })) if peer != rendezvous_point => {
-                        tracing::info!("Ping to {} is {}ms", peer, rtt.as_millis())
+                        tracing::info!(%peer, "Ping is {}ms", rtt.as_millis())
                     }
                     other => {
                         tracing::debug!("Unhandled {:?}", other);

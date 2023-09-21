@@ -85,9 +85,9 @@ impl GossipPromises {
                     let count = result.entry(*peer_id).or_insert(0);
                     *count += 1;
                     tracing::debug!(
-                        "[Penalty] The peer {} broke the promise to deliver message {} in time!",
-                        peer_id,
-                        msg
+                        peer=%peer_id,
+                        message=%msg,
+                        "[Penalty] The peer broke the promise to deliver message in time!"
                     );
                     false
                 } else {

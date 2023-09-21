@@ -338,9 +338,9 @@ impl Decoder for GossipsubCodec {
                         None
                     } else if seq_no.len() != 8 {
                         tracing::debug!(
-                            "Invalid sequence number length for received message. SeqNo: {:?} Size: {}",
-                            seq_no,
-                            seq_no.len()
+                            sequence_number=?seq_no,
+                            sequence_length=%seq_no.len(),
+                            "Invalid sequence number length for received message"
                         );
                         let message = RawMessage {
                             source: None, // don't bother inform the application

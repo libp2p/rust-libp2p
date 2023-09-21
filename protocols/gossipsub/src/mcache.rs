@@ -86,7 +86,7 @@ impl MessageCache {
                 entry.insert((msg, HashSet::default()));
                 self.history[0].push(cache_entry);
 
-                tracing::trace!("Put message {:?} in mcache", message_id);
+                tracing::trace!(message=?message_id, "Put message in mcache");
                 true
             }
         }
@@ -191,12 +191,12 @@ impl MessageCache {
                     // application has to ensure that Gossipsub::validate_message gets called for
                     // each received message within the cache timeout time."
                     tracing::debug!(
-                        "The message with id {} got removed from the cache without being validated.",
-                        &entry.mid
+                        message=%&entry.mid,
+                        "The message got removed from the cache without being validated."
                     );
                 }
             }
-            tracing::trace!("Remove message from the cache: {}", &entry.mid);
+            tracing::trace!(message=%&entry.mid, "Remove message from the cache");
 
             self.iwant_counts.remove(&entry.mid);
         }

@@ -274,11 +274,11 @@ impl PeerScore {
                         metrics.register_score_penalty(Penalty::MessageDeficit);
                     }
                     tracing::debug!(
-                        "[Penalty] The peer {} has a mesh message deliveries deficit of {} in topic\
-                         {} and will get penalized by {}",
-                        peer_id,
-                        deficit,
-                        topic,
+                        peer=%peer_id,
+                        %topic,
+                        %deficit,
+                        "[Penalty] The peer has a mesh message deliveries deficit in topic\
+                        and will get penalized by {}",
                         p3 * topic_params.mesh_message_deliveries_weight
                     );
                 }
@@ -326,9 +326,10 @@ impl PeerScore {
                         metrics.register_score_penalty(Penalty::IPColocation);
                     }
                     tracing::debug!(
-                        "[Penalty] The peer {} gets penalized because of too many peers with the ip {}. \
-                        The surplus is {}. ",
-                        peer_id, ip, surplus
+                        peer=%peer_id,
+                        surplus_ip=%ip,
+                        surplus=%surplus,
+                        "[Penalty] The peer gets penalized because of too many peers with the same ip"
                     );
                     score += p6 * self.params.ip_colocation_factor_weight;
                 }
@@ -347,8 +348,8 @@ impl PeerScore {
     pub(crate) fn add_penalty(&mut self, peer_id: &PeerId, count: usize) {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             tracing::debug!(
-                "[Penalty] Behavioral penalty for peer {}, count = {}.",
-                peer_id,
+                peer=%peer_id,
+                "[Penalty] Behavioral penalty for peer, count = {}.",
                 count
             );
             peer_stats.behaviour_penalty += count as f64;
@@ -445,7 +446,7 @@ impl PeerScore {
 
     /// Adds a new ip to a peer, if the peer is not yet known creates a new peer_stats entry for it
     pub(crate) fn add_ip(&mut self, peer_id: &PeerId, ip: IpAddr) {
-        tracing::trace!("Add ip for peer {}, ip: {}", peer_id, ip);
+        tracing::trace!(peer=%peer_id, %ip, "Add ip for peer");
         let peer_stats = self.peer_stats.entry(*peer_id).or_default();
 
         // Mark the peer as connected (currently the default is connected, but we don't want to
@@ -462,20 +463,20 @@ impl PeerScore {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             peer_stats.known_ips.remove(ip);
             if let Some(peer_ids) = self.peer_ips.get_mut(ip) {
-                tracing::trace!("Remove ip for peer {}, ip: {}", peer_id, ip);
+                tracing::trace!(peer=%peer_id, %ip, "Remove ip for peer");
                 peer_ids.remove(peer_id);
             } else {
                 tracing::trace!(
-                    "No entry in peer_ips for ip {} which should get removed for peer {}",
-                    ip,
-                    peer_id
+                    peer=%peer_id,
+                    %ip,
+                    "No entry in peer_ips for ip which should get removed for peer"
                 );
             }
         } else {
             tracing::trace!(
-                "No peer_stats for peer {} which should remove the ip {}",
-                peer_id,
-                ip
+                peer=%peer_id,
+                %ip,
+                "No peer_stats for peer which should remove the ip"
             );
         }
     }
@@ -594,7 +595,12 @@ impl PeerScore {
 
         // this should be the first delivery trace
         if record.status != DeliveryStatus::Unknown {
-            tracing::warn!("Unexpected delivery trace: Message from {} was first seen {}s ago and has a delivery status {:?}", from, record.first_seen.elapsed().as_secs(), record.status);
+            tracing::warn!(
+                peer=%from,
+                status=?record.status,
+                "Unexpected delivery trace: Message from peer was first seen {}s ago", 
+                record.first_seen.elapsed().as_secs(),
+            );
             return;
         }
 
@@ -612,8 +618,8 @@ impl PeerScore {
     /// Similar to `reject_message` except does not require the message id or reason for an invalid message.
     pub(crate) fn reject_invalid_message(&mut self, from: &PeerId, topic_hash: &TopicHash) {
         tracing::debug!(
-            "[Penalty] Message from {} rejected because of ValidationError or SelfOrigin",
-            from
+            peer=%from,
+            "[Penalty] Message from peer rejected because of ValidationError or SelfOrigin"
         );
 
         self.mark_invalid_message_delivery(from, topic_hash);
@@ -779,9 +785,10 @@ impl PeerScore {
                 peer_stats.stats_or_default_mut(topic_hash.clone(), &self.params)
             {
                 tracing::debug!(
-                    "[Penalty] Peer {} delivered an invalid message in topic {} and gets penalized \
+                    peer=%peer_id,
+                    topic=%topic_hash,
+                    "[Penalty] Peer delivered an invalid message in topic and gets penalized \
                     for it",
-                    peer_id, topic_hash
                 );
                 topic_stats.invalid_message_deliveries += 1f64;
             }

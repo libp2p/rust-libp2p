@@ -156,9 +156,9 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                 request_id,
             } => {
                 tracing::debug!(
-                    "Outbound Failure {} when on dial-back request to peer {}.",
+                    %peer,
+                    "Outbound Failure {} when on dial-back request to peer.",
                     error,
-                    peer
                 );
                 let probe_id = self
                     .ongoing_outbound
@@ -294,7 +294,7 @@ impl<'a> AsClient<'a> {
             },
         );
         self.throttled_servers.push((server, Instant::now()));
-        tracing::debug!("Send dial-back request to peer {}.", server);
+        tracing::debug!(peer=%server, "Send dial-back request to peer.");
         self.ongoing_outbound.insert(request_id, probe_id);
         Ok(server)
     }
