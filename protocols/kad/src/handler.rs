@@ -481,12 +481,16 @@ impl KademliaHandler {
         match &endpoint {
             ConnectedPoint::Dialer { .. } => {
                 tracing::debug!(
-                    "Operating in {mode}-mode on new outbound connection to {remote_peer_id}"
+                    peer=%remote_peer_id,
+                    mode=%mode,
+                    "Operating in mode on new outbound connection to peer"
                 );
             }
             ConnectedPoint::Listener { .. } => {
                 tracing::debug!(
-                    "Operating in {mode}-mode on new inbound connection to {remote_peer_id}"
+                    peer=%remote_peer_id,
+                    mode=%mode,
+                    "Operating in mode on new inbound connection to peer"
                 );
             }
         }
@@ -566,15 +570,15 @@ impl KademliaHandler {
             }) {
                 *s = InboundSubstreamState::Cancelled;
                 tracing::debug!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                    Removed older substream waiting to be reused.",
-                    self.remote_peer_id,
+                    peer=?self.remote_peer_id,
+                    "New inbound substream to peer exceeds inbound substream limit. \
+                    Removed older substream waiting to be reused."
                 )
             } else {
                 tracing::warn!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                     No older substream waiting to be reused. Dropping new substream.",
-                    self.remote_peer_id,
+                    peer=?self.remote_peer_id,
+                    "New inbound substream to peer exceeds inbound substream limit. \
+                     No older substream waiting to be reused. Dropping new substream."
                 );
                 return;
             }
@@ -704,11 +708,17 @@ impl ConnectionHandler for KademliaHandler {
                 match &self.endpoint {
                     ConnectedPoint::Dialer { .. } => {
                         tracing::debug!(
-                            "Now operating in {new_mode}-mode on outbound connection with {peer}"
+                            %peer,
+                            mode=%new_mode,
+                            "Now operating in mode on outbound connection with peer"
                         )
                     }
                     ConnectedPoint::Listener { local_addr, .. } => {
-                        tracing::debug!("Now operating in {new_mode}-mode on inbound connection with {peer} assuming that one of our external addresses routes to {local_addr}")
+                        tracing::debug!(
+                            %peer,
+                            mode=%new_mode,
+                            local_address=%local_addr,
+                            "Now operating in mode on inbound connection with peer assuming that one of our external addresses routes to the local address")
                     }
                 }
 
@@ -808,18 +818,18 @@ impl ConnectionHandler for KademliaHandler {
                         (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
                         (true, _) => {
                             tracing::debug!(
-                                "Remote {} now supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
+                                peer=%self.remote_peer_id,
+                                connection=%self.connection_id,
+                                "Remote peer now supports our kademlia protocol on connection"
                             );
 
                             self.protocol_status = ProtocolStatus::Confirmed;
                         }
                         (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
                             tracing::debug!(
-                                "Remote {} no longer supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
+                                peer=%self.remote_peer_id,
+                                connection=%self.connection_id,
+                                "Remote peer no longer supports our kademlia protocol on connection"
                             );
 
                             self.protocol_status = ProtocolStatus::NotSupported;

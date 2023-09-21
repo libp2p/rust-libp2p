@@ -156,9 +156,9 @@ impl Handler {
             future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     tracing::warn!(
-                        "New inbound identify push stream from {} while still \
-                         upgrading previous one. Replacing previous with new.",
-                        self.remote_peer_id,
+                        peer=%self.remote_peer_id,
+                        "New inbound identify push stream from peer while still \
+                         upgrading previous one. Replacing previous with new."
                     );
                 }
             }
@@ -372,8 +372,8 @@ impl ConnectionHandler for Handler {
 
                 if protocols_changed && self.exchanged_one_periodic_identify {
                     tracing::debug!(
-                        "Supported listen protocols changed from [{before}] to [{after}], pushing to {}",
-                        self.remote_peer_id
+                        peer=%self.remote_peer_id,
+                        "Supported listen protocols changed from [{before}] to [{after}], pushing to peer"
                     );
 
                     let info = self.build_info();

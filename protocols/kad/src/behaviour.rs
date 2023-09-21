@@ -574,7 +574,7 @@ where
                         RoutingUpdate::Success
                     }
                     kbucket::InsertResult::Full => {
-                        tracing::debug!("Bucket full. Peer not added to routing table: {}", peer);
+                        tracing::debug!(%peer, "Bucket full. Peer not added to routing table");
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
@@ -1092,13 +1092,13 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            tracing::trace!("Request to {:?} in query {:?} succeeded.", source, query_id);
+            tracing::trace!(peer=%source, query=?query_id, "Request to peer in query succeeded.");
             for peer in others_iter.clone() {
                 tracing::trace!(
-                    "Peer {:?} reported by {:?} in query {:?}.",
-                    peer,
-                    source,
-                    query_id
+                    ?peer,
+                    %source,
+                    query=?query_id,
+                    "Peer reported by source in query"
                 );
                 let addrs = peer.multiaddrs.iter().cloned().collect();
                 query.inner.addresses.insert(peer.node_id, addrs);
@@ -1288,8 +1288,8 @@ where
                             }
                             kbucket::InsertResult::Full => {
                                 tracing::debug!(
-                                    "Bucket full. Peer not added to routing table: {}",
-                                    peer
+                                    %peer,
+                                    "Bucket full. Peer not added to routing table"
                                 );
                                 let address = addresses.first().clone();
                                 self.queued_events.push_back(ToSwarm::GenerateEvent(
@@ -1327,7 +1327,7 @@ where
     /// Handles a finished (i.e. successful) query.
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
-        tracing::trace!("Query {:?} finished.", query_id);
+        tracing::trace!(query=?query_id, "Query finished.");
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1554,7 +1554,7 @@ where
                         step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => {
-                        tracing::debug!("Record replicated: {:?}", record.key);
+                        tracing::debug!(record=?record.key, "Record replicated");
                         None
                     }
                 }
@@ -1565,7 +1565,7 @@ where
     /// Handles a query that timed out.
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
-        tracing::trace!("Query {:?} timed out.", query_id);
+        tracing::trace!(query=?query_id, "Query timed out.");
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1771,8 +1771,8 @@ where
                 KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => {
                         tracing::debug!(
-                            "Record stored: {:?}; {} bytes",
-                            record.key,
+                            record=?record.key,
+                            "Record stored: {} bytes",
                             record.value.len()
                         );
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
@@ -1874,9 +1874,9 @@ where
             // The error passed in should rather be a dedicated enum.
             if addrs.remove(address).is_ok() {
                 tracing::debug!(
-                    "Address '{}' removed from peer '{}' due to error.",
-                    address,
-                    peer_id
+                    peer=%peer_id,
+                    %address,
+                    "Address removed from peer due to error."
                 );
             } else {
                 // Despite apparently having no reachable address (any longer),
@@ -1889,9 +1889,9 @@ where
                 // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
                 // within `Kademlia::poll`.
                 tracing::debug!(
-                    "Last remaining address '{}' of peer '{}' is unreachable.",
-                    address,
-                    peer_id,
+                    peer=%peer_id,
+                    %address,
+                    "Last remaining address of peer is unreachable."
                 )
             }
         }
@@ -1958,27 +1958,26 @@ where
         if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
             if addrs.replace(old, new) {
                 tracing::debug!(
-                    "Address '{}' replaced with '{}' for peer '{}'.",
-                    old,
-                    new,
-                    peer
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address replaced with new address for peer."
                 );
             } else {
                 tracing::debug!(
-                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
-                     present.",
-                    old,
-                    new,
-                    peer
+                    %peer,
+                    old_address=%old,
+                    new_address=%new,
+                    "Old address not replaced with new address for peer as old address wasn't present.",
                 );
             }
         } else {
             tracing::debug!(
-                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
-                 routing table.",
-                old,
-                new,
-                peer
+                %peer,
+                old_address=%old,
+                new_address=%new,
+                "Old address not replaced with new address for peer as peer is not present in the \
+                 routing table."
             );
         }
 
@@ -2276,9 +2275,9 @@ where
 
             KademliaHandlerEvent::QueryError { query_id, error } => {
                 tracing::debug!(
-                    "Request to {:?} in query {:?} failed with {:?}",
-                    source,
-                    query_id,
+                    peer=%source,
+                    query=?query_id,
+                    "Request to peer in query failed with {:?}",
                     error
                 );
                 // If the query to which the error relates is still active,
@@ -2367,7 +2366,7 @@ where
 
                             *step = step.next();
                         } else {
-                            tracing::trace!("Record with key {:?} not found at {}", key, source);
+                            tracing::trace!(record=?key, %source, "Record not found at source");
                             if let KademliaCaching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());
@@ -2409,12 +2408,12 @@ where
                             let finished = query.try_finish(peers.iter());
                             if !finished {
                                 tracing::debug!(
-                                    "PutRecord query ({:?}) reached quorum ({}/{}) with response \
-                                     from peer {} but could not yet finish.",
-                                    query_id,
+                                    peer=%source,
+                                    query=?query_id,
+                                    "PutRecord query reached quorum ({}/{}) with response \
+                                     from peer but could not yet finish.",
                                     peers.len(),
                                     quorum,
-                                    source,
                                 );
                             }
                         }

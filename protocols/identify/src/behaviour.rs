@@ -183,7 +183,7 @@ impl Behaviour {
     {
         for p in peers {
             if !self.connected.contains_key(&p) {
-                tracing::debug!("Not pushing to {p} because we are not connected");
+                tracing::debug!(peer=%p, "Not pushing to peer because we are not connected");
                 continue;
             }
 
