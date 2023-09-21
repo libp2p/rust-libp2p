@@ -28,19 +28,18 @@ use libp2p::{
     tcp, yamux, PeerId, Transport,
 };
 use std::error::Error;
-use tracing_subscriber::{EnvFilter, filter::LevelFilter};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
-    
+
     tracing_subscriber::fmt().with_env_filter(env_filter).init();
-    
+
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1Lazy)

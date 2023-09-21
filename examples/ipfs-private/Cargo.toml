@@ -1,5 +1,5 @@
 [package]
-name = "ipfs-private"
+name = "ipfs-private-example"
 version = "0.1.0"
 edition = "2021"
 publish = false

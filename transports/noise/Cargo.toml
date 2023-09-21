@@ -10,7 +10,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 
 [dependencies]
 bytes = "1"
-curve25519-dalek = "4.0.0"
+curve25519-dalek = "4.1.0"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519"] }

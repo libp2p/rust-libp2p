@@ -40,7 +40,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::tokio::{error::Error, substream, substream::Substream};
+use crate::tokio::{error::Error, stream, stream::Stream};
 
 /// Maximum number of unprocessed data channels.
 /// See [`Connection::poll_inbound`].
@@ -56,14 +56,14 @@ pub struct Connection {
     /// Channel onto which incoming data channels are put.
     incoming_data_channels_rx: mpsc::Receiver<Arc<DetachedDataChannel>>,
 
-    /// Future, which, once polled, will result in an outbound substream.
+    /// Future, which, once polled, will result in an outbound stream.
     outbound_fut: Option<BoxFuture<'static, Result<Arc<DetachedDataChannel>, Error>>>,
 
     /// Future, which, once polled, will result in closing the entire connection.
     close_fut: Option<BoxFuture<'static, Result<(), Error>>>,
 
-    /// A list of futures, which, once completed, signal that a [`Substream`] has been dropped.
-    drop_listeners: FuturesUnordered<substream::DropListener>,
+    /// A list of futures, which, once completed, signal that a [`Stream`] has been dropped.
+    drop_listeners: FuturesUnordered<stream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 }
 
@@ -147,7 +147,7 @@ impl Connection {
 }
 
 impl StreamMuxer for Connection {
-    type Substream = Substream;
+    type Substream = Stream;
     type Error = Error;
 
     fn poll_inbound(
@@ -156,15 +156,15 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         match ready!(self.incoming_data_channels_rx.poll_next_unpin(cx)) {
             Some(detached) => {
-                log::trace!("Incoming substream {}", detached.stream_identifier());
+                log::trace!("Incoming stream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
                 }
 
-                Poll::Ready(Ok(substream))
+                Poll::Ready(Ok(stream))
             }
             None => {
                 debug_assert!(
@@ -226,15 +226,15 @@ impl StreamMuxer for Connection {
             Ok(detached) => {
                 self.outbound_fut = None;
 
-                log::trace!("Outbound substream {}", detached.stream_identifier());
+                log::trace!("Outbound stream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached);
+                let (stream, drop_listener) = Stream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
                 }
 
-                Poll::Ready(Ok(substream))
+                Poll::Ready(Ok(stream))
             }
             Err(e) => {
                 self.outbound_fut = None;

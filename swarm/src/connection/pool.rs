@@ -37,7 +37,7 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use instant::Instant;
+use instant::{Duration, Instant};
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::task::Waker;
@@ -135,6 +135,9 @@ where
 
     /// Receivers for [`NewConnection`] objects that are dropped.
     new_connection_dropped_listeners: FuturesUnordered<oneshot::Receiver<StreamMuxerBox>>,
+
+    /// How long a connection should be kept alive once it starts idling.
+    idle_connection_timeout: Duration,
 }
 
 #[derive(Debug)]
@@ -322,6 +325,7 @@ where
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
             per_connection_event_buffer_size: config.per_connection_event_buffer_size,
+            idle_connection_timeout: config.idle_connection_timeout,
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
@@ -518,6 +522,7 @@ where
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
+            self.idle_connection_timeout,
             span,
         );
 
@@ -948,6 +953,8 @@ pub(crate) struct PoolConfig {
     pub(crate) per_connection_event_buffer_size: usize,
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub(crate) dial_concurrency_factor: NonZeroU8,
+    /// How long a connection should be kept alive once it is idling.
+    pub(crate) idle_connection_timeout: Duration,
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
@@ -964,6 +971,7 @@ impl PoolConfig {
             task_command_buffer_size: 32,
             per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
+            idle_connection_timeout: Duration::ZERO,
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }

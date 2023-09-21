@@ -1,5 +1,5 @@
 [package]
-name = "distributed-key-value-store"
+name = "distributed-key-value-store-example"
 version = "0.1.0"
 edition = "2021"
 publish = false

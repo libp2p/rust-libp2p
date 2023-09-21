@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.3] - unreleased
+### Changed
+- Add libp2p-lookup to Dockerfile to enable healthchecks.
+
+### Fixed
+
+- Disable QUIC `draft-29` support.
+  Listening on `/quic` and `/quic-v1` addresses with the same port would otherwise result in an "Address already in use" error by the OS.
+  See [PR 4467].
+
+[PR 4467]: https://github.com/libp2p/rust-libp2p/pull/4467
+
 ## [0.12.2]
 ### Fixed
 - Adhere to `--metrics-path` flag and listen on `0.0.0.0:8888` (default IPFS metrics port).

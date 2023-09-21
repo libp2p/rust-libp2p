@@ -25,13 +25,14 @@ use futures::stream::StreamExt;
 use libp2p::core::{upgrade::Version, Multiaddr, Transport};
 use libp2p::identity::PeerId;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
-use tracing;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
-use tracing_subscriber::{EnvFilter, filter::LevelFilter};
+use std::time::Duration;
+use tracing;
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 mod http_service;
 
@@ -45,7 +46,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let local_pub_key = local_key.public();
-    tracing::info!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = SwarmBuilder::without_executor(
         tcp::async_io::Transport::default()
@@ -56,6 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Behaviour::new(local_pub_key),
         local_peer_id,
     )
+    .idle_connection_timeout(Duration::from_secs(60))
     .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -92,13 +93,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
-/// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
@@ -110,7 +107,6 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_pub_key,
             )),
-            keep_alive: keep_alive::Behaviour,
         }
     }
 }

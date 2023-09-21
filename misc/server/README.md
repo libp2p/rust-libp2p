@@ -33,3 +33,9 @@ Local peer id: PeerId("12D3KooWSa1YEeQVSwvoqAMhwjKQ6kqZQckhWPb3RWEGV3sZGU6Z")
 Listening on "/ip4/127.0.0.1/udp/4001/quic"
 [...]
 ```
+
+The Docker container includes [libp2-lookup](https://github.com/mxinden/libp2p-lookup/) to enable adding a proper healthcheck for container startup, e.g.
+
+``` shell
+docker run --health-cmd 'libp2p-lookup direct --address /ip4/127.0.0.1/tcp/4001/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa' /home/ipfs/.ipfs:/ipfs ghcr.io/libp2p/rust-libp2p-server --config /ipfs/config
+```
