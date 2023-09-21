@@ -2,7 +2,8 @@
 members = [
     "core",
     "examples/autonat",
-    "examples/chat-example",
+    "examples/browser-webrtc",
+    "examples/chat",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
@@ -10,7 +11,7 @@ members = [
     "examples/ipfs-kad",
     "examples/ipfs-private",
     "examples/metrics",
-    "examples/ping-example",
+    "examples/ping",
     "examples/relay-server",
     "examples/rendezvous",
     "examples/upnp",
@@ -18,6 +19,7 @@ members = [
     "interop-tests",
     "misc/allow-block-list",
     "misc/connection-limits",
+    "misc/futures-bounded",
     "misc/keygen",
     "misc/memory-connection-limits",
     "misc/metrics",
@@ -26,6 +28,7 @@ members = [
     "misc/quickcheck-ext",
     "misc/rw-stream-sink",
     "misc/server",
+    "misc/webrtc-utils",
     "muxers/mplex",
     "muxers/test-harness",
     "muxers/yamux",
@@ -56,6 +59,7 @@ members = [
     "transports/uds",
     "transports/wasm-ext",
     "transports/webrtc",
+    "transports/webrtc-websys",
     "transports/websocket",
     "transports/webtransport-websys",
     "wasm-tests/webtransport-tests",
@@ -66,6 +70,7 @@ resolver = "2"
 rust-version = "1.65.0"
 
 [workspace.dependencies]
+futures-bounded = { version = "0.1.0", path = "misc/futures-bounded" }
 libp2p = { version = "0.52.3", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.2.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.11.0", path = "protocols/autonat" }
@@ -102,7 +107,9 @@ libp2p-tcp = { version = "0.40.0", path = "transports/tcp" }
 libp2p-tls = { version = "0.2.1", path = "transports/tls" }
 libp2p-uds = { version = "0.39.0", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.40.0", path = "transports/wasm-ext" }
-libp2p-webrtc = { version = "0.6.0-alpha", path = "transports/webrtc" }
+libp2p-webrtc = { version = "0.6.1-alpha", path = "transports/webrtc" }
+libp2p-webrtc-utils = { version = "0.1.0", path = "misc/webrtc-utils" }
+libp2p-webrtc-websys = { version = "0.1.0-alpha", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.42.1", path = "transports/websocket" }
 libp2p-webtransport-websys = { version = "0.1.0", path = "transports/webtransport-websys" }
 libp2p-yamux = { version = "0.44.1", path = "muxers/yamux" }
@@ -112,7 +119,6 @@ quickcheck = { package = "quickcheck-ext", path = "misc/quickcheck-ext" }
 rw-stream-sink = { version = "0.4.0", path = "misc/rw-stream-sink" }
 multiaddr = "0.18.0"
 multihash = "0.19.1"
-
 
 [patch.crates-io]
 

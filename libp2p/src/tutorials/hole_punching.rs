@@ -122,16 +122,16 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --bin dcutr
+//! cargo build --bin dcutr-example
 //! ```
 //!
-//! You can find the binary at `target/debug/dcutr`. In case you built it locally, copy
+//! You can find the binary at `target/debug/dcutr-example`. In case you built it locally, copy
 //! it to your listening client machine.
 //!
 //! On the listening client machine:
 //!
 //! ``` bash
-//! RUST_LOG=info ./dcutr --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 //!
 //! [2022-05-11T10:38:52Z INFO  client] Local peer id: PeerId("XXX")
 //! [2022-05-11T10:38:52Z INFO  client] Listening on "/ip4/127.0.0.1/tcp/44703"
@@ -153,7 +153,7 @@
 //! ## Connecting to the listening client from the dialing client
 //!
 //! ``` bash
-//! RUST_LOG=info ./dcutr --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 //! ```
 //!
 //! You should see the following logs appear:

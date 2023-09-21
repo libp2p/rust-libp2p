@@ -1,9 +1,15 @@
-## 0.45.0
+## 0.45.0 - unreleased
 
 - make `Kademlia::add_address` return `Result`.
   See [PR 4280].
 
 [PR 4280]: https://github.com/libp2p/rust-libp2p/pull/4280
+
+## 0.44.5 - unreleased
+- Migrate to `quick-protobuf-codec` crate for codec logic.
+  See [PR 4501].
+
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 
 ## 0.44.4
 

@@ -1,4 +1,5 @@
 // Copyright 2022 Parity Technologies (UK) Ltd.
+// Copyright 2023 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,24 +19,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::{channel::oneshot, prelude::*, ready};
-use tokio_util::compat::Compat;
-use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 
 use std::{
     io,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
 use crate::proto::{Flag, Message};
-use crate::tokio::{
-    substream::drop_listener::GracefullyClosed,
-    substream::framed_dc::FramedDc,
-    substream::state::{Closing, State},
+use crate::{
+    stream::drop_listener::GracefullyClosed,
+    stream::framed_dc::FramedDc,
+    stream::state::{Closing, State},
 };
 
 mod drop_listener;
@@ -47,7 +44,7 @@ mod state;
 /// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
 /// size to 16 KB to avoid monopolization."
 /// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
-const MAX_MSG_LEN: usize = 16384; // 16kiB
+pub const MAX_MSG_LEN: usize = 16 * 1024;
 /// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
 /// Overhead of the protobuf encoding, in bytes.
@@ -55,26 +52,28 @@ const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
-pub(crate) use drop_listener::DropListener;
-/// A substream on top of a WebRTC data channel.
+pub use drop_listener::DropListener;
+/// A stream backed by a WebRTC data channel.
 ///
-/// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
+/// To be a proper libp2p stream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
 /// as support a half-closed state which we do by framing messages in a protobuf envelope.
-pub struct Substream {
-    io: FramedDc,
+pub struct Stream<T> {
+    io: FramedDc<T>,
     state: State,
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
-impl Substream {
-    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
-    /// is dropped.
-    pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
+impl<T> Stream<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Clone,
+{
+    /// Returns a new [`Stream`] and a [`DropListener`], which will notify the receiver when/if the stream is dropped.
+    pub fn new(data_channel: T) -> (Self, DropListener<T>) {
         let (sender, receiver) = oneshot::channel();
 
-        let substream = Self {
+        let stream = Self {
             io: framed_dc::new(data_channel.clone()),
             state: State::Open,
             read_buffer: Bytes::default(),
@@ -82,10 +81,10 @@ impl Substream {
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
 
-        (substream, listener)
+        (stream, listener)
     }
 
-    /// Gracefully closes the "read-half" of the substream.
+    /// Gracefully closes the "read-half" of the stream.
     pub fn poll_close_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.close_read_barrier()? {
@@ -113,7 +112,10 @@ impl Substream {
     }
 }
 
-impl AsyncRead for Substream {
+impl<T> AsyncRead for Stream<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -157,7 +159,10 @@ impl AsyncRead for Substream {
     }
 }
 
-impl AsyncWrite for Substream {
+impl<T> AsyncWrite for Stream<T>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -236,10 +241,13 @@ impl AsyncWrite for Substream {
     }
 }
 
-fn io_poll_next(
-    io: &mut Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>,
+fn io_poll_next<T>(
+    io: &mut FramedDc<T>,
     cx: &mut Context<'_>,
-) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
+) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
     match ready!(io.poll_next_unpin(cx))
         .transpose()
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
@@ -262,8 +270,8 @@ mod tests {
         // Largest possible message.
         let message = [0; MAX_DATA_LEN];
 
-        let protobuf = crate::proto::Message {
-            flag: Some(crate::proto::Flag::FIN),
+        let protobuf = Message {
+            flag: Some(Flag::FIN),
             message: Some(message.to_vec()),
         };
 
