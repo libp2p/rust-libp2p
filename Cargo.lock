@@ -3180,20 +3180,16 @@ dependencies = [
 name = "libp2p-webrtc"
 version = "0.6.1-alpha"
 dependencies = [
- "anyhow",
  "async-trait",
  "bytes",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "hex",
- "hex-literal",
  "if-watch",
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
- "libp2p-ping",
- "libp2p-swarm",
  "libp2p-webrtc-utils",
  "log",
  "multihash",
@@ -3206,8 +3202,6 @@ dependencies = [
  "tinytemplate",
  "tokio",
  "tokio-util",
- "unsigned-varint",
- "void",
  "webrtc",
 ]
 
