@@ -1227,7 +1227,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dcutr"
+name = "dcutr-example"
 version = "0.1.0"
 dependencies = [
  "clap",
@@ -1316,7 +1316,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "distributed-key-value-store"
+name = "distributed-key-value-store-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -1528,7 +1528,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0870c84016d4b481be5c9f323c24f65e31e901ae618f0e80f4308fb00de1d2d"
 
 [[package]]
-name = "file-sharing"
+name = "file-sharing-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2061,7 +2061,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "identify"
+name = "identify-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2249,7 +2249,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipfs-kad"
+name = "ipfs-kad-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
@@ -2260,7 +2260,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipfs-private"
+name = "ipfs-private-example"
 version = "0.1.0"
 dependencies = [
  "async-std",
