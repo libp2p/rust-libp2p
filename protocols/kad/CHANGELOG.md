@@ -1,3 +1,10 @@
+## 0.45.0
+
+- make `Kademlia::add_address` return `Result`.
+  See [PR 4280].
+
+[PR 4280]: https://github.com/libp2p/rust-libp2p/pull/4280
+
 ## 0.44.4
 
 - Implement common traits on `RoutingUpdate`.
