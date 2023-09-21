@@ -422,11 +422,24 @@ impl NetworkBehaviour for Behaviour {
                         .or_default()
                         .insert(connection);
 
-                    Action::AcceptReservationPrototype {
+                    ToSwarm::NotifyHandler {
                         handler: NotifyHandler::One(connection),
                         peer_id: event_source,
-                        inbound_reservation_req,
+                        event: Either::Left(handler::In::AcceptReservationReq {
+                            inbound_reservation_req,
+                            addrs: self
+                                .external_addresses
+                                .iter()
+                                .cloned()
+                                // Add local peer ID in case it isn't present yet.
+                                .filter_map(|a| match a.iter().last()? {
+                                    Protocol::P2p(_) => Some(a),
+                                    _ => Some(a.with(Protocol::P2p(self.local_peer_id))),
+                                })
+                                .collect(),
+                        }),
                     }
+                    .into()
                 };
 
                 self.queued_actions.push_back(action);
@@ -707,8 +720,8 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(action) = self.queued_actions.pop_front() {
-            return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
+        if let Some(Action::Done(to_swarm)) = self.queued_actions.pop_front() {
+            return Poll::Ready(to_swarm);
         }
 
         Poll::Pending
@@ -810,47 +823,10 @@ impl Add<u64> for CircuitId {
 #[allow(clippy::large_enum_variant)]
 enum Action {
     Done(ToSwarm<Event, Either<handler::In, Void>>),
-    AcceptReservationPrototype {
-        inbound_reservation_req: inbound_hop::ReservationReq,
-        handler: NotifyHandler,
-        peer_id: PeerId,
-    },
 }
 
 impl From<ToSwarm<Event, Either<handler::In, Void>>> for Action {
     fn from(action: ToSwarm<Event, Either<handler::In, Void>>) -> Self {
         Self::Done(action)
-    }
-}
-
-impl Action {
-    fn build(
-        self,
-        local_peer_id: PeerId,
-        external_addresses: &ExternalAddresses,
-    ) -> ToSwarm<Event, Either<handler::In, Void>> {
-        match self {
-            Action::Done(action) => action,
-            Action::AcceptReservationPrototype {
-                inbound_reservation_req,
-                handler,
-                peer_id,
-            } => ToSwarm::NotifyHandler {
-                handler,
-                peer_id,
-                event: Either::Left(handler::In::AcceptReservationReq {
-                    inbound_reservation_req,
-                    addrs: external_addresses
-                        .iter()
-                        .cloned()
-                        // Add local peer ID in case it isn't present yet.
-                        .filter_map(|a| match a.iter().last()? {
-                            Protocol::P2p(_) => Some(a),
-                            _ => Some(a.with(Protocol::P2p(local_peer_id))),
-                        })
-                        .collect(),
-                }),
-            },
-        }
     }
 }
