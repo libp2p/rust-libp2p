@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
-mod handler;
+pub(crate) mod handler;
 pub(crate) mod transport;
 
 use crate::multiaddr_ext::MultiaddrExt;
@@ -163,7 +163,6 @@ impl NetworkBehaviour for Behaviour {
         if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
-
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
         if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
@@ -378,10 +377,10 @@ impl NetworkBehaviour for Behaviour {
 ///
 /// Internally, this uses a stream to the relay.
 pub struct Connection {
-    state: ConnectionState,
+    pub(crate) state: ConnectionState,
 }
 
-enum ConnectionState {
+pub(crate) enum ConnectionState {
     InboundAccepting {
         accept: BoxFuture<'static, Result<ConnectionState, Error>>,
     },

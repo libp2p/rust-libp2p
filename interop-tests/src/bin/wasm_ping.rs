@@ -1,3 +1,4 @@
+#![allow(non_upper_case_globals)]
 use std::process::Stdio;
 use std::time::Duration;
 
