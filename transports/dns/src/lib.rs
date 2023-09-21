@@ -63,14 +63,14 @@ mod config;
 pub use config::async_std;
 
 #[cfg(feature = "async-std")]
-#[deprecated(since = "0.40.0", note = "Use `async_std::Config` instead.")]
+#[deprecated(note = "Use `async_std::Config` instead.")]
 pub type DnsConfig<T> = async_std::Config<T>;
 
 #[cfg(feature = "tokio")]
 pub use config::tokio;
 
 #[cfg(feature = "tokio")]
-#[deprecated(since = "0.40.0", note = "Use `tokio::Config` instead.")]
+#[deprecated(note = "Use `tokio::Config` instead.")]
 pub type TokioDnsConfig<T> = tokio::Config<T>;
 
 use async_trait::async_trait;
@@ -130,10 +130,7 @@ pub struct Config<T, R> {
     resolver: R,
 }
 
-#[deprecated(
-    since = "0.40.0",
-    note = "Use `async_std::Config` or `tokio::Config` instead."
-)]
+#[deprecated(note = "Use `async_std::Config` or `tokio::Config` instead.")]
 pub type GenDnsConfig<T, R> = Config<T, R>;
 
 impl<T, R> Transport for Config<T, R>
@@ -360,7 +357,7 @@ pub enum Error<TErr> {
     TooManyLookups,
 }
 
-#[deprecated(since = "0.40.0", note = "Use `Error` instead.")]
+#[deprecated(note = "Use `Error` instead.")]
 pub type DnsError<TErr> = Error<TErr>;
 
 impl<TErr> fmt::Display for Error<TErr>
