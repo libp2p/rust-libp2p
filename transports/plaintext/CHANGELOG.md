@@ -1,3 +1,8 @@
+## 0.40.1 - unreleased
+
+- Rename `Plaintext2Config` to `Config` to follow naming conventions across repository.
+  See [PR XXXX](XXXX).  
+
 ## 0.40.0 
 
 - Raise MSRV to 1.65.
