@@ -579,7 +579,7 @@ mod tests {
             )))
         }
 
-        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
+        fn on_swarm_event(&mut self, _event: FromSwarm) {}
 
         fn on_connection_handler_event(
             &mut self,
