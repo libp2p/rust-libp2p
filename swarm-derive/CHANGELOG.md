@@ -1,3 +1,8 @@
+## 0.34.0 - unreleased
+
+- Adapt to interface changes in `libp2p-swarm`.
+  See [PR 4706](https://github.com/libp2p/rust-libp2p/pull/4076).
+
 ## 0.33.0 
 
 - Raise MSRV to 1.65.
