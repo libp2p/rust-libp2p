@@ -38,7 +38,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
-use tracing;
 use std::collections::VecDeque;
 use std::task::Waker;
 use std::{

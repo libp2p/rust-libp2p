@@ -31,7 +31,6 @@ use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
 use std::time::Duration;
-use tracing;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 mod http_service;

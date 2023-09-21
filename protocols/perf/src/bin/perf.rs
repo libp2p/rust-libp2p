@@ -32,7 +32,6 @@ use libp2p_core::{
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
-use tracing;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
@@ -383,7 +382,9 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
     tracing::info!(
             "Finished: established {rounds} connections with one {to_send} bytes request and one {to_receive} bytes response within {duration:.2} s",
         );
-    tracing::info!("- {connection_establishment_95th:.4} s 95th percentile connection establishment");
+    tracing::info!(
+        "- {connection_establishment_95th:.4} s 95th percentile connection establishment"
+    );
     tracing::info!("- {connection_establishment_plus_request_95th:.4} s 95th percentile connection establishment + one request");
 
     Ok(())

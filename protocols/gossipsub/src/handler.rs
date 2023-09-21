@@ -40,7 +40,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tracing;
 use void::Void;
 
 /// The event emitted by the Handler. This informs the behaviour of various events created
@@ -342,7 +341,9 @@ impl EnabledHandler {
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
                                 Err(e) => {
-                                    tracing::debug!("Failed to send message on outbound stream: {e}");
+                                    tracing::debug!(
+                                        "Failed to send message on outbound stream: {e}"
+                                    );
                                     self.outbound_substream = None;
                                     break;
                                 }

@@ -37,7 +37,6 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-use tracing;
 
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);

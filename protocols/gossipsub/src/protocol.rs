@@ -34,7 +34,6 @@ use futures::prelude::*;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity::{PeerId, PublicKey};
 use libp2p_swarm::StreamProtocol;
-use tracing;
 use quick_protobuf::Writer;
 use std::pin::Pin;
 use unsigned_varint::codec;
@@ -205,7 +204,9 @@ impl GossipsubCodec {
 
         // The key must match the peer_id
         if source != public_key.to_peer_id() {
-            tracing::warn!("Signature verification failed: Public key doesn't match source peer id");
+            tracing::warn!(
+                "Signature verification failed: Public key doesn't match source peer id"
+            );
             return false;
         }
 
@@ -276,10 +277,14 @@ impl Decoder for GossipsubCodec {
                 }
                 ValidationMode::Anonymous => {
                     if message.signature.is_some() {
-                        tracing::warn!("Signature field was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Signature field was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SignaturePresent);
                     } else if message.seqno.is_some() {
-                        tracing::warn!("Sequence number was non-empty and anonymous validation mode is set");
+                        tracing::warn!(
+                            "Sequence number was non-empty and anonymous validation mode is set"
+                        );
                         invalid_kind = Some(ValidationError::SequenceNumberPresent);
                     } else if message.from.is_some() {
                         tracing::warn!("Message dropped. Message source was non-empty and anonymous validation mode is set");

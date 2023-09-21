@@ -892,6 +892,7 @@ mod tests {
             None,
             0,
             idle_timeout,
+            tracing::Span::none(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
@@ -916,6 +917,7 @@ mod tests {
             None,
             0,
             idle_timeout,
+            tracing::Span::none(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());
@@ -947,6 +949,7 @@ mod tests {
             None,
             0,
             idle_timeout,
+            tracing::Span::none(),
         );
 
         assert!(connection.poll_noop_waker().is_pending());

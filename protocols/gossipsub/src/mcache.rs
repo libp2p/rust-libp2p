@@ -21,7 +21,6 @@
 use crate::topic::TopicHash;
 use crate::types::{MessageId, RawMessage};
 use libp2p_identity::PeerId;
-use tracing;
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::{

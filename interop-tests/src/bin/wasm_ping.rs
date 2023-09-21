@@ -15,7 +15,6 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
-use tracing;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use interop_tests::{BlpopRequest, Report};
@@ -153,7 +152,8 @@ async fn redis_blpop(
         .map_err(|e| {
             tracing::warn!(
                 "Failed to get list elem {} within timeout {}: {e}",
-                request.key, request.timeout
+                request.key,
+                request.timeout
             );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;

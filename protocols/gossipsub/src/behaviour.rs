@@ -31,7 +31,6 @@ use std::{
 
 use futures::StreamExt;
 use futures_ticker::Ticker;
-use tracing;
 use prometheus_client::registry::Registry;
 use rand::{seq::SliceRandom, thread_rng};
 
@@ -981,7 +980,8 @@ where
             let add_peers = std::cmp::min(peers.len(), self.config.mesh_n());
             tracing::debug!(
                 "JOIN: Adding {:?} peers from the fanout for topic: {:?}",
-                add_peers, topic_hash
+                add_peers,
+                topic_hash
             );
             added_peers.extend(peers.iter().cloned().take(add_peers));
 
@@ -1199,7 +1199,8 @@ where
         if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
             tracing::debug!(
                 "IHAVE: ignoring peer {:?} with score below threshold [score = {}]",
-                peer_id, score
+                peer_id,
+                score
             );
             return;
         }
@@ -1211,7 +1212,8 @@ where
             tracing::debug!(
                 "IHAVE: peer {} has advertised too many times ({}) within this heartbeat \
             interval; ignoring",
-                peer_id, *peer_have
+                peer_id,
+                *peer_have
             );
             return;
         }
@@ -1220,7 +1222,8 @@ where
             if *iasked >= self.config.max_ihave_length() {
                 tracing::debug!(
                     "IHAVE: peer {} has already advertised too many messages ({}); ignoring",
-                    peer_id, *iasked
+                    peer_id,
+                    *iasked
                 );
                 return;
             }
@@ -1325,7 +1328,8 @@ where
         if let (true, score) = self.score_below_threshold(peer_id, |pst| pst.gossip_threshold) {
             tracing::debug!(
                 "IWANT: ignoring peer {:?} with score below threshold [score = {}]",
-                peer_id, score
+                peer_id,
+                score
             );
             return;
         }
@@ -1342,7 +1346,8 @@ where
                     tracing::debug!(
                         "IWANT: Peer {} has asked for message {} too many times; ignoring \
                     request",
-                        peer_id, &id
+                        peer_id,
+                        &id
                     );
                 } else {
                     cached_messages.insert(id.clone(), msg.clone());
@@ -1419,7 +1424,8 @@ where
                     if peers.contains(peer_id) {
                         tracing::debug!(
                             "GRAFT: Received graft for peer {:?} that is already in topic {:?}",
-                            peer_id, &topic_hash
+                            peer_id,
+                            &topic_hash
                         );
                         continue;
                     }
@@ -1464,7 +1470,9 @@ where
                         tracing::debug!(
                             "GRAFT: ignoring peer {:?} with negative score [score = {}, \
                         topic = {}]",
-                            peer_id, score, topic_hash
+                            peer_id,
+                            score,
+                            topic_hash
                         );
                         // we do send them PRUNE however, because it's a matter of protocol correctness
                         to_prune_topics.insert(topic_hash.clone());
@@ -1485,7 +1493,8 @@ where
                     // add peer to the mesh
                     tracing::debug!(
                         "GRAFT: Mesh link added for peer: {:?} in topic: {:?}",
-                        peer_id, &topic_hash
+                        peer_id,
+                        &topic_hash
                     );
 
                     if peers.insert(*peer_id) {
@@ -1512,7 +1521,8 @@ where
                     do_px = false;
                     tracing::debug!(
                         "GRAFT: Received graft for unknown topic {:?} from peer {:?}",
-                        &topic_hash, peer_id
+                        &topic_hash,
+                        peer_id
                     );
                     // spam hardening: ignore GRAFTs for unknown topics
                     continue;
@@ -1617,7 +1627,9 @@ where
                         tracing::debug!(
                             "PRUNE: ignoring PX from peer {:?} with insufficient score \
                              [score ={} topic = {}]",
-                            peer_id, score, topic_hash
+                            peer_id,
+                            score,
+                            topic_hash
                         );
                         continue;
                     }
@@ -1703,7 +1715,8 @@ where
             if self.blacklisted_peers.contains(source) {
                 tracing::debug!(
                     "Rejecting message from peer {} because of blacklisted source: {}",
-                    propagation_source, source
+                    propagation_source,
+                    source
                 );
                 self.handle_invalid_message(
                     propagation_source,
@@ -1733,7 +1746,8 @@ where
         if self_published {
             tracing::debug!(
                 "Dropping message {} claiming to be from self but forwarded from {}",
-                msg_id, propagation_source
+                msg_id,
+                propagation_source
             );
             self.handle_invalid_message(propagation_source, raw_message, RejectReason::SelfOrigin);
             return false;
@@ -2171,7 +2185,9 @@ where
                     tracing::debug!(
                         "HEARTBEAT: Prune peer {:?} with negative score [score = {}, topic = \
                              {}]",
-                        peer_id, peer_score, topic_hash
+                        peer_id,
+                        peer_score,
+                        topic_hash
                     );
 
                     let current_topic = to_prune.entry(*peer_id).or_insert_with(Vec::new);
@@ -2379,7 +2395,8 @@ where
                         // update the mesh
                         tracing::debug!(
                             "Opportunistically graft in topic {} with peers {:?}",
-                            topic_hash, peer_list
+                            topic_hash,
+                            peer_list
                         );
                         if let Some(m) = self.metrics.as_mut() {
                             m.peers_included(topic_hash, Inclusion::Random, peer_list.len())
@@ -3218,7 +3235,8 @@ where
                     } else {
                         tracing::warn!(
                             "Disconnected node: {} with topic: {:?} not in topic_peers",
-                            &peer_id, &topic
+                            &peer_id,
+                            &topic
                         );
                     }
 
@@ -3360,7 +3378,8 @@ where
                     // All other PeerKind changes are ignored.
                     tracing::debug!(
                         "New peer type found: {} for peer: {}",
-                        kind, propagation_source
+                        kind,
+                        propagation_source
                     );
                     if let PeerKind::Floodsub = conn.kind {
                         conn.kind = kind;
