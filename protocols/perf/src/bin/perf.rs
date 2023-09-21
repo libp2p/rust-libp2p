@@ -122,7 +122,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
         loop {
             match swarm.next().await.unwrap() {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    tracing::info!("Listening on {address}");
+                    tracing::info!(%address, "Listening on address");
                 }
                 SwarmEvent::IncomingConnection { .. } => {}
                 e @ SwarmEvent::IncomingConnectionError { .. } => {
@@ -131,7 +131,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    tracing::info!("Established connection to {:?} via {:?}", peer_id, endpoint);
+                    tracing::info!(peer=%peer_id, ?endpoint, "Established connection to peer via endpoint");
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
                 SwarmEvent::Behaviour(()) => {
