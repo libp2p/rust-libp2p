@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Identify, InboundPush, Info, OutboundPush, Push, UpgradeError};
+use crate::protocol::{Identify, InboundPush, OutboundPush, Push, UpgradeError};
+use crate::protocol::{Info, PartialInfo};
 use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -48,7 +49,8 @@ use std::{io, task::Context, task::Poll, time::Duration};
 /// permitting the underlying connection to be closed.
 pub struct Handler {
     remote_peer_id: PeerId,
-    inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
+    remote_public_key: Option<PublicKey>,
+    inbound_identify_push: Option<BoxFuture<'static, Result<PartialInfo, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
         [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
@@ -121,6 +123,7 @@ impl Handler {
     ) -> Self {
         Self {
             remote_peer_id,
+            remote_public_key: Default::default(),
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
             pending_replies: FuturesUnordered::new(),
@@ -151,7 +154,7 @@ impl Handler {
                 let info = self.build_info();
 
                 self.pending_replies
-                    .push(crate::protocol::send(substream, info).boxed());
+                    .push(crate::protocol::send(substream, info.into()).boxed());
             }
             future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
@@ -177,10 +180,19 @@ impl Handler {
         match output {
             future::Either::Left(remote_info) => {
                 self.update_supported_protocols_for_remote(&remote_info);
-                self.events
-                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                        remote_info,
-                    )));
+
+                match self.update_remote_public_key(remote_info).try_into() {
+                    Ok(info) => {
+                        self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::Identified(info),
+                        ));
+                    }
+                    Err(error) => {
+                        warn!(
+                            "Failed to build remote info from inbound identify push stream from {:?}: {:?}",
+                            self.remote_peer_id, error)
+                    }
+                }
             }
             future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
                 Event::IdentificationPushed,
@@ -204,7 +216,7 @@ impl Handler {
 
     fn build_info(&mut self) -> Info {
         Info {
-            public_key: Some(self.public_key.clone()),
+            public_key: self.public_key.clone(),
             protocol_version: self.protocol_version.clone(),
             agent_version: self.agent_version.clone(),
             listen_addrs: Vec::from_iter(self.external_addresses.iter().cloned()),
@@ -213,7 +225,17 @@ impl Handler {
         }
     }
 
-    fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
+    fn update_remote_public_key(&mut self, mut remote_info: PartialInfo) -> PartialInfo {
+        if let Some(key) = &remote_info.public_key {
+            self.remote_public_key.replace(key.clone());
+            remote_info
+        } else {
+            remote_info.public_key = self.remote_public_key.clone();
+            remote_info
+        }
+    }
+
+    fn update_supported_protocols_for_remote(&mut self, remote_info: &PartialInfo) {
         let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
 
         let remote_added_protocols = new_remote_protocols
@@ -274,7 +296,10 @@ impl ConnectionHandler for Handler {
                 let info = self.build_info();
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(Either::Right(Push::outbound(info)), ()),
+                        protocol: SubstreamProtocol::new(
+                            Either::Right(Push::outbound(info.into())),
+                            (),
+                        ),
                     });
             }
         }
@@ -318,11 +343,20 @@ impl ConnectionHandler for Handler {
         {
             self.inbound_identify_push.take();
 
-            if let Ok(info) = res {
-                self.update_supported_protocols_for_remote(&info);
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    info,
-                )));
+            if let Ok(remote_info) = res {
+                self.update_supported_protocols_for_remote(&remote_info);
+                match self.update_remote_public_key(remote_info).try_into() {
+                    Ok(info) => {
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::Identified(info),
+                        ));
+                    }
+                    Err(error) => {
+                        warn!(
+                            "Failed to build remote info from inbound identify stream from {:?}: {:?}",
+                            self.remote_peer_id, error)
+                    }
+                }
             }
         }
 
@@ -380,7 +414,7 @@ impl ConnectionHandler for Handler {
                     self.events
                         .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                             protocol: SubstreamProtocol::new(
-                                Either::Right(Push::outbound(info)),
+                                Either::Right(Push::outbound(info.into())),
                                 (),
                             ),
                         });

@@ -48,7 +48,7 @@ async fn periodic_identify() {
             [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s1_info, .. })],
             [BehaviourEvent::Identify(Received { info: s2_info, .. }), BehaviourEvent::Identify(Sent { .. })],
         ) => {
-            assert_eq!(s1_info.public_key.unwrap().to_peer_id(), swarm2_peer_id);
+            assert_eq!(s1_info.public_key.to_peer_id(), swarm2_peer_id);
             assert_eq!(s1_info.protocol_version, "c");
             assert_eq!(s1_info.agent_version, "d");
             assert!(!s1_info.protocols.is_empty());
@@ -61,7 +61,7 @@ async fn periodic_identify() {
             assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
             assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
 
-            assert_eq!(s2_info.public_key.unwrap().to_peer_id(), swarm1_peer_id);
+            assert_eq!(s2_info.public_key.to_peer_id(), swarm1_peer_id);
             assert_eq!(s2_info.protocol_version, "a");
             assert_eq!(s2_info.agent_version, "b");
             assert!(!s2_info.protocols.is_empty());
@@ -127,7 +127,7 @@ async fn identify_push() {
     };
 
     assert_eq!(
-        swarm1_received_info.public_key.unwrap().to_peer_id(),
+        swarm1_received_info.public_key.to_peer_id(),
         *swarm2.local_peer_id()
     );
     assert_eq!(swarm1_received_info.protocol_version, "a");
