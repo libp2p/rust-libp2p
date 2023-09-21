@@ -102,7 +102,7 @@ where
 {
     /// Builds a new [`InterfaceState`].
     pub(crate) fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
-        tracing::info!("creating instance on iface {}", addr);
+        tracing::info!(address=%addr, "creating instance on iface address");
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
                 let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -184,7 +184,7 @@ where
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-                tracing::trace!("sending query on iface {}", self.addr);
+                tracing::trace!(address=%self.addr, "sending query on iface");
                 self.send_buffer.push_back(build_query());
                 tracing::trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
 
@@ -209,11 +209,11 @@ where
                     SocketAddr::new(self.multicast_addr, 5353),
                 ) {
                     Poll::Ready(Ok(_)) => {
-                        tracing::trace!("sent packet on iface {}", self.addr);
+                        tracing::trace!(address=%self.addr, "sent packet on iface address");
                         continue;
                     }
                     Poll::Ready(Err(err)) => {
-                        tracing::error!("error sending packet on iface {} {}", self.addr, err);
+                        tracing::error!(address=%self.addr, "error sending packet on iface address {}", err);
                         continue;
                     }
                     Poll::Pending => {
@@ -234,9 +234,9 @@ where
             {
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Query(query))))) => {
                     tracing::trace!(
-                        "received query from {} on {}",
-                        query.remote_addr(),
-                        self.addr
+                        address=%self.addr,
+                        remote_address=%query.remote_addr(),
+                        "received query from remote address on address"
                     );
 
                     self.send_buffer.extend(build_query_response(
@@ -249,9 +249,9 @@ where
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Response(response))))) => {
                     tracing::trace!(
-                        "received response from {} on {}",
-                        response.remote_addr(),
-                        self.addr
+                        address=%self.addr,
+                        remote_address=%response.remote_addr(),
+                        "received response from remote address on address"
                     );
 
                     self.discovered
@@ -266,9 +266,9 @@ where
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
                     tracing::trace!(
-                        "received service discovery from {} on {}",
-                        disc.remote_addr(),
-                        self.addr
+                        address=%self.addr,
+                        remote_address=%disc.remote_addr(),
+                        "received service discovery from remote address on address"
                     );
 
                     self.send_buffer

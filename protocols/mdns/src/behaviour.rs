@@ -280,7 +280,7 @@ where
                 }
                 Ok(IfEvent::Down(inet)) => {
                     if self.iface_states.contains_key(&inet.addr()) {
-                        tracing::info!("dropping instance {}", inet.addr());
+                        tracing::info!(instance=%inet.addr(), "dropping instance");
                         self.iface_states.remove(&inet.addr());
                     }
                 }
@@ -300,7 +300,7 @@ where
                 {
                     *cur_expires = cmp::max(*cur_expires, expiration);
                 } else {
-                    tracing::info!("discovered: {} {}", peer, addr);
+                    tracing::info!(%peer, address=%addr, "discovered peer on address");
                     self.discovered_nodes.push((peer, addr.clone(), expiration));
                     discovered.push((peer, addr));
                 }
@@ -316,7 +316,7 @@ where
         let mut expired = Vec::new();
         self.discovered_nodes.retain(|(peer, addr, expiration)| {
             if *expiration <= now {
-                tracing::info!("expired: {} {}", peer, addr);
+                tracing::info!(%peer, address=%addr, "expired peer on address");
                 expired.push((*peer, addr.clone()));
                 return false;
             }
