@@ -1,4 +1,4 @@
-## 0.41.0
+## 0.40.1 - unreleased
 
 - Rename types with `Dns` prefix (`TokioDnsConfig`, and `DnsConfig`)
 - Integrate `GenDnsConfig` into `Config`
