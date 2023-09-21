@@ -2657,7 +2657,6 @@ dependencies = [
  "ed25519-dalek",
  "hex-literal",
  "libsecp256k1",
- "log",
  "multihash",
  "p256",
  "quick-protobuf",
@@ -2670,6 +2669,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "thiserror",
+ "tracing",
  "void",
  "zeroize",
 ]
