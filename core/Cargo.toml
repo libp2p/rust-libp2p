@@ -17,7 +17,6 @@ futures = { version = "0.3.28", features = ["executor", "thread-pool"] }
 futures-timer = "3"
 instant = "0.1.12"
 libp2p-identity = { workspace = true, features = ["peerid", "ed25519"] }
-log = "0.4"
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 multistream-select = { workspace = true }
@@ -30,6 +29,7 @@ rw-stream-sink = { workspace = true }
 serde = { version = "1", optional = true, features = ["derive"] }
 smallvec = "1.11.0"
 thiserror = "1.0"
+tracing = { version = "0.1.37", features = ["log"] }
 unsigned-varint = "0.7"
 void = "1"
 

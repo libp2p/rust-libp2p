@@ -2480,7 +2480,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-mplex",
  "libp2p-noise",
- "log",
  "multiaddr",
  "multihash",
  "multistream-select",
@@ -2494,6 +2493,7 @@ dependencies = [
  "serde",
  "smallvec",
  "thiserror",
+ "tracing",
  "unsigned-varint",
  "void",
 ]
