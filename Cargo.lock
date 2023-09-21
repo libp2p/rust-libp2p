@@ -2746,10 +2746,10 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
- "log",
  "memory-stats",
  "rand 0.8.5",
  "sysinfo",
+ "tracing",
  "void",
 ]
 
@@ -3604,12 +3604,12 @@ dependencies = [
  "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
- "log",
  "pin-project",
  "quickcheck-ext",
  "rand 0.8.5",
  "rw-stream-sink",
  "smallvec",
+ "tracing",
  "unsigned-varint",
 ]
 
