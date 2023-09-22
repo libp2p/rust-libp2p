@@ -29,7 +29,6 @@
 mod crypt_writer;
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
-use log::trace;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
@@ -209,7 +208,7 @@ impl PnetConfig {
     where
         TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        trace!("exchanging nonces");
+        tracing::trace!("exchanging nonces");
         let mut local_nonce = [0u8; NONCE_SIZE];
         let mut remote_nonce = [0u8; NONCE_SIZE];
         rand::thread_rng().fill_bytes(&mut local_nonce);
@@ -222,7 +221,7 @@ impl PnetConfig {
             .read_exact(&mut remote_nonce)
             .await
             .map_err(PnetError::HandshakeError)?;
-        trace!("setting up ciphers");
+        tracing::trace!("setting up ciphers");
         let write_cipher = XSalsa20::new(&self.key.0.into(), &local_nonce.into());
         let read_cipher = XSalsa20::new(&self.key.0.into(), &remote_nonce.into());
         Ok(PnetOutput::new(socket, write_cipher, read_cipher))
@@ -256,9 +255,9 @@ impl<S: AsyncRead + AsyncWrite> AsyncRead for PnetOutput<S> {
         let this = self.project();
         let result = this.inner.get_pin_mut().poll_read(cx, buf);
         if let Poll::Ready(Ok(size)) = &result {
-            trace!("read {} bytes", size);
+            tracing::trace!(bytes=%size, "read bytes");
             this.read_cipher.apply_keystream(&mut buf[..*size]);
-            trace!("decrypted {} bytes", size);
+            tracing::trace!(bytes=%size, "decrypted bytes");
         }
         result
     }

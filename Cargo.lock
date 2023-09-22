@@ -2904,13 +2904,13 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-websocket",
  "libp2p-yamux",
- "log",
  "pin-project",
  "quickcheck-ext",
  "rand 0.8.5",
  "salsa20",
  "sha3",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
