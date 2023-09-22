@@ -11,13 +11,13 @@ version = "0.1.0"
 publish = false # TEMP fix for https://github.com/obi1kenobi/cargo-semver-checks-action/issues/53.
 
 [dependencies]
+asynchronous-codec = "0.6"
 bytes = "1"
 futures = "0.3"
 hex = "0.4"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-noise = { workspace = true }
-log = "0.4.19"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10.7"
 thiserror = "1"
 tinytemplate = "1.2"
-asynchronous-codec = "0.6"
+tracing = { version = "0.1.37", features = ["log"] }
 
 [dev-dependencies]
 hex-literal = "0.4"

@@ -2786,12 +2786,12 @@ dependencies = [
  "libp2p-muxer-test-harness",
  "libp2p-plaintext",
  "libp2p-tcp",
- "log",
  "nohash-hasher",
  "parking_lot",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
+ "tracing",
  "unsigned-varint",
 ]
 
@@ -3237,7 +3237,6 @@ dependencies = [
  "libp2p-core",
  "libp2p-identity",
  "libp2p-noise",
- "log",
  "quick-protobuf",
  "quick-protobuf-codec",
  "rand 0.8.5",
@@ -3245,6 +3244,7 @@ dependencies = [
  "sha2 0.10.7",
  "thiserror",
  "tinytemplate",
+ "tracing",
  "unsigned-varint",
 ]
 
