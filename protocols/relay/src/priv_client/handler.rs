@@ -270,10 +270,10 @@ impl Handler {
     fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
         let src_peer_id = circuit.src_peer_id();
 
-        match self.circuit_deny_futs.try_push(
-            src_peer_id,
-            circuit.deny(proto::Status::NO_RESERVATION),
-        ) {
+        match self
+            .circuit_deny_futs
+            .try_push(src_peer_id, circuit.deny(proto::Status::NO_RESERVATION))
+        {
             Err(PushError::BeyondCapacity(_)) => tracing::warn!(
                 peer=%src_peer_id,
                 "Dropping inbound circuit request to be denied from peer due to exceeding limit"

@@ -598,7 +598,7 @@ impl PeerScore {
             tracing::warn!(
                 peer=%from,
                 status=?record.status,
-                "Unexpected delivery trace: Message from peer was first seen {}s ago", 
+                "Unexpected delivery trace: Message from peer was first seen {}s ago",
                 record.first_seen.elapsed().as_secs(),
             );
             return;

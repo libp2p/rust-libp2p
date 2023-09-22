@@ -54,7 +54,9 @@ async fn main() -> anyhow::Result<()> {
                 .iter()
                 .any(|e| e == Protocol::Ip4(Ipv4Addr::LOCALHOST))
             {
-                tracing::debug!("Ignoring localhost address to make sure the example works in Firefox");
+                tracing::debug!(
+                    "Ignoring localhost address to make sure the example works in Firefox"
+                );
                 continue;
             }
 

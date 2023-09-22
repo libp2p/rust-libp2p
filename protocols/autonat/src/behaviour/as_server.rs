@@ -233,19 +233,17 @@ impl<'a> AsServer<'a> {
         error: &DialError,
     ) -> Option<InboundProbeEvent> {
         let (probe_id, _, _, channel) = peer.and_then(|p| self.ongoing_inbound.remove(&p))?;
-        
+
         match peer {
-            Some(p) => 
-                tracing::debug!(
-                    peer=%p,
-                    "Dial-back to peer failed with error {:?}",
-                    error
-                ),
-            None =>  
-                tracing::debug!(
-                    "Dial-back to non existent peer failed with error {:?}",
-                    error
-                ),
+            Some(p) => tracing::debug!(
+                peer=%p,
+                "Dial-back to peer failed with error {:?}",
+                error
+            ),
+            None => tracing::debug!(
+                "Dial-back to non existent peer failed with error {:?}",
+                error
+            ),
         };
 
         let response_error = ResponseError::DialError;

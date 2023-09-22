@@ -640,8 +640,8 @@ where
         if let Some(id) = &stream_id {
             if self.pending_flush_open.contains(id) {
                 tracing::trace!(
-                    connection=%self.id, 
-                    substream=%id, 
+                    connection=%self.id,
+                    substream=%id,
                     "Executing pending flush for substream"
                 );
                 ready!(self.poll_flush(cx))?;
@@ -870,7 +870,7 @@ where
     fn on_error<T>(&mut self, e: io::Error) -> io::Result<T> {
         tracing::debug!(
             connection=%self.id,
-            "Multiplexed connection failed: {:?}", 
+            "Multiplexed connection failed: {:?}",
             e
         );
         self.status = Status::Err(io::Error::new(e.kind(), e.to_string()));
