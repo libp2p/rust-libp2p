@@ -107,7 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
 
     if config.addresses.swarm.is_empty() {
-        tracing::warn!("No listen addresses configured.");
+        tracing::warn!("No listen addresses configured");
     }
     for address in &config.addresses.swarm {
         match swarm.listen_on(address.clone()) {
@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if config.addresses.append_announce.is_empty() {
-        tracing::warn!("No external addresses configured.");
+        tracing::warn!("No external addresses configured");
     }
     for address in &config.addresses.append_announce {
         swarm.add_external_address(address.clone())

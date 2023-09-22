@@ -276,13 +276,13 @@ impl<'a> AsClient<'a> {
     ) -> Result<PeerId, OutboundProbeError> {
         let _ = self.last_probe.insert(Instant::now());
         if addresses.is_empty() {
-            tracing::debug!("Outbound dial-back request aborted: No dial-back addresses.");
+            tracing::debug!("Outbound dial-back request aborted: No dial-back addresses");
             return Err(OutboundProbeError::NoAddresses);
         }
         let server = match self.random_server() {
             Some(s) => s,
             None => {
-                tracing::debug!("Outbound dial-back request aborted: No qualified server.");
+                tracing::debug!("Outbound dial-back request aborted: No qualified server");
                 return Err(OutboundProbeError::NoServer);
             }
         };
@@ -294,7 +294,7 @@ impl<'a> AsClient<'a> {
             },
         );
         self.throttled_servers.push((server, Instant::now()));
-        tracing::debug!(peer=%server, "Send dial-back request to peer.");
+        tracing::debug!(peer=%server, "Send dial-back request to peer");
         self.ongoing_outbound.insert(request_id, probe_id);
         Ok(server)
     }

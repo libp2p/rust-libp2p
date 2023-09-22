@@ -115,7 +115,7 @@ impl DialRequest {
         {
             (peer_id, addrs)
         } else {
-            tracing::debug!("Received malformed dial message.");
+            tracing::debug!("Received malformed dial message");
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "invalid dial message",
@@ -200,7 +200,7 @@ impl TryFrom<proto::ResponseStatus> for ResponseError {
             proto::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
             proto::ResponseStatus::E_INTERNAL_ERROR => Ok(ResponseError::InternalError),
             proto::ResponseStatus::OK => {
-                tracing::debug!("Received response with status code OK but expected error.");
+                tracing::debug!("Received response with status code OK but expected error");
                 Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid response error type",
@@ -249,7 +249,7 @@ impl DialResponse {
                 result: Err(ResponseError::try_from(status)?),
             },
             _ => {
-                tracing::debug!("Received malformed response message.");
+                tracing::debug!("Received malformed response message");
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "invalid dial response message",

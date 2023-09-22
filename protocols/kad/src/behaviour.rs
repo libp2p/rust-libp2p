@@ -1092,7 +1092,7 @@ where
         let local_id = self.kbuckets.local_key().preimage();
         let others_iter = peers.filter(|p| &p.node_id != local_id);
         if let Some(query) = self.queries.get_mut(query_id) {
-            tracing::trace!(peer=%source, query=?query_id, "Request to peer in query succeeded.");
+            tracing::trace!(peer=%source, query=?query_id, "Request to peer in query succeeded");
             for peer in others_iter.clone() {
                 tracing::trace!(
                     ?peer,
@@ -1327,7 +1327,7 @@ where
     /// Handles a finished (i.e. successful) query.
     fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
-        tracing::trace!(query=?query_id, "Query finished.");
+        tracing::trace!(query=?query_id, "Query finished");
         let result = q.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {
@@ -1565,7 +1565,7 @@ where
     /// Handles a query that timed out.
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
-        tracing::trace!(query=?query_id, "Query timed out.");
+        tracing::trace!(query=?query_id, "Query timed out");
         let result = query.into_result();
         match result.inner.info {
             QueryInfo::Bootstrap {

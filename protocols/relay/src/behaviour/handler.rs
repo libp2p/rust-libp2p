@@ -537,7 +537,7 @@ impl ConnectionHandler for Handler {
                     ))
                     .is_some()
                 {
-                    tracing::warn!("Dropping existing deny/accept future in favor of new one.")
+                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
                 }
             }
             In::DenyReservationReq {
@@ -551,7 +551,7 @@ impl ConnectionHandler for Handler {
                     ))
                     .is_some()
                 {
-                    tracing::warn!("Dropping existing deny/accept future in favor of new one.")
+                    tracing::warn!("Dropping existing deny/accept future in favor of new one")
                 }
             }
             In::NegotiateOutboundConnect {

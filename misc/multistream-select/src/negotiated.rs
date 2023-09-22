@@ -317,7 +317,7 @@ where
             StateProj::Expecting { io, .. } => {
                 let close_poll = io.poll_close(cx);
                 if let Poll::Ready(Ok(())) = close_poll {
-                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending.")
+                    tracing::debug!("Stream closed. Confirmation from remote for optimstic protocol negotiation still pending")
                 }
                 close_poll
             }
