@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-deflate"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "async-std",
  "flate2",

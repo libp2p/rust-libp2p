@@ -52,10 +52,15 @@ pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
+
 #[cfg(feature = "deflate")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_deflate as deflate;
+#[deprecated(
+    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
+)]
+pub mod deflate {
+    pub use libp2p_deflate::*;
+}
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(target_arch = "wasm32"))]
