@@ -458,7 +458,11 @@ where
                         let num_addresses = addresses.len();
 
                         if num_addresses > 0 {
-                            log::debug!("discarding {num_addresses} addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection {connection_id:?}")
+                            tracing::debug!(
+                                connection=%connection_id,
+                                discarded_addresses_count=%num_addresses,
+                                "discarding addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection"
+                            )
                         }
                     }
                 }
@@ -742,11 +746,11 @@ where
                 self.pool
                     .spawn_connection(id, peer_id, &endpoint, connection, handler);
 
-                log::debug!(
-                    "Connection established: {:?} {:?}; Total (peer): {}.",
-                    peer_id,
-                    endpoint,
-                    num_established,
+                tracing::debug!(
+                    peer=%peer_id,
+                    ?endpoint,
+                    total_peers=%num_established,
+                    "Connection established"
                 );
                 let failed_addresses = concurrent_dial_errors
                     .as_ref()
@@ -792,9 +796,9 @@ where
                     }));
 
                 if let Some(peer) = peer {
-                    log::debug!("Connection attempt to {:?} failed with {:?}.", peer, error,);
+                    tracing::debug!(%peer, "Connection attempt to peer failed with {:?}.", error,);
                 } else {
-                    log::debug!("Connection attempt to unknown peer failed with {:?}", error);
+                    tracing::debug!("Connection attempt to unknown peer failed with {:?}", error);
                 }
 
                 return Some(SwarmEvent::OutgoingConnectionError {
@@ -811,7 +815,7 @@ where
             } => {
                 let error = error.into();
 
-                log::debug!("Incoming connection failed: {:?}", error);
+                tracing::debug!("Incoming connection failed: {:?}", error);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                         local_addr: &local_addr,
@@ -835,17 +839,17 @@ where
                 ..
             } => {
                 if let Some(error) = error.as_ref() {
-                    log::debug!(
-                        "Connection closed with error {:?}: {:?}; Total (peer): {}.",
+                    tracing::debug!(
+                        total_peers=%remaining_established_connection_ids.len(),
+                        "Connection closed with error {:?}: {:?}",
                         error,
                         connected,
-                        remaining_established_connection_ids.len()
                     );
                 } else {
-                    log::debug!(
-                        "Connection closed: {:?}; Total (peer): {}.",
-                        connected,
-                        remaining_established_connection_ids.len()
+                    tracing::debug!(
+                        total_peers=%remaining_established_connection_ids.len(),
+                        "Connection closed: {:?}",
+                        connected
                     );
                 }
                 let peer_id = connected.peer_id;
@@ -953,7 +957,11 @@ where
                 listener_id,
                 listen_addr,
             } => {
-                log::debug!("Listener {:?}; New address: {:?}", listener_id, listen_addr);
+                tracing::debug!(
+                    listener=?listener_id,
+                    address=%listen_addr,
+                    "New listener address"
+                );
                 let addrs = self.listened_addrs.entry(listener_id).or_default();
                 if !addrs.contains(&listen_addr) {
                     addrs.push(listen_addr.clone())
@@ -972,10 +980,10 @@ where
                 listener_id,
                 listen_addr,
             } => {
-                log::debug!(
-                    "Listener {:?}; Expired address {:?}.",
-                    listener_id,
-                    listen_addr
+                tracing::debug!(
+                    listener=?listener_id,
+                    address=%listen_addr,
+                    "Expired listener address"
                 );
                 if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
                     addrs.retain(|a| a != &listen_addr);
@@ -994,7 +1002,11 @@ where
                 listener_id,
                 reason,
             } => {
-                log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
+                tracing::debug!(
+                    listener=?listener_id,
+                    "Listener closed by {:?}.", 
+                    reason
+                );
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
                     self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
@@ -1532,7 +1544,7 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
-        log::info!("Local peer id: {}", self.local_peer_id);
+        tracing::info!(local_peer_id=%self.local_peer_id);
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,

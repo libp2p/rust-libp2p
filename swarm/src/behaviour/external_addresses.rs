@@ -37,7 +37,7 @@ impl ExternalAddresses {
                     self.addresses.remove(pos);
                     self.push_front(addr);
 
-                    log::debug!("Refreshed external address {addr}");
+                    tracing::debug!(address=%addr, "Refreshed external address");
 
                     return false; // No changes to our external addresses.
                 }
@@ -47,7 +47,11 @@ impl ExternalAddresses {
                 if self.addresses.len() > MAX_LOCAL_EXTERNAL_ADDRS {
                     let expired = self.addresses.pop().expect("list to be not empty");
 
-                    log::debug!("Removing previously confirmed external address {expired} because we reached the limit of {MAX_LOCAL_EXTERNAL_ADDRS} addresses");
+                    tracing::debug!(
+                        external_address=%expired,
+                        address_limit=%MAX_LOCAL_EXTERNAL_ADDRS,
+                        "Removing previously confirmed external address because we reached the address limit"
+                    );
                 }
 
                 return true;

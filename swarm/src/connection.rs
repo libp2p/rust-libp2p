@@ -337,15 +337,15 @@ where
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Io(e))))) => {
-                    log::debug!("failed to upgrade inbound stream: {e}");
+                    tracing::debug!("failed to upgrade inbound stream: {e}");
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::NegotiationFailed)))) => {
-                    log::debug!("no protocol could be agreed upon for inbound stream");
+                    tracing::debug!("no protocol could be agreed upon for inbound stream");
                     continue;
                 }
                 Poll::Ready(Some((_, Err(StreamUpgradeError::Timeout)))) => {
-                    log::debug!("inbound stream upgrade timed out");
+                    tracing::debug!("inbound stream upgrade timed out");
                     continue;
                 }
             }
@@ -522,7 +522,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     {
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
-                log::debug!(
+                tracing::debug!(
                     "Substream upgrade protocol override: {:?} -> {:?}",
                     upgrade::Version::default(),
                     version_override

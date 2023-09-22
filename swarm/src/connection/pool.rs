@@ -693,10 +693,10 @@ where
                     if let Err(error) = check_peer_id() {
                         self.executor.spawn(poll_fn(move |cx| {
                             if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
-                                log::debug!(
-                                    "Failed to close connection {:?} to peer {}: {:?}",
-                                    id,
-                                    obtained_peer_id,
+                                tracing::debug!(
+                                    peer=%obtained_peer_id,
+                                    connection=%id,
+                                    "Failed to close connection to peer: {:?}",
                                     e
                                 );
                             }

@@ -215,7 +215,7 @@ where
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 if self.pending_error.is_none() {
-                    log::debug!("DialUpgradeError: {error}");
+                    tracing::debug!("DialUpgradeError: {error}");
                     self.keep_alive = KeepAlive::No;
                 }
             }

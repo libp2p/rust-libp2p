@@ -3067,7 +3067,6 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-swarm-test",
  "libp2p-yamux",
- "log",
  "multistream-select",
  "once_cell",
  "quickcheck-ext",
