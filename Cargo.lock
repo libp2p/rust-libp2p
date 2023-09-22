@@ -2552,10 +2552,10 @@ dependencies = [
  "futures",
  "libp2p-core",
  "libp2p-identity",
- "log",
  "parking_lot",
  "smallvec",
  "tokio",
+ "tracing",
  "trust-dns-resolver",
 ]
 
@@ -2810,7 +2810,6 @@ dependencies = [
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "log",
  "multiaddr",
  "multihash",
  "once_cell",
@@ -2821,6 +2820,7 @@ dependencies = [
  "snow",
  "static_assertions",
  "thiserror",
+ "tracing",
  "x25519-dalek 1.1.1",
  "zeroize",
 ]
