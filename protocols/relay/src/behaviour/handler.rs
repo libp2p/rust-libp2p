@@ -436,7 +436,7 @@ impl Handler {
             )
             .is_err()
         {
-            log::warn!("Dropping inbound stream because we are at capacity")
+            tracing::warn!("Dropping inbound stream because we are at capacity")
         }
     }
 
@@ -454,7 +454,7 @@ impl Handler {
             .try_push(outbound_stop::connect(stream, stop_command, tx).map(Either::Right))
             .is_err()
         {
-            log::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound stream because we are at capacity")
         }
     }
 

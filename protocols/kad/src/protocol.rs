@@ -106,7 +106,7 @@ impl TryFrom<proto::Peer> for KadPeer {
             match Multiaddr::try_from(addr) {
                 Ok(a) => addrs.push(a),
                 Err(e) => {
-                    log::debug!("Unable to parse multiaddr: {e}");
+                    tracing::debug!("Unable to parse multiaddr: {e}");
                 }
             };
         }

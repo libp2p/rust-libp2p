@@ -16,9 +16,9 @@ futures-timer = "3.0.2"
 igd-next = "0.14.2"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
-log = "0.4.19"
-void = "1.0.2"
 tokio = { version = "1.29", default-features = false, features = ["rt"], optional = true }
+tracing = { version = "0.1.37", features = ["log"] }
+void = "1.0.2"
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]

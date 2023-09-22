@@ -19,7 +19,6 @@ instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 thiserror = "1.0"

@@ -274,11 +274,13 @@ impl Handler {
             src_peer_id,
             circuit.deny(proto::Status::NO_RESERVATION),
         ) {
-            Err(PushError::BeyondCapacity(_)) => log::warn!(
-                "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
+            Err(PushError::BeyondCapacity(_)) => tracing::warn!(
+                peer=%src_peer_id,
+                "Dropping inbound circuit request to be denied from peer due to exceeding limit"
             ),
-            Err(PushError::ReplacedFuture(_)) => log::warn!(
-                "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
+            Err(PushError::ReplacedFuture(_)) => tracing::warn!(
+                peer=%src_peer_id,
+                "Dropping existing inbound circuit request to be denied from peer in favor of new one"
             ),
             Ok(()) => {}
         }
@@ -471,7 +473,10 @@ impl ConnectionHandler for Handler {
                 ));
             }
             Poll::Ready((src_peer_id, Err(Timeout { .. }))) => {
-                log::warn!("Dropping inbound circuit request to be denied from {:?} due to exceeding limit.", src_peer_id);
+                tracing::warn!(
+                    peer=%src_peer_id,
+                    "Dropping inbound circuit request to be denied from peer due to exceeding limit."
+                );
             }
             Poll::Pending => {}
         }
@@ -526,7 +531,7 @@ impl ConnectionHandler for Handler {
                     .try_push(inbound_stop::handle_open_circuit(stream))
                     .is_err()
                 {
-                    log::warn!("Dropping inbound stream because we are at capacity")
+                    tracing::warn!("Dropping inbound stream because we are at capacity")
                 }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
@@ -546,7 +551,7 @@ impl ConnectionHandler for Handler {
                             )
                             .is_err()
                         {
-                            log::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity")
                         }
                     }
                     outbound_hop::OutboundStreamInfo::CircuitConnection(cmd) => {
@@ -566,7 +571,7 @@ impl ConnectionHandler for Handler {
                             )
                             .is_err()
                         {
-                            log::warn!("Dropping outbound stream because we are at capacity")
+                            tracing::warn!("Dropping outbound stream because we are at capacity")
                         }
                     }
                 }
@@ -663,12 +668,12 @@ impl Reservation {
                         if let Err(e) = to_listener
                             .start_send(pending_msgs.pop_front().expect("Called !is_empty()."))
                         {
-                            debug!("Failed to sent pending message to listener: {:?}", e);
+                            tracing::debug!("Failed to sent pending message to listener: {:?}", e);
                             *self = Reservation::None;
                         }
                     }
                     Poll::Ready(Err(e)) => {
-                        debug!("Channel to listener failed: {:?}", e);
+                        tracing::debug!("Channel to listener failed: {:?}", e);
                         *self = Reservation::None;
                     }
                     Poll::Pending => {}

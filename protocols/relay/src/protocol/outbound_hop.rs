@@ -24,7 +24,6 @@ use asynchronous_codec::{Framed, FramedParts};
 use futures::channel::{mpsc, oneshot};
 use futures::prelude::*;
 use futures_timer::Delay;
-use log::debug;
 use thiserror::Error;
 use void::Void;
 
@@ -265,10 +264,10 @@ pub(crate) async fn handle_connection_message_response(
     })) {
         Ok(()) => Ok(Ok(Some(Circuit { limit }))),
         Err(_) => {
-            debug!(
+            tracing::debug!(
+                peer=%remote_peer_id,
                 "Oneshot to `client::transport::Dial` future dropped. \
-                         Dropping established relayed connection to {:?}.",
-                remote_peer_id,
+                         Dropping established relayed connection to peer"
             );
 
             Ok(Ok(None))

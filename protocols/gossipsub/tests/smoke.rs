@@ -25,7 +25,6 @@ use libp2p_gossipsub as gossipsub;
 use libp2p_gossipsub::{MessageAuthenticity, ValidationMode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt as _;
-use log::debug;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
@@ -136,7 +135,7 @@ fn multi_hop_propagation() {
             return TestResult::discard();
         }
 
-        debug!("number nodes: {:?}, seed: {:?}", num_nodes, seed);
+        tracing::debug!(number_of_nodes=%num_nodes, seed=%seed);
 
         async_std::task::block_on(async move {
             let mut graph = Graph::new_connected(num_nodes as usize, seed).await;

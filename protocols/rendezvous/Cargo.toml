@@ -21,7 +21,6 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 libp2p-request-response = { workspace = true }
-log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
