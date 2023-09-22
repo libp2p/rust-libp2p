@@ -580,7 +580,11 @@ fn prop<P: Provider + BlockOn + Spawn>(
 
     let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
 
-    log::info!("Creating {number_streams} streams on {number_listeners} connections");
+    tracing::info!(
+        stream_count=%number_streams,
+        connection_count=%number_listeners,
+        "Creating streams on connections"
+    );
 
     // Spawn the listener nodes.
     for _ in 0..number_listeners {
@@ -721,7 +725,10 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
         });
     }
 
-    log::info!("Created {number_streams} streams");
+    tracing::info!(
+        stream_count=%number_streams,
+        "Created streams
+    ");
 
     while future::poll_fn(|cx| connection.poll_unpin(cx))
         .await

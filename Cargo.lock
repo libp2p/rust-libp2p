@@ -2930,7 +2930,6 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-tls",
  "libp2p-yamux",
- "log",
  "parking_lot",
  "quickcheck",
  "quinn",
@@ -2939,6 +2938,7 @@ dependencies = [
  "socket2 0.5.4",
  "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
