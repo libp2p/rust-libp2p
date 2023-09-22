@@ -63,7 +63,10 @@ struct Extensions {
     webtransport_certhashes: HashSet<Multihash<64>>,
 }
 
-impl<T> State<T> {
+impl<T> State<T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Initializes the state for a new Noise handshake, using the given local
     /// identity keypair and local DH static public key. The handshake messages
     /// will be sent and received on the given I/O resource and using the
@@ -88,7 +91,10 @@ impl<T> State<T> {
     }
 }
 
-impl<T> State<T> {
+impl<T> State<T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
     pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
@@ -158,7 +164,7 @@ where
     match state.io.next().await {
         None => Err(io::Error::new(io::ErrorKind::UnexpectedEof, "eof").into()),
         Some(Err(e)) => Err(e.into()),
-        Some(Ok(m)) => Ok(m),
+        Some(Ok(bytes)) => Ok(bytes),
     }
 }
 
@@ -169,10 +175,9 @@ where
 {
     let msg = recv(state).await?;
     if !msg.is_empty() {
-        return Err(
-            io::Error::new(io::ErrorKind::InvalidData, "Unexpected handshake payload.").into(),
-        );
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
+
     Ok(())
 }
 
@@ -181,7 +186,7 @@ pub(crate) async fn send_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
-    state.io.send(&Vec::new()).await?;
+    state.io.send(Vec::new()).await?;
     Ok(())
 }
 
@@ -211,7 +216,7 @@ where
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
 pub(crate) async fn send_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
-    T: AsyncWrite + Unpin,
+    T: AsyncRead + AsyncWrite + Unpin,
 {
     let mut pb = proto::NoiseHandshakePayload {
         identity_key: state.identity.public.encode_protobuf(),
@@ -235,7 +240,7 @@ where
 
     let mut writer = Writer::new(&mut msg);
     pb.write_message(&mut writer).expect("Encoding to succeed");
-    state.io.send(&msg).await?;
+    state.io.send(msg).await?;
 
     Ok(())
 }

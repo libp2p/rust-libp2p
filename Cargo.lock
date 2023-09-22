@@ -2793,8 +2793,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
+ "asynchronous-codec",
  "bytes",
  "curve25519-dalek 4.1.0",
  "env_logger 0.10.0",
@@ -2806,6 +2807,7 @@ dependencies = [
  "multiaddr",
  "multihash",
  "once_cell",
+ "pin-project",
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",

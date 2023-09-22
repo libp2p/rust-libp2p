@@ -1,3 +1,12 @@
+## 0.43.2
+
+- Refactor noise io framing.
+  This migrates to the `asynchronous_codec::Framed` type to provide an implementation of `Sink` and
+  `Stream` for noise payloads.
+  See [PR 4548].
+
+[PR 4544]: https://github.com/libp2p/rust-libp2p/pull/4548
+
 ## 0.43.1
 
 - Update dependencies.

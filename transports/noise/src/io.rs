@@ -29,7 +29,7 @@ use futures::ready;
 use log::trace;
 use std::{
     cmp::min,
-    fmt, io,
+    io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -43,12 +43,6 @@ pub struct Output<T> {
     recv_offset: usize,
     send_buffer: Vec<u8>,
     send_offset: usize,
-}
-
-impl<T> fmt::Debug for Output<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NoiseOutput").field("io", &self.io).finish()
-    }
 }
 
 impl<T> Output<T> {
@@ -113,7 +107,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
         if this.send_offset == MAX_FRAME_LEN {
             trace!("write: sending {} bytes", MAX_FRAME_LEN);
             ready!(io.as_mut().poll_ready(cx))?;
-            io.as_mut().start_send(frame_buf)?;
+            io.as_mut().start_send(frame_buf.clone())?;
             this.send_offset = 0;
         }
 
@@ -137,7 +131,7 @@ impl<T: AsyncWrite + Unpin> AsyncWrite for Output<T> {
         if this.send_offset > 0 {
             ready!(io.as_mut().poll_ready(cx))?;
             trace!("flush: sending {} bytes", this.send_offset);
-            io.as_mut().start_send(frame_buf)?;
+            io.as_mut().start_send(frame_buf.clone())?;
             this.send_offset = 0;
         }
 

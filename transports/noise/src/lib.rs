@@ -121,7 +121,7 @@ impl Config {
         self
     }
 
-    fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
@@ -141,7 +141,7 @@ impl Config {
         Ok(state)
     }
 
-    fn into_initiator<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_initiator<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
