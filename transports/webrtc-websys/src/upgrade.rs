@@ -45,12 +45,12 @@ async fn outbound_inner(
 
     let local_fingerprint = rtc_peer_connection.local_fingerprint()?;
 
-    log::trace!("local_fingerprint: {:?}", local_fingerprint);
-    log::trace!("remote_fingerprint: {:?}", remote_fingerprint);
+    tracing::trace!(?local_fingerprint);
+    tracing::trace!(?remote_fingerprint);
 
     let peer_id = noise::outbound(id_keys, channel, remote_fingerprint, local_fingerprint).await?;
 
-    log::debug!("Remote peer identified as {peer_id}");
+    tracing::debug!(peer=%peer_id, "Remote peer identified");
 
     Ok((peer_id, Connection::new(rtc_peer_connection)))
 }

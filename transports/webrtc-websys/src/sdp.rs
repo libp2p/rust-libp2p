@@ -46,7 +46,7 @@ pub(crate) fn offer(offer: String, client_ufrag: &str) -> RtcSessionDescriptionI
     // remove any double \r\n
     let munged_sdp_offer = munged_sdp_offer.replace("\r\n\r\n", "\r\n");
 
-    log::trace!("Created SDP offer: {munged_sdp_offer}");
+    tracing::trace!(offer=%munged_sdp_offer, "Created SDP offer");
 
     let mut offer_obj = RtcSessionDescriptionInit::new(RtcSdpType::Offer);
     offer_obj.sdp(&munged_sdp_offer);
