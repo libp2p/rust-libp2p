@@ -49,7 +49,7 @@ pub struct Identify;
 #[derive(Debug, Clone)]
 pub struct Push<T>(T);
 pub struct InboundPush();
-pub struct OutboundPush(PartialInfo);
+pub struct OutboundPush(Info);
 
 impl Push<InboundPush> {
     pub fn inbound() -> Self {
@@ -58,7 +58,7 @@ impl Push<InboundPush> {
 }
 
 impl Push<OutboundPush> {
-    pub fn outbound(info: PartialInfo) -> Self {
+    pub fn outbound(info: Info) -> Self {
         Push(OutboundPush(info))
     }
 }
@@ -82,23 +82,33 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-impl From<Info> for PartialInfo {
-    fn from(val: Info) -> Self {
-        PartialInfo {
-            public_key: Some(val.public_key),
-            protocol_version: Some(val.protocol_version),
-            agent_version: Some(val.agent_version),
-            listen_addrs: val.listen_addrs,
-            protocols: val.protocols,
-            observed_addr: Some(val.observed_addr),
+impl Info {
+    pub fn merge(&mut self, info: PushInfo) {
+        if let Some(public_key) = info.public_key {
+            self.public_key = public_key;
+        }
+        if let Some(protocol_version) = info.protocol_version {
+            self.protocol_version = protocol_version;
+        }
+        if let Some(agent_version) = info.agent_version {
+            self.agent_version = agent_version;
+        }
+        if !info.listen_addrs.is_empty() {
+            self.listen_addrs = info.listen_addrs;
+        }
+        if !info.protocols.is_empty() {
+            self.protocols = info.protocols;
+        }
+        if let Some(observed_addr) = info.observed_addr {
+            self.observed_addr = observed_addr;
         }
     }
 }
 
-/// Partial identify information of a peer sent in protocol messages.
+/// Identify push information of a peer sent in protocol messages.
 /// Note that missing fields should be ignored, as peers may choose to send partial updates containing only the fields whose values have changed.
 #[derive(Debug, Clone)]
-pub struct PartialInfo {
+pub struct PushInfo {
     pub public_key: Option<PublicKey>,
     pub protocol_version: Option<String>,
     pub agent_version: Option<String>,
@@ -108,18 +118,16 @@ pub struct PartialInfo {
 }
 
 #[derive(Debug)]
-pub enum IdentifyError {
-    MissingRemotePublicKey,
+pub enum MissingInfoError {
+    PublicKey,
 }
 
-impl TryFrom<PartialInfo> for Info {
-    type Error = IdentifyError;
+impl TryFrom<PushInfo> for Info {
+    type Error = MissingInfoError;
 
-    fn try_from(info: PartialInfo) -> Result<Self, Self::Error> {
+    fn try_from(info: PushInfo) -> Result<Self, Self::Error> {
         Ok(Info {
-            public_key: info
-                .public_key
-                .ok_or(IdentifyError::MissingRemotePublicKey)?,
+            public_key: info.public_key.ok_or(MissingInfoError::PublicKey)?,
             protocol_version: info.protocol_version.unwrap_or_default(),
             agent_version: info.agent_version.unwrap_or_default(),
             listen_addrs: info.listen_addrs,
@@ -152,12 +160,16 @@ impl<C> OutboundUpgrade<C> for Identify
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = PartialInfo;
+    type Output = Info;
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        recv(socket).boxed()
+        recv(socket)
+            .map(|result| {
+                result.and_then(|info| info.try_into().map_err(UpgradeError::MissingInfo))
+            })
+            .boxed()
     }
 }
 
@@ -174,7 +186,7 @@ impl<C> InboundUpgrade<C> for Push<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = BoxFuture<'static, Result<PartialInfo, UpgradeError>>; // @todo -- Different future result?
+    type Output = BoxFuture<'static, Result<PushInfo, UpgradeError>>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
@@ -197,7 +209,7 @@ where
     }
 }
 
-pub(crate) async fn send<T>(io: T, info: PartialInfo) -> Result<(), UpgradeError>
+pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -209,14 +221,14 @@ where
         .map(|addr| addr.to_vec())
         .collect();
 
-    let pubkey_bytes = info.public_key.map(|key| key.encode_protobuf());
+    let pubkey_bytes = info.public_key.encode_protobuf();
 
     let message = proto::Identify {
-        agentVersion: info.agent_version,
-        protocolVersion: info.protocol_version,
-        publicKey: pubkey_bytes,
+        agentVersion: Some(info.agent_version),
+        protocolVersion: Some(info.protocol_version),
+        publicKey: Some(pubkey_bytes),
         listenAddrs: listen_addrs,
-        observedAddr: info.observed_addr.map(|addr| addr.to_vec()),
+        observedAddr: Some(info.observed_addr.to_vec()),
         protocols: info.protocols.into_iter().map(|p| p.to_string()).collect(),
     };
 
@@ -231,7 +243,7 @@ where
     Ok(())
 }
 
-async fn recv<T>(socket: T) -> Result<PartialInfo, UpgradeError>
+async fn recv<T>(socket: T) -> Result<PushInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -254,7 +266,7 @@ where
     Ok(info)
 }
 
-impl TryFrom<proto::Identify> for PartialInfo {
+impl TryFrom<proto::Identify> for PushInfo {
     type Error = UpgradeError;
 
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
@@ -295,7 +307,7 @@ impl TryFrom<proto::Identify> for PartialInfo {
                 }
             });
 
-        let info = PartialInfo {
+        let info = PushInfo {
             public_key,
             protocol_version: msg.protocolVersion,
             agent_version: msg.agentVersion,
@@ -326,6 +338,8 @@ pub enum UpgradeError {
     Io(#[from] io::Error),
     #[error("Stream closed")]
     StreamClosed,
+    #[error("Missing information received")]
+    MissingInfo(MissingInfoError),
     #[error("Failed decoding multiaddr")]
     Multiaddr(#[from] multiaddr::Error),
     #[error("Failed decoding public key")]
@@ -361,7 +375,7 @@ mod tests {
             ),
         };
 
-        let info = PartialInfo::try_from(payload).expect("not to fail");
+        let info = PushInfo::try_from(payload).expect("not to fail");
 
         assert_eq!(info.listen_addrs, vec![valid_multiaddr])
     }
