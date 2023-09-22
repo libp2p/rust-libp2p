@@ -111,9 +111,9 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                 let probe_id = self.probe_id.next();
                 match self.resolve_inbound_request(peer, request) {
                     Ok(addrs) => {
-                        log::debug!(
-                            "Inbound dial request from Peer {} with dial-back addresses {:?}.",
-                            peer,
+                        tracing::debug!(
+                            %peer,
+                            "Inbound dial request from peer with dial-back addresses {:?}",
                             addrs
                         );
 
@@ -141,10 +141,10 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         ])
                     }
                     Err((status_text, error)) => {
-                        log::debug!(
-                            "Reject inbound dial request from peer {}: {}.",
-                            peer,
-                            status_text
+                        tracing::debug!(
+                            %peer,
+                            status=%status_text,
+                            "Reject inbound dial request from peer"
                         );
 
                         let response = DialResponse {
@@ -168,10 +168,10 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                 error,
                 request_id,
             } => {
-                log::debug!(
-                    "Inbound Failure {} when on dial-back request from peer {}.",
-                    error,
-                    peer
+                tracing::debug!(
+                    %peer,
+                    "Inbound Failure {} when on dial-back request from peer",
+                    error
                 );
 
                 let probe_id = match self.ongoing_inbound.get(&peer) {
@@ -207,10 +207,10 @@ impl<'a> AsServer<'a> {
             return None;
         }
 
-        log::debug!(
-            "Dial-back to peer {} succeeded at addr {:?}.",
-            peer,
-            address
+        tracing::debug!(
+            %peer,
+            %address,
+            "Dial-back to peer succeeded at address"
         );
 
         let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();
@@ -233,11 +233,21 @@ impl<'a> AsServer<'a> {
         error: &DialError,
     ) -> Option<InboundProbeEvent> {
         let (probe_id, _, _, channel) = peer.and_then(|p| self.ongoing_inbound.remove(&p))?;
-        log::debug!(
-            "Dial-back to peer {} failed with error {:?}.",
-            peer.unwrap(),
-            error
-        );
+        
+        match peer {
+            Some(p) => 
+                tracing::debug!(
+                    peer=%p,
+                    "Dial-back to peer failed with error {:?}",
+                    error
+                ),
+            None =>  
+                tracing::debug!(
+                    "Dial-back to non existent peer failed with error {:?}",
+                    error
+                ),
+        };
+
         let response_error = ResponseError::DialError;
         let response = DialResponse {
             result: Err(response_error.clone()),
