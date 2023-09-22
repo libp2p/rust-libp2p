@@ -3,7 +3,7 @@ members = [
     "core",
     "examples/autonat",
     "examples/browser-webrtc",
-    "examples/chat-example",
+    "examples/chat",
     "examples/dcutr",
     "examples/distributed-key-value-store",
     "examples/file-sharing",
@@ -11,7 +11,7 @@ members = [
     "examples/ipfs-kad",
     "examples/ipfs-private",
     "examples/metrics",
-    "examples/ping-example",
+    "examples/ping",
     "examples/relay-server",
     "examples/rendezvous",
     "examples/upnp",
@@ -19,6 +19,7 @@ members = [
     "interop-tests",
     "misc/allow-block-list",
     "misc/connection-limits",
+    "misc/futures-bounded",
     "misc/keygen",
     "misc/memory-connection-limits",
     "misc/metrics",
@@ -69,6 +70,7 @@ resolver = "2"
 rust-version = "1.65.0"
 
 [workspace.dependencies]
+futures-bounded = { version = "0.1.0", path = "misc/futures-bounded" }
 libp2p = { version = "0.52.3", path = "libp2p" }
 libp2p-allow-block-list = { version = "0.2.0", path = "misc/allow-block-list" }
 libp2p-autonat = { version = "0.11.0", path = "protocols/autonat" }
