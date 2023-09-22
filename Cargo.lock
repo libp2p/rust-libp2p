@@ -3103,8 +3103,8 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-yamux",
- "log",
  "rand 0.8.5",
+ "tracing",
 ]
 
 [[package]]
