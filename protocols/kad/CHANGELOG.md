@@ -1,11 +1,14 @@
-## 0.44.5
-- Migrate to `quick-protobuf-codec` crate for codec logic.
-  See [PR 4501].
+## 0.45.0
 - Emit `ModeChanged` event whenever we automatically reconfigure the mode.
   See [PR 4503].
 
-[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 [PR 4503]: https://github.com/libp2p/rust-libp2p/pull/4503
+
+## 0.44.5
+- Migrate to `quick-protobuf-codec` crate for codec logic.
+  See [PR 4501].
+
+[PR 4501]: https://github.com/libp2p/rust-libp2p/pull/4501
 
 ## 0.44.4
 
