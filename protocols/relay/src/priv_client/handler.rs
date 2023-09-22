@@ -41,7 +41,6 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol,
 };
-use log::debug;
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};

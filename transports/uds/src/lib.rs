@@ -49,7 +49,6 @@ use libp2p_core::{
     transport::{TransportError, TransportEvent},
     Transport,
 };
-use log::debug;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -104,7 +103,7 @@ macro_rules! codegen {
                             stream::once({
                                 let addr = addr.clone();
                                 async move {
-                                    debug!("Now listening on {}", addr);
+                                    tracing::debug!(address=%addr, "Now listening on address");
                                     Ok(TransportEvent::NewAddress {
                                         listener_id: id,
                                         listen_addr: addr,
@@ -118,7 +117,7 @@ macro_rules! codegen {
                                     async move {
                                         let event = match listener.accept().await {
                                             Ok((stream, _)) => {
-                                                debug!("incoming connection on {}", addr);
+                                                tracing::debug!(address=%addr, "incoming connection on address");
                                                 TransportEvent::Incoming {
                                                     upgrade: future::ok(stream),
                                                     local_addr: addr.clone(),
@@ -163,7 +162,7 @@ macro_rules! codegen {
             fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // TODO: Should we dial at all?
                 if let Ok(path) = multiaddr_to_path(&addr) {
-                    debug!("Dialing {}", addr);
+                    tracing::debug!(address=%addr, "Dialing address");
                     Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))

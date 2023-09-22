@@ -3154,9 +3154,9 @@ dependencies = [
  "async-std",
  "futures",
  "libp2p-core",
- "log",
  "tempfile",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -3200,7 +3200,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-noise",
  "libp2p-webrtc-utils",
- "log",
  "multihash",
  "quickcheck",
  "rand 0.8.5",
@@ -3211,6 +3210,7 @@ dependencies = [
  "tinytemplate",
  "tokio",
  "tokio-util",
+ "tracing",
  "webrtc",
 ]
 

@@ -238,7 +238,7 @@ impl ListenStream {
     /// terminate the stream.
     fn close(&mut self, reason: Result<(), Error>) {
         match self.report_closed {
-            Some(_) => log::debug!("Listener was already closed"),
+            Some(_) => tracing::debug!("Listener was already closed"),
             None => {
                 // Report the listener event as closed.
                 let _ = self
