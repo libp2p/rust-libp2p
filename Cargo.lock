@@ -2442,7 +2442,6 @@ dependencies = [
  "libp2p-request-response",
  "libp2p-swarm",
  "libp2p-swarm-test",
- "log",
  "quick-protobuf",
  "rand 0.8.5",
  "tracing",
@@ -2803,7 +2802,7 @@ dependencies = [
  "futures-timer",
  "futures_ringbuf",
  "libp2p-core",
- "log",
+ "tracing",
 ]
 
 [[package]]
@@ -3324,8 +3323,8 @@ dependencies = [
  "futures",
  "libp2p-core",
  "libp2p-muxer-test-harness",
- "log",
  "thiserror",
+ "tracing",
  "yamux",
 ]
 

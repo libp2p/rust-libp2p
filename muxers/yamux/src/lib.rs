@@ -121,7 +121,10 @@ where
         let inbound_stream = ready!(this.poll_inner(cx))?;
 
         if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
-            log::warn!("dropping {} because buffer is full", inbound_stream.0);
+            tracing::warn!(
+                stream=%inbound_stream.0,
+                "dropping stream because buffer is full"
+            );
             drop(inbound_stream);
         } else {
             this.inbound_stream_buffer.push_back(inbound_stream);
