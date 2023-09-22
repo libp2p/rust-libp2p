@@ -16,8 +16,8 @@ bytes = "1"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.20"
 quick-protobuf = "0.8"
+tracing = { version = "0.1.37", features = ["log"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]

@@ -2885,10 +2885,10 @@ dependencies = [
  "futures_ringbuf",
  "libp2p-core",
  "libp2p-identity",
- "log",
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
+ "tracing",
  "unsigned-varint",
 ]
 

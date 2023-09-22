@@ -26,7 +26,6 @@ use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use libp2p_identity::{PeerId, PublicKey};
-use log::{debug, trace};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use unsigned_varint::codec::UviBytes;
@@ -104,27 +103,27 @@ where
     // The handshake messages all start with a variable-length integer indicating the size.
     let mut framed_socket = Framed::new(socket, UviBytes::default());
 
-    trace!("starting handshake");
+    tracing::trace!("starting handshake");
     let context = HandshakeContext::new(config);
 
-    trace!("sending exchange to remote");
+    tracing::trace!("sending exchange to remote");
     framed_socket
         .send(BytesMut::from(&context.state.exchange_bytes[..]))
         .await?;
 
-    trace!("receiving the remote's exchange");
+    tracing::trace!("receiving the remote's exchange");
     let context = match framed_socket.next().await {
         Some(p) => context.with_remote(p?)?,
         None => {
-            debug!("unexpected eof while waiting for remote's exchange");
+            tracing::debug!("unexpected eof while waiting for remote's exchange");
             let err = IoError::new(IoErrorKind::BrokenPipe, "unexpected eof");
             return Err(err.into());
         }
     };
 
-    trace!(
-        "received exchange from remote; pubkey = {:?}",
-        context.state.public_key
+    tracing::trace!(
+        public_key=?context.state.public_key,
+        "received exchange from remote"
     );
 
     let FramedParts {

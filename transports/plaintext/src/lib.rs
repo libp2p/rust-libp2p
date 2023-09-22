@@ -31,7 +31,6 @@ use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
-use log::debug;
 use std::{
     io, iter,
     pin::Pin,
@@ -93,9 +92,9 @@ impl PlainText2Config {
     where
         T: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        debug!("Starting plaintext handshake.");
+        tracing::debug!("Starting plaintext handshake.");
         let (socket, remote, read_buffer) = handshake::handshake(socket, self).await?;
-        debug!("Finished plaintext handshake.");
+        tracing::debug!("Finished plaintext handshake.");
 
         Ok((
             remote.peer_id,
