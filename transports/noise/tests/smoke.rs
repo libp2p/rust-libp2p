@@ -23,7 +23,6 @@ use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_identity as identity;
 use libp2p_noise as noise;
-use log::info;
 use quickcheck::*;
 use std::{convert::TryInto, io};
 
@@ -85,7 +84,7 @@ fn xx() {
                             Err(e) => panic!("error reading len: {e}"),
                         }
                     };
-                    info!("server: reading message ({} bytes)", len);
+                    tracing::info!(bytes=%len, "server: reading message");
                     let mut server_buffer = vec![0; len.try_into().unwrap()];
                     server_session
                         .read_exact(&mut server_buffer)

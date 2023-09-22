@@ -26,7 +26,6 @@ use crate::{protocol::PublicKey, Error};
 use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use futures::ready;
-use log::{debug, trace};
 use std::{
     fmt, io,
     pin::Pin,
@@ -176,7 +175,7 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = Pin::into_inner(self);
         loop {
-            trace!("read state: {:?}", this.read_state);
+            tracing::trace!(read_state=?this.read_state);
             match this.read_state {
                 ReadState::Ready => {
                     this.read_state = ReadState::ReadLen {
@@ -188,7 +187,7 @@ where
                     let n = match read_frame_len(&mut this.io, cx, &mut buf, &mut off) {
                         Poll::Ready(Ok(Some(n))) => n,
                         Poll::Ready(Ok(None)) => {
-                            trace!("read: eof");
+                            tracing::trace!("read: eof");
                             this.read_state = ReadState::Eof(Ok(()));
                             return Poll::Ready(None);
                         }
@@ -198,9 +197,9 @@ where
                             return Poll::Pending;
                         }
                     };
-                    trace!("read: frame len = {}", n);
+                    tracing::trace!(frame_length=%n, "read");
                     if n == 0 {
-                        trace!("read: empty frame");
+                        tracing::trace!("read: empty frame");
                         this.read_state = ReadState::Ready;
                         continue;
                     }
@@ -219,22 +218,22 @@ where
                             Err(e) => return Poll::Ready(Some(Err(e))),
                         }
                     };
-                    trace!("read: {}/{} bytes", *off + n, len);
+                    tracing::trace!(read_bytes=%(*off + n), total_bytes=%len, "read");
                     if n == 0 {
-                        trace!("read: eof");
+                        tracing::trace!("read: eof");
                         this.read_state = ReadState::Eof(Err(()));
                         return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                     }
                     *off += n;
                     if len == *off {
-                        trace!("read: decrypting {} bytes", len);
+                        tracing::trace!(bytes=%len, "read: decrypting bytes");
                         this.decrypt_buffer.resize(len, 0);
                         if let Ok(n) = this
                             .session
                             .read_message(&this.read_buffer, &mut this.decrypt_buffer)
                         {
                             this.decrypt_buffer.truncate(n);
-                            trace!("read: payload len = {} bytes", n);
+                            tracing::trace!(payload_bytes=%n, "read");
                             this.read_state = ReadState::Ready;
                             // Return an immutable view into the current buffer.
                             // If the view is dropped before the next frame is
@@ -243,18 +242,18 @@ where
                             let view = this.decrypt_buffer.split().freeze();
                             return Poll::Ready(Some(Ok(view)));
                         } else {
-                            debug!("read: decryption error");
+                            tracing::debug!("read: decryption error");
                             this.read_state = ReadState::DecErr;
                             return Poll::Ready(Some(Err(io::ErrorKind::InvalidData.into())));
                         }
                     }
                 }
                 ReadState::Eof(Ok(())) => {
-                    trace!("read: eof");
+                    tracing::trace!("read: eof");
                     return Poll::Ready(None);
                 }
                 ReadState::Eof(Err(())) => {
-                    trace!("read: eof (unexpected)");
+                    tracing::trace!("read: eof (unexpected)");
                     return Poll::Ready(Some(Err(io::ErrorKind::UnexpectedEof.into())));
                 }
                 ReadState::DecErr => {
@@ -275,17 +274,17 @@ where
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = Pin::into_inner(self);
         loop {
-            trace!("write state {:?}", this.write_state);
+            tracing::trace!(write_state=?this.write_state);
             match this.write_state {
                 WriteState::Ready => {
                     return Poll::Ready(Ok(()));
                 }
                 WriteState::WriteLen { len, buf, mut off } => {
-                    trace!("write: frame len ({}, {:?}, {}/2)", len, buf, off);
+                    tracing::trace!("write: frame len ({}, {:?}, {}/2)", len, buf, off);
                     match write_frame_len(&mut this.io, cx, &buf, &mut off) {
                         Poll::Ready(Ok(true)) => (),
                         Poll::Ready(Ok(false)) => {
-                            trace!("write: eof");
+                            tracing::trace!("write: eof");
                             this.write_state = WriteState::Eof;
                             return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                         }
@@ -307,19 +306,19 @@ where
                         }
                     };
                     if n == 0 {
-                        trace!("write: eof");
+                        tracing::trace!("write: eof");
                         this.write_state = WriteState::Eof;
                         return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                     }
                     *off += n;
-                    trace!("write: {}/{} bytes written", *off, len);
+                    tracing::trace!(writen_bytes=%*off, total_bytes=%len, "write");
                     if len == *off {
-                        trace!("write: finished with {} bytes", len);
+                        tracing::trace!(total_bytes=%len, "write: finished");
                         this.write_state = WriteState::Ready;
                     }
                 }
                 WriteState::Eof => {
-                    trace!("write: eof");
+                    tracing::trace!("write: eof");
                     return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                 }
                 WriteState::EncErr => return Poll::Ready(Err(io::ErrorKind::InvalidData.into())),
@@ -339,7 +338,7 @@ where
             .write_message(frame, &mut this.write_buffer[..])
         {
             Ok(n) => {
-                trace!("write: cipher text len = {} bytes", n);
+                tracing::trace!(cipher_text_bytes=%n, "write: cipher text");
                 this.write_buffer.truncate(n);
                 this.write_state = WriteState::WriteLen {
                     len: n,
@@ -349,7 +348,7 @@ where
                 Ok(())
             }
             Err(e) => {
-                log::error!("encryption error: {:?}", e);
+                tracing::error!("encryption error: {:?}", e);
                 this.write_state = WriteState::EncErr;
                 Err(io::ErrorKind::InvalidData.into())
             }
