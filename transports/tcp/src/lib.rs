@@ -98,7 +98,7 @@ impl PortReuse {
     /// Has no effect if port reuse is disabled.
     fn register(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
-            log::trace!("Registering for port reuse: {}:{}", ip, port);
+            tracing::trace!(%ip, %port, "Registering for port reuse");
             listen_addrs
                 .write()
                 .expect("`register()` and `unregister()` never panic while holding the lock")
@@ -111,7 +111,7 @@ impl PortReuse {
     /// Has no effect if port reuse is disabled.
     fn unregister(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
-            log::trace!("Unregistering for port reuse: {}:{}", ip, port);
+            tracing::trace!(%ip, %port, "Unregistering for port reuse");
             listen_addrs
                 .write()
                 .expect("`register()` and `unregister()` never panic while holding the lock")
@@ -446,7 +446,7 @@ where
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        log::debug!("listening on {}", socket_addr);
+        tracing::debug!(address=%socket_addr, "listening on address");
         let listener = self
             .do_listen(id, socket_addr)
             .map_err(TransportError::Other)?;
@@ -472,14 +472,14 @@ where
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        log::debug!("dialing {}", socket_addr);
+        tracing::debug!(address=%socket_addr, "dialing address");
 
         let socket = self
             .create_socket(socket_addr)
             .map_err(TransportError::Other)?;
 
         if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
-            log::trace!("Binding dial socket to listen socket {}", addr);
+            tracing::trace!(address=%addr, "Binding dial socket to listen socket address");
             socket.bind(&addr.into()).map_err(TransportError::Other)?;
         }
 
@@ -677,7 +677,7 @@ where
                     let ip = inet.addr();
                     if self.listen_addr.is_ipv4() == ip.is_ipv4() {
                         let ma = ip_to_multiaddr(ip, my_listen_addr_port);
-                        log::debug!("New listen address: {}", ma);
+                        tracing::debug!(address=%ma, "New listen address");
                         self.port_reuse.register(ip, my_listen_addr_port);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -689,7 +689,7 @@ where
                     let ip = inet.addr();
                     if self.listen_addr.is_ipv4() == ip.is_ipv4() {
                         let ma = ip_to_multiaddr(ip, my_listen_addr_port);
-                        log::debug!("Expired listen address: {}", ma);
+                        tracing::debug!(address=%ma, "Expired listen address");
                         self.port_reuse.unregister(ip, my_listen_addr_port);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
@@ -762,7 +762,11 @@ where
                 let local_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
                 let remote_addr = ip_to_multiaddr(remote_addr.ip(), remote_addr.port());
 
-                log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
+                tracing::debug!(
+                    remote_address=%remote_addr, 
+                    local_address=%local_addr, 
+                    "Incoming connection from remote at local"
+                );
 
                 return Poll::Ready(Some(TransportEvent::Incoming {
                     listener_id: self.listener_id,

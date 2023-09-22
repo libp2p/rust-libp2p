@@ -3120,9 +3120,9 @@ dependencies = [
  "libc",
  "libp2p-core",
  "libp2p-identity",
- "log",
  "socket2 0.5.4",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

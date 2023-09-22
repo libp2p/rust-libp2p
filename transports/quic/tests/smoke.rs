@@ -727,8 +727,8 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
 
     tracing::info!(
         stream_count=%number_streams,
-        "Created streams
-    ");
+        "Created streams"
+    );
 
     while future::poll_fn(|cx| connection.poll_unpin(cx))
         .await
