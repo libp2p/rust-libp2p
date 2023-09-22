@@ -1,4 +1,4 @@
-## 0.44.5 - unreleased
+## 0.44.5
 - Migrate to `quick-protobuf-codec` crate for codec logic.
   See [PR 4501].
 
