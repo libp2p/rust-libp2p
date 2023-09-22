@@ -121,7 +121,7 @@ impl Config {
         self
     }
 
-    fn into_responder<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_responder<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
@@ -141,7 +141,7 @@ impl Config {
         Ok(state)
     }
 
-    fn into_initiator<S>(self, socket: S) -> Result<State<S>, Error> {
+    fn into_initiator<S: AsyncRead + AsyncWrite>(self, socket: S) -> Result<State<S>, Error> {
         let session = noise_params_into_builder(
             self.params,
             &self.prologue,
@@ -238,16 +238,14 @@ pub enum Error {
     #[error("Authentication failed")]
     AuthenticationFailed,
     #[error("failed to decode protobuf ")]
-    InvalidPayload(#[from] DecodeError),
+    InvalidPayload(#[from] quick_protobuf_codec::Error),
+    #[error("failed to decode protobuf")]
+    IncompletePayload,
     #[error(transparent)]
     SigningError(#[from] libp2p_identity::SigningError),
     #[error("Expected WebTransport certhashes ({}) are not a subset of received ones ({})", certhashes_to_string(.0), certhashes_to_string(.1))]
     UnknownWebTransportCerthashes(HashSet<Multihash<64>>, HashSet<Multihash<64>>),
 }
-
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
 
 fn certhashes_to_string(certhashes: &HashSet<Multihash<64>>) -> String {
     let mut s = String::new();

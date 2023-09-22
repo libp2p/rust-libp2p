@@ -27,14 +27,15 @@ mod proto {
     pub use self::payload::proto::NoiseHandshakePayload;
 }
 
+use super::framed::MAX_FRAME_LEN;
 use crate::io::{framed::NoiseFramed, Output};
 use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
-use crate::{DecodeError, Error};
-use bytes::Bytes;
+use crate::Error;
+use asynchronous_codec::{Decoder, Encoder};
+use bytes::BytesMut;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::collections::HashSet;
 use std::io;
 
@@ -45,6 +46,8 @@ use std::io;
 pub(crate) struct State<T> {
     /// The underlying I/O resource.
     io: NoiseFramed<T, snow::HandshakeState>,
+    /// The codec for protobuf messages.
+    codec: quick_protobuf_codec::Codec<proto::NoiseHandshakePayload>,
     /// The associated public identity of the local node's static DH keypair,
     /// which can be sent to the remote as part of an authenticated handshake.
     identity: KeypairIdentity,
@@ -63,7 +66,10 @@ struct Extensions {
     webtransport_certhashes: HashSet<Multihash<64>>,
 }
 
-impl<T> State<T> {
+impl<T> State<T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Initializes the state for a new Noise handshake, using the given local
     /// identity keypair and local DH static public key. The handshake messages
     /// will be sent and received on the given I/O resource and using the
@@ -79,6 +85,7 @@ impl<T> State<T> {
     ) -> Self {
         Self {
             identity,
+            codec: quick_protobuf_codec::Codec::new(MAX_FRAME_LEN),
             io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey: expected_remote_key,
@@ -88,7 +95,10 @@ impl<T> State<T> {
     }
 }
 
-impl<T> State<T> {
+impl<T> State<T>
+where
+    T: AsyncRead + AsyncWrite,
+{
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
     pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
@@ -151,7 +161,7 @@ impl From<proto::NoiseExtensions> for Extensions {
 // Handshake Message Futures
 
 /// A future for receiving a Noise handshake message.
-async fn recv<T>(state: &mut State<T>) -> Result<Bytes, Error>
+async fn recv<T>(state: &mut State<T>) -> Result<BytesMut, Error>
 where
     T: AsyncRead + Unpin,
 {
@@ -169,10 +179,9 @@ where
 {
     let msg = recv(state).await?;
     if !msg.is_empty() {
-        return Err(
-            io::Error::new(io::ErrorKind::InvalidData, "Unexpected handshake payload.").into(),
-        );
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
+
     Ok(())
 }
 
@@ -181,7 +190,7 @@ pub(crate) async fn send_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
-    state.io.send(&Vec::new()).await?;
+    state.io.send(Vec::new()).await?;
     Ok(())
 }
 
@@ -190,19 +199,25 @@ pub(crate) async fn recv_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
-    let msg = recv(state).await?;
-    let mut reader = BytesReader::from_bytes(&msg[..]);
-    let pb =
-        proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]).map_err(DecodeError)?;
+    let mut msg = recv(state).await?;
+    let pb = state.codec.decode(&mut msg)?;
 
-    state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
+    if let Some(pb) = pb {
+        state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
-    if !pb.identity_sig.is_empty() {
-        state.dh_remote_pubkey_sig = Some(pb.identity_sig);
-    }
+        if !pb.identity_sig.is_empty() {
+            state.dh_remote_pubkey_sig = Some(pb.identity_sig);
+        }
 
-    if let Some(extensions) = pb.extensions {
-        state.remote_extensions = Some(extensions.into());
+        if let Some(extensions) = pb.extensions {
+            state.remote_extensions = Some(extensions.into());
+        }
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "decoding did not yield a valid item",
+        )
+        .into());
     }
 
     Ok(())
@@ -211,7 +226,7 @@ where
 /// Send a Noise handshake message with a payload identifying the local node to the remote.
 pub(crate) async fn send_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
-    T: AsyncWrite + Unpin,
+    T: AsyncRead + AsyncWrite + Unpin,
 {
     let mut pb = proto::NoiseHandshakePayload {
         identity_key: state.identity.public.encode_protobuf(),
@@ -231,11 +246,10 @@ where
         }
     }
 
-    let mut msg = Vec::with_capacity(pb.get_size());
+    let mut bytes = BytesMut::new();
+    state.codec.encode(pb, &mut bytes)?;
 
-    let mut writer = Writer::new(&mut msg);
-    pb.write_message(&mut writer).expect("Encoding to succeed");
-    state.io.send(&msg).await?;
+    state.io.send(bytes.into()).await?;
 
     Ok(())
 }

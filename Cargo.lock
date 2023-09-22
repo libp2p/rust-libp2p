@@ -2795,6 +2795,7 @@ dependencies = [
 name = "libp2p-noise"
 version = "0.43.1"
 dependencies = [
+ "asynchronous-codec",
  "bytes",
  "curve25519-dalek 4.1.0",
  "env_logger 0.10.0",
@@ -2806,13 +2807,16 @@ dependencies = [
  "multiaddr",
  "multihash",
  "once_cell",
+ "pin-project",
  "quick-protobuf",
+ "quick-protobuf-codec",
  "quickcheck-ext",
  "rand 0.8.5",
  "sha2 0.10.7",
  "snow",
  "static_assertions",
  "thiserror",
+ "unsigned-varint",
  "x25519-dalek 1.1.1",
  "zeroize",
 ]
