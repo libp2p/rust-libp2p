@@ -3275,12 +3275,12 @@ dependencies = [
  "libp2p-dns",
  "libp2p-identity",
  "libp2p-tcp",
- "log",
  "parking_lot",
  "quicksink",
  "rcgen 0.10.0",
  "rw-stream-sink",
  "soketto",
+ "tracing",
  "url",
  "webpki-roots",
 ]
