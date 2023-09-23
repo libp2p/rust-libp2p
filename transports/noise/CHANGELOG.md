@@ -1,3 +1,13 @@
+## 0.43.2
+
+- Refactor noise io framing and protobuf encoding/decoding.
+  This migrates to the `asynchronous_codec::Framed` type to provide an implementation of `Sink` and
+  `Stream` for noise payloads, and introduces using `quick_protobuf_codec::Codec` for encoding/decoding
+  protobuf messages.
+  See [PR 4544].
+
+[PR 4544]: https://github.com/libp2p/rust-libp2p/pull/4544
+
 ## 0.43.1
 
 - Update dependencies.
