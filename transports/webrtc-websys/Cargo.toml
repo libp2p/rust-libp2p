@@ -9,7 +9,7 @@ name = "libp2p-webrtc-websys"
 repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
 version = "0.1.0-alpha"
-publish = false # TEMP fix for https://github.com/obi1kenobi/cargo-semver-checks-action/issues/53.
+publish = true
 
 [dependencies]
 bytes = "1"
