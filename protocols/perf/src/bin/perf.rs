@@ -131,7 +131,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    tracing::info!(peer=%peer_id, ?endpoint, "Established connection to peer via endpoint");
+                    tracing::info!(peer=%peer_id, ?endpoint, "Established new connection");
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
                 SwarmEvent::Behaviour(()) => {

@@ -277,9 +277,8 @@ impl PeerScore {
                         peer=%peer_id,
                         %topic,
                         %deficit,
-                        "[Penalty] The peer has a mesh message deliveries deficit in topic\
-                        and will get penalized by {}",
-                        p3 * topic_params.mesh_message_deliveries_weight
+                        penalty=%topic_score,
+                        "[Penalty] The peer has a mesh deliveries deficit and will be penalized"
                     );
                 }
 
@@ -349,8 +348,8 @@ impl PeerScore {
         if let Some(peer_stats) = self.peer_stats.get_mut(peer_id) {
             tracing::debug!(
                 peer=%peer_id,
-                "[Penalty] Behavioral penalty for peer, count = {}.",
-                count
+                %count,
+                "[Penalty] Behavioral penalty for peer"
             );
             peer_stats.behaviour_penalty += count as f64;
         }
@@ -598,8 +597,8 @@ impl PeerScore {
             tracing::warn!(
                 peer=%from,
                 status=?record.status,
-                "Unexpected delivery trace: Message from peer was first seen {}s ago",
-                record.first_seen.elapsed().as_secs(),
+                first_seen=?record.first_seen.elapsed().as_secs(),
+                "Unexpected delivery trace"
             );
             return;
         }

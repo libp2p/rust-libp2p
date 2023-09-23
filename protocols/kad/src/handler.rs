@@ -483,14 +483,14 @@ impl KademliaHandler {
                 tracing::debug!(
                     peer=%remote_peer_id,
                     mode=%mode,
-                    "Operating in mode on new outbound connection to peer"
+                    "New outbound connection"
                 );
             }
             ConnectedPoint::Listener { .. } => {
                 tracing::debug!(
                     peer=%remote_peer_id,
                     mode=%mode,
-                    "Operating in mode on new inbound connection to peer"
+                    "New inbound connection"
                 );
             }
         }
@@ -710,7 +710,7 @@ impl ConnectionHandler for KademliaHandler {
                         tracing::debug!(
                             %peer,
                             mode=%new_mode,
-                            "Now operating in mode on outbound connection with peer"
+                            "Changed mode on outbound connection"
                         )
                     }
                     ConnectedPoint::Listener { local_addr, .. } => {
@@ -718,7 +718,7 @@ impl ConnectionHandler for KademliaHandler {
                             %peer,
                             mode=%new_mode,
                             local_address=%local_addr,
-                            "Now operating in mode on inbound connection with peer assuming that one of our external addresses routes to the local address")
+                            "Changed mode on inbound connection assuming that one of our external addresses routes to the local address")
                     }
                 }
 

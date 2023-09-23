@@ -373,7 +373,9 @@ impl ConnectionHandler for Handler {
                 if protocols_changed && self.exchanged_one_periodic_identify {
                     tracing::debug!(
                         peer=%self.remote_peer_id,
-                        "Supported listen protocols changed from [{before}] to [{after}], pushing to peer"
+                        %before,
+                        %after,
+                        "Supported listen protocols changed, pushing to peer"
                     );
 
                     let info = self.build_info();

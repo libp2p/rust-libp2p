@@ -278,10 +278,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {
-                    tracing::info!(peer=%peer_id, endpoint=?endpoint, "Established connection to peer via endpoint");
+                    tracing::info!(peer=%peer_id, ?endpoint, "Established new connection");
                 }
                 SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                    tracing::info!(peer=?peer_id, "Outgoing connection error to peer: {:?}", error);
+                    tracing::info!(peer=?peer_id, "Outgoing connection failed: {error}");
                 }
                 _ => {}
             }
