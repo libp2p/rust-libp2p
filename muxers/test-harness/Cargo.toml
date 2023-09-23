@@ -12,4 +12,4 @@ libp2p-core = { workspace = true }
 futures = "0.3.28"
 futures-timer = "3.0.2"
 futures_ringbuf = "0.4.0"
-tracing = { version = "0.1.37", features = ["log"] }
+tracing = "0.1.37"

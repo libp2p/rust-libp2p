@@ -12,6 +12,6 @@ clap = { version = "4.3.23", features = ["derive"] }
 either = "1.9"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["async-std", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }
-tracing = { version = "0.1.37", features = ["log"] }
+tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 void = "1.0.2"

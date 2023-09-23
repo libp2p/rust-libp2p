@@ -11,5 +11,5 @@ async-trait = "0.1"
 env_logger = "0.10"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
-tracing = { version = "0.1.37", features = ["log"] }
+tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -25,7 +25,7 @@ libp2p-webrtc-utils = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "1"
-tracing = { version = "0.1.37", features = ["log"] }
+tracing = "0.1.37"
 wasm-bindgen = { version = "0.2.87" }
 wasm-bindgen-futures = { version = "0.4.37" }
 web-sys = { version = "0.3.64", features = ["Document", "Location", "MessageEvent", "Navigator", "RtcCertificate", "RtcConfiguration", "RtcDataChannel", "RtcDataChannelEvent", "RtcDataChannelInit", "RtcDataChannelState", "RtcDataChannelType", "RtcPeerConnection", "RtcSdpType", "RtcSessionDescription", "RtcSessionDescriptionInit", "Window"] }
