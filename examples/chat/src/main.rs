@@ -20,10 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use futures::{
-    future::{Either, FutureExt},
-    stream::StreamExt,
-};
+use futures::{future::Either, stream::StreamExt};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
     gossipsub, identity, mdns, noise, quic,
@@ -111,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            Some(line) = stdin.next_line().then(|x| async move { x.expect("Stdin not to close") }) => {
+            Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
                     .publish(topic.clone(), line.as_bytes()) {
