@@ -2959,7 +2959,6 @@ dependencies = [
  "libp2p-plaintext",
  "libp2p-swarm",
  "libp2p-yamux",
- "log",
  "quick-protobuf",
  "quick-protobuf-codec",
  "quickcheck-ext",

@@ -58,10 +58,7 @@ pub(crate) async fn outbound(
     peer_connection.set_local_description(offer).await?;
 
     let answer = sdp::answer(addr, server_fingerprint, &ufrag);
-    tracing::debug!(
-        ?answer,
-        "calculated SDP answer for outbound connection"
-    );
+    tracing::debug!(?answer, "calculated SDP answer for outbound connection");
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;

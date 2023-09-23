@@ -763,8 +763,8 @@ where
                 let remote_addr = ip_to_multiaddr(remote_addr.ip(), remote_addr.port());
 
                 tracing::debug!(
-                    remote_address=%remote_addr, 
-                    local_address=%local_addr, 
+                    remote_address=%remote_addr,
+                    local_address=%local_addr,
                     "Incoming connection from remote at local"
                 );
 
