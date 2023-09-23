@@ -210,7 +210,7 @@ impl<'a> AsServer<'a> {
         tracing::debug!(
             %peer,
             %address,
-            "Dial-back to peer succeeded at address"
+            "Dial-back to peer succeeded"
         );
 
         let (probe_id, _, _, channel) = self.ongoing_inbound.remove(peer).unwrap();

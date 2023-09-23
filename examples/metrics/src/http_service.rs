@@ -38,7 +38,7 @@ pub(crate) async fn metrics_server(registry: Registry) -> Result<(), std::io::Er
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let server = Server::bind(&addr).serve(MakeMetricService::new(registry));
-        tracing::info!("Metrics server on http://{}/metrics", server.local_addr());
+        tracing::info!(metrics_server=%format!("http://{}/metrics", server.local_addr()));
         if let Err(e) = server.await {
             tracing::error!("server error: {}", e);
         }

@@ -516,7 +516,7 @@ where
             waker.wake();
         }
 
-        let span = tracing::error_span!("connection", id = %id, peer = %obtained_peer_id, peer_address = %endpoint.get_remote_address());
+        let span = tracing::error_span!("connection", id = %id, peer = %obtained_peer_id, remote_address = %endpoint.get_remote_address());
         let connection: Connection<THandler> = Connection::new(
             connection,
             handler,

@@ -254,11 +254,12 @@ async fn latency(server_address: Multiaddr) -> Result<()> {
     latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
     tracing::info!(
-        "Finished: {rounds} pings in {:.4}s",
-        start.elapsed().as_secs_f64()
+        %rounds,
+        elapsed_time=%format!("{:.4}s", start.elapsed().as_secs_f64()),
+        "Finished rounds of pings"
     );
-    tracing::info!("- {:.4} s median", percentile(&latencies, 0.50),);
-    tracing::info!("- {:.4} s 95th percentile\n", percentile(&latencies, 0.95),);
+    tracing::info!(median=%format!("- {:.4} s", percentile(&latencies, 0.50)));
+    tracing::info!(ninety_fifth_percentile=%format!("- {:.4} s", percentile(&latencies, 0.95)));
     Ok(())
 }
 
@@ -328,7 +329,7 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     tracing::info!(
             "Finished: sent {num} {to_send} bytes requests with {to_receive} bytes response each within {duration:.2} s",
         );
-    tracing::info!("- {requests_per_second:.2} req/s\n");
+    tracing::info!(requests_per_second=%format!("{requests_per_second:.2}"));
 
     Ok(())
 }
@@ -442,7 +443,7 @@ async fn connect(
     let duration = start.elapsed();
     let duration_seconds = duration.as_secs_f64();
 
-    tracing::info!("established connection in {duration_seconds:.4} s");
+    tracing::info!(elapsed_time=%format!("{duration_seconds:.4} s"));
 
     Ok(server_peer_id)
 }

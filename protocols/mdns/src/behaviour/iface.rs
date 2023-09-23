@@ -167,7 +167,7 @@ where
     }
 
     pub(crate) fn reset_timer(&mut self) {
-        tracing::trace!("reset timer on {:#?} {:#?}", self.addr, self.probe_state);
+        tracing::trace!(address=%self.addr, probe_state=?self.probe_state, "reset timer");
         let interval = *self.probe_state.interval();
         self.timeout = T::interval(interval);
     }
@@ -186,7 +186,7 @@ where
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
                 tracing::trace!(address=%self.addr, "sending query on iface");
                 self.send_buffer.push_back(build_query());
-                tracing::trace!("tick on {:#?} {:#?}", self.addr, self.probe_state);
+                tracing::trace!(address=%self.addr, probe_state=?self.probe_state, "tick");
 
                 // Stop to probe when the initial interval reach the query interval
                 if let ProbeState::Probing(interval) = self.probe_state {

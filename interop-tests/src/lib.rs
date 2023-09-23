@@ -70,7 +70,7 @@ pub async fn run_test(
             let handshake_start = Instant::now();
 
             swarm.dial(other.parse::<Multiaddr>()?)?;
-            tracing::info!("Test instance, dialing multiaddress on: {}.", other);
+            tracing::info!(listener=%other, "Test instance, dialing multiaddress");
 
             let rtt = loop {
                 if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -147,7 +147,7 @@ pub async fn run_test_wasm(
     base_url: &str,
 ) -> Result<(), JsValue> {
     let result = run_test(transport, ip, is_dialer, test_timeout_secs, base_url).await;
-    tracing::info!("Sending test result: {result:?}");
+    tracing::info!(?result, "Sending test result");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
         .json(&result.map_err(|e| e.to_string()))

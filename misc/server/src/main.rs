@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         match swarm.listen_on(address.clone()) {
             Ok(_) => {}
             Err(e @ libp2p::TransportError::MultiaddrNotSupported(_)) => {
-                tracing::warn!("Failed to listen on {address}, continuing anyways, {e}")
+                tracing::warn!(%address, "Failed to listen on address, continuing anyways, {e}")
             }
             Err(e) => return Err(e.into()),
         }
@@ -202,7 +202,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // metrics.record(&e)
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                tracing::info!("Listening on {address:?}");
+                tracing::info!(%address, "Listening on address");
             }
             _ => {}
         }

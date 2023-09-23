@@ -113,7 +113,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         response,
                     },
             } => {
-                tracing::debug!("Outbound dial-back request returned {:?}.", response);
+                tracing::debug!(?response, "Outbound dial-back request returned response");
 
                 let probe_id = self
                     .ongoing_outbound
@@ -346,9 +346,9 @@ impl<'a> AsClient<'a> {
         }
 
         tracing::debug!(
-            "Flipped assumed NAT status from {:?} to {:?}",
-            self.nat_status,
-            reported_status
+            old_status=?self.nat_status,
+            new_status=?reported_status,
+            "Flipped assumed NAT status"
         );
 
         let old_status = self.nat_status.clone();

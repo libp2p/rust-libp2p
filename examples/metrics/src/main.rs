@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        tracing::info!("Dialed {}", addr)
+        tracing::info!(address=%addr, "Dialed address")
     }
 
     let mut metric_registry = Registry::default();
@@ -74,15 +74,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
-                    tracing::info!("{:?}", ping_event);
+                    tracing::info!(?ping_event);
                     metrics.record(&ping_event);
                 }
                 SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
-                    tracing::info!("{:?}", identify_event);
+                    tracing::info!(?identify_event);
                     metrics.record(&identify_event);
                 }
                 swarm_event => {
-                    tracing::info!("{:?}", swarm_event);
+                    tracing::info!(?swarm_event);
                     metrics.record(&swarm_event);
                 }
             }

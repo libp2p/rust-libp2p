@@ -151,9 +151,9 @@ async fn redis_blpop(
         .await
         .map_err(|e| {
             tracing::warn!(
-                "Failed to get list elem {} within timeout {}: {e}",
-                request.key,
-                request.timeout
+                key=%request.key,
+                timeout=%request.timeout,
+                "Failed to get list elem key within timeout: {e}"
             );
             StatusCode::INTERNAL_SERVER_ERROR
         })?;

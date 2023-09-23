@@ -19,8 +19,8 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
-void = "1.0"
 tracing = "0.1.37"
+void = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"

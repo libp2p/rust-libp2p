@@ -1004,8 +1004,8 @@ where
             } => {
                 tracing::debug!(
                     listener=?listener_id,
-                    "Listener closed by {:?}.",
-                    reason
+                    ?reason,
+                    "Listener closed"
                 );
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
