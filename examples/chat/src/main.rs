@@ -20,8 +20,7 @@
 
 #![doc = include_str!("../README.md")]
 
-use async_std::io;
-use futures::{future::Either, prelude::*, select};
+use futures::{future::Either, stream::StreamExt};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport::OrTransport, upgrade},
     gossipsub, identity, mdns, noise, quic,
@@ -34,15 +33,16 @@ use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tokio::{io, io::AsyncBufReadExt, select};
 
 // We create a custom network behaviour that combines Gossipsub and Mdns.
 #[derive(NetworkBehaviour)]
 struct MyBehaviour {
     gossipsub: gossipsub::Behaviour,
-    mdns: mdns::async_io::Behaviour,
+    mdns: mdns::tokio::Behaviour,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let env_filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
@@ -54,13 +54,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(id_keys.public());
 
     // Set up an encrypted DNS-enabled TCP Transport over the yamux protocol.
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
+    let tcp_transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1Lazy)
         .authenticate(noise::Config::new(&id_keys).expect("signing libp2p-noise static keypair"))
         .multiplex(yamux::Config::default())
         .timeout(std::time::Duration::from_secs(20))
         .boxed();
-    let quic_transport = quic::async_std::Transport::new(quic::Config::new(&id_keys));
+    let quic_transport = quic::tokio::Transport::new(quic::Config::new(&id_keys));
     let transport = OrTransport::new(quic_transport, tcp_transport)
         .map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -96,13 +96,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
+        let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), local_peer_id)?;
         let behaviour = MyBehaviour { gossipsub, mdns };
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse()?)?;
@@ -113,13 +113,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.select_next_some() => {
+            Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut().gossipsub
-                    .publish(topic.clone(), line.expect("Stdin not to close").as_bytes()) {
+                    .publish(topic.clone(), line.as_bytes()) {
                     println!("Publish error: {e:?}");
                 }
-            },
+            }
             event = swarm.select_next_some() => match event {
                 SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                     for (peer_id, _multiaddr) in list {
