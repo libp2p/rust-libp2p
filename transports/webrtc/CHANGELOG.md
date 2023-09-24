@@ -1,4 +1,4 @@
-## 0.6.1-alpha - unreleased
+## 0.6.1-alpha
 
 - Move common dependencies to `libp2p-webrtc-utils` crate.
   See [PR 4248].
