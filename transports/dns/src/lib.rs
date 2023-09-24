@@ -27,7 +27,7 @@
 //!
 //! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
-//! transport, except that [`Transport::dial`] resolves `/dns/...`, `/dns4/...`,
+//! transport, except that [`libp2p_core::Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
