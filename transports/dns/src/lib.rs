@@ -21,17 +21,17 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`async_std::Config`] and [`tokio::Config`]
+//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
 //! for use with `async-std` and `tokio`,
 //! respectively.
 //!
-//! A [`Config`] is an address-rewriting [`Transport`] wrapper around
+//! A [`Transport`] is an address-rewriting [`libp2p::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
 //! transport, except that [`Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the `async_std::Config` are
+//! The `async-std` feature and hence the `async_std::Transport` are
 //! enabled by default. Tokio users can furthermore opt-in
 //! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
 //! features. For more information about these features, please
@@ -49,7 +49,7 @@
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
 //! If the implementation requires different characteristics, one should
-//! consider providing their own implementation of [`Config`] or use
+//! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
@@ -72,13 +72,13 @@ pub mod async_std {
     pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
 
     impl<T> Transport<T> {
-        /// Creates a new [`Config`] from the OS's DNS configuration and defaults.
+        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
         pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
             let (cfg, opts) = system_conf::read_system_conf()?;
             Self::custom(inner, cfg, opts).await
         }
 
-        /// Creates a [`Config`] with a custom resolver configuration and options.
+        /// Creates a [`Transport`] with a custom resolver configuration and options.
         pub async fn custom(
             inner: T,
             cfg: ResolverConfig,
@@ -93,7 +93,7 @@ pub mod async_std {
 }
 
 #[cfg(feature = "async-std")]
-#[deprecated(note = "Use `async_std::Config` instead.")]
+#[deprecated(note = "Use `async_std::Transport` instead.")]
 pub type DnsConfig<T> = async_std::Transport<T>;
 
 #[cfg(feature = "tokio")]
@@ -130,7 +130,7 @@ pub mod tokio {
 }
 
 #[cfg(feature = "tokio")]
-#[deprecated(note = "Use `tokio::Config` instead.")]
+#[deprecated(note = "Use `tokio::Transport` instead.")]
 pub type TokioDnsConfig<T> = tokio::Transport<T>;
 
 use async_trait::async_trait;
@@ -180,7 +180,7 @@ const MAX_DNS_LOOKUPS: usize = 32;
 const MAX_TXT_RECORDS: usize = 16;
 
 /// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
-/// You shouldn't need to use this type directly. Use [`tokio::Config`] or [`async_std::Config`] instead.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or [`async_std::Transport`] instead.
 #[derive(Debug)]
 pub struct Transport<T, R> {
     /// The underlying transport.
@@ -189,7 +189,7 @@ pub struct Transport<T, R> {
     resolver: R,
 }
 
-#[deprecated(note = "Use `async_std::Config` or `tokio::Config` instead.")]
+#[deprecated(note = "Use `async_std::Transport` or `tokio::Transport` instead.")]
 pub type GenDnsConfig<T, R> = Transport<T, R>;
 
 impl<T, R> libp2p_core::Transport for Transport<T, R>
@@ -400,7 +400,7 @@ where
     }
 }
 
-/// The possible errors of a [`Config`] wrapped transport.
+/// The possible errors of a [`Transport`] wrapped transport.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Error<TErr> {
