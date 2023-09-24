@@ -23,7 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::handler::{Handler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
@@ -2073,7 +2073,7 @@ impl<TStore> NetworkBehaviour for Behaviour<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandler;
+    type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
@@ -2089,7 +2089,7 @@ where
         };
         self.connections.insert(connection_id, peer);
 
-        Ok(KademliaHandler::new(
+        Ok(Handler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,
@@ -2112,7 +2112,7 @@ where
         };
         self.connections.insert(connection_id, peer);
 
-        Ok(KademliaHandler::new(
+        Ok(Handler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,

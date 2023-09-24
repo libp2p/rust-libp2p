@@ -47,6 +47,9 @@ use std::{
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Handler`.")]
+pub type KademliaHandler = Handler;
+
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.
 ///
@@ -54,7 +57,7 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// make.
 ///
 /// It also handles requests made by the remote.
-pub struct KademliaHandler {
+pub struct Handler {
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
 
@@ -470,7 +473,7 @@ pub struct KademliaRequestId {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 struct UniqueConnecId(u64);
 
-impl KademliaHandler {
+impl Handler {
     pub fn new(
         protocol_config: KademliaProtocolConfig,
         idle_timeout: Duration,
@@ -494,7 +497,7 @@ impl KademliaHandler {
 
         let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
 
-        KademliaHandler {
+        Handler {
             protocol_config,
             mode,
             idle_timeout,
@@ -612,7 +615,7 @@ impl KademliaHandler {
     }
 }
 
-impl ConnectionHandler for KademliaHandler {
+impl ConnectionHandler for Handler {
     type FromBehaviour = KademliaHandlerIn;
     type ToBehaviour = KademliaHandlerEvent;
     type Error = io::Error; // TODO: better error type?
@@ -833,7 +836,7 @@ impl ConnectionHandler for KademliaHandler {
     }
 }
 
-impl KademliaHandler {
+impl Handler {
     fn answer_pending_request(&mut self, request_id: KademliaRequestId, mut msg: KadResponseMsg) {
         for state in self.inbound_substreams.iter_mut() {
             match state.try_answer_with(request_id, msg) {
