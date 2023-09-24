@@ -75,7 +75,7 @@ pub struct Behaviour<TStore> {
     protocol_config: KademliaProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
-    record_filtering: KademliaStoreInserts,
+    record_filtering: StoreInserts,
 
     /// The currently active (i.e. in-progress) queries.
     queries: QueryPool<QueryInner>,
@@ -153,6 +153,11 @@ pub enum BucketInserts {
     Manual,
 }
 
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::StoreInserts`."
+)]
+pub type KademliaStoreInserts = StoreInserts;
+
 /// The configurable filtering strategies for the acceptance of
 /// incoming records.
 ///
@@ -161,7 +166,7 @@ pub enum BucketInserts {
 ///
 /// [`Key`]: crate::record_priv::Key
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KademliaStoreInserts {
+pub enum StoreInserts {
     /// Whenever a (provider) record is received,
     /// the record is forwarded immediately to the [`RecordStore`].
     Unfiltered,
@@ -187,7 +192,7 @@ pub struct KademliaConfig {
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,
-    record_filtering: KademliaStoreInserts,
+    record_filtering: StoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
@@ -204,7 +209,7 @@ impl Default for KademliaConfig {
             record_ttl: Some(Duration::from_secs(36 * 60 * 60)),
             record_replication_interval: Some(Duration::from_secs(60 * 60)),
             record_publication_interval: Some(Duration::from_secs(24 * 60 * 60)),
-            record_filtering: KademliaStoreInserts::Unfiltered,
+            record_filtering: StoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
@@ -310,9 +315,9 @@ impl KademliaConfig {
 
     /// Sets whether or not records should be filtered before being stored.
     ///
-    /// See [`KademliaStoreInserts`] for the different values.
-    /// Defaults to [`KademliaStoreInserts::Unfiltered`].
-    pub fn set_record_filtering(&mut self, filtering: KademliaStoreInserts) -> &mut Self {
+    /// See [`StoreInserts`] for the different values.
+    /// Defaults to [`StoreInserts::Unfiltered`].
+    pub fn set_record_filtering(&mut self, filtering: StoreInserts) -> &mut Self {
         self.record_filtering = filtering;
         self
     }
@@ -1770,7 +1775,7 @@ where
             // requirement to send back the value in the response, although this
             // is a waste of resources.
             match self.record_filtering {
-                KademliaStoreInserts::Unfiltered => match self.store.put(record.clone()) {
+                StoreInserts::Unfiltered => match self.store.put(record.clone()) {
                     Ok(()) => {
                         debug!(
                             "Record stored: {:?}; {} bytes",
@@ -1798,7 +1803,7 @@ where
                         return;
                     }
                 },
-                KademliaStoreInserts::FilterBoth => {
+                StoreInserts::FilterBoth => {
                     self.queued_events.push_back(ToSwarm::GenerateEvent(
                         KademliaEvent::InboundRequest {
                             request: InboundRequest::PutRecord {
@@ -1840,7 +1845,7 @@ where
                 addresses: provider.multiaddrs,
             };
             match self.record_filtering {
-                KademliaStoreInserts::Unfiltered => {
+                StoreInserts::Unfiltered => {
                     if let Err(e) = self.store.add_provider(record) {
                         info!("Provider record not stored: {:?}", e);
                         return;
@@ -1852,7 +1857,7 @@ where
                         },
                     ));
                 }
-                KademliaStoreInserts::FilterBoth => {
+                StoreInserts::FilterBoth => {
                     self.queued_events.push_back(ToSwarm::GenerateEvent(
                         KademliaEvent::InboundRequest {
                             request: InboundRequest::AddProvider {
@@ -2727,10 +2732,10 @@ pub enum InboundRequest {
         num_provider_peers: usize,
     },
     /// A peer sent an add provider request.
-    /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
+    /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
+    /// See [`StoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
     AddProvider { record: Option<ProviderRecord> },
     /// Request to retrieve a record.
     GetRecord {
@@ -2738,9 +2743,9 @@ pub enum InboundRequest {
         present_locally: bool,
     },
     /// A peer sent a put record request.
-    /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
+    /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
     ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`StoreInserts`] and [`KademliaConfig::set_record_filtering`].
     PutRecord {
         source: PeerId,
         connection: ConnectionId,

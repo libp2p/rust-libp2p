@@ -502,7 +502,7 @@ fn put_record() {
         }
 
         if filter_records {
-            config.set_record_filtering(KademliaStoreInserts::FilterBoth);
+            config.set_record_filtering(StoreInserts::FilterBoth);
         }
 
         let mut swarms = {
@@ -614,7 +614,7 @@ fn put_record() {
                                 if let Some(record) = record {
                                     assert_eq!(
                                         swarm.behaviour().record_filtering,
-                                        KademliaStoreInserts::FilterBoth
+                                        StoreInserts::FilterBoth
                                     );
                                     // Accept the record
                                     swarm
@@ -625,7 +625,7 @@ fn put_record() {
                                 } else {
                                     assert_eq!(
                                         swarm.behaviour().record_filtering,
-                                        KademliaStoreInserts::Unfiltered
+                                        StoreInserts::Unfiltered
                                     );
                                 }
                             }
@@ -684,7 +684,7 @@ fn put_record() {
                     })
                     .collect::<HashSet<_>>();
 
-                if swarms[0].behaviour().record_filtering != KademliaStoreInserts::Unfiltered
+                if swarms[0].behaviour().record_filtering != StoreInserts::Unfiltered
                     && drop_records
                 {
                     assert_eq!(actual.len(), 0);
