@@ -25,13 +25,13 @@
 //! for use with `async-std` and `tokio`,
 //! respectively.
 //!
-//! A [`Transport`] is an address-rewriting [`libp2p::Transport`] wrapper around
+//! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
 //! transport, except that [`Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the `async_std::Transport` are
+//! The `async-std` feature and hence the [`async_std::Transport`] are
 //! enabled by default. Tokio users can furthermore opt-in
 //! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
 //! features. For more information about these features, please

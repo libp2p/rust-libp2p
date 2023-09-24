@@ -1,8 +1,7 @@
 ## 0.40.1 - unreleased
 
-- Rename types with `Dns` prefix (`TokioDnsConfig`, and `DnsConfig`)
-- Integrate `GenDnsConfig` into `Config`
-    See [PR 4505].
+- Remove `Dns` prefix from types like `TokioDnsConfig` and `DnsConfig` in favor of modules that describe the different variants. Users are encouraged to import the `libp2p::dns` module and refer to types as `dns::tokio::Transport` and `dns::async_std::Transport`.
+  See [PR 4505].
 
 [PR 4505]: https://github.com/libp2p/rust-libp2p/pull/4505
 
