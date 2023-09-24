@@ -62,7 +62,7 @@ impl Push<OutboundPush> {
     }
 }
 
-/// Information of a peer sent in protocol messages.
+/// Identify information of a peer sent in protocol messages.
 #[derive(Debug, Clone)]
 pub struct Info {
     /// The public key of the local peer.
@@ -79,6 +79,41 @@ pub struct Info {
     pub protocols: Vec<StreamProtocol>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+}
+
+impl Info {
+    pub fn merge(&mut self, info: PushInfo) {
+        if let Some(public_key) = info.public_key {
+            self.public_key = public_key;
+        }
+        if let Some(protocol_version) = info.protocol_version {
+            self.protocol_version = protocol_version;
+        }
+        if let Some(agent_version) = info.agent_version {
+            self.agent_version = agent_version;
+        }
+        if !info.listen_addrs.is_empty() {
+            self.listen_addrs = info.listen_addrs;
+        }
+        if !info.protocols.is_empty() {
+            self.protocols = info.protocols;
+        }
+        if let Some(observed_addr) = info.observed_addr {
+            self.observed_addr = observed_addr;
+        }
+    }
+}
+
+/// Identify push information of a peer sent in protocol messages.
+/// Note that missing fields should be ignored, as peers may choose to send partial updates containing only the fields whose values have changed.
+#[derive(Debug, Clone)]
+pub struct PushInfo {
+    pub public_key: Option<PublicKey>,
+    pub protocol_version: Option<String>,
+    pub agent_version: Option<String>,
+    pub listen_addrs: Vec<Multiaddr>,
+    pub protocols: Vec<StreamProtocol>,
+    pub observed_addr: Option<Multiaddr>,
 }
 
 impl UpgradeInfo for Identify {
@@ -109,7 +144,7 @@ where
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        recv(socket).boxed()
+        recv_identify(socket).boxed()
     }
 }
 
@@ -126,13 +161,13 @@ impl<C> InboundUpgrade<C> for Push<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = BoxFuture<'static, Result<Info, UpgradeError>>;
+    type Output = BoxFuture<'static, Result<PushInfo, UpgradeError>>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
-        future::ok(recv(socket).boxed())
+        future::ok(recv_push(socket).boxed())
     }
 }
 
@@ -183,7 +218,29 @@ where
     Ok(())
 }
 
-async fn recv<T>(socket: T) -> Result<Info, UpgradeError>
+async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let info = recv(socket).await?.try_into()?;
+
+    tracing::trace!(?info, "Received");
+
+    Ok(info)
+}
+
+async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
+where
+    T: AsyncRead + AsyncWrite + Unpin,
+{
+    let info = recv(socket).await?.try_into()?;
+
+    tracing::trace!(?info, "Received");
+
+    Ok(info)
+}
+
+async fn recv<T>(socket: T) -> Result<proto::Identify, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -198,61 +255,93 @@ where
     )
     .next()
     .await
-    .ok_or(UpgradeError::StreamClosed)??
-    .try_into()?;
-
-    tracing::trace!("Received: {:?}", info);
+    .ok_or(UpgradeError::StreamClosed)??;
 
     Ok(info)
+}
+
+fn parse_listen_addrs(listen_addrs: Vec<Vec<u8>>) -> Vec<Multiaddr> {
+    listen_addrs
+        .into_iter()
+        .filter_map(|bytes| match Multiaddr::try_from(bytes) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                tracing::debug!("Unable to parse multiaddr: {e:?}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_protocols(protocols: Vec<String>) -> Vec<StreamProtocol> {
+    protocols
+        .into_iter()
+        .filter_map(|p| match StreamProtocol::try_from_owned(p) {
+            Ok(p) => Some(p),
+            Err(e) => {
+                tracing::debug!("Received invalid protocol from peer: {e}");
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_public_key(public_key: Option<Vec<u8>>) -> Option<PublicKey> {
+    public_key.and_then(|key| match PublicKey::try_decode_protobuf(&key) {
+        Ok(k) => Some(k),
+        Err(e) => {
+            tracing::debug!("Unable to decode public key: {e:?}");
+            None
+        }
+    })
+}
+
+fn parse_observed_addr(observed_addr: Option<Vec<u8>>) -> Option<Multiaddr> {
+    observed_addr.and_then(|bytes| match Multiaddr::try_from(bytes) {
+        Ok(a) => Some(a),
+        Err(e) => {
+            tracing::debug!("Unable to parse observed multiaddr: {e:?}");
+            None
+        }
+    })
 }
 
 impl TryFrom<proto::Identify> for Info {
     type Error = UpgradeError;
 
     fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
-        fn parse_multiaddr(bytes: Vec<u8>) -> Result<Multiaddr, multiaddr::Error> {
-            Multiaddr::try_from(bytes)
-        }
-
-        let listen_addrs = {
-            let mut addrs = Vec::new();
-            for addr in msg.listenAddrs.into_iter() {
-                match parse_multiaddr(addr) {
-                    Ok(a) => addrs.push(a),
-                    Err(e) => {
-                        tracing::debug!("Unable to parse multiaddr: {e:?}");
-                    }
-                }
-            }
-            addrs
-        };
-
-        let public_key = PublicKey::try_decode_protobuf(&msg.publicKey.unwrap_or_default())?;
-
-        let observed_addr = match parse_multiaddr(msg.observedAddr.unwrap_or_default()) {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::debug!("Unable to parse multiaddr: {e:?}");
-                Multiaddr::empty()
+        let public_key = {
+            match parse_public_key(msg.publicKey) {
+                Some(key) => key,
+                // This will always produce a DecodingError if the public key is missing.
+                None => PublicKey::try_decode_protobuf(Default::default())?,
             }
         };
+
         let info = Info {
             public_key,
             protocol_version: msg.protocolVersion.unwrap_or_default(),
             agent_version: msg.agentVersion.unwrap_or_default(),
-            listen_addrs,
-            protocols: msg
-                .protocols
-                .into_iter()
-                .filter_map(|p| match StreamProtocol::try_from_owned(p) {
-                    Ok(p) => Some(p),
-                    Err(e) => {
-                        tracing::debug!("Received invalid protocol from peer: {e}");
-                        None
-                    }
-                })
-                .collect(),
-            observed_addr,
+            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            protocols: parse_protocols(msg.protocols),
+            observed_addr: parse_observed_addr(msg.observedAddr).unwrap_or(Multiaddr::empty()),
+        };
+
+        Ok(info)
+    }
+}
+
+impl TryFrom<proto::Identify> for PushInfo {
+    type Error = UpgradeError;
+
+    fn try_from(msg: proto::Identify) -> Result<Self, Self::Error> {
+        let info = PushInfo {
+            public_key: parse_public_key(msg.publicKey),
+            protocol_version: msg.protocolVersion,
+            agent_version: msg.agentVersion,
+            listen_addrs: parse_listen_addrs(msg.listenAddrs),
+            protocols: parse_protocols(msg.protocols),
+            observed_addr: parse_observed_addr(msg.observedAddr),
         };
 
         Ok(info)
@@ -302,7 +391,7 @@ mod tests {
             ),
         };
 
-        let info = Info::try_from(payload).expect("not to fail");
+        let info = PushInfo::try_from(payload).expect("not to fail");
 
         assert_eq!(info.listen_addrs, vec![valid_multiaddr])
     }

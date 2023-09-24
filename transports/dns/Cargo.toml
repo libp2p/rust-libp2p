@@ -3,7 +3,7 @@ name = "libp2p-dns"
 edition = "2021"
 rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
-version = "0.40.0"
+version = "0.40.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -35,7 +35,7 @@ tokio = ["trust-dns-resolver/tokio-runtime"]
 tokio-dns-over-rustls = ["tokio", "trust-dns-resolver/dns-over-rustls"]
 tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustls"]
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

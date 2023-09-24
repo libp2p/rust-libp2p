@@ -2543,7 +2543,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "async-std",
  "async-std-resolver",
@@ -2618,7 +2618,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
