@@ -1,4 +1,4 @@
-## 0.43.1
+## 0.43.1 - unreleased
 
 - Handle partial push messages.
   Previously, push messages with partial information were ignored.
