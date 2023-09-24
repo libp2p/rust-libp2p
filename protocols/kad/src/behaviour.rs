@@ -112,7 +112,7 @@ pub struct Behaviour<TStore> {
     connections: HashMap<ConnectionId, PeerId>,
 
     /// See [`Config::caching`].
-    caching: KademliaCaching,
+    caching: Caching,
 
     local_peer_id: PeerId,
 
@@ -200,7 +200,7 @@ pub struct Config {
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
     kbucket_inserts: BucketInserts,
-    caching: KademliaCaching,
+    caching: Caching,
 }
 
 impl Default for Config {
@@ -217,15 +217,18 @@ impl Default for Config {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: BucketInserts::OnConnected,
-            caching: KademliaCaching::Enabled { max_peers: 1 },
+            caching: Caching::Enabled { max_peers: 1 },
         }
     }
 }
 
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Caching`.")]
+pub type KademliaCaching = Caching;
+
 /// The configuration for Kademlia "write-back" caching after successful
 /// lookups via [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
-pub enum KademliaCaching {
+pub enum Caching {
     /// Caching is disabled and the peers closest to records being looked up
     /// that do not return a record are not tracked, i.e.
     /// [`GetRecordOk::FinishedWithNoAdditionalRecord`] is always empty.
@@ -408,13 +411,13 @@ impl Config {
         self
     }
 
-    /// Sets the [`KademliaCaching`] strategy to use for successful lookups.
+    /// Sets the [`Caching`] strategy to use for successful lookups.
     ///
-    /// The default is [`KademliaCaching::Enabled`] with a `max_peers` of 1.
+    /// The default is [`Caching::Enabled`] with a `max_peers` of 1.
     /// Hence, with default settings and a lookup quorum of 1, a successful lookup
     /// will result in the record being cached at the closest node to the key that
     /// did not return the record, i.e. the standard Kademlia behaviour.
-    pub fn set_caching(&mut self, c: KademliaCaching) -> &mut Self {
+    pub fn set_caching(&mut self, c: Caching) -> &mut Self {
         self.caching = c;
         self
     }
@@ -2370,7 +2373,7 @@ where
                             *step = step.next();
                         } else {
                             log::trace!("Record with key {:?} not found at {}", key, source);
-                            if let KademliaCaching::Enabled { max_peers } = self.caching {
+                            if let Caching::Enabled { max_peers } = self.caching {
                                 let source_key = kbucket::Key::from(source);
                                 let target_key = kbucket::Key::from(key.clone());
                                 let distance = source_key.distance(&target_key);
