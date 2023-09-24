@@ -23,7 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{Handler, HandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
@@ -1319,7 +1319,7 @@ where
                                 // `disconnected` might already be in the process of re-connecting.
                                 // In other words `disconnected` might have already re-connected but
                                 // is not yet confirmed to support the Kademlia protocol via
-                                // [`HandlerEvent::ProtocolConfirmed`].
+                                // [`KademliaHandlerEvent::ProtocolConfirmed`].
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
@@ -1822,7 +1822,7 @@ where
 
         // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
         // case where the record is discarded due to being expired. Given that
-        // the remote sent the local node a [`HandlerEvent::PutRecord`]
+        // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
         // request, the remote perceives the local node as one node among the k
         // closest nodes to the target. In addition returning
         // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
@@ -1924,7 +1924,7 @@ where
 
         // When a connection is established, we don't know yet whether the
         // remote supports the configured protocol name. Only once a connection
-        // handler reports [`HandlerEvent::ProtocolConfirmed`] do we
+        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
         // update the local routing table.
 
         // Peer's first connection.
@@ -2073,7 +2073,7 @@ impl<TStore> NetworkBehaviour for Behaviour<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = Handler;
+    type ConnectionHandler = KademliaHandler;
     type ToSwarm = Event;
 
     fn handle_established_inbound_connection(
@@ -2089,7 +2089,7 @@ where
         };
         self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        Ok(KademliaHandler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,
@@ -2112,7 +2112,7 @@ where
         };
         self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        Ok(KademliaHandler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,
@@ -2163,7 +2163,7 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            HandlerEvent::ProtocolConfirmed { endpoint } => {
+            KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {
                 debug_assert!(self.connected_peers.contains(&source));
                 // The remote's address can only be put into the routing table,
                 // and thus shared with other nodes, if the local node is the dialer,
@@ -2177,7 +2177,7 @@ where
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
-            HandlerEvent::ProtocolNotSupported { endpoint } => {
+            KademliaHandlerEvent::ProtocolNotSupported { endpoint } => {
                 let address = match endpoint {
                     ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
@@ -2185,7 +2185,7 @@ where
                 self.connection_updated(source, address, NodeStatus::Disconnected);
             }
 
-            HandlerEvent::FindNodeReq { key, request_id } => {
+            KademliaHandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
@@ -2205,14 +2205,14 @@ where
                 });
             }
 
-            HandlerEvent::FindNodeRes {
+            KademliaHandlerEvent::FindNodeRes {
                 closer_peers,
                 query_id,
             } => {
                 self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            HandlerEvent::GetProvidersReq { key, request_id } => {
+            KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
@@ -2235,7 +2235,7 @@ where
                 });
             }
 
-            HandlerEvent::GetProvidersRes {
+            KademliaHandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 query_id,
@@ -2272,7 +2272,7 @@ where
                 }
             }
 
-            HandlerEvent::QueryError { query_id, error } => {
+            KademliaHandlerEvent::QueryError { query_id, error } => {
                 log::debug!(
                     "Request to {:?} in query {:?} failed with {:?}",
                     source,
@@ -2286,7 +2286,7 @@ where
                 }
             }
 
-            HandlerEvent::AddProvider { key, provider } => {
+            KademliaHandlerEvent::AddProvider { key, provider } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
                     return;
@@ -2295,7 +2295,7 @@ where
                 self.provider_received(key, provider);
             }
 
-            HandlerEvent::GetRecord { key, request_id } => {
+            KademliaHandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
@@ -2330,7 +2330,7 @@ where
                 });
             }
 
-            HandlerEvent::GetRecordRes {
+            KademliaHandlerEvent::GetRecordRes {
                 record,
                 closer_peers,
                 query_id,
@@ -2385,11 +2385,11 @@ where
                 self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            HandlerEvent::PutRecord { record, request_id } => {
+            KademliaHandlerEvent::PutRecord { record, request_id } => {
                 self.record_received(source, connection, request_id, record);
             }
 
-            HandlerEvent::PutRecordRes { query_id, .. } => {
+            KademliaHandlerEvent::PutRecordRes { query_id, .. } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
