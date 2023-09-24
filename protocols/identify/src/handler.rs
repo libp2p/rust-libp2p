@@ -180,12 +180,12 @@ impl Handler {
         >,
     ) {
         match output {
-            future::Either::Left(info) => {
-                self.handle_incoming_info(&info);
+            future::Either::Left(remote_info) => {
+                self.handle_incoming_info(&remote_info);
 
                 self.events
                     .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                        info,
+                        remote_info,
                     )));
             }
             future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
@@ -343,8 +343,8 @@ impl ConnectionHandler for Handler {
         {
             self.inbound_identify_push.take();
 
-            if let Ok(remote_info) = res {
-                if let Some(info) = self.patch_incoming_push_info(remote_info) {
+            if let Ok(remote_push_info) = res {
+                if let Some(info) = self.patch_incoming_push_info(remote_push_info) {
                     self.handle_incoming_info(&info);
 
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
