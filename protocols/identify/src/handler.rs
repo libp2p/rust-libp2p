@@ -225,19 +225,6 @@ impl Handler {
         self.update_supported_protocols_for_remote(info);
     }
 
-    fn patch_incoming_push_info(&self, push_info: PushInfo) -> Option<Info> {
-        if let Some(mut info) = self.remote_info.clone() {
-            info.merge(push_info);
-            Some(info)
-        } else {
-            log::debug!(
-                "Failed to process push from {:?} because no identify info was received before",
-                self.remote_peer_id
-            );
-            None
-        }
-    }
-
     fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
         let new_remote_protocols = HashSet::from_iter(remote_info.protocols.clone());
 
@@ -344,7 +331,8 @@ impl ConnectionHandler for Handler {
             self.inbound_identify_push.take();
 
             if let Ok(remote_push_info) = res {
-                if let Some(info) = self.patch_incoming_push_info(remote_push_info) {
+                if let Some(mut info) = self.remote_info.clone() {
+                    info.merge(remote_push_info);
                     self.handle_incoming_info(&info);
 
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(

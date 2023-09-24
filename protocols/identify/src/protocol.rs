@@ -223,7 +223,7 @@ async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    let info = recv(socket).await.and_then(|message| message.try_into())?;
+    let info = recv(socket).await?.try_into()?;
 
     trace!("Received {:?}", info);
 
@@ -234,7 +234,7 @@ async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    let info = recv(socket).await.and_then(|message| message.try_into())?;
+    let info = recv(socket).await?.try_into()?;
 
     trace!("Received {:?}", info);
 
