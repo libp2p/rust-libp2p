@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a swarm to manage peers and events.
     let mut swarm = {
         // Create a Kademlia behaviour.
-        let mut cfg = kad::KademliaConfig::default();
+        let mut cfg = kad::Config::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
         let store = MemoryStore::new(local_peer_id);
         let mut behaviour = kad::Behaviour::with_config(local_peer_id, store, cfg);

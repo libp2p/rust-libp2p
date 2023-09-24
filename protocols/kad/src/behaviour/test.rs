@@ -54,7 +54,7 @@ fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
 }
 
-fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
+fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let transport = MemoryTransport::default()
@@ -82,7 +82,7 @@ fn build_nodes(num: usize) -> Vec<(Multiaddr, TestSwarm)> {
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_nodes_with_config(num: usize, cfg: Config) -> Vec<(Multiaddr, TestSwarm)> {
     (0..num)
         .map(|_| build_node_with_config(cfg.clone()))
         .collect()
@@ -95,7 +95,7 @@ fn build_connected_nodes(total: usize, step: usize) -> Vec<(Multiaddr, TestSwarm
 fn build_connected_nodes_with_config(
     total: usize,
     step: usize,
-    cfg: KademliaConfig,
+    cfg: Config,
 ) -> Vec<(Multiaddr, TestSwarm)> {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms
@@ -121,7 +121,7 @@ fn build_connected_nodes_with_config(
 
 fn build_fully_connected_nodes_with_config(
     total: usize,
-    cfg: KademliaConfig,
+    cfg: Config,
 ) -> Vec<(Multiaddr, TestSwarm)> {
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_addr_and_peer_id: Vec<_> = swarms
@@ -166,7 +166,7 @@ fn bootstrap() {
         // or smaller than K_VALUE.
         let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
-        let mut cfg = KademliaConfig::default();
+        let mut cfg = Config::default();
         if rng.gen() {
             cfg.disjoint_query_paths(true);
         }
@@ -495,7 +495,7 @@ fn put_record() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = KademliaConfig::default();
+        let mut config = Config::default();
         config.set_replication_factor(replication_factor);
         if rng.gen() {
             config.disjoint_query_paths(true);
@@ -870,7 +870,7 @@ fn add_provider() {
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
-        let mut config = KademliaConfig::default();
+        let mut config = Config::default();
         config.set_replication_factor(replication_factor);
         if rng.gen() {
             config.disjoint_query_paths(true);
@@ -1085,14 +1085,14 @@ fn exp_decr_expiration_overflow() {
     }
 
     // Right shifting a u64 by >63 results in a panic.
-    prop_no_panic(KademliaConfig::default().record_ttl.unwrap(), 64);
+    prop_no_panic(Config::default().record_ttl.unwrap(), 64);
 
     quickcheck(prop_no_panic as fn(_, _))
 }
 
 #[test]
 fn disjoint_query_does_not_finish_before_all_paths_did() {
-    let mut config = KademliaConfig::default();
+    let mut config = Config::default();
     config.disjoint_query_paths(true);
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
@@ -1244,7 +1244,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 /// the routing table with `BucketInserts::Manual`.
 #[test]
 fn manual_bucket_inserts() {
-    let mut cfg = KademliaConfig::default();
+    let mut cfg = Config::default();
     cfg.set_kbucket_inserts(BucketInserts::Manual);
     // 1 -> 2 -> [3 -> ...]
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);

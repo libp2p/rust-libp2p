@@ -111,7 +111,7 @@ pub struct Behaviour<TStore> {
 
     connections: HashMap<ConnectionId, PeerId>,
 
-    /// See [`KademliaConfig::caching`].
+    /// See [`Config::caching`].
     caching: KademliaCaching,
 
     local_peer_id: PeerId,
@@ -181,11 +181,14 @@ pub enum StoreInserts {
     FilterBoth,
 }
 
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Config`.")]
+pub type KademliaConfig = Config;
+
 /// The configuration for the `Kademlia` behaviour.
 ///
 /// The configuration is consumed by [`Kademlia::new`].
 #[derive(Debug, Clone)]
-pub struct KademliaConfig {
+pub struct Config {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
     protocol_config: KademliaProtocolConfig,
@@ -200,9 +203,9 @@ pub struct KademliaConfig {
     caching: KademliaCaching,
 }
 
-impl Default for KademliaConfig {
+impl Default for Config {
     fn default() -> Self {
-        KademliaConfig {
+        Config {
             kbucket_pending_timeout: Duration::from_secs(60),
             query_config: QueryConfig::default(),
             protocol_config: Default::default(),
@@ -234,7 +237,7 @@ pub enum KademliaCaching {
     Enabled { max_peers: u16 },
 }
 
-impl KademliaConfig {
+impl Config {
     /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
@@ -279,7 +282,7 @@ impl KademliaConfig {
     /// This only controls the level of parallelism of an iterative query, not
     /// the level of parallelism of a query to a fixed set of peers.
     ///
-    /// When used with [`KademliaConfig::disjoint_query_paths`] it equals
+    /// When used with [`Config::disjoint_query_paths`] it equals
     /// the amount of disjoint paths used.
     pub fn set_parallelism(&mut self, parallelism: NonZeroUsize) -> &mut Self {
         self.query_config.parallelism = parallelism;
@@ -432,7 +435,7 @@ where
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
-    pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
+    pub fn with_config(id: PeerId, store: TStore, config: Config) -> Self {
         let local_key = kbucket::Key::from(id);
 
         let put_record_job = config
@@ -2735,7 +2738,7 @@ pub enum InboundRequest {
     /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
-    /// See [`StoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
+    /// See [`StoreInserts`] and [`Config::set_record_filtering`] for details..
     AddProvider { record: Option<ProviderRecord> },
     /// Request to retrieve a record.
     GetRecord {
@@ -2745,7 +2748,7 @@ pub enum InboundRequest {
     /// A peer sent a put record request.
     /// If filtering [`StoreInserts::FilterBoth`] is enabled, the [`Record`] is included.
     ///
-    /// See [`StoreInserts`] and [`KademliaConfig::set_record_filtering`].
+    /// See [`StoreInserts`] and [`Config::set_record_filtering`].
     PutRecord {
         source: PeerId,
         connection: ConnectionId,
@@ -2793,7 +2796,7 @@ pub enum GetRecordOk {
         /// _to the record key_ (not the local node) that were queried but
         /// did not return the record, sorted by distance to the record key
         /// from closest to farthest. How many of these are tracked is configured
-        /// by [`KademliaConfig::set_caching`]. If the lookup used a quorum of
+        /// by [`Config::set_caching`]. If the lookup used a quorum of
         /// 1, these peers will be sent the record as a means of caching.
         /// If the lookup used a quorum > 1, you may wish to use these
         /// candidates with [`Kademlia::put_record_to`] after selecting

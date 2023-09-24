@@ -1,7 +1,7 @@
 use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_kad::store::MemoryStore;
-use libp2p_kad::{Behaviour, KademliaConfig, KademliaEvent, Mode};
+use libp2p_kad::{Behaviour, Config, KademliaEvent, Mode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt;
 
@@ -174,7 +174,7 @@ impl MyBehaviour {
             kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
-                KademliaConfig::default(),
+                Config::default(),
             ),
         }
     }

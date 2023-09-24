@@ -31,7 +31,7 @@ impl Behaviour {
         enable_autonat: bool,
     ) -> Self {
         let kademlia = if enable_kademlia {
-            let mut kademlia_config = kad::KademliaConfig::default();
+            let mut kademlia_config = kad::Config::default();
             // Instantly remove records and provider records.
             //
             // TODO: Replace hack with option to disable both.
