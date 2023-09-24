@@ -420,7 +420,7 @@ pub enum Error<TErr> {
 }
 
 #[deprecated(note = "Use `Error` instead.")]
-pub type DnsError<TErr> = Error<TErr>;
+pub type DnsErr<TErr> = Error<TErr>;
 
 impl<TErr> fmt::Display for Error<TErr>
 where
