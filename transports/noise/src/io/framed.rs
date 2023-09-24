@@ -120,7 +120,7 @@ pub(crate) struct Codec<S> {
     write_buffer: Vec<u8>,
     decrypt_buffer: BytesMut,
     session: S,
-} 
+}
 
 impl<S> asynchronous_codec::Encoder for Codec<S>
 where
