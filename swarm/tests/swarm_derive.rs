@@ -115,7 +115,7 @@ fn three_fields() {
                 let _: identify::Event = event;
             }
             FooEvent::Kad(event) => {
-                let _: libp2p_kad::KademliaEvent = event;
+                let _: libp2p_kad::Event = event;
             }
         }
     }
@@ -381,12 +381,12 @@ fn custom_event_with_either() {
 
     #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
-        Kad(libp2p_kad::KademliaEvent),
+        Kad(libp2p_kad::Event),
         PingOrIdentify(Either<ping::Event, identify::Event>),
     }
 
-    impl From<libp2p_kad::KademliaEvent> for BehaviourOutEvent {
-        fn from(event: libp2p_kad::KademliaEvent) -> Self {
+    impl From<libp2p_kad::Event> for BehaviourOutEvent {
+        fn from(event: libp2p_kad::Event) -> Self {
             BehaviourOutEvent::Kad(event)
         }
     }

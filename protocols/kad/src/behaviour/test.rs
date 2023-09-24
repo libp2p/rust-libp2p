@@ -190,7 +190,7 @@ fn bootstrap() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::Bootstrap(Ok(ok)),
                                 ..
@@ -280,7 +280,7 @@ fn query_iter() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::GetClosestPeers(Ok(ok)),
                                 ..
@@ -338,12 +338,10 @@ fn unresponsive_not_returned_direct() {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            result: QueryResult::GetClosestPeers(Ok(ok)),
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetClosestPeers(Ok(ok)),
+                        ..
+                    }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         assert_eq!(ok.peers.len(), 0);
                         return Poll::Ready(());
@@ -398,12 +396,10 @@ fn unresponsive_not_returned_indirect() {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            result: QueryResult::GetClosestPeers(Ok(ok)),
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetClosestPeers(Ok(ok)),
+                        ..
+                    }))) => {
                         assert_eq!(&ok.key[..], search_target.to_bytes().as_slice());
                         assert_eq!(ok.peers.len(), 1);
                         assert_eq!(ok.peers[0], first_peer_id);
@@ -453,13 +449,11 @@ fn get_record_not_found() {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            id,
-                            result: QueryResult::GetRecord(Err(e)),
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::GetRecord(Err(e)),
+                        ..
+                    }))) => {
                         assert_eq!(id, qid);
                         if let GetRecordError::NotFound { key, closest_peers } = e {
                             assert_eq!(key, target_key);
@@ -574,7 +568,7 @@ fn put_record() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::PutRecord(res),
                                 stats,
@@ -582,7 +576,7 @@ fn put_record() {
                             },
                         )))
                         | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::RepublishRecord(res),
                                 stats,
@@ -605,11 +599,9 @@ fn put_record() {
                                 }
                             }
                         }
-                        Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::InboundRequest {
-                                request: InboundRequest::PutRecord { record, .. },
-                            },
-                        ))) => {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(Event::InboundRequest {
+                            request: InboundRequest::PutRecord { record, .. },
+                        }))) => {
                             if !drop_records {
                                 if let Some(record) = record {
                                     assert_eq!(
@@ -765,14 +757,12 @@ fn get_record() {
         for swarm in &mut swarms {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            id,
-                            result: QueryResult::GetRecord(Ok(r)),
-                            step: ProgressStep { count, last },
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::GetRecord(Ok(r)),
+                        step: ProgressStep { count, last },
+                        ..
+                    }))) => {
                         assert_eq!(id, qid);
                         if usize::from(count) == 1 {
                             assert!(!last);
@@ -829,14 +819,12 @@ fn get_record_many() {
                     swarm.behaviour_mut().query_mut(&qid).unwrap().finish();
                 }
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            id,
-                            result: QueryResult::GetRecord(Ok(r)),
-                            step: ProgressStep { count: _, last },
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::GetRecord(Ok(r)),
+                        step: ProgressStep { count: _, last },
+                        ..
+                    }))) => {
                         assert_eq!(id, qid);
                         if let GetRecordOk::FoundRecord(r) = r {
                             assert_eq!(r.record, record);
@@ -924,14 +912,14 @@ fn add_provider() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::StartProviding(res),
                                 ..
                             },
                         )))
                         | Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::RepublishProvider(res),
                                 ..
@@ -1062,7 +1050,7 @@ fn exceed_jobs_max_queries() {
             loop {
                 if let Poll::Ready(Some(e)) = swarm.poll_next_unpin(ctx) {
                     match e {
-                        SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
+                        SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
                             result: QueryResult::GetClosestPeers(Ok(r)),
                             ..
                         }) => break assert!(r.peers.is_empty()),
@@ -1140,13 +1128,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            result: QueryResult::GetRecord(result),
-                            step,
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetRecord(result),
+                        step,
+                        ..
+                    }))) => {
                         if i != 0 {
                             panic!("Expected `QueryResult` from Alice.")
                         }
@@ -1197,13 +1183,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(
-                        KademliaEvent::OutboundQueryProgressed {
-                            result: QueryResult::GetRecord(result),
-                            step,
-                            ..
-                        },
-                    ))) => {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
+                        result: QueryResult::GetRecord(result),
+                        step,
+                        ..
+                    }))) => {
                         if i != 0 {
                             panic!("Expected `QueryResult` from Alice.")
                         }
@@ -1271,7 +1255,7 @@ fn manual_bucket_inserts() {
         for (_, swarm) in swarms.iter_mut() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(KademliaEvent::RoutablePeer {
+                    Poll::Ready(Some(SwarmEvent::Behaviour(Event::RoutablePeer {
                         peer,
                         address,
                     }))) => {
@@ -1389,7 +1373,7 @@ fn get_providers_single() {
 
         block_on(async {
             match single_swarm.next().await.unwrap() {
-                SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
+                SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
                     result: QueryResult::StartProviding(Ok(_)),
                     ..
                 }) => {}
@@ -1403,7 +1387,7 @@ fn get_providers_single() {
         block_on(async {
             loop {
                 match single_swarm.next().await.unwrap() {
-                    SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
+                    SwarmEvent::Behaviour(Event::OutboundQueryProgressed {
                         id,
                         result: QueryResult::GetProviders(Ok(ok)),
                         step: index,
@@ -1469,7 +1453,7 @@ fn get_providers_limit<const N: usize>() {
                 loop {
                     match swarm.poll_next_unpin(ctx) {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
-                            KademliaEvent::OutboundQueryProgressed {
+                            Event::OutboundQueryProgressed {
                                 id,
                                 result: QueryResult::GetProviders(Ok(ok)),
                                 step: index,

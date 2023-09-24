@@ -217,7 +217,7 @@ impl EventLoop {
     ) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                kad::KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     id,
                     result: kad::QueryResult::StartProviding(_),
                     ..
@@ -230,7 +230,7 @@ impl EventLoop {
                 let _ = sender.send(());
             }
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                kad::KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     id,
                     result:
                         kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders {
@@ -253,7 +253,7 @@ impl EventLoop {
                 }
             }
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                kad::KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     result:
                         kad::QueryResult::GetProviders(Ok(
                             kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
@@ -415,7 +415,7 @@ struct ComposedBehaviour {
 #[derive(Debug)]
 enum ComposedEvent {
     RequestResponse(request_response::Event<FileRequest, FileResponse>),
-    Kademlia(kad::KademliaEvent),
+    Kademlia(kad::Event),
 }
 
 impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
@@ -424,8 +424,8 @@ impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent 
     }
 }
 
-impl From<kad::KademliaEvent> for ComposedEvent {
-    fn from(event: kad::KademliaEvent) -> Self {
+impl From<kad::Event> for ComposedEvent {
+    fn from(event: kad::Event) -> Self {
         ComposedEvent::Kademlia(event)
     }
 }

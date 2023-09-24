@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(kad::KademliaEvent::OutboundQueryProgressed {
+        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
             result: kad::QueryResult::GetClosestPeers(result),
             ..
         }) = event

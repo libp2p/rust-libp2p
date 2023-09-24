@@ -57,12 +57,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
-        Kademlia(kad::KademliaEvent),
+        Kademlia(kad::Event),
         Mdns(mdns::Event),
     }
 
-    impl From<kad::KademliaEvent> for MyBehaviourEvent {
-        fn from(event: kad::KademliaEvent) -> Self {
+    impl From<kad::Event> for MyBehaviourEvent {
+        fn from(event: kad::Event) -> Self {
             MyBehaviourEvent::Kademlia(event)
         }
     }
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
             }
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::KademliaEvent::OutboundQueryProgressed { result, ..})) => {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
                 match result {
                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { key, providers, .. })) => {
                         for peer in providers {
