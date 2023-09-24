@@ -73,7 +73,7 @@ pub use behaviour::{
     QueryResult, QueryStats, RoutingUpdate,
 };
 pub use behaviour::{
-    Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
+    Behaviour, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
     KademliaStoreInserts, ProgressStep, Quorum,
 };
 pub use kbucket::{Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey};

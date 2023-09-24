@@ -1,7 +1,7 @@
 use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_kad::store::MemoryStore;
-use libp2p_kad::{Kademlia, KademliaConfig, KademliaEvent, Mode};
+use libp2p_kad::{Behaviour, KademliaConfig, KademliaEvent, Mode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt;
 
@@ -159,7 +159,7 @@ async fn set_client_to_server_mode() {
 #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct MyBehaviour {
     identify: identify::Behaviour,
-    kad: Kademlia<MemoryStore>,
+    kad: Behaviour<MemoryStore>,
 }
 
 impl MyBehaviour {
@@ -171,7 +171,7 @@ impl MyBehaviour {
                 "/test/1.0.0".to_owned(),
                 k.public(),
             )),
-            kad: Kademlia::with_config(
+            kad: Behaviour::with_config(
                 local_peer_id,
                 MemoryStore::new(local_peer_id),
                 KademliaConfig::default(),

@@ -59,9 +59,12 @@ use thiserror::Error;
 
 pub use crate::query::QueryStats;
 
-/// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Behaviour`.")]
+pub type Kademlia<TStore> = Behaviour<TStore>;
+
+/// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
-pub struct Kademlia<TStore> {
+pub struct Behaviour<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
@@ -404,7 +407,7 @@ impl KademliaConfig {
     }
 }
 
-impl<TStore> Kademlia<TStore>
+impl<TStore> Behaviour<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
@@ -438,7 +441,7 @@ where
             .provider_publication_interval
             .map(AddProviderJob::new);
 
-        Kademlia {
+        Behaviour {
             store,
             caching: config.caching,
             kbuckets: KBucketsTable::new(local_key, config.kbucket_pending_timeout),
@@ -2055,7 +2058,7 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
     Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
 }
 
-impl<TStore> NetworkBehaviour for Kademlia<TStore>
+impl<TStore> NetworkBehaviour for Behaviour<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {

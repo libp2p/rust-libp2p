@@ -48,7 +48,7 @@ use std::{
     u64,
 };
 
-type TestSwarm = Swarm<Kademlia<MemoryStore>>;
+type TestSwarm = Swarm<Behaviour<MemoryStore>>;
 
 fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
@@ -65,7 +65,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
 
     let local_id = local_public_key.to_peer_id();
     let store = MemoryStore::new(local_id);
-    let behaviour = Kademlia::with_config(local_id, store, cfg);
+    let behaviour = Behaviour::with_config(local_id, store, cfg);
 
     let mut swarm = SwarmBuilder::without_executor(transport, behaviour, local_id).build();
 
@@ -1303,7 +1303,7 @@ fn network_behaviour_on_address_change() {
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 
-    let mut kademlia = Kademlia::new(local_peer_id, MemoryStore::new(local_peer_id));
+    let mut kademlia = Behaviour::new(local_peer_id, MemoryStore::new(local_peer_id));
 
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),

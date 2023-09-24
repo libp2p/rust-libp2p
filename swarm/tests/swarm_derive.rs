@@ -98,7 +98,7 @@ fn three_fields() {
     struct Foo {
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
     }
 
     #[allow(
@@ -327,7 +327,7 @@ fn with_either() {
     #[derive(NetworkBehaviour)]
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Foo {
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
         ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
@@ -351,7 +351,7 @@ fn with_generics() {
     fn foo() {
         require_net_behaviour::<
             Foo<
-                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
                 libp2p_ping::Behaviour,
             >,
         >();
@@ -370,7 +370,7 @@ fn with_generics_mixed() {
 
     #[allow(dead_code)]
     fn foo() {
-        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        require_net_behaviour::<Foo<libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>>>(
         );
     }
 }
@@ -404,7 +404,7 @@ fn custom_event_with_either() {
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Foo {
-        kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+        kad: libp2p_kad::Behaviour<libp2p_kad::record::store::MemoryStore>,
         ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
