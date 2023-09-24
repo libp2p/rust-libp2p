@@ -215,9 +215,14 @@ impl InboundSubstreamState {
     }
 }
 
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::HandlerEvent`."
+)]
+pub type KademliaHandlerEvent = HandlerEvent;
+
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
-pub enum KademliaHandlerEvent {
+pub enum HandlerEvent {
     /// The configured protocol name has been confirmed by the peer through
     /// a successfully negotiated substream or by learning the supported protocols of the remote.
     ProtocolConfirmed { endpoint: ConnectedPoint },
@@ -617,7 +622,7 @@ impl Handler {
 
 impl ConnectionHandler for Handler {
     type FromBehaviour = KademliaHandlerIn;
-    type ToBehaviour = KademliaHandlerEvent;
+    type ToBehaviour = HandlerEvent;
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
@@ -739,7 +744,7 @@ impl ConnectionHandler for Handler {
         if let ProtocolStatus::Confirmed = self.protocol_status {
             self.protocol_status = ProtocolStatus::Reported;
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                KademliaHandlerEvent::ProtocolConfirmed {
+                HandlerEvent::ProtocolConfirmed {
                     endpoint: self.endpoint.clone(),
                 },
             ));
@@ -852,7 +857,7 @@ impl Handler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), HandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -869,7 +874,7 @@ impl futures::Stream for OutboundSubstreamState {
                                 *this = OutboundSubstreamState::Done;
                                 let event = query_id.map(|query_id| {
                                     ConnectionHandlerEvent::NotifyBehaviour(
-                                        KademliaHandlerEvent::QueryError {
+                                        HandlerEvent::QueryError {
                                             error: KademliaHandlerQueryErr::Io(error),
                                             query_id,
                                         },
@@ -886,12 +891,10 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(
-                                    KademliaHandlerEvent::QueryError {
-                                        error: KademliaHandlerQueryErr::Io(error),
-                                        query_id,
-                                    },
-                                )
+                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+                                    error: KademliaHandlerQueryErr::Io(error),
+                                    query_id,
+                                })
                             });
 
                             return Poll::Ready(event);
@@ -914,12 +917,10 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(Err(error)) => {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
-                                ConnectionHandlerEvent::NotifyBehaviour(
-                                    KademliaHandlerEvent::QueryError {
-                                        error: KademliaHandlerQueryErr::Io(error),
-                                        query_id,
-                                    },
-                                )
+                                ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
+                                    error: KademliaHandlerQueryErr::Io(error),
+                                    query_id,
+                                })
                             });
 
                             return Poll::Ready(event);
@@ -942,7 +943,7 @@ impl futures::Stream for OutboundSubstreamState {
                         }
                         Poll::Ready(Some(Err(error))) => {
                             *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
+                            let event = HandlerEvent::QueryError {
                                 error: KademliaHandlerQueryErr::Io(error),
                                 query_id,
                             };
@@ -953,7 +954,7 @@ impl futures::Stream for OutboundSubstreamState {
                         }
                         Poll::Ready(None) => {
                             *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
+                            let event = HandlerEvent::QueryError {
                                 error: KademliaHandlerQueryErr::Io(
                                     io::ErrorKind::UnexpectedEof.into(),
                                 ),
@@ -968,7 +969,7 @@ impl futures::Stream for OutboundSubstreamState {
                 }
                 OutboundSubstreamState::ReportError(error, query_id) => {
                     *this = OutboundSubstreamState::Done;
-                    let event = KademliaHandlerEvent::QueryError { error, query_id };
+                    let event = HandlerEvent::QueryError { error, query_id };
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(event)));
                 }
@@ -990,7 +991,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), HandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -1016,7 +1017,7 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::FindNodeReq {
+                            HandlerEvent::FindNodeReq {
                                 key,
                                 request_id: KademliaRequestId {
                                     connec_unique_id: connection_id,
@@ -1028,7 +1029,7 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::GetProvidersReq {
+                            HandlerEvent::GetProvidersReq {
                                 key,
                                 request_id: KademliaRequestId {
                                     connec_unique_id: connection_id,
@@ -1043,14 +1044,14 @@ impl futures::Stream for InboundSubstreamState {
                             substream,
                         };
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::AddProvider { key, provider },
+                            HandlerEvent::AddProvider { key, provider },
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::GetRecord {
+                            HandlerEvent::GetRecord {
                                 key,
                                 request_id: KademliaRequestId {
                                     connec_unique_id: connection_id,
@@ -1062,7 +1063,7 @@ impl futures::Stream for InboundSubstreamState {
                         *this =
                             InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
-                            KademliaHandlerEvent::PutRecord {
+                            HandlerEvent::PutRecord {
                                 record,
                                 request_id: KademliaRequestId {
                                     connec_unique_id: connection_id,
@@ -1141,24 +1142,24 @@ impl futures::Stream for InboundSubstreamState {
 }
 
 /// Process a Kademlia message that's supposed to be a response to one of our requests.
-fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHandlerEvent {
+fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEvent {
     // TODO: must check that the response corresponds to the request
     match event {
         KadResponseMsg::Pong => {
             // We never send out pings.
-            KademliaHandlerEvent::QueryError {
+            HandlerEvent::QueryError {
                 error: KademliaHandlerQueryErr::UnexpectedMessage,
                 query_id,
             }
         }
-        KadResponseMsg::FindNode { closer_peers } => KademliaHandlerEvent::FindNodeRes {
+        KadResponseMsg::FindNode { closer_peers } => HandlerEvent::FindNodeRes {
             closer_peers,
             query_id,
         },
         KadResponseMsg::GetProviders {
             closer_peers,
             provider_peers,
-        } => KademliaHandlerEvent::GetProvidersRes {
+        } => HandlerEvent::GetProvidersRes {
             closer_peers,
             provider_peers,
             query_id,
@@ -1166,12 +1167,12 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> KademliaHan
         KadResponseMsg::GetValue {
             record,
             closer_peers,
-        } => KademliaHandlerEvent::GetRecordRes {
+        } => HandlerEvent::GetRecordRes {
             record,
             closer_peers,
             query_id,
         },
-        KadResponseMsg::PutValue { key, value, .. } => KademliaHandlerEvent::PutRecordRes {
+        KadResponseMsg::PutValue { key, value, .. } => HandlerEvent::PutRecordRes {
             key,
             value,
             query_id,

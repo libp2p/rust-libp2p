@@ -23,7 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{Handler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::handler::{Handler, HandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
@@ -1319,7 +1319,7 @@ where
                                 // `disconnected` might already be in the process of re-connecting.
                                 // In other words `disconnected` might have already re-connected but
                                 // is not yet confirmed to support the Kademlia protocol via
-                                // [`KademliaHandlerEvent::ProtocolConfirmed`].
+                                // [`HandlerEvent::ProtocolConfirmed`].
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
@@ -1822,7 +1822,7 @@ where
 
         // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
         // case where the record is discarded due to being expired. Given that
-        // the remote sent the local node a [`KademliaHandlerEvent::PutRecord`]
+        // the remote sent the local node a [`HandlerEvent::PutRecord`]
         // request, the remote perceives the local node as one node among the k
         // closest nodes to the target. In addition returning
         // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
@@ -1924,7 +1924,7 @@ where
 
         // When a connection is established, we don't know yet whether the
         // remote supports the configured protocol name. Only once a connection
-        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
+        // handler reports [`HandlerEvent::ProtocolConfirmed`] do we
         // update the local routing table.
 
         // Peer's first connection.
@@ -2163,7 +2163,7 @@ where
         event: THandlerOutEvent<Self>,
     ) {
         match event {
-            KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {
+            HandlerEvent::ProtocolConfirmed { endpoint } => {
                 debug_assert!(self.connected_peers.contains(&source));
                 // The remote's address can only be put into the routing table,
                 // and thus shared with other nodes, if the local node is the dialer,
@@ -2177,7 +2177,7 @@ where
                 self.connection_updated(source, address, NodeStatus::Connected);
             }
 
-            KademliaHandlerEvent::ProtocolNotSupported { endpoint } => {
+            HandlerEvent::ProtocolNotSupported { endpoint } => {
                 let address = match endpoint {
                     ConnectedPoint::Dialer { address, .. } => Some(address),
                     ConnectedPoint::Listener { .. } => None,
@@ -2185,7 +2185,7 @@ where
                 self.connection_updated(source, address, NodeStatus::Disconnected);
             }
 
-            KademliaHandlerEvent::FindNodeReq { key, request_id } => {
+            HandlerEvent::FindNodeReq { key, request_id } => {
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
                 self.queued_events
@@ -2205,14 +2205,14 @@ where
                 });
             }
 
-            KademliaHandlerEvent::FindNodeRes {
+            HandlerEvent::FindNodeRes {
                 closer_peers,
                 query_id,
             } => {
                 self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::GetProvidersReq { key, request_id } => {
+            HandlerEvent::GetProvidersReq { key, request_id } => {
                 let provider_peers = self.provider_peers(&key, &source);
                 let closer_peers = self.find_closest(&kbucket::Key::new(key), &source);
 
@@ -2235,7 +2235,7 @@ where
                 });
             }
 
-            KademliaHandlerEvent::GetProvidersRes {
+            HandlerEvent::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 query_id,
@@ -2272,7 +2272,7 @@ where
                 }
             }
 
-            KademliaHandlerEvent::QueryError { query_id, error } => {
+            HandlerEvent::QueryError { query_id, error } => {
                 log::debug!(
                     "Request to {:?} in query {:?} failed with {:?}",
                     source,
@@ -2286,7 +2286,7 @@ where
                 }
             }
 
-            KademliaHandlerEvent::AddProvider { key, provider } => {
+            HandlerEvent::AddProvider { key, provider } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
                     return;
@@ -2295,7 +2295,7 @@ where
                 self.provider_received(key, provider);
             }
 
-            KademliaHandlerEvent::GetRecord { key, request_id } => {
+            HandlerEvent::GetRecord { key, request_id } => {
                 // Lookup the record locally.
                 let record = match self.store.get(&key) {
                     Some(record) => {
@@ -2330,7 +2330,7 @@ where
                 });
             }
 
-            KademliaHandlerEvent::GetRecordRes {
+            HandlerEvent::GetRecordRes {
                 record,
                 closer_peers,
                 query_id,
@@ -2385,11 +2385,11 @@ where
                 self.discovered(&query_id, &source, closer_peers.iter());
             }
 
-            KademliaHandlerEvent::PutRecord { record, request_id } => {
+            HandlerEvent::PutRecord { record, request_id } => {
                 self.record_received(source, connection, request_id, record);
             }
 
-            KademliaHandlerEvent::PutRecordRes { query_id, .. } => {
+            HandlerEvent::PutRecordRes { query_id, .. } => {
                 if let Some(query) = self.queries.get_mut(&query_id) {
                     query.on_success(&source, vec![]);
                     if let QueryInfo::PutRecord {
