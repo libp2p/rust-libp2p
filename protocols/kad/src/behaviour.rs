@@ -143,10 +143,10 @@ pub enum BucketInserts {
     /// disconnected peer is evicted from the bucket.
     OnConnected,
     /// New peers and addresses are only added to the routing table via
-    /// explicit calls to [`Kademlia::add_address`].
+    /// explicit calls to [`Behaviour::add_address`].
     ///
     /// > **Note**: Even though peers can only get into the
-    /// > routing table as a result of [`Kademlia::add_address`],
+    /// > routing table as a result of [`Behaviour::add_address`],
     /// > routing table entries are still updated as peers
     /// > connect and disconnect (i.e. the order of the entries
     /// > as well as the network addresses).
@@ -177,7 +177,7 @@ pub enum StoreInserts {
     /// When deemed valid, a (provider) record needs to be explicitly stored in
     /// the [`RecordStore`] via [`RecordStore::put`] or [`RecordStore::add_provider`],
     /// whichever is applicable. A mutable reference to the [`RecordStore`] can
-    /// be retrieved via [`Kademlia::store_mut`].
+    /// be retrieved via [`Behaviour::store_mut`].
     FilterBoth,
 }
 
@@ -186,7 +186,7 @@ pub type KademliaConfig = Config;
 
 /// The configuration for the `Kademlia` behaviour.
 ///
-/// The configuration is consumed by [`Kademlia::new`].
+/// The configuration is consumed by [`Behaviour::new`].
 #[derive(Debug, Clone)]
 pub struct Config {
     kbucket_pending_timeout: Duration,
@@ -226,7 +226,7 @@ impl Default for Config {
 pub type KademliaCaching = Caching;
 
 /// The configuration for Kademlia "write-back" caching after successful
-/// lookups via [`Kademlia::get_record`].
+/// lookups via [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
 pub enum Caching {
     /// Caching is disabled and the peers closest to records being looked up
@@ -236,7 +236,7 @@ pub enum Caching {
     /// Up to `max_peers` peers not returning a record that are closest to the key
     /// being looked up are tracked and returned in [`GetRecordOk::FinishedWithNoAdditionalRecord`].
     /// The write-back operation must be performed explicitly, if
-    /// desired and after choosing a record from the results, via [`Kademlia::put_record_to`].
+    /// desired and after choosing a record from the results, via [`Behaviour::put_record_to`].
     Enabled { max_peers: u16 },
 }
 
@@ -775,7 +775,7 @@ where
     /// The record is always stored locally with the given expiration. If the record's
     /// expiration is `None`, the common case, it does not expire in local storage
     /// but is still replicated with the configured record TTL. To remove the record
-    /// locally and stop it from being re-published in the DHT, see [`Kademlia::remove_record`].
+    /// locally and stop it from being re-published in the DHT, see [`Behaviour::remove_record`].
     ///
     /// After the initial publication of the record, it is subject to (re-)replication
     /// and (re-)publication as per the configured intervals. Periodic (re-)publication
@@ -892,7 +892,7 @@ where
     /// Returns `Err` if bootstrapping is impossible due an empty routing table.
     ///
     /// > **Note**: Bootstrapping requires at least one node of the DHT to be known.
-    /// > See [`Kademlia::add_address`].
+    /// > See [`Behaviour::add_address`].
     pub fn bootstrap(&mut self) -> Result<QueryId, NoKnownPeers> {
         let local_key = self.kbuckets.local_key().clone();
         let info = QueryInfo::Bootstrap {
@@ -921,10 +921,10 @@ where
     /// The publication of the provider records is periodically repeated as per the
     /// configured interval, to renew the expiry and account for changes to the DHT
     /// topology. A provider record may be removed from local storage and
-    /// thus no longer re-published by calling [`Kademlia::stop_providing`].
+    /// thus no longer re-published by calling [`Behaviour::stop_providing`].
     ///
     /// In contrast to the standard Kademlia push-based model for content distribution
-    /// implemented by [`Kademlia::put_record`], the provider API implements a
+    /// implemented by [`Behaviour::put_record`], the provider API implements a
     /// pull-based model that may be used in addition or as an alternative.
     /// The means by which the actual value is obtained from a provider is out of scope
     /// of the libp2p Kademlia provider API.
@@ -1894,7 +1894,7 @@ where
                 // and is unreachable in the context of another peer pending insertion
                 // into the same bucket. This is handled transparently by the
                 // `KBucketsTable` and takes effect through `KBucketsTable::take_applied_pending`
-                // within `Kademlia::poll`.
+                // within `Behaviour::poll`.
                 debug!(
                     "Last remaining address '{}' of peer '{}' is unreachable.",
                     address, peer_id,
@@ -2660,7 +2660,7 @@ pub enum Event {
     /// A peer has connected for whom no listen address is known.
     ///
     /// If the peer is to be added to the routing table, a known
-    /// listen address for the peer must be provided via [`Kademlia::add_address`].
+    /// listen address for the peer must be provided via [`Behaviour::add_address`].
     UnroutablePeer { peer: PeerId },
 
     /// A connection to a peer has been established for whom a listen address
@@ -2669,10 +2669,10 @@ pub enum Event {
     /// the corresponding bucket is full.
     ///
     /// If the peer is to be included in the routing table, it must
-    /// must be explicitly added via [`Kademlia::add_address`], possibly after
+    /// must be explicitly added via [`Behaviour::add_address`], possibly after
     /// removing another peer.
     ///
-    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     RoutablePeer { peer: PeerId, address: Multiaddr },
 
@@ -2682,10 +2682,10 @@ pub enum Event {
     /// may not make it into the routing table.
     ///
     /// If the peer is to be unconditionally included in the routing table,
-    /// it should be explicitly added via [`Kademlia::add_address`] after
+    /// it should be explicitly added via [`Behaviour::add_address`] after
     /// removing another peer.
     ///
-    /// See [`Kademlia::kbucket`] for insight into the contents of
+    /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
 }
@@ -2757,35 +2757,35 @@ pub enum InboundRequest {
 /// The results of Kademlia queries.
 #[derive(Debug, Clone)]
 pub enum QueryResult {
-    /// The result of [`Kademlia::bootstrap`].
+    /// The result of [`Behaviour::bootstrap`].
     Bootstrap(BootstrapResult),
 
-    /// The result of [`Kademlia::get_closest_peers`].
+    /// The result of [`Behaviour::get_closest_peers`].
     GetClosestPeers(GetClosestPeersResult),
 
-    /// The result of [`Kademlia::get_providers`].
+    /// The result of [`Behaviour::get_providers`].
     GetProviders(GetProvidersResult),
 
-    /// The result of [`Kademlia::start_providing`].
+    /// The result of [`Behaviour::start_providing`].
     StartProviding(AddProviderResult),
 
     /// The result of a (automatic) republishing of a provider record.
     RepublishProvider(AddProviderResult),
 
-    /// The result of [`Kademlia::get_record`].
+    /// The result of [`Behaviour::get_record`].
     GetRecord(GetRecordResult),
 
-    /// The result of [`Kademlia::put_record`].
+    /// The result of [`Behaviour::put_record`].
     PutRecord(PutRecordResult),
 
     /// The result of a (automatic) republishing of a (value-)record.
     RepublishRecord(PutRecordResult),
 }
 
-/// The result of [`Kademlia::get_record`].
+/// The result of [`Behaviour::get_record`].
 pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
-/// The successful result of [`Kademlia::get_record`].
+/// The successful result of [`Behaviour::get_record`].
 #[derive(Debug, Clone)]
 pub enum GetRecordOk {
     FoundRecord(PeerRecord),
@@ -2797,13 +2797,13 @@ pub enum GetRecordOk {
         /// by [`Config::set_caching`]. If the lookup used a quorum of
         /// 1, these peers will be sent the record as a means of caching.
         /// If the lookup used a quorum > 1, you may wish to use these
-        /// candidates with [`Kademlia::put_record_to`] after selecting
+        /// candidates with [`Behaviour::put_record_to`] after selecting
         /// one of the returned records.
         cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
     },
 }
 
-/// The error result of [`Kademlia::get_record`].
+/// The error result of [`Behaviour::get_record`].
 #[derive(Debug, Clone, Error)]
 pub enum GetRecordError {
     #[error("the record was not found")]
@@ -2842,16 +2842,16 @@ impl GetRecordError {
     }
 }
 
-/// The result of [`Kademlia::put_record`].
+/// The result of [`Behaviour::put_record`].
 pub type PutRecordResult = Result<PutRecordOk, PutRecordError>;
 
-/// The successful result of [`Kademlia::put_record`].
+/// The successful result of [`Behaviour::put_record`].
 #[derive(Debug, Clone)]
 pub struct PutRecordOk {
     pub key: record_priv::Key,
 }
 
-/// The error result of [`Kademlia::put_record`].
+/// The error result of [`Behaviour::put_record`].
 #[derive(Debug, Clone, Error)]
 pub enum PutRecordError {
     #[error("the quorum failed; needed {quorum} peers")]
@@ -2889,17 +2889,17 @@ impl PutRecordError {
     }
 }
 
-/// The result of [`Kademlia::bootstrap`].
+/// The result of [`Behaviour::bootstrap`].
 pub type BootstrapResult = Result<BootstrapOk, BootstrapError>;
 
-/// The successful result of [`Kademlia::bootstrap`].
+/// The successful result of [`Behaviour::bootstrap`].
 #[derive(Debug, Clone)]
 pub struct BootstrapOk {
     pub peer: PeerId,
     pub num_remaining: u32,
 }
 
-/// The error result of [`Kademlia::bootstrap`].
+/// The error result of [`Behaviour::bootstrap`].
 #[derive(Debug, Clone, Error)]
 pub enum BootstrapError {
     #[error("the request timed out")]
@@ -2909,17 +2909,17 @@ pub enum BootstrapError {
     },
 }
 
-/// The result of [`Kademlia::get_closest_peers`].
+/// The result of [`Behaviour::get_closest_peers`].
 pub type GetClosestPeersResult = Result<GetClosestPeersOk, GetClosestPeersError>;
 
-/// The successful result of [`Kademlia::get_closest_peers`].
+/// The successful result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone)]
 pub struct GetClosestPeersOk {
     pub key: Vec<u8>,
     pub peers: Vec<PeerId>,
 }
 
-/// The error result of [`Kademlia::get_closest_peers`].
+/// The error result of [`Behaviour::get_closest_peers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetClosestPeersError {
     #[error("the request timed out")]
@@ -2943,10 +2943,10 @@ impl GetClosestPeersError {
     }
 }
 
-/// The result of [`Kademlia::get_providers`].
+/// The result of [`Behaviour::get_providers`].
 pub type GetProvidersResult = Result<GetProvidersOk, GetProvidersError>;
 
-/// The successful result of [`Kademlia::get_providers`].
+/// The successful result of [`Behaviour::get_providers`].
 #[derive(Debug, Clone)]
 pub enum GetProvidersOk {
     FoundProviders {
@@ -2959,7 +2959,7 @@ pub enum GetProvidersOk {
     },
 }
 
-/// The error result of [`Kademlia::get_providers`].
+/// The error result of [`Behaviour::get_providers`].
 #[derive(Debug, Clone, Error)]
 pub enum GetProvidersError {
     #[error("the request timed out")]
@@ -3059,33 +3059,33 @@ impl QueryInner {
 /// The context of a [`QueryInfo::AddProvider`] query.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AddProviderContext {
-    /// The context is a [`Kademlia::start_providing`] operation.
+    /// The context is a [`Behaviour::start_providing`] operation.
     Publish,
     /// The context is periodic republishing of provider announcements
-    /// initiated earlier via [`Kademlia::start_providing`].
+    /// initiated earlier via [`Behaviour::start_providing`].
     Republish,
 }
 
 /// The context of a [`QueryInfo::PutRecord`] query.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PutRecordContext {
-    /// The context is a [`Kademlia::put_record`] operation.
+    /// The context is a [`Behaviour::put_record`] operation.
     Publish,
     /// The context is periodic republishing of records stored
-    /// earlier via [`Kademlia::put_record`].
+    /// earlier via [`Behaviour::put_record`].
     Republish,
     /// The context is periodic replication (i.e. without extending
     /// the record TTL) of stored records received earlier from another peer.
     Replicate,
     /// The context is a custom store operation targeting specific
-    /// peers initiated by [`Kademlia::put_record_to`].
+    /// peers initiated by [`Behaviour::put_record_to`].
     Custom,
 }
 
 /// Information about a running query.
 #[derive(Debug, Clone)]
 pub enum QueryInfo {
-    /// A query initiated by [`Kademlia::bootstrap`].
+    /// A query initiated by [`Behaviour::bootstrap`].
     Bootstrap {
         /// The targeted peer ID.
         peer: PeerId,
@@ -3099,7 +3099,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_closest_peers`].
+    /// A (repeated) query initiated by [`Behaviour::get_closest_peers`].
     GetClosestPeers {
         /// The key being queried (the preimage).
         key: Vec<u8>,
@@ -3107,7 +3107,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_providers`].
+    /// A (repeated) query initiated by [`Behaviour::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
         key: record_priv::Key,
@@ -3117,7 +3117,7 @@ pub enum QueryInfo {
         step: ProgressStep,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::start_providing`].
+    /// A (repeated) query initiated by [`Behaviour::start_providing`].
     AddProvider {
         /// The record key.
         key: record_priv::Key,
@@ -3127,7 +3127,7 @@ pub enum QueryInfo {
         context: AddProviderContext,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::put_record`].
+    /// A (repeated) query initiated by [`Behaviour::put_record`].
     PutRecord {
         record: Record,
         /// The expected quorum of responses w.r.t. the replication factor.
@@ -3138,7 +3138,7 @@ pub enum QueryInfo {
         context: PutRecordContext,
     },
 
-    /// A (repeated) query initiated by [`Kademlia::get_record`].
+    /// A (repeated) query initiated by [`Behaviour::get_record`].
     GetRecord {
         /// The key to look for.
         key: record_priv::Key,
@@ -3304,7 +3304,7 @@ impl fmt::Display for NoKnownPeers {
 
 impl std::error::Error for NoKnownPeers {}
 
-/// The possible outcomes of [`Kademlia::add_address`].
+/// The possible outcomes of [`Behaviour::add_address`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RoutingUpdate {
     /// The given peer and address has been added to the routing
