@@ -1241,11 +1241,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 }
 
 /// Tests that peers are not automatically inserted into
-/// the routing table with `KademliaBucketInserts::Manual`.
+/// the routing table with `BucketInserts::Manual`.
 #[test]
 fn manual_bucket_inserts() {
     let mut cfg = KademliaConfig::default();
-    cfg.set_kbucket_inserts(KademliaBucketInserts::Manual);
+    cfg.set_kbucket_inserts(BucketInserts::Manual);
     // 1 -> 2 -> [3 -> ...]
     let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.

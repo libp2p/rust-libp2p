@@ -69,7 +69,7 @@ pub struct Behaviour<TStore> {
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 
     /// The k-bucket insertion strategy.
-    kbucket_inserts: KademliaBucketInserts,
+    kbucket_inserts: BucketInserts,
 
     /// Configuration of the wire protocol.
     protocol_config: KademliaProtocolConfig,
@@ -124,11 +124,16 @@ pub struct Behaviour<TStore> {
     store: TStore,
 }
 
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::BucketInserts`."
+)]
+pub type KademliaBucketInserts = BucketInserts;
+
 /// The configurable strategies for the insertion of peers
 /// and their addresses into the k-buckets of the Kademlia
 /// routing table.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum KademliaBucketInserts {
+pub enum BucketInserts {
     /// Whenever a connection to a peer is established as a
     /// result of a dialing attempt and that peer is not yet
     /// in the routing table, it is inserted as long as there
@@ -186,7 +191,7 @@ pub struct KademliaConfig {
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
-    kbucket_inserts: KademliaBucketInserts,
+    kbucket_inserts: BucketInserts,
     caching: KademliaCaching,
 }
 
@@ -203,7 +208,7 @@ impl Default for KademliaConfig {
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
-            kbucket_inserts: KademliaBucketInserts::OnConnected,
+            kbucket_inserts: BucketInserts::OnConnected,
             caching: KademliaCaching::Enabled { max_peers: 1 },
         }
     }
@@ -390,7 +395,7 @@ impl KademliaConfig {
     }
 
     /// Sets the k-bucket insertion strategy for the Kademlia routing table.
-    pub fn set_kbucket_inserts(&mut self, inserts: KademliaBucketInserts) -> &mut Self {
+    pub fn set_kbucket_inserts(&mut self, inserts: BucketInserts) -> &mut Self {
         self.kbucket_inserts = inserts;
         self
     }
@@ -1267,12 +1272,12 @@ where
                             KademliaEvent::UnroutablePeer { peer },
                         ));
                     }
-                    (Some(a), KademliaBucketInserts::Manual) => {
+                    (Some(a), BucketInserts::Manual) => {
                         self.queued_events.push_back(ToSwarm::GenerateEvent(
                             KademliaEvent::RoutablePeer { peer, address: a },
                         ));
                     }
-                    (Some(a), KademliaBucketInserts::OnConnected) => {
+                    (Some(a), BucketInserts::OnConnected) => {
                         let addresses = Addresses::new(a);
                         match entry.insert(addresses.clone(), new_status) {
                             kbucket::InsertResult::Inserted => {
