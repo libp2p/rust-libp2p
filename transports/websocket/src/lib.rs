@@ -74,7 +74,7 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(dns::async_std::Config::system(
+/// let mut transport = websocket::WsConfig::new(dns::async_std::Transport::system(
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// ).await.unwrap());
 ///

@@ -69,11 +69,11 @@ pub mod async_std {
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `async-std` for all async I/O.
-    pub type Config<T> = crate::Config<T, AsyncStdResolver>;
+    pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
 
-    impl<T> Config<T> {
+    impl<T> Transport<T> {
         /// Creates a new [`Config`] from the OS's DNS configuration and defaults.
-        pub async fn system(inner: T) -> Result<Config<T>, io::Error> {
+        pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
             let (cfg, opts) = system_conf::read_system_conf()?;
             Self::custom(inner, cfg, opts).await
         }
@@ -83,8 +83,8 @@ pub mod async_std {
             inner: T,
             cfg: ResolverConfig,
             opts: ResolverOpts,
-        ) -> Result<Config<T>, io::Error> {
-            Ok(Config {
+        ) -> Result<Transport<T>, io::Error> {
+            Ok(Transport {
                 inner: Arc::new(Mutex::new(inner)),
                 resolver: async_std_resolver::resolver(cfg, opts).await,
             })
@@ -94,7 +94,7 @@ pub mod async_std {
 
 #[cfg(feature = "async-std")]
 #[deprecated(note = "Use `async_std::Config` instead.")]
-pub type DnsConfig<T> = async_std::Config<T>;
+pub type DnsConfig<T> = async_std::Transport<T>;
 
 #[cfg(feature = "tokio")]
 pub mod tokio {
@@ -104,24 +104,24 @@ pub mod tokio {
 
     /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
     /// using `tokio` for all async I/O.
-    pub type Config<T> = crate::Config<T, TokioAsyncResolver>;
+    pub type Transport<T> = crate::Transport<T, TokioAsyncResolver>;
 
-    impl<T> Config<T> {
-        /// Creates a new [`Config`] from the OS's DNS configuration and defaults.
-        pub fn system(inner: T) -> Result<crate::Config<T, TokioAsyncResolver>, std::io::Error> {
+    impl<T> Transport<T> {
+        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
+        pub fn system(inner: T) -> Result<crate::Transport<T, TokioAsyncResolver>, std::io::Error> {
             let (cfg, opts) = system_conf::read_system_conf()?;
             Self::custom(inner, cfg, opts)
         }
 
-        /// Creates a [`Config`] with a custom resolver configuration
+        /// Creates a [`Transport`] with a custom resolver configuration
         /// and options.
         pub fn custom(
             inner: T,
             cfg: trust_dns_resolver::config::ResolverConfig,
             opts: trust_dns_resolver::config::ResolverOpts,
-        ) -> Result<crate::Config<T, TokioAsyncResolver>, std::io::Error> {
+        ) -> Result<crate::Transport<T, TokioAsyncResolver>, std::io::Error> {
             // TODO: Make infallible in next breaking release. Or deprecation?
-            Ok(Config {
+            Ok(Transport {
                 inner: Arc::new(Mutex::new(inner)),
                 resolver: TokioAsyncResolver::tokio(cfg, opts),
             })
@@ -131,7 +131,7 @@ pub mod tokio {
 
 #[cfg(feature = "tokio")]
 #[deprecated(note = "Use `tokio::Config` instead.")]
-pub type TokioDnsConfig<T> = tokio::Config<T>;
+pub type TokioDnsConfig<T> = tokio::Transport<T>;
 
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
@@ -139,7 +139,6 @@ use libp2p_core::{
     connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    Transport,
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -180,10 +179,10 @@ const MAX_DNS_LOOKUPS: usize = 32;
 /// result of a single `/dnsaddr` lookup.
 const MAX_TXT_RECORDS: usize = 16;
 
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
+/// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
 /// You shouldn't need to use this type directly. Use [`tokio::Config`] or [`async_std::Config`] instead.
 #[derive(Debug)]
-pub struct Config<T, R> {
+pub struct Transport<T, R> {
     /// The underlying transport.
     inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
@@ -191,11 +190,11 @@ pub struct Config<T, R> {
 }
 
 #[deprecated(note = "Use `async_std::Config` or `tokio::Config` instead.")]
-pub type GenDnsConfig<T, R> = Config<T, R>;
+pub type GenDnsConfig<T, R> = Transport<T, R>;
 
-impl<T, R> Transport for Config<T, R>
+impl<T, R> libp2p_core::Transport for Transport<T, R>
 where
-    T: Transport + Send + Unpin + 'static,
+    T: libp2p_core::Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     R: Clone + Send + Sync + Resolver + 'static,
@@ -243,7 +242,7 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let mut inner = self.inner.lock();
-        Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
+        libp2p_core::Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
             event
                 .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(Error::Transport))
                 .map_err(Error::Transport)
@@ -251,9 +250,9 @@ where
     }
 }
 
-impl<T, R> Config<T, R>
+impl<T, R> Transport<T, R>
 where
-    T: Transport + Send + Unpin + 'static,
+    T: libp2p_core::Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     R: Clone + Send + Sync + Resolver + 'static,
@@ -262,7 +261,10 @@ where
         &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
-    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+    ) -> Result<
+        <Self as libp2p_core::Transport>::Dial,
+        TransportError<<Self as libp2p_core::Transport>::Error>,
+    > {
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
@@ -680,7 +682,7 @@ mod tests {
             }
         }
 
-        async fn run<T, R>(mut transport: Config<T, R>)
+        async fn run<T, R>(mut transport: super::Transport<T, R>)
         where
             T: Transport + Clone + Send + Unpin + 'static,
             T::Error: Send,
@@ -762,7 +764,7 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                async_std::Config::custom(CustomTransport, config, opts)
+                async_std::Transport::custom(CustomTransport, config, opts)
                     .then(|dns| run(dns.unwrap())),
             );
         }
@@ -780,7 +782,7 @@ mod tests {
                 .unwrap();
 
             rt.block_on(run(
-                tokio::Config::custom(CustomTransport, config, opts).unwrap()
+                tokio::Transport::custom(CustomTransport, config, opts).unwrap()
             ));
         }
     }
