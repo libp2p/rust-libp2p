@@ -22,7 +22,7 @@ log = "0.4"
 quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 thiserror = "1.0.48"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

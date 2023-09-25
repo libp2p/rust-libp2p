@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Identify, InboundPush, Info, OutboundPush, Push, UpgradeError};
+use crate::protocol::{Identify, InboundPush, OutboundPush, Push, UpgradeError};
+use crate::protocol::{Info, PushInfo};
 use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -48,7 +49,7 @@ use std::{io, task::Context, task::Poll, time::Duration};
 /// permitting the underlying connection to be closed.
 pub struct Handler {
     remote_peer_id: PeerId,
-    inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
+    inbound_identify_push: Option<BoxFuture<'static, Result<PushInfo, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
         [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
@@ -79,6 +80,9 @@ pub struct Handler {
 
     /// Address observed by or for the remote.
     observed_addr: Multiaddr,
+
+    /// Identify information about the remote peer.
+    remote_info: Option<Info>,
 
     local_supported_protocols: SupportedProtocols,
     remote_supported_protocols: HashSet<StreamProtocol>,
@@ -133,6 +137,7 @@ impl Handler {
             observed_addr,
             local_supported_protocols: SupportedProtocols::default(),
             remote_supported_protocols: HashSet::default(),
+            remote_info: Default::default(),
             external_addresses,
         }
     }
@@ -176,7 +181,8 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(remote_info) => {
-                self.update_supported_protocols_for_remote(&remote_info);
+                self.handle_incoming_info(&remote_info);
+
                 self.events
                     .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                         remote_info,
@@ -211,6 +217,12 @@ impl Handler {
             protocols: Vec::from_iter(self.local_supported_protocols.iter().cloned()),
             observed_addr: self.observed_addr.clone(),
         }
+    }
+
+    fn handle_incoming_info(&mut self, info: &Info) {
+        self.remote_info.replace(info.clone());
+
+        self.update_supported_protocols_for_remote(info);
     }
 
     fn update_supported_protocols_for_remote(&mut self, remote_info: &Info) {
@@ -318,11 +330,15 @@ impl ConnectionHandler for Handler {
         {
             self.inbound_identify_push.take();
 
-            if let Ok(info) = res {
-                self.update_supported_protocols_for_remote(&info);
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    info,
-                )));
+            if let Ok(remote_push_info) = res {
+                if let Some(mut info) = self.remote_info.clone() {
+                    info.merge(remote_push_info);
+                    self.handle_incoming_info(&info);
+
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::Identified(info),
+                    ));
+                };
             }
         }
 
