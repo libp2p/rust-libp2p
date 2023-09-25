@@ -1321,7 +1321,7 @@ fn network_behaviour_on_address_change() {
     kademlia.on_connection_handler_event(
         remote_peer_id,
         connection_id,
-        KademliaHandlerEvent::ProtocolConfirmed { endpoint },
+        HandlerEvent::ProtocolConfirmed { endpoint },
     );
 
     assert_eq!(
