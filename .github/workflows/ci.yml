@@ -99,26 +99,6 @@ jobs:
       - name: Run all tests
         run: ./wasm-tests/run-all.sh
 
-  holepunch_tests:
-    name: Run all holepunch tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@dd05243424bd5c0e585e4b55eb2d7615cdd32f1f # v2.5.1
-
-      - run: sudo apt-get install -y openvswitch-switch
-
-      - run: |
-          cargo build
-          python -m venv ./venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-          sudo ./venv/bin/python ./relay-test.py ../target/debug/relay ../target/debug/hp_client
-        working-directory: ./hole-punching-tests
-
   cross:
     name: Compile on ${{ matrix.target }}
     strategy:
