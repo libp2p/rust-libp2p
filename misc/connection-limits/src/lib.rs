@@ -402,7 +402,8 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
-                        .condition(PeerCondition::Disconnected)
+                        // Dial always, even if already dialing or connected.
+                        .condition(PeerCondition::Always)
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -412,7 +413,7 @@ mod tests {
         match network
             .dial(
                 DialOpts::peer_id(target)
-                    .condition(PeerCondition::Disconnected)
+                    .condition(PeerCondition::Always)
                     .addresses(vec![addr])
                     .build(),
             )
