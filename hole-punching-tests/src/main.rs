@@ -1,4 +1,4 @@
-// Copyright 2021 Protocol Labs.
+// Copyright 2023 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -21,7 +21,7 @@
 use anyhow::{Context, Result};
 use futures::{future::Either, stream::StreamExt};
 use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::{keep_alive, ConnectionId};
+use libp2p::swarm::ConnectionId;
 use libp2p::{
     core::{
         multiaddr::{Multiaddr, Protocol},
@@ -316,12 +316,12 @@ fn make_swarm() -> Result<Swarm<Behaviour>> {
         )),
         dcutr: dcutr::Behaviour::new(local_peer_id),
         ping: ping::Behaviour::new(ping::Config::default().with_interval(Duration::from_secs(1))),
-        keep_alive: keep_alive::Behaviour,
     };
 
     Ok(
         SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id)
             .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .idle_connection_timeout(Duration::from_secs(2 * 60))
             .build(),
     )
 }
@@ -419,5 +419,4 @@ struct Behaviour {
     identify: identify::Behaviour,
     dcutr: dcutr::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }
