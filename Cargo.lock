@@ -3152,7 +3152,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "futures-timer",
