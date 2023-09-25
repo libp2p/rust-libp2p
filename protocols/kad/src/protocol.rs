@@ -20,7 +20,7 @@
 
 //! The Kademlia connection protocol upgrade and associated message types.
 //!
-//! The connection protocol upgrade is provided by [`KademliaProtocolConfig`], with the
+//! The connection protocol upgrade is provided by [`ProtocolConfig`], with the
 //! request and response types [`KadRequestMsg`] and [`KadResponseMsg`], respectively.
 //! The upgrade's output is a `Sink + Stream` of messages. The `Stream` component is used
 //! to poll the underlying transport for incoming messages, and the `Sink` component
@@ -135,13 +135,13 @@ impl From<KadPeer> for proto::Peer {
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
-pub struct KademliaProtocolConfig {
+pub struct ProtocolConfig {
     protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
-impl KademliaProtocolConfig {
+impl ProtocolConfig {
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
@@ -159,16 +159,16 @@ impl KademliaProtocolConfig {
     }
 }
 
-impl Default for KademliaProtocolConfig {
+impl Default for ProtocolConfig {
     fn default() -> Self {
-        KademliaProtocolConfig {
+        ProtocolConfig {
             protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
 
-impl UpgradeInfo for KademliaProtocolConfig {
+impl UpgradeInfo for ProtocolConfig {
     type Info = StreamProtocol;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
@@ -213,7 +213,7 @@ pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestM
 /// Sink of requests and stream of responses.
 pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
 
-impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+impl<C> InboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -228,7 +228,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+impl<C> OutboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -624,7 +624,7 @@ mod tests {
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
     use multihash::{encode, Hash};
-    use protocol::{ConnectionType, KadPeer, KademliaProtocolConfig};
+    use protocol::{ConnectionType, KadPeer, ProtocolConfig};
     use std::sync::mpsc;
     use std::thread;
 
@@ -674,7 +674,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -694,7 +694,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())

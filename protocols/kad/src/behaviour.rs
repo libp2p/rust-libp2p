@@ -26,7 +26,7 @@ use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{ConnectionType, KadPeer, KademliaProtocolConfig};
+use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record_priv::{
     self,
@@ -69,7 +69,7 @@ pub struct Behaviour<TStore> {
     kbucket_inserts: BucketInserts,
 
     /// Configuration of the wire protocol.
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
 
     /// Configuration of [`RecordStore`] filtering.
     record_filtering: StoreInserts,
@@ -175,7 +175,7 @@ pub enum StoreInserts {
 pub struct Config {
     kbucket_pending_timeout: Duration,
     query_config: QueryConfig,
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
     record_ttl: Option<Duration>,
     record_replication_interval: Option<Duration>,
     record_publication_interval: Option<Duration>,

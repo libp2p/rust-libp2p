@@ -20,8 +20,7 @@
 
 use crate::behaviour::Mode;
 use crate::protocol::{
-    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg,
-    KademliaProtocolConfig,
+    KadInStreamSink, KadOutStreamSink, KadPeer, KadRequestMsg, KadResponseMsg, ProtocolConfig,
 };
 use crate::record_priv::{self, Record};
 use crate::QueryId;
@@ -56,7 +55,7 @@ const MAX_NUM_SUBSTREAMS: usize = 32;
 /// It also handles requests made by the remote.
 pub struct KademliaHandler {
     /// Configuration of the wire protocol.
-    protocol_config: KademliaProtocolConfig,
+    protocol_config: ProtocolConfig,
 
     /// In client mode, we don't accept inbound substreams.
     mode: Mode,
@@ -472,7 +471,7 @@ struct UniqueConnecId(u64);
 
 impl KademliaHandler {
     pub fn new(
-        protocol_config: KademliaProtocolConfig,
+        protocol_config: ProtocolConfig,
         idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
@@ -616,8 +615,8 @@ impl ConnectionHandler for KademliaHandler {
     type FromBehaviour = KademliaHandlerIn;
     type ToBehaviour = KademliaHandlerEvent;
     type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
-    type OutboundProtocol = KademliaProtocolConfig;
+    type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
+    type OutboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -849,7 +848,7 @@ impl KademliaHandler {
 }
 
 impl futures::Stream for OutboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -987,7 +986,7 @@ impl futures::Stream for OutboundSubstreamState {
 }
 
 impl futures::Stream for InboundSubstreamState {
-    type Item = ConnectionHandlerEvent<KademliaProtocolConfig, (), KademliaHandlerEvent, io::Error>;
+    type Item = ConnectionHandlerEvent<ProtocolConfig, (), KademliaHandlerEvent, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
