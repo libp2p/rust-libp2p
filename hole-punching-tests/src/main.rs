@@ -50,7 +50,8 @@ const LISTEN_CLIENT_PEER_ID: &str = "LISTEN_CLIENT_PEER_ID";
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_level(log::LevelFilter::Debug)
+        .parse_filters("netlink_proto=warn,rustls=warn,multistream_select=warn")
         .parse_default_env()
         .init();
 
