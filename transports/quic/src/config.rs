@@ -134,7 +134,10 @@ impl From<Config> for QuinnConfig {
 
         let mut endpoint_config = match keypair.secret() {
             Some(secret) => {
-                let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &secret));
+                let reset_key = Arc::new(ring::hmac::Key::new(
+                    ring::hmac::HMAC_SHA256,
+                    &[&b"libp2p quic stateless reset key"[..], &secret].concat(),
+                ));
                 quinn::EndpointConfig::new(reset_key)
             }
             None => quinn::EndpointConfig::default(),
