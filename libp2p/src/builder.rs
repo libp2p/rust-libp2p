@@ -1513,7 +1513,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                (libp2p_tls::Config::new,),
                 (
                     libp2p_yamux::Config::default(),
                     libp2p_mplex::MplexConfig::default(),
@@ -1532,10 +1532,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (
-                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
-                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
-                ),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
                 (
                     libp2p_yamux::Config::default(),
                     libp2p_mplex::MplexConfig::default(),
@@ -1560,10 +1557,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (
-                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
-                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
-                ),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
@@ -1593,7 +1587,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                (libp2p_tls::Config::new,),
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
@@ -1623,10 +1617,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (
-                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
-                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
-                ),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
@@ -1674,10 +1665,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (
-                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
-                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
-                ),
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
@@ -1714,7 +1702,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                (libp2p_tls::Config::new,),
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
