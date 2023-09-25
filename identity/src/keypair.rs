@@ -345,15 +345,15 @@ impl Keypair {
 
     /// Return the secret key of the [`Keypair`] if it has one.
     pub fn secret(&self) -> Option<[u8; 32]> {
-        match &self.keypair {
+        match self.keypair {
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(inner) => Some(inner.secret().0),
+            KeyPairInner::Ed25519(ref inner) => Some(inner.secret().0),
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             KeyPairInner::Rsa(_) => None,
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(inner) => Some(inner.secret().to_bytes()),
+            KeyPairInner::Secp256k1(ref inner) => Some(inner.secret().to_bytes()),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(inner) => Some(
+            KeyPairInner::Ecdsa(ref inner) => Some(
                 inner
                     .secret()
                     .to_bytes()
