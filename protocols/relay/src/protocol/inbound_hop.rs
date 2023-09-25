@@ -18,79 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::proto;
-use crate::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
+use std::time::{Duration, SystemTime};
+
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
-use futures::{future::BoxFuture, prelude::*};
-use instant::{Duration, SystemTime};
-use libp2p_core::{upgrade, Multiaddr};
-use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamProtocol};
-use std::convert::TryInto;
-use std::iter;
+use either::Either;
+use futures::prelude::*;
 use thiserror::Error;
 
-pub struct Upgrade {
-    pub reservation_duration: Duration,
-    pub max_circuit_duration: Duration,
-    pub max_circuit_bytes: u64,
-}
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
+use libp2p_swarm::Stream;
 
-impl upgrade::UpgradeInfo for Upgrade {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(HOP_PROTOCOL_NAME)
-    }
-}
-
-impl upgrade::InboundUpgrade<Stream> for Upgrade {
-    type Output = Req;
-    type Error = UpgradeError;
-    type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, substream: Stream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(
-            substream,
-            quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE),
-        );
-
-        async move {
-            let proto::HopMessage {
-                type_pb,
-                peer,
-                reservation: _,
-                limit: _,
-                status: _,
-            } = substream
-                .next()
-                .await
-                .ok_or(FatalUpgradeError::StreamClosed)??;
-
-            let req = match type_pb {
-                proto::HopMessageType::RESERVE => Req::Reserve(ReservationReq {
-                    substream,
-                    reservation_duration: self.reservation_duration,
-                    max_circuit_duration: self.max_circuit_duration,
-                    max_circuit_bytes: self.max_circuit_bytes,
-                }),
-                proto::HopMessageType::CONNECT => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
-                    Req::Connect(CircuitReq { dst, substream })
-                }
-                proto::HopMessageType::STATUS => {
-                    return Err(FatalUpgradeError::UnexpectedTypeStatus.into())
-                }
-            };
-
-            Ok(req)
-        }
-        .boxed()
-    }
-}
+use crate::proto;
+use crate::proto::message_v2::pb::mod_HopMessage::Type;
+use crate::protocol::MAX_MESSAGE_SIZE;
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
@@ -120,11 +62,6 @@ pub enum FatalUpgradeError {
     UnexpectedTypeStatus,
 }
 
-pub enum Req {
-    Reserve(ReservationReq),
-    Connect(CircuitReq),
-}
-
 pub struct ReservationReq {
     substream: Framed<Stream, quick_protobuf_codec::Codec<proto::HopMessage>>,
     reservation_duration: Duration,
@@ -133,7 +70,7 @@ pub struct ReservationReq {
 }
 
 impl ReservationReq {
-    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
+    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), FatalUpgradeError> {
         if addrs.is_empty() {
             log::debug!(
                 "Accepting relay reservation without providing external addresses of local node. \
@@ -167,7 +104,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    pub async fn deny(self, status: proto::Status) -> Result<(), UpgradeError> {
+    pub async fn deny(self, status: proto::Status) -> Result<(), FatalUpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
@@ -179,7 +116,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    async fn send(mut self, msg: proto::HopMessage) -> Result<(), UpgradeError> {
+    async fn send(mut self, msg: proto::HopMessage) -> Result<(), FatalUpgradeError> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
@@ -198,7 +135,7 @@ impl CircuitReq {
         self.dst
     }
 
-    pub async fn accept(mut self) -> Result<(Stream, Bytes), UpgradeError> {
+    pub async fn accept(mut self) -> Result<(Stream, Bytes), FatalUpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
@@ -223,7 +160,7 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: proto::Status) -> Result<(), UpgradeError> {
+    pub async fn deny(mut self, status: proto::Status) -> Result<(), FatalUpgradeError> {
         let msg = proto::HopMessage {
             type_pb: proto::HopMessageType::STATUS,
             peer: None,
@@ -241,4 +178,52 @@ impl CircuitReq {
 
         Ok(())
     }
+}
+
+pub(crate) async fn handle_inbound_request(
+    io: Stream,
+    reservation_duration: Duration,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
+) -> Result<Either<ReservationReq, CircuitReq>, FatalUpgradeError> {
+    let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
+
+    let res = substream.next().await;
+
+    if let None | Some(Err(_)) = res {
+        return Err(FatalUpgradeError::StreamClosed);
+    }
+
+    let proto::HopMessage {
+        type_pb,
+        peer,
+        reservation: _,
+        limit: _,
+        status: _,
+    } = res.unwrap().expect("should be ok");
+
+    let req = match type_pb {
+        Type::RESERVE => Either::Left(ReservationReq {
+            substream,
+            reservation_duration,
+            max_circuit_duration,
+            max_circuit_bytes,
+        }),
+        Type::CONNECT => {
+            let peer_id_res = match peer {
+                Some(r) => PeerId::from_bytes(&r.id),
+                None => return Err(FatalUpgradeError::MissingPeer),
+            };
+
+            let dst = match peer_id_res {
+                Ok(res) => res,
+                Err(_) => return Err(FatalUpgradeError::ParsePeerId),
+            };
+
+            Either::Right(CircuitReq { dst, substream })
+        }
+        Type::STATUS => return Err(FatalUpgradeError::UnexpectedTypeStatus),
+    };
+
+    Ok(req)
 }

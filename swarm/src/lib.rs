@@ -1728,9 +1728,9 @@ pub struct ConnectionDenied {
 }
 
 impl ConnectionDenied {
-    pub fn new(cause: impl error::Error + Send + Sync + 'static) -> Self {
+    pub fn new(cause: impl Into<Box<dyn error::Error + Send + Sync + 'static>>) -> Self {
         Self {
-            inner: Box::new(cause),
+            inner: cause.into(),
         }
     }
 

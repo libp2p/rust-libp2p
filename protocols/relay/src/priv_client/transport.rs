@@ -55,7 +55,7 @@ use thiserror::Error;
 ///    # use libp2p_identity::PeerId;
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = relay::client::new(
-///        PeerId::random(),
+///        PeerId::random()
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);
 ///    # let relay_id = PeerId::random();
@@ -80,7 +80,7 @@ use thiserror::Error;
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = relay::client::new(
-///       local_peer_id,
+///       local_peer_id
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);
 ///    let relay_addr = Multiaddr::empty()
