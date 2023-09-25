@@ -161,7 +161,7 @@ enum InboundSubstreamState {
 impl InboundSubstreamState {
     fn try_answer_with(
         &mut self,
-        id: KademliaRequestId,
+        id: RequestId,
         msg: KadResponseMsg,
     ) -> Result<(), KadResponseMsg> {
         match std::mem::replace(
@@ -227,7 +227,7 @@ pub enum HandlerEvent {
         /// The key for which to locate the closest nodes.
         key: Vec<u8>,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Response to an `HandlerIn::FindNodeReq`.
@@ -244,7 +244,7 @@ pub enum HandlerEvent {
         /// The key for which providers are requested.
         key: record_priv::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Response to an `HandlerIn::GetProvidersReq`.
@@ -278,7 +278,7 @@ pub enum HandlerEvent {
         /// Key for which we should look in the dht
         key: record_priv::Key,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Response to a `HandlerIn::GetRecord`.
@@ -295,7 +295,7 @@ pub enum HandlerEvent {
     PutRecord {
         record: Record,
         /// Identifier of the request. Needs to be passed back when answering.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Response to a request to store a record.
@@ -365,7 +365,7 @@ pub enum HandlerIn {
     /// can be used as an alternative to letting requests simply time
     /// out on the remote peer, thus potentially avoiding some delay
     /// for the query on the remote.
-    Reset(KademliaRequestId),
+    Reset(RequestId),
 
     /// Change the connection to the specified mode.
     ReconfigureMode { new_mode: Mode },
@@ -386,7 +386,7 @@ pub enum HandlerIn {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Same as `FindNodeReq`, but should also return the entries of the local providers list for
@@ -407,7 +407,7 @@ pub enum HandlerIn {
         /// Identifier of the request that was made by the remote.
         ///
         /// It is a logic error to use an id of the handler of a different node.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Indicates that this provider is known for this key.
@@ -436,7 +436,7 @@ pub enum HandlerIn {
         /// Nodes that are closer to the key we were searching for.
         closer_peers: Vec<KadPeer>,
         /// Identifier of the request that was made by the remote.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 
     /// Put a value into the dht records.
@@ -453,14 +453,14 @@ pub enum HandlerIn {
         /// Value that was put.
         value: Vec<u8>,
         /// Identifier of the request that was made by the remote.
-        request_id: KademliaRequestId,
+        request_id: RequestId,
     },
 }
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub struct KademliaRequestId {
+pub struct RequestId {
     /// Unique identifier for an incoming connection.
     connec_unique_id: UniqueConnecId,
 }
@@ -833,7 +833,7 @@ impl ConnectionHandler for Handler {
 }
 
 impl Handler {
-    fn answer_pending_request(&mut self, request_id: KademliaRequestId, mut msg: KadResponseMsg) {
+    fn answer_pending_request(&mut self, request_id: RequestId, mut msg: KadResponseMsg) {
         for state in self.inbound_substreams.iter_mut() {
             match state.try_answer_with(request_id, msg) {
                 Ok(()) => return,
@@ -1010,7 +1010,7 @@ impl futures::Stream for InboundSubstreamState {
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             HandlerEvent::FindNodeReq {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1022,7 +1022,7 @@ impl futures::Stream for InboundSubstreamState {
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             HandlerEvent::GetProvidersReq {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1044,7 +1044,7 @@ impl futures::Stream for InboundSubstreamState {
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             HandlerEvent::GetRecord {
                                 key,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },
@@ -1056,7 +1056,7 @@ impl futures::Stream for InboundSubstreamState {
                         return Poll::Ready(Some(ConnectionHandlerEvent::NotifyBehaviour(
                             HandlerEvent::PutRecord {
                                 record,
-                                request_id: KademliaRequestId {
+                                request_id: RequestId {
                                     connec_unique_id: connection_id,
                                 },
                             },

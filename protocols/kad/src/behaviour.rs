@@ -23,7 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{Handler, HandlerEvent, HandlerIn, KademliaRequestId};
+use crate::handler::{Handler, HandlerEvent, HandlerIn, RequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
@@ -1701,7 +1701,7 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        request_id: KademliaRequestId,
+        request_id: RequestId,
         mut record: Record,
     ) {
         if record.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
