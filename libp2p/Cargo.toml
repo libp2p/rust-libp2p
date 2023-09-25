@@ -93,6 +93,7 @@ yamux = ["dep:libp2p-yamux"]
 
 [dependencies]
 bytes = "1"
+either = "1.9.0"
 futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature

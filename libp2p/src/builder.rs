@@ -120,105 +120,114 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
 pub struct TcpPhase {}
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    any(feature = "tls", feature = "noise")
-))]
-impl<Provider> SwarmBuilder<Provider, TcpPhase> {
-    pub fn with_tcp(self) -> SwarmBuilder<Provider, TcpTlsPhase> {
-        self.with_tcp_config(Default::default())
-    }
+macro_rules! impl_tcp_builder {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $path:ident) => {
+        #[cfg(all(
+            not(target_arch = "wasm32"),
+            feature = "tcp",
+            feature = $providerKebabCase,
+        ))]
+        impl SwarmBuilder<$providerCamelCase, TcpPhase> {
+            pub fn with_tcp<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+                self,
+                tcp_config: libp2p_tcp::Config,
+                security_upgrade: SecUpgrade,
+                multiplexer_upgrade: MuxUpgrade,
+            ) -> Result<
+                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+            Box<dyn std::error::Error>,
+            >
+            where
+                SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+                SecError: std::error::Error + Send + Sync + 'static,
+                SecUpgrade: IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+                <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
+                <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
+                <<<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as UpgradeInfo>::Info: Send,
 
-    pub fn with_tcp_2<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
-        self,
-        security_upgrade: SecUpgrade,
-        multiplexer_upgrade: MuxUpgrade,
-    ) -> Result<
-        SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-        AuthenticationError,
-    >
-    where
-        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
-        SecError: std::error::Error + Send + Sync + 'static,
-        SecUpgrade: IntoSecurityUpgrade<libp2p_tcp::tokio::TcpStream>,
-        SecUpgrade::Upgrade: Clone + Send + 'static,
-        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>, Output = (PeerId, SecStream), Error = SecError>,
-        <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>>>::Future: Send,
-        SecUpgrade::Upgrade: OutboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>, Output = (PeerId, SecStream), Error = SecError>,
-        <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_tcp::tokio::TcpStream>>>::Future: Send,
-        <<<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::tokio::TcpStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-        <<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::tokio::TcpStream>>::Upgrade as UpgradeInfo>::Info: Send,
-
-        MuxStream: StreamMuxer + Send + 'static,
-        MuxStream::Substream: Send + 'static,
-        MuxStream::Error: Send + Sync + 'static,
-        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
-        MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError>,
-        <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
-        MuxUpgrade::Upgrade: OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError>,
-        MuxUpgrade::Upgrade: Clone + Send + 'static,
-        <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
-        MuxError: std::error::Error + Send + Sync + 'static,
-        <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
-        <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
-    {
-        Ok(SwarmBuilder {
-            phase: QuicPhase {
-                transport: libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
-                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
-                    .authenticate(security_upgrade.into_security_upgrade(&self.keypair))
-                    .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
-                    .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
-        })
-    }
-
-    pub fn with_tcp_config(
-        self,
-        tcp_config: libp2p_tcp::Config,
-    ) -> SwarmBuilder<Provider, TcpTlsPhase> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: TcpTlsPhase { tcp_config },
+                MuxStream: StreamMuxer + Send + 'static,
+                MuxStream::Substream: Send + 'static,
+                MuxStream::Error: Send + Sync + 'static,
+                MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+                MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+                <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                MuxError: std::error::Error + Send + Sync + 'static,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+            {
+                Ok(SwarmBuilder {
+                    phase: QuicPhase {
+                        transport: libp2p_tcp::$path::Transport::new(tcp_config)
+                            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                            .authenticate(
+                                security_upgrade
+                                    .into_security_upgrade(&self.keypair)
+                                    .map_err(Box::new)?,
+                            )
+                            .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+                            .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
+                    },
+                    keypair: self.keypair,
+                    phantom: PhantomData,
+                })
+            }
         }
-    }
+    };
 }
+
+impl_tcp_builder!("async-std", AsyncStd, async_io);
+impl_tcp_builder!("tokio", Tokio, tokio);
 
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
+    type Error: std::error::Error + 'static;
 
-    fn into_security_upgrade(self, keypair: &Keypair) -> Self::Upgrade;
+    fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error>;
 }
 
-impl<C, T, F> IntoSecurityUpgrade<C> for (F,)
+impl<C, T, F, E> IntoSecurityUpgrade<C> for (F,)
 where
-    F: for<'a> FnOnce(&'a Keypair) -> T,
+    F: for<'a> FnOnce(&'a Keypair) -> Result<T, E>,
+    E: std::error::Error + 'static,
 {
     type Upgrade = T;
+    type Error = E;
 
-    fn into_security_upgrade(self, keypair: &Keypair) -> Self::Upgrade {
+    fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error> {
         self.0(keypair)
     }
 }
 
-impl<F1, F2, T1, T2, C, O1, O2> IntoSecurityUpgrade<C> for (F1, F2)
+impl<F1, F2, T1, T2, C, O1, O2, E1, E2> IntoSecurityUpgrade<C> for (F1, F2)
 where
-    F1: for<'a> FnOnce(&'a Keypair) -> T1,
-    F2: for<'a> FnOnce(&'a Keypair) -> T2,
+    F1: for<'a> FnOnce(&'a Keypair) -> Result<T1, E1>,
+    F2: for<'a> FnOnce(&'a Keypair) -> Result<T2, E2>,
     T1: InboundUpgrade<Negotiated<C>, Output = (PeerId, O1)>,
     T2: InboundUpgrade<Negotiated<C>, Output = (PeerId, O2)>,
+    E1: std::error::Error + 'static,
+    E2: std::error::Error + 'static,
 {
-    type Upgrade = map::Upgrade<SelectUpgrade<T1, T2>, fn(futures::future::Either<<T1 as InboundUpgrade<Negotiated<C>>>::Output, <T2 as InboundUpgrade<Negotiated<C>>>::Output>) -> (PeerId, futures::future::Either<O1, O2>)>;
+    type Upgrade = map::Upgrade<
+        SelectUpgrade<T1, T2>,
+        fn(
+            futures::future::Either<
+                <T1 as InboundUpgrade<Negotiated<C>>>::Output,
+                <T2 as InboundUpgrade<Negotiated<C>>>::Output,
+            >,
+        ) -> (PeerId, futures::future::Either<O1, O2>),
+    >;
+    type Error = either::Either<E1, E2>;
 
-    fn into_security_upgrade(self, keypair: &Keypair) -> Self::Upgrade {
-        map::Upgrade::new(
-            SelectUpgrade::new(self.0(keypair), self.1(keypair)),
-            |either |futures::future::Either::factor_first(either),
-        )
+    fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error> {
+        let u1 = self.0(keypair).map_err(either::Either::Left)?;
+        let u2 = self.1(keypair).map_err(either::Either::Right)?;
+
+        Ok(map::Upgrade::new(SelectUpgrade::new(u1, u2), |either| {
+            futures::future::Either::factor_first(either)
+        }))
     }
 }
 
@@ -311,181 +320,6 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    any(feature = "tls", feature = "noise")
-))]
-pub struct TcpTlsPhase {
-    tcp_config: libp2p_tcp::Config,
-}
-
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    any(feature = "tls", feature = "noise")
-))]
-impl<Provider> SwarmBuilder<Provider, TcpTlsPhase> {
-    #[cfg(feature = "tls")]
-    pub fn with_tls(
-        self,
-    ) -> Result<SwarmBuilder<Provider, TcpNoisePhase<libp2p_tls::Config>>, AuthenticationError>
-    {
-        Ok(SwarmBuilder {
-            phase: TcpNoisePhase {
-                tcp_config: self.phase.tcp_config,
-                tls_config: libp2p_tls::Config::new(&self.keypair)
-                    .map_err(|e| AuthenticationError(e.into()))?,
-                phantom: PhantomData,
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
-        })
-    }
-
-    fn without_tls(self) -> SwarmBuilder<Provider, TcpNoisePhase<WithoutTls>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: TcpNoisePhase {
-                tcp_config: self.phase.tcp_config,
-                tls_config: WithoutTls {},
-                phantom: PhantomData,
-            },
-        }
-    }
-}
-
-// Shortcuts
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    feature = "noise",
-    feature = "async-std"
-))]
-impl SwarmBuilder<AsyncStd, TcpTlsPhase> {
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<AsyncStd, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-        AuthenticationError,
-    > {
-        self.without_tls().with_noise()
-    }
-}
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    feature = "noise",
-    feature = "tokio"
-))]
-impl SwarmBuilder<Tokio, TcpTlsPhase> {
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<Tokio, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-        AuthenticationError,
-    > {
-        self.without_tls().with_noise()
-    }
-}
-
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    any(feature = "tls", feature = "noise")
-))]
-pub struct TcpNoisePhase<A> {
-    tcp_config: libp2p_tcp::Config,
-    tls_config: A,
-    phantom: PhantomData<A>,
-}
-
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tcp",
-    feature = "yamux",
-    any(feature = "tls", feature = "noise")
-))]
-macro_rules! construct_quic_builder {
-    ($self:ident, $tcp:ident, $auth:expr) => {
-        SwarmBuilder {
-            phase: QuicPhase {
-                transport: libp2p_tcp::$tcp::Transport::new($self.phase.tcp_config)
-                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
-                    .authenticate($auth)
-                    .multiplex(libp2p_yamux::Config::default())
-                    .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
-            },
-            keypair: $self.keypair,
-            phantom: PhantomData,
-        }
-    };
-}
-
-macro_rules! impl_tcp_noise_builder {
-    ($providerKebabCase:literal, $providerCamelCase:ident, $tcp:ident) => {
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "tls", feature = "yamux"))]
-        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<libp2p_tls::Config>> {
-            #[cfg(feature = "noise")]
-            pub fn with_noise(
-                self,
-            ) -> Result<
-                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-                AuthenticationError,
-            > {
-                Ok(construct_quic_builder!(
-                    self,
-                    $tcp,
-                    map::Upgrade::new(
-                        libp2p_core::upgrade::SelectUpgrade::new(
-                            self.phase.tls_config,
-                            libp2p_noise::Config::new(&self.keypair)
-                                .map_err(|e| AuthenticationError(e.into()))?,
-                        ),
-                        |upgrade| match upgrade {
-                            futures::future::Either::Left((peer_id, upgrade)) => {
-                                (peer_id, futures::future::Either::Left(upgrade))
-                            }
-                            futures::future::Either::Right((peer_id, upgrade)) => {
-                                (peer_id, futures::future::Either::Right(upgrade))
-                            }
-                        },
-                    )
-                ))
-            }
-
-            fn without_noise(
-                self,
-            ) -> SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>
-            {
-                construct_quic_builder!(self, $tcp, self.phase.tls_config)
-            }
-        }
-
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "tcp", feature = "noise", feature = "yamux"))]
-        impl SwarmBuilder<$providerCamelCase, TcpNoisePhase<WithoutTls>> {
-            pub fn with_noise(
-                self,
-            ) -> Result<
-                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-                AuthenticationError,
-            > {
-                let _ = self.phase.tls_config;
-                Ok(construct_quic_builder!(
-                    self,
-                    $tcp,
-                    libp2p_noise::Config::new(&self.keypair)
-                        .map_err(|e| AuthenticationError(e.into()))?
-                ))
-            }
-        }
-    };
-}
-
-impl_tcp_noise_builder!("async-std", AsyncStd, async_io);
-impl_tcp_noise_builder!("tokio", Tokio, tokio);
-
 #[cfg(any(feature = "tls", feature = "noise"))]
 pub struct WithoutTls {}
 
@@ -501,78 +335,6 @@ enum AuthenticationErrorInner {
     #[error("Noise")]
     #[cfg(feature = "noise")]
     Noise(#[from] libp2p_noise::Error),
-}
-
-// Shortcuts
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tls",
-    feature = "quic",
-    feature = "async-std"
-))]
-impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<AsyncStd, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
-        self.without_noise().with_quic()
-    }
-}
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tls",
-    feature = "quic",
-    feature = "tokio"
-))]
-impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
-    pub fn with_quic(
-        self,
-    ) -> SwarmBuilder<Tokio, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
-        self.without_noise().with_quic()
-    }
-}
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tls",
-    feature = "quic",
-    feature = "async-std"
-))]
-impl SwarmBuilder<AsyncStd, TcpNoisePhase<libp2p_tls::Config>> {
-    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
-        self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
-    ) -> Result<
-        SwarmBuilder<AsyncStd, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>,
-        R::Error,
-    > {
-        self.without_noise()
-            .without_quic()
-            .without_any_other_transports()
-            .without_dns()
-            .without_relay()
-            .without_websocket()
-            .with_behaviour(constructor)
-    }
-}
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tls",
-    feature = "quic",
-    feature = "tokio"
-))]
-impl SwarmBuilder<Tokio, TcpNoisePhase<libp2p_tls::Config>> {
-    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
-        self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
-    ) -> Result<SwarmBuilder<Tokio, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>, R::Error>
-    {
-        self.without_noise()
-            .without_quic()
-            .without_any_other_transports()
-            .without_dns()
-            .without_relay()
-            .without_websocket()
-            .with_behaviour(constructor)
-    }
 }
 
 pub struct QuicPhase<T> {
@@ -1710,24 +1472,9 @@ mod tests {
     fn tcp() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
-            .unwrap()
-            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
-            .unwrap()
-            .build();
-    }
-
-    #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
-    fn tcp2() {
-        let _ = SwarmBuilder::with_new_identity()
-            .with_tokio()
-            .with_tcp_2(
-                // TODO: Handle unwrap
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair).unwrap(),),
+            .with_tcp(
+                Default::default(),
+                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
                 // TODO: The single tuple is not intuitive.
                 (libp2p_yamux::Config::default(),),
             )
@@ -1738,13 +1485,35 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]
+    #[cfg(all(
+        feature = "async-std",
+        feature = "tcp",
+        feature = "tls",
+        feature = "noise"
+    ))]
+    fn async_std_tcp() {
+        let _ = SwarmBuilder::with_new_identity()
+            .with_async_std()
+            .with_tcp(
+                Default::default(),
+                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                // TODO: The single tuple is not intuitive.
+                (libp2p_yamux::Config::default(),),
+            )
+            .unwrap()
+            .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
+            .unwrap()
+            .build();
+    }
+
+    #[test]
+    #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "mplex"))]
     fn tcp_yamux_mplex() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp_2(
-                // TODO: Handle unwrap
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair).unwrap(),),
+            .with_tcp(
+                Default::default(),
+                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
                 (
                     libp2p_yamux::Config::default(),
                     libp2p_mplex::MplexConfig::default(),
@@ -1761,11 +1530,11 @@ mod tests {
     fn tcp_tls_noise() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp_2(
-                // TODO: Handle unwrap
+            .with_tcp(
+                Default::default(),
                 (
-                    |keypair: &Keypair| libp2p_tls::Config::new(keypair).unwrap(),
-                    |keypair: &Keypair| libp2p_noise::Config::new(keypair).unwrap(),
+                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
+                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
                 ),
                 (
                     libp2p_yamux::Config::default(),
@@ -1789,10 +1558,14 @@ mod tests {
     fn tcp_quic() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_tcp(
+                Default::default(),
+                (
+                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
+                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
+                ),
+                (libp2p_yamux::Config::default(),),
+            )
             .unwrap()
             .with_quic()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -1818,10 +1591,11 @@ mod tests {
 
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_tcp(
+                Default::default(),
+                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                (libp2p_yamux::Config::default(),),
+            )
             .unwrap()
             .with_relay()
             .with_tls()
@@ -1847,10 +1621,14 @@ mod tests {
     async fn tcp_dns() {
         SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_tcp(
+                Default::default(),
+                (
+                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
+                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
+                ),
+                (libp2p_yamux::Config::default(),),
+            )
             .unwrap()
             .with_dns()
             .unwrap()
@@ -1894,10 +1672,14 @@ mod tests {
     async fn tcp_websocket() {
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_tcp(
+                Default::default(),
+                (
+                    |keypair: &Keypair| libp2p_tls::Config::new(keypair),
+                    |keypair: &Keypair| libp2p_noise::Config::new(keypair),
+                ),
+                (libp2p_yamux::Config::default(),),
+            )
             .unwrap()
             .with_websocket()
             .with_tls()
@@ -1930,10 +1712,11 @@ mod tests {
 
         let (builder, _bandwidth_sinks) = SwarmBuilder::with_new_identity()
             .with_tokio()
-            .with_tcp()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_tcp(
+                Default::default(),
+                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                (libp2p_yamux::Config::default(),),
+            )
             .unwrap()
             .with_quic()
             .with_dns()
