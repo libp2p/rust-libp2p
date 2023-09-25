@@ -59,9 +59,6 @@ use thiserror::Error;
 
 pub use crate::query::QueryStats;
 
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Behaviour`.")]
-pub type Kademlia<TStore> = Behaviour<TStore>;
-
 /// `Behaviour` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
 pub struct Behaviour<TStore> {
@@ -124,11 +121,6 @@ pub struct Behaviour<TStore> {
     store: TStore,
 }
 
-#[deprecated(
-    note = "Import the `kad` module instead and refer to this type as `kad::BucketInserts`."
-)]
-pub type KademliaBucketInserts = BucketInserts;
-
 /// The configurable strategies for the insertion of peers
 /// and their addresses into the k-buckets of the Kademlia
 /// routing table.
@@ -153,11 +145,6 @@ pub enum BucketInserts {
     Manual,
 }
 
-#[deprecated(
-    note = "Import the `kad` module instead and refer to this type as `kad::StoreInserts`."
-)]
-pub type KademliaStoreInserts = StoreInserts;
-
 /// The configurable filtering strategies for the acceptance of
 /// incoming records.
 ///
@@ -180,9 +167,6 @@ pub enum StoreInserts {
     /// be retrieved via [`Behaviour::store_mut`].
     FilterBoth,
 }
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Config`.")]
-pub type KademliaConfig = Config;
 
 /// The configuration for the `Kademlia` behaviour.
 ///
@@ -221,9 +205,6 @@ impl Default for Config {
         }
     }
 }
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Caching`.")]
-pub type KademliaCaching = Caching;
 
 /// The configuration for Kademlia "write-back" caching after successful
 /// lookups via [`Behaviour::get_record`].
@@ -2610,9 +2591,6 @@ pub struct PeerRecord {
 
 //////////////////////////////////////////////////////////////////////////////
 // Events
-
-#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Event`.")]
-pub type KademliaEvent = Event;
 
 /// The events produced by the `Kademlia` behaviour.
 ///

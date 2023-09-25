@@ -114,3 +114,25 @@ pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 /// Constant shared across tests for the [`Multihash`](libp2p_core::multihash::Multihash) type.
 #[cfg(test)]
 const SHA_256_MH: u64 = 0x12;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Behaviour`.")]
+pub type Kademlia<TStore> = Behaviour<TStore>;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::BucketInserts`."
+)]
+pub type KademliaBucketInserts = BucketInserts;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::StoreInserts`."
+)]
+pub type KademliaStoreInserts = StoreInserts;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Config`.")]
+pub type KademliaConfig = Config;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Caching`.")]
+pub type KademliaCaching = Caching;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Event`.")]
+pub type KademliaEvent = Event;
