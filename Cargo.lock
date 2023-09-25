@@ -2927,6 +2927,7 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
+ "ring",
  "rustls 0.21.7",
  "socket2 0.5.4",
  "thiserror",

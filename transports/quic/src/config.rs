@@ -61,6 +61,8 @@ pub struct Config {
     client_tls_config: Arc<rustls::ClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
     server_tls_config: Arc<rustls::ServerConfig>,
+    /// Libp2p identity [`libp2p_identity::Keypair`] used for the stateless reset key.
+    keypair: libp2p_identity::Keypair,
 }
 
 impl Config {
@@ -80,6 +82,7 @@ impl Config {
 
             // Ensure that one stream is not consuming the whole connection.
             max_stream_data: 10_000_000,
+            keypair: keypair.clone(),
         }
     }
 }
@@ -104,6 +107,7 @@ impl From<Config> for QuinnConfig {
             max_stream_data,
             support_draft_29,
             handshake_timeout: _,
+            keypair,
         } = config;
         let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
@@ -128,7 +132,32 @@ impl From<Config> for QuinnConfig {
         let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let mut endpoint_config = quinn::EndpointConfig::default();
+        let mut endpoint_config = match keypair.key_type() {
+            libp2p_identity::KeyType::RSA => {
+                log::warn!(
+                    "identity keytype is RSA, QUIC stateless resets will not be not supported"
+                );
+                quinn::EndpointConfig::default()
+            }
+            libp2p_identity::KeyType::Ed25519 => {
+                let keypair = keypair.try_into_ed25519().expect("key should be Ed25519");
+                let secret = keypair.secret();
+                endpoint_config(secret.as_ref())
+            }
+            libp2p_identity::KeyType::Secp256k1 => {
+                let keypair = keypair
+                    .try_into_secp256k1()
+                    .expect("key should be Secp256k1");
+                let secret = keypair.secret();
+                endpoint_config(&secret.to_bytes())
+            }
+            libp2p_identity::KeyType::Ecdsa => {
+                let keypair = keypair.try_into_ecdsa().expect("key should be Ecdsa");
+                let secret = keypair.secret();
+                endpoint_config(&secret.to_bytes())
+            }
+        };
+
         if !support_draft_29 {
             endpoint_config.supported_versions(vec![1]);
         }
@@ -139,4 +168,9 @@ impl From<Config> for QuinnConfig {
             endpoint_config,
         }
     }
+}
+
+fn endpoint_config(secret: &[u8]) -> quinn::EndpointConfig {
+    let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, secret));
+    quinn::EndpointConfig::new(reset_key)
 }

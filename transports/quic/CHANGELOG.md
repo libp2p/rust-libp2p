@@ -1,3 +1,9 @@
+## 0.9.3
+
+- Support QUIC stateless resets for supported `libp2p_identity::Keypair`s. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.9.2
 
 - Cut stable release.
