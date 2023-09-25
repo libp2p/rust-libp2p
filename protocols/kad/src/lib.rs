@@ -76,7 +76,7 @@ pub use behaviour::{
     Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,
 };
 pub use kbucket::{Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey};
-pub use protocol::KadConnectionType;
+pub use protocol::ConnectionType;
 pub use query::QueryId;
 pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
 
@@ -136,3 +136,8 @@ pub type KademliaCaching = Caching;
 
 #[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Event`.")]
 pub type KademliaEvent = Event;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::ConnectionType`."
+)]
+pub type KadConnectionType = ConnectionType;

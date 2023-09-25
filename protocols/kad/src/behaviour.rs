@@ -26,7 +26,7 @@ use crate::addresses::Addresses;
 use crate::handler::{KademliaHandler, KademliaHandlerEvent, KademliaHandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
-use crate::protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+use crate::protocol::{ConnectionType, KadPeer, KademliaProtocolConfig};
 use crate::query::{Query, QueryConfig, QueryId, QueryPool, QueryPoolState};
 use crate::record_priv::{
     self,
@@ -1139,9 +1139,9 @@ where
                     let node_id = p.provider;
                     let multiaddrs = p.addresses;
                     let connection_ty = if connected.contains(&node_id) {
-                        KadConnectionType::Connected
+                        ConnectionType::Connected
                     } else {
-                        KadConnectionType::NotConnected
+                        ConnectionType::NotConnected
                     };
                     if multiaddrs.is_empty() {
                         // The provider is either the local node and we fill in
@@ -3002,8 +3002,8 @@ impl From<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> for KadPeer {
             node_id: e.node.key.into_preimage(),
             multiaddrs: e.node.value.into_vec(),
             connection_ty: match e.status {
-                NodeStatus::Connected => KadConnectionType::Connected,
-                NodeStatus::Disconnected => KadConnectionType::NotConnected,
+                NodeStatus::Connected => ConnectionType::Connected,
+                NodeStatus::Disconnected => ConnectionType::NotConnected,
             },
         }
     }
@@ -3161,7 +3161,7 @@ impl QueryInfo {
                     provider: crate::protocol::KadPeer {
                         node_id: *provider_id,
                         multiaddrs: external_addresses.clone(),
-                        connection_ty: crate::protocol::KadConnectionType::Connected,
+                        connection_ty: crate::protocol::ConnectionType::Connected,
                     },
                 },
             },

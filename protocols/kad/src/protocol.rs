@@ -46,7 +46,7 @@ pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs
 pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum KadConnectionType {
+pub enum ConnectionType {
     /// Sender hasn't tried to connect to peer.
     NotConnected = 0,
     /// Sender is currently connected to peer.
@@ -57,26 +57,26 @@ pub enum KadConnectionType {
     CannotConnect = 3,
 }
 
-impl From<proto::ConnectionType> for KadConnectionType {
-    fn from(raw: proto::ConnectionType) -> KadConnectionType {
+impl From<proto::ConnectionType> for ConnectionType {
+    fn from(raw: proto::ConnectionType) -> ConnectionType {
         use proto::ConnectionType::*;
         match raw {
-            NOT_CONNECTED => KadConnectionType::NotConnected,
-            CONNECTED => KadConnectionType::Connected,
-            CAN_CONNECT => KadConnectionType::CanConnect,
-            CANNOT_CONNECT => KadConnectionType::CannotConnect,
+            NOT_CONNECTED => ConnectionType::NotConnected,
+            CONNECTED => ConnectionType::Connected,
+            CAN_CONNECT => ConnectionType::CanConnect,
+            CANNOT_CONNECT => ConnectionType::CannotConnect,
         }
     }
 }
 
-impl From<KadConnectionType> for proto::ConnectionType {
-    fn from(val: KadConnectionType) -> Self {
+impl From<ConnectionType> for proto::ConnectionType {
+    fn from(val: ConnectionType) -> Self {
         use proto::ConnectionType::*;
         match val {
-            KadConnectionType::NotConnected => NOT_CONNECTED,
-            KadConnectionType::Connected => CONNECTED,
-            KadConnectionType::CanConnect => CAN_CONNECT,
-            KadConnectionType::CannotConnect => CANNOT_CONNECT,
+            ConnectionType::NotConnected => NOT_CONNECTED,
+            ConnectionType::Connected => CONNECTED,
+            ConnectionType::CanConnect => CAN_CONNECT,
+            ConnectionType::CannotConnect => CANNOT_CONNECT,
         }
     }
 }
@@ -89,7 +89,7 @@ pub struct KadPeer {
     /// The multiaddresses that the sender think can be used in order to reach the peer.
     pub multiaddrs: Vec<Multiaddr>,
     /// How the sender is connected to that remote.
-    pub connection_ty: KadConnectionType,
+    pub connection_ty: ConnectionType,
 }
 
 // Builds a `KadPeer` from a corresponding protobuf message.
@@ -624,7 +624,7 @@ mod tests {
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
     use multihash::{encode, Hash};
-    use protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+    use protocol::{ConnectionType, KadPeer, KademliaProtocolConfig};
     use std::sync::mpsc;
     use std::thread;
 
@@ -641,7 +641,7 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
         });
         test_one(KadMsg::GetProvidersReq {
@@ -651,12 +651,12 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
             provider_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
-                connection_ty: KadConnectionType::NotConnected,
+                connection_ty: ConnectionType::NotConnected,
             }],
         });
         test_one(KadMsg::AddProvider {
@@ -664,7 +664,7 @@ mod tests {
             provider_peer: KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             },
         });
         // TODO: all messages
