@@ -125,7 +125,7 @@ enum OutboundSubstreamState {
     // TODO: add timeout
     WaitingAnswer(KadOutStreamSink<Stream>, QueryId),
     /// An error happened on the substream and we should report the error to the user.
-    ReportError(KademliaHandlerQueryErr, QueryId),
+    ReportError(HandlerQueryErr, QueryId),
     /// The substream is being closed.
     Closing(KadOutStreamSink<Stream>),
     /// The substream is complete and will not perform any more work.
@@ -260,7 +260,7 @@ pub enum HandlerEvent {
     /// An error happened when performing a query.
     QueryError {
         /// The error that happened.
-        error: KademliaHandlerQueryErr,
+        error: HandlerQueryErr,
         /// The user data passed to the query.
         query_id: QueryId,
     },
@@ -311,7 +311,7 @@ pub enum HandlerEvent {
 
 /// Error that can happen when requesting an RPC query.
 #[derive(Debug)]
-pub enum KademliaHandlerQueryErr {
+pub enum HandlerQueryErr {
     /// Error while trying to perform the query.
     Upgrade(StreamUpgradeError<io::Error>),
     /// Received an answer that doesn't correspond to the request.
@@ -320,38 +320,38 @@ pub enum KademliaHandlerQueryErr {
     Io(io::Error),
 }
 
-impl fmt::Display for KademliaHandlerQueryErr {
+impl fmt::Display for HandlerQueryErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KademliaHandlerQueryErr::Upgrade(err) => {
+            HandlerQueryErr::Upgrade(err) => {
                 write!(f, "Error while performing Kademlia query: {err}")
             }
-            KademliaHandlerQueryErr::UnexpectedMessage => {
+            HandlerQueryErr::UnexpectedMessage => {
                 write!(
                     f,
                     "Remote answered our Kademlia RPC query with the wrong message type"
                 )
             }
-            KademliaHandlerQueryErr::Io(err) => {
+            HandlerQueryErr::Io(err) => {
                 write!(f, "I/O error during a Kademlia RPC query: {err}")
             }
         }
     }
 }
 
-impl error::Error for KademliaHandlerQueryErr {
+impl error::Error for HandlerQueryErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            KademliaHandlerQueryErr::Upgrade(err) => Some(err),
-            KademliaHandlerQueryErr::UnexpectedMessage => None,
-            KademliaHandlerQueryErr::Io(err) => Some(err),
+            HandlerQueryErr::Upgrade(err) => Some(err),
+            HandlerQueryErr::UnexpectedMessage => None,
+            HandlerQueryErr::Io(err) => Some(err),
         }
     }
 }
 
-impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
+impl From<StreamUpgradeError<io::Error>> for HandlerQueryErr {
     fn from(err: StreamUpgradeError<io::Error>) -> Self {
-        KademliaHandlerQueryErr::Upgrade(err)
+        HandlerQueryErr::Upgrade(err)
     }
 }
 
@@ -866,7 +866,7 @@ impl futures::Stream for OutboundSubstreamState {
                                 let event = query_id.map(|query_id| {
                                     ConnectionHandlerEvent::NotifyBehaviour(
                                         HandlerEvent::QueryError {
-                                            error: KademliaHandlerQueryErr::Io(error),
+                                            error: HandlerQueryErr::Io(error),
                                             query_id,
                                         },
                                     )
@@ -883,7 +883,7 @@ impl futures::Stream for OutboundSubstreamState {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
                                 ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
+                                    error: HandlerQueryErr::Io(error),
                                     query_id,
                                 })
                             });
@@ -909,7 +909,7 @@ impl futures::Stream for OutboundSubstreamState {
                             *this = OutboundSubstreamState::Done;
                             let event = query_id.map(|query_id| {
                                 ConnectionHandlerEvent::NotifyBehaviour(HandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
+                                    error: HandlerQueryErr::Io(error),
                                     query_id,
                                 })
                             });
@@ -935,7 +935,7 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(Some(Err(error))) => {
                             *this = OutboundSubstreamState::Done;
                             let event = HandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
+                                error: HandlerQueryErr::Io(error),
                                 query_id,
                             };
 
@@ -946,9 +946,7 @@ impl futures::Stream for OutboundSubstreamState {
                         Poll::Ready(None) => {
                             *this = OutboundSubstreamState::Done;
                             let event = HandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(
-                                    io::ErrorKind::UnexpectedEof.into(),
-                                ),
+                                error: HandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
                                 query_id,
                             };
 
@@ -1139,7 +1137,7 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
         KadResponseMsg::Pong => {
             // We never send out pings.
             HandlerEvent::QueryError {
-                error: KademliaHandlerQueryErr::UnexpectedMessage,
+                error: HandlerQueryErr::UnexpectedMessage,
                 query_id,
             }
         }
