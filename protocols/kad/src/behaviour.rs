@@ -2643,7 +2643,7 @@ pub enum Event {
 
     /// A connection to a peer has been established for whom a listen address
     /// is known but the peer has not been added to the routing table either
-    /// because [`KademliaBucketInserts::Manual`] is configured or because
+    /// because [`BucketInserts::Manual`] is configured or because
     /// the corresponding bucket is full.
     ///
     /// If the peer is to be included in the routing table, it must
