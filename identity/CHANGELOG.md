@@ -1,3 +1,10 @@
+## 0.2.4 - unreleased
+
+- Implement `Keypair::secret`, that returns the secret key of the keypair if it has one.
+  See [PR 4554]
+
+[PR 4554]: https://github.com/libp2p/rust-libp2p/pull/4554
+
 ## 0.2.3
 
 - Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.

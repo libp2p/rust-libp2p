@@ -164,7 +164,7 @@ impl PublicKey {
 
 /// An Ed25519 secret key.
 #[derive(Clone)]
-pub struct SecretKey(ed25519::SecretKey);
+pub struct SecretKey(pub(crate) ed25519::SecretKey);
 
 /// View the bytes of the secret key.
 impl AsRef<[u8]> for SecretKey {

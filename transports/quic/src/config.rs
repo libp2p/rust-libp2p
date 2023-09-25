@@ -132,30 +132,12 @@ impl From<Config> for QuinnConfig {
         let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let mut endpoint_config = match keypair.key_type() {
-            libp2p_identity::KeyType::RSA => {
-                log::warn!(
-                    "identity keytype is RSA, QUIC stateless resets will not be not supported"
-                );
-                quinn::EndpointConfig::default()
+        let mut endpoint_config = match keypair.secret() {
+            Some(secret) => {
+                let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &secret));
+                quinn::EndpointConfig::new(reset_key)
             }
-            libp2p_identity::KeyType::Ed25519 => {
-                let keypair = keypair.try_into_ed25519().expect("key should be Ed25519");
-                let secret = keypair.secret();
-                endpoint_config(secret.as_ref())
-            }
-            libp2p_identity::KeyType::Secp256k1 => {
-                let keypair = keypair
-                    .try_into_secp256k1()
-                    .expect("key should be Secp256k1");
-                let secret = keypair.secret();
-                endpoint_config(&secret.to_bytes())
-            }
-            libp2p_identity::KeyType::Ecdsa => {
-                let keypair = keypair.try_into_ecdsa().expect("key should be Ecdsa");
-                let secret = keypair.secret();
-                endpoint_config(&secret.to_bytes())
-            }
+            None => quinn::EndpointConfig::default(),
         };
 
         if !support_draft_29 {
@@ -168,9 +150,4 @@ impl From<Config> for QuinnConfig {
             endpoint_config,
         }
     }
-}
-
-fn endpoint_config(secret: &[u8]) -> quinn::EndpointConfig {
-    let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, secret));
-    quinn::EndpointConfig::new(reset_key)
 }
