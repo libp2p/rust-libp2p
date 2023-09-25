@@ -57,6 +57,7 @@
 //!    [dependencies]
 //!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
+//!        env_logger = "0.10.0"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!    ```
 //!
@@ -142,7 +143,7 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour};
+//! use libp2p::swarm::NetworkBehaviour;
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
@@ -154,19 +155,9 @@
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     let behaviour = Behaviour::default();
+//!     let behaviour = ping::Behaviour::default();
 //!
 //!     Ok(())
-//! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
@@ -177,36 +168,65 @@
 //! carried out by a [`Swarm`]. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the
 //! [`NetworkBehaviour`] to the [`Transport`] as well as events from the
-//! [`Transport`] to the [`NetworkBehaviour`].
+//! [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
+//! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
+//! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
+//! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
+//! (In our example, `env_logger` is used)
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     let behaviour = Behaviour::default();
+//!     let behaviour = ping::Behaviour::default();
 //!
 //!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
 //!
 //!     Ok(())
 //! }
+//! ```
 //!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::
-//! /// KeepAlive) behaviour so a continuous sequence of pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
+//! ## Idle connection timeout
+//!
+//! Now, for this example in particular, we need set the idle connection timeout.
+//! Otherwise, the connection will be closed immediately.
+//!
+//! Whether you need to set this in your application too depends on your usecase.
+//! Typically, connections are kept alive if they are "in use" by a certain protocol.
+//! The ping protocol however is only an "auxiliary" kind of protocol.
+//! Thus, without any other behaviour in place, we would not be able to observe the pings.
+//!
+//! ```rust
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
+//! use libp2p::{identity, ping, PeerId};
+//! use std::error::Error;
+//! use std::time::Duration;
+//!
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
+//!     use std::time::Duration;
+//! let local_key = identity::Keypair::generate_ed25519();
+//!     let local_peer_id = PeerId::from(local_key.public());
+//!     println!("Local peer id: {local_peer_id:?}");
+//!
+//!     let transport = libp2p::development_transport(local_key).await?;
+//!
+//!     let behaviour = ping::Behaviour::default();
+//!
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
+//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
+//!         .build();
+//!
+//!     Ok(())
 //! }
 //! ```
 //!
@@ -237,21 +257,24 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
+//! use std::time::Duration;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     let behaviour = Behaviour::default();
+//!     let behaviour = ping::Behaviour::default();
 //!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
+//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
+//!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
@@ -267,16 +290,6 @@
 //!
 //!     Ok(())
 //! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
-//! }
 //! ```
 //!
 //! ## Continuously polling the Swarm
@@ -287,21 +300,24 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent, SwarmBuilder};
+//! use libp2p::swarm::{NetworkBehaviour, SwarmEvent, SwarmBuilder};
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
+//! use std::time::Duration;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     let behaviour = Behaviour::default();
+//!     let behaviour = ping::Behaviour::default();
 //!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
+//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
+//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
+//!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
@@ -323,16 +339,6 @@
 //!         }
 //!     }
 //! }
-//!
-//! /// Our network behaviour.
-//! ///
-//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-//! /// pings can be observed.
-//! #[derive(NetworkBehaviour, Default)]
-//! struct Behaviour {
-//!     keep_alive: keep_alive::Behaviour,
-//!     ping: ping::Behaviour,
-//! }
 //! ```
 //!
 //! ## Running two nodes
@@ -349,9 +355,8 @@
 //! cargo run --example ping
 //! ```
 //!
-//! It will print the PeerId and the new listening addresses, e.g.
+//! It will print the new listening addresses, e.g.
 //! ```sh
-//! Local peer id: PeerId("12D3KooWT1As4mwh3KYBnNTw9bSrRbYQGJTm9SSte82JSumqgCQG")
 //! Listening on "/ip4/127.0.0.1/tcp/24915"
 //! Listening on "/ip4/192.168.178.25/tcp/24915"
 //! Listening on "/ip4/172.17.0.1/tcp/24915"

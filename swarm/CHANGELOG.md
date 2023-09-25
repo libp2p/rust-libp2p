@@ -1,3 +1,18 @@
+## 0.43.4
+
+- Implement `Debug` for event structs.
+  See [PR 4426].
+
+- Improve error message when `DialPeerCondition` prevents a dial.
+  See [PR 4409].
+
+- Introduce `SwarmBuilder::idle_conncetion_timeout` and deprecate `keep_alive::Behaviour` as a result.
+  See [PR 4161].
+
+[PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
+[PR 4409]: https://github.com/libp2p/rust-libp2p/pull/4409
+[PR 4161]: https://github.com/libp2p/rust-libp2p/pull/4161
+
 ## 0.43.3
 
 - Implement `Display` for `ConnectionId`.
