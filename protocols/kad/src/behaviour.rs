@@ -23,7 +23,7 @@
 mod test;
 
 use crate::addresses::Addresses;
-use crate::handler::{Handler, HandlerEvent, KademliaHandlerIn, KademliaRequestId};
+use crate::handler::{Handler, HandlerEvent, HandlerIn, KademliaRequestId};
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
 use crate::protocol::{ConnectionType, KadPeer, ProtocolConfig};
@@ -100,7 +100,7 @@ pub struct Behaviour<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<ToSwarm<Event, KademliaHandlerIn>>,
+    queued_events: VecDeque<ToSwarm<Event, HandlerIn>>,
 
     listen_addresses: ListenAddresses,
 
@@ -1037,7 +1037,7 @@ where
                     .map(|(conn_id, peer_id)| ToSwarm::NotifyHandler {
                         peer_id: *peer_id,
                         handler: NotifyHandler::One(*conn_id),
-                        event: KademliaHandlerIn::ReconfigureMode {
+                        event: HandlerIn::ReconfigureMode {
                             new_mode: self.mode,
                         },
                     }),
@@ -1711,7 +1711,7 @@ where
             self.queued_events.push_back(ToSwarm::NotifyHandler {
                 peer_id: source,
                 handler: NotifyHandler::One(connection),
-                event: KademliaHandlerIn::PutRecordRes {
+                event: HandlerIn::PutRecordRes {
                     key: record.key,
                     value: record.value,
                     request_id,
@@ -1782,7 +1782,7 @@ where
                         self.queued_events.push_back(ToSwarm::NotifyHandler {
                             peer_id: source,
                             handler: NotifyHandler::One(connection),
-                            event: KademliaHandlerIn::Reset(request_id),
+                            event: HandlerIn::Reset(request_id),
                         });
 
                         return;
@@ -1801,17 +1801,17 @@ where
             }
         }
 
-        // The remote receives a [`KademliaHandlerIn::PutRecordRes`] even in the
+        // The remote receives a [`HandlerIn::PutRecordRes`] even in the
         // case where the record is discarded due to being expired. Given that
         // the remote sent the local node a [`HandlerEvent::PutRecord`]
         // request, the remote perceives the local node as one node among the k
         // closest nodes to the target. In addition returning
-        // [`KademliaHandlerIn::PutRecordRes`] does not reveal any internal
+        // [`HandlerIn::PutRecordRes`] does not reveal any internal
         // information to a possibly malicious remote node.
         self.queued_events.push_back(ToSwarm::NotifyHandler {
             peer_id: source,
             handler: NotifyHandler::One(connection),
-            event: KademliaHandlerIn::PutRecordRes {
+            event: HandlerIn::PutRecordRes {
                 key: record.key,
                 value: record.value,
                 request_id,
@@ -2179,7 +2179,7 @@ where
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
                     handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::FindNodeRes {
+                    event: HandlerIn::FindNodeRes {
                         closer_peers,
                         request_id,
                     },
@@ -2208,7 +2208,7 @@ where
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
                     handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::GetProvidersRes {
+                    event: HandlerIn::GetProvidersRes {
                         closer_peers,
                         provider_peers,
                         request_id,
@@ -2303,7 +2303,7 @@ where
                 self.queued_events.push_back(ToSwarm::NotifyHandler {
                     peer_id: source,
                     handler: NotifyHandler::One(connection),
-                    event: KademliaHandlerIn::GetRecordRes {
+                    event: HandlerIn::GetRecordRes {
                         record,
                         closer_peers,
                         request_id,
@@ -3021,7 +3021,7 @@ struct QueryInner {
     ///
     /// A request is pending if the targeted peer is not currently connected
     /// and these requests are sent as soon as a connection to the peer is established.
-    pending_rpcs: SmallVec<[(PeerId, KademliaHandlerIn); K_VALUE.get()]>,
+    pending_rpcs: SmallVec<[(PeerId, HandlerIn); K_VALUE.get()]>,
 }
 
 impl QueryInner {
@@ -3133,22 +3133,22 @@ pub enum QueryInfo {
 impl QueryInfo {
     /// Creates an event for a handler to issue an outgoing request in the
     /// context of a query.
-    fn to_request(&self, query_id: QueryId) -> KademliaHandlerIn {
+    fn to_request(&self, query_id: QueryId) -> HandlerIn {
         match &self {
-            QueryInfo::Bootstrap { peer, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfo::Bootstrap { peer, .. } => HandlerIn::FindNodeReq {
                 key: peer.to_bytes(),
                 query_id,
             },
-            QueryInfo::GetClosestPeers { key, .. } => KademliaHandlerIn::FindNodeReq {
+            QueryInfo::GetClosestPeers { key, .. } => HandlerIn::FindNodeReq {
                 key: key.clone(),
                 query_id,
             },
-            QueryInfo::GetProviders { key, .. } => KademliaHandlerIn::GetProvidersReq {
+            QueryInfo::GetProviders { key, .. } => HandlerIn::GetProvidersReq {
                 key: key.clone(),
                 query_id,
             },
             QueryInfo::AddProvider { key, phase, .. } => match phase {
-                AddProviderPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
+                AddProviderPhase::GetClosestPeers => HandlerIn::FindNodeReq {
                     key: key.to_vec(),
                     query_id,
                 },
@@ -3156,7 +3156,7 @@ impl QueryInfo {
                     provider_id,
                     external_addresses,
                     ..
-                } => KademliaHandlerIn::AddProvider {
+                } => HandlerIn::AddProvider {
                     key: key.clone(),
                     provider: crate::protocol::KadPeer {
                         node_id: *provider_id,
@@ -3165,16 +3165,16 @@ impl QueryInfo {
                     },
                 },
             },
-            QueryInfo::GetRecord { key, .. } => KademliaHandlerIn::GetRecord {
+            QueryInfo::GetRecord { key, .. } => HandlerIn::GetRecord {
                 key: key.clone(),
                 query_id,
             },
             QueryInfo::PutRecord { record, phase, .. } => match phase {
-                PutRecordPhase::GetClosestPeers => KademliaHandlerIn::FindNodeReq {
+                PutRecordPhase::GetClosestPeers => HandlerIn::FindNodeReq {
                     key: record.key.to_vec(),
                     query_id,
                 },
-                PutRecordPhase::PutRecord { .. } => KademliaHandlerIn::PutRecord {
+                PutRecordPhase::PutRecord { .. } => HandlerIn::PutRecord {
                     record: record.clone(),
                     query_id,
                 },

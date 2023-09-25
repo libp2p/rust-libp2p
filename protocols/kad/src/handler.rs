@@ -142,7 +142,7 @@ enum InboundSubstreamState {
         connection_id: UniqueConnecId,
         substream: KadInStreamSink<Stream>,
     },
-    /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
+    /// Waiting for the behaviour to send a [`HandlerIn`] event containing the response.
     WaitingBehaviour(UniqueConnecId, KadInStreamSink<Stream>, Option<Waker>),
     /// Waiting to send an answer back to the remote.
     PendingSend(UniqueConnecId, KadInStreamSink<Stream>, KadResponseMsg),
@@ -230,7 +230,7 @@ pub enum HandlerEvent {
         request_id: KademliaRequestId,
     },
 
-    /// Response to an `KademliaHandlerIn::FindNodeReq`.
+    /// Response to an `HandlerIn::FindNodeReq`.
     FindNodeRes {
         /// Results of the request.
         closer_peers: Vec<KadPeer>,
@@ -247,7 +247,7 @@ pub enum HandlerEvent {
         request_id: KademliaRequestId,
     },
 
-    /// Response to an `KademliaHandlerIn::GetProvidersReq`.
+    /// Response to an `HandlerIn::GetProvidersReq`.
     GetProvidersRes {
         /// Nodes closest to the key.
         closer_peers: Vec<KadPeer>,
@@ -281,7 +281,7 @@ pub enum HandlerEvent {
         request_id: KademliaRequestId,
     },
 
-    /// Response to a `KademliaHandlerIn::GetRecord`.
+    /// Response to a `HandlerIn::GetRecord`.
     GetRecordRes {
         /// The result is present if the key has been found
         record: Option<Record>,
@@ -357,7 +357,7 @@ impl From<StreamUpgradeError<io::Error>> for KademliaHandlerQueryErr {
 
 /// Event to send to the handler.
 #[derive(Debug)]
-pub enum KademliaHandlerIn {
+pub enum HandlerIn {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.
     ///
@@ -612,7 +612,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type FromBehaviour = KademliaHandlerIn;
+    type FromBehaviour = HandlerIn;
     type ToBehaviour = HandlerEvent;
     type Error = io::Error; // TODO: better error type?
     type InboundProtocol = Either<ProtocolConfig, upgrade::DeniedUpgrade>;
@@ -627,9 +627,9 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn on_behaviour_event(&mut self, message: KademliaHandlerIn) {
+    fn on_behaviour_event(&mut self, message: HandlerIn) {
         match message {
-            KademliaHandlerIn::Reset(request_id) => {
+            HandlerIn::Reset(request_id) => {
                 if let Some(state) = self
                     .inbound_substreams
                     .iter_mut()
@@ -643,19 +643,19 @@ impl ConnectionHandler for Handler {
                     state.close();
                 }
             }
-            KademliaHandlerIn::FindNodeReq { key, query_id } => {
+            HandlerIn::FindNodeReq { key, query_id } => {
                 let msg = KadRequestMsg::FindNode { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::FindNodeRes {
+            HandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
-            KademliaHandlerIn::GetProvidersReq { key, query_id } => {
+            HandlerIn::GetProvidersReq { key, query_id } => {
                 let msg = KadRequestMsg::GetProviders { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::GetProvidersRes {
+            HandlerIn::GetProvidersRes {
                 closer_peers,
                 provider_peers,
                 request_id,
@@ -666,19 +666,19 @@ impl ConnectionHandler for Handler {
                     provider_peers,
                 },
             ),
-            KademliaHandlerIn::AddProvider { key, provider } => {
+            HandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
                 self.pending_messages.push_back((msg, None));
             }
-            KademliaHandlerIn::GetRecord { key, query_id } => {
+            HandlerIn::GetRecord { key, query_id } => {
                 let msg = KadRequestMsg::GetValue { key };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::PutRecord { record, query_id } => {
+            HandlerIn::PutRecord { record, query_id } => {
                 let msg = KadRequestMsg::PutValue { record };
                 self.pending_messages.push_back((msg, Some(query_id)));
             }
-            KademliaHandlerIn::GetRecordRes {
+            HandlerIn::GetRecordRes {
                 record,
                 closer_peers,
                 request_id,
@@ -691,14 +691,14 @@ impl ConnectionHandler for Handler {
                     },
                 );
             }
-            KademliaHandlerIn::PutRecordRes {
+            HandlerIn::PutRecordRes {
                 key,
                 request_id,
                 value,
             } => {
                 self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
             }
-            KademliaHandlerIn::ReconfigureMode { new_mode } => {
+            HandlerIn::ReconfigureMode { new_mode } => {
                 let peer = self.remote_peer_id;
 
                 match &self.endpoint {
