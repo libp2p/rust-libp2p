@@ -3,7 +3,6 @@ use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use futures_timer::Delay;
-use libp2p::identify;
 use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
@@ -11,6 +10,7 @@ use libp2p::metrics::{Metrics, Recorder};
 use libp2p::quic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp;
+use libp2p::{identify, noise, yamux};
 use log::{debug, info, warn};
 use prometheus_client::metrics::info::Info;
 use prometheus_client::registry::Registry;
@@ -75,8 +75,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
-        .with_tcp_config(tcp::Config::new().port_reuse(true).nodelay(true))
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default().port_reuse(true).nodelay(true),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_quic_config(|key| {
             let mut config = quic::Config::new(key);
             config.support_draft_29 = true;

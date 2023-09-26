@@ -21,7 +21,7 @@
 #![doc = include_str!("../README.md")]
 
 use futures::StreamExt;
-use libp2p::{core::multiaddr::Multiaddr, identify, swarm::SwarmEvent};
+use libp2p::{core::multiaddr::Multiaddr, identify, noise, swarm::SwarmEvent, tcp, yamux};
 use std::error::Error;
 
 #[async_std::main]
@@ -30,8 +30,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| {
             identify::Behaviour::new(identify::Config::new(
                 "/ipfs/id/1.0.0".to_string(),

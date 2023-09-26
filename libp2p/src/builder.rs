@@ -137,7 +137,7 @@ macro_rules! impl_tcp_builder {
                 multiplexer_upgrade: MuxUpgrade,
             ) -> Result<
                 SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
-            Box<dyn std::error::Error>,
+            SecUpgrade::Error,
             >
             where
                 SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
@@ -165,9 +165,7 @@ macro_rules! impl_tcp_builder {
                         transport: libp2p_tcp::$path::Transport::new(tcp_config)
                             .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                             .authenticate(
-                                security_upgrade
-                                    .into_security_upgrade(&self.keypair)
-                                    .map_err(Box::new)?,
+                                security_upgrade.into_security_upgrade(&self.keypair)?,
                             )
                             .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
                             .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
@@ -605,7 +603,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, DnsPhase<T>> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: RelayPhase {
-                transport: libp2p_dns::DnsConfig::system(self.phase.transport).await?,
+                transport: libp2p_dns::async_std::Transport::system(self.phase.transport).await?,
             },
         })
     }
@@ -621,7 +619,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, DnsPhase<T>> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: RelayPhase {
-                transport: libp2p_dns::TokioDnsConfig::system(self.phase.transport)?,
+                transport: libp2p_dns::tokio::Transport::system(self.phase.transport)?,
             },
         })
     }
@@ -1137,7 +1135,7 @@ macro_rules! impl_websocket_noise_builder {
 impl_websocket_noise_builder!(
     "async-std",
     AsyncStd,
-    libp2p_dns::DnsConfig::system(libp2p_tcp::async_io::Transport::new(
+    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
         libp2p_tcp::Config::default(),
     ))
 );
@@ -1145,7 +1143,7 @@ impl_websocket_noise_builder!(
 impl_websocket_noise_builder!(
     "tokio",
     Tokio,
-    futures::future::ready(libp2p_dns::TokioDnsConfig::system(
+    futures::future::ready(libp2p_dns::tokio::Transport::system(
         libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
     ))
 );

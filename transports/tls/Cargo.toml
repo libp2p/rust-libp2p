@@ -15,14 +15,14 @@ libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true }
 rcgen = "0.10.0"
 ring = "0.16.20"
-thiserror = "1.0.44"
+thiserror = "1.0.48"
 webpki = { version = "0.101.4", package = "rustls-webpki", features = ["std"] }
 x509-parser = "0.15.1"
 yasna = "0.5.2"
 
 # Exposed dependencies. Breaking changes to these are breaking changes to us.
 [dependencies.rustls]
-version = "0.21.6"
+version = "0.21.7"
 default-features = false
 features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
 

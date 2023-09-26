@@ -50,6 +50,7 @@ full = [
     "websocket",
     "webtransport-websys",
     "yamux",
+    "upnp"
 ]
 
 async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
@@ -82,7 +83,7 @@ secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
@@ -90,6 +91,7 @@ wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
 yamux = ["dep:libp2p-yamux"]
+upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
 bytes = "1"
@@ -135,6 +137,7 @@ libp2p-quic = { workspace = true, optional = true }
 libp2p-tcp = { workspace = true, optional = true }
 libp2p-tls = { workspace = true, optional = true }
 libp2p-uds = { workspace = true, optional = true }
+libp2p-upnp = { workspace = true, optional = true }
 libp2p-websocket = { workspace = true, optional = true }
 
 [dev-dependencies]

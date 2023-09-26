@@ -24,9 +24,9 @@ use clap::Parser;
 use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
     core::multiaddr::{Multiaddr, Protocol},
-    dcutr, identify, identity, ping, relay,
+    dcutr, identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, PeerId,
+    tcp, yamux, PeerId,
 };
 use log::info;
 use std::error::Error;
@@ -120,8 +120,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm =
         libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
             .with_async_std()
-            .with_tcp_config(tcp::Config::default().port_reuse(true).nodelay(true))
-            .with_noise()?
+            .with_tcp(
+                tcp::Config::default().port_reuse(true).nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )?
             .with_quic()
             .with_dns()
             .await?

@@ -27,10 +27,9 @@ use futures::stream::StreamExt;
 use libp2p::{
     core::multiaddr::Protocol,
     core::Multiaddr,
-    identify, identity,
-    identity::PeerId,
-    ping, relay,
+    identify, identity, noise, ping, relay,
     swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -42,13 +41,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_quic()
         .with_behaviour(|key| Behaviour {
             relay: relay::Behaviour::new(key.public().to_peer_id(), Default::default()),

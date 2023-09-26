@@ -6,7 +6,7 @@ use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
-use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
+use libp2p_swarm::{dummy, NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -98,7 +98,7 @@ where
     assert_eq!(&outbound_peer_id, swarm1.local_peer_id());
 }
 
-fn make_swarm<T>(transport: T, pnet: PnetConfig) -> Swarm<keep_alive::Behaviour>
+fn make_swarm<T>(transport: T, pnet: PnetConfig) -> Swarm<dummy::Behaviour>
 where
     T: Transport + Send + Unpin + 'static,
     <T as libp2p_core::Transport>::Error: Send + Sync + 'static,
@@ -115,7 +115,7 @@ where
         .boxed();
     Swarm::new_with_config(
         transport,
-        keep_alive::Behaviour,
+        dummy::Behaviour,
         identity.public().to_peer_id(),
         SwarmConfig::with_tokio_executor(),
     )

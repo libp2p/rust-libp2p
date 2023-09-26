@@ -4,8 +4,8 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use futures::{FutureExt, StreamExt};
 use libp2p::identity::Keypair;
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, ping, Multiaddr};
+use libp2p::swarm::SwarmEvent;
+use libp2p::{identify, ping, swarm::NetworkBehaviour, Multiaddr};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -35,6 +35,7 @@ pub async fn run_test(
     let mut maybe_id = None;
 
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
+    #[cfg(not(target_arch = "wasm32"))]
     if transport == Transport::WebRtcDirect {
         maybe_id = Some(swarm.listen_on(local_addr.parse()?)?);
     }
@@ -226,7 +227,6 @@ impl FromStr for SecProtocol {
 #[derive(NetworkBehaviour)]
 pub(crate) struct Behaviour {
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     identify: identify::Behaviour,
 }
 
@@ -244,7 +244,6 @@ where
 pub(crate) fn build_behaviour(key: &Keypair) -> Behaviour {
     Behaviour {
         ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-        keep_alive: keep_alive::Behaviour,
         // Need to include identify until https://github.com/status-im/nim-libp2p/issues/924 is resolved.
         identify: identify::Behaviour::new(identify::Config::new(
             "/interop-tests".to_owned(),

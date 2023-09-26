@@ -29,8 +29,9 @@ use libp2p::kad::{
     PutRecordOk, QueryResult, Quorum, Record,
 };
 use libp2p::{
-    mdns,
+    mdns, noise,
     swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 
@@ -47,8 +48,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| {
             Ok(MyBehaviour {
                 kademlia: Kademlia::new(

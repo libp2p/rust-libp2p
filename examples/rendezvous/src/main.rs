@@ -22,8 +22,9 @@
 
 use futures::StreamExt;
 use libp2p::{
-    identify, ping, rendezvous,
-    swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
+    identify, noise, ping, rendezvous,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 use std::time::Duration;
@@ -34,8 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_tokio()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
@@ -43,11 +47,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-            keep_alive: keep_alive::Behaviour,
         })?
         .build();
 
-    log::info!("Local peer id: {}", swarm.local_peer_id());
+    // TODO: Set idle connection timeout.
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap());
 
@@ -94,5 +97,4 @@ struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::server::Behaviour,
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
 }

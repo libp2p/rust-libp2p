@@ -24,8 +24,8 @@ use env_logger::Env;
 use futures::{executor::block_on, StreamExt};
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, identity, ping};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -38,8 +38,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .build();
 
@@ -85,7 +88,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
-    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
@@ -97,7 +99,6 @@ impl Behaviour {
                 "/ipfs/0.1.0".into(),
                 local_pub_key,
             )),
-            keep_alive: keep_alive::Behaviour,
         }
     }
 }

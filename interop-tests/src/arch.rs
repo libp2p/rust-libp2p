@@ -17,7 +17,7 @@ pub(crate) mod native {
     use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::Transport as _;
+    use libp2p::{noise, tcp, tls, yamux, Transport as _};
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
@@ -36,7 +36,7 @@ pub(crate) mod native {
     }
 
     fn expect_muxer_yamux() -> Result<()> {
-       match from_env("muxer")? {
+        match from_env("muxer")? {
             Muxer::Yamux => (),
             Muxer::Mplex => {
                 bail!("Only Yamux is supported, not Mplex")
@@ -64,8 +64,12 @@ pub(crate) mod native {
 
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_tcp()
-                    .with_tls()?
+                    .with_tcp(
+                        tcp::Config::default(),
+                        tls::Config::new,
+                        yamux::Config::default,
+                    )
+                    .context("failed to build tcp transport")?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
@@ -75,8 +79,12 @@ pub(crate) mod native {
 
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_tcp()
-                    .with_noise()?
+                    .with_tcp(
+                        tcp::Config::default(),
+                        noise::Config::new,
+                        yamux::Config::default,
+                    )
+                    .context("failed to build tcp transport")?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
@@ -158,6 +166,7 @@ pub(crate) mod wasm {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
     use libp2p::Transport as _;
+    use libp2p_webrtc_websys as webrtc;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Transport};
@@ -178,6 +187,34 @@ pub(crate) mod wasm {
         transport: Transport,
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
+        match transport {
+            Transport::Webtransport => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|key| {
+                        libp2p::webtransport_websys::Transport::new(
+                            libp2p::webtransport_websys::Config::new(key),
+                        )
+                        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                return Ok((swarm, format!("/ip4/{ip}/udp/0/quic/webtransport")));
+            }
+            Transport::WebRtcDirect => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|key| {
+                        webrtc::Transport::new(webrtc::Config::new(&local_key))
+                            .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                return Ok((swarm, format!("/ip4/{ip}/udp/0/webrtc-direct")));
+            }
+            _ => bail!("Only webtransport and webrtc-direct are supported with wasm"),
+        }
+
         if let Transport::Webtransport = transport {
             let swarm = libp2p::SwarmBuilder::with_new_identity()
                 .with_wasm_bindgen()

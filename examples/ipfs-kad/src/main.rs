@@ -23,7 +23,7 @@
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
-use libp2p::{swarm::SwarmEvent, PeerId};
+use libp2p::{noise, swarm::SwarmEvent, tcp, yamux, PeerId};
 use std::{env, error::Error, time::Duration};
 
 const BOOTNODES: [&str; 4] = [
@@ -39,8 +39,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_dns()
         .await?
         .with_behaviour(|key| {

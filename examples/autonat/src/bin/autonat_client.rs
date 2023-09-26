@@ -25,7 +25,7 @@ use futures::StreamExt;
 use libp2p::core::multiaddr::Protocol;
 use libp2p::core::Multiaddr;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{autonat, identify, identity, PeerId};
+use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
 use std::time::Duration;
@@ -51,8 +51,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .build();
 

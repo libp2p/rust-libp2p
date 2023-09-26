@@ -1,4 +1,4 @@
-## 0.43.4 - unreleased
+## 0.43.5 - unreleased
 
 - Deprecate old `libp2p::swarm::SwarmBuilder`.
   Most users should use the new `libp2p::SwarmBuilder`.
@@ -6,6 +6,21 @@
   See [PR 4120].
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+
+## 0.43.4
+
+- Implement `Debug` for event structs.
+  See [PR 4426].
+
+- Improve error message when `DialPeerCondition` prevents a dial.
+  See [PR 4409].
+
+- Introduce `SwarmBuilder::idle_conncetion_timeout` and deprecate `keep_alive::Behaviour` as a result.
+  See [PR 4161].
+
+[PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
+[PR 4409]: https://github.com/libp2p/rust-libp2p/pull/4409
+[PR 4161]: https://github.com/libp2p/rust-libp2p/pull/4161
 
 ## 0.43.3
 

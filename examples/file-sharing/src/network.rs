@@ -11,9 +11,10 @@ use libp2p::{
         QueryResult,
     },
     multiaddr::Protocol,
+    noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId,
 };
 
 use libp2p::StreamProtocol;
@@ -45,8 +46,11 @@ pub(crate) async fn new(
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(id_keys)
         .with_async_std()
-        .with_tcp()
-        .with_noise()?
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
         .with_behaviour(|key| ComposedBehaviour {
             kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
             request_response: request_response::cbor::Behaviour::new(
