@@ -366,10 +366,11 @@ where
                     {
                         let effective_keep_alive = max(requested_keep_alive, *idle_timeout);
 
+                        let (delay, _) = sleep_until_or_at_least_very_long(effective_keep_alive);
+
                         // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
                         // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                        *shutdown =
-                            Shutdown::Later(Delay::new(effective_keep_alive), earliest_shutdown)
+                        *shutdown = Shutdown::Later(delay, earliest_shutdown)
                     }
                 }
                 (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
@@ -379,8 +380,9 @@ where
                     // Do nothing, i.e. let the shutdown timer continue to tick.
                 }
                 (_, KeepAlive::No) => {
-                    let deadline = Instant::now() + *idle_timeout;
-                    *shutdown = Shutdown::Later(Delay::new(*idle_timeout), deadline);
+                    let (delay, deadline) = sleep_until_or_at_least_very_long(*idle_timeout);
+
+                    *shutdown = Shutdown::Later(delay, deadline);
                 }
                 (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
             };
@@ -477,6 +479,19 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .protocol_info()
         .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
+}
+
+/// Constructs a [`Delay`] for the given [`Duration`] and returns the [`Instant`] at which it will fire.
+///
+/// If [`Duration`] + [`Instant::now`] overflows, we will return a [`Delay`] that at least sleeps _very_ long.
+fn sleep_until_or_at_least_very_long(mut duration: Duration) -> (Delay, Instant) {
+    while Instant::now().checked_add(duration).is_none() {
+        log::debug!("Cannot represent time {duration:?} in the future, halving it ...");
+
+        duration = duration / 2;
+    }
+
+    (Delay::new(duration), Instant::now() + duration)
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
@@ -955,6 +970,13 @@ mod tests {
             connection.poll_noop_waker(),
             Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
         ));
+    }
+
+    #[test]
+    fn sleep_until_or_eternity_doesnt_overflow() {
+        env_logger::init();
+
+        sleep_until_or_at_least_very_long(Duration::from_secs(u64::MAX));
     }
 
     struct KeepAliveUntilConnectionHandler {
