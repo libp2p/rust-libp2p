@@ -1,6 +1,6 @@
 ## 0.11.0 - unreleased
 
-- Add ConnectionId to Event::DirectConnectionUpgradeSucceeded and Event::DirectConnectionUpgradeFailed
+- Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
   See [PR 4558].
 
 [PR 4558]: https://github.com/libp2p/rust-libp2p/pull/4558
