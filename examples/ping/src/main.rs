@@ -21,11 +21,7 @@
 #![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
-use libp2p::{
-    noise, ping,
-    swarm::{keep_alive, NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr,
-};
+use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
 use std::error::Error;
 
 #[async_std::main]
@@ -37,7 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_behaviour(|_| Behaviour::default())
+        .with_behaviour(|_| ping::Behaviour::default())
         .unwrap()
         .build();
 
@@ -62,14 +58,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](keep_alive::Behaviour) behaviour so a continuous sequence of
-/// pings can be observed.
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
 }
