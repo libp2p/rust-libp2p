@@ -1,9 +1,9 @@
 ## 0.11.0 - unreleased
 
 - Add ConnectionId to Event::DirectConnectionUpgradeSucceeded and Event::DirectConnectionUpgradeFailed
-  See [PR XXXX].
+  See [PR 4558].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4558]: https://github.com/libp2p/rust-libp2p/pull/4558
 
 ## 0.10.0 
 
