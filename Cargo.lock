@@ -2807,7 +2807,6 @@ dependencies = [
  "multiaddr",
  "multihash",
  "once_cell",
- "pin-project",
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",

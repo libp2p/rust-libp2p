@@ -27,9 +27,11 @@ mod proto {
     pub use self::payload::proto::NoiseHandshakePayload;
 }
 
-use crate::io::{framed::NoiseFramed, Output};
+use super::framed::Codec;
+use crate::io::Output;
 use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
 use crate::{DecodeError, Error};
+use asynchronous_codec::Framed;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
@@ -44,7 +46,7 @@ use std::io;
 /// Handshake state.
 pub(crate) struct State<T> {
     /// The underlying I/O resource.
-    io: NoiseFramed<T, snow::HandshakeState>,
+    io: asynchronous_codec::Framed<T, Codec<snow::HandshakeState>>,
     /// The associated public identity of the local node's static DH keypair,
     /// which can be sent to the remote as part of an authenticated handshake.
     identity: KeypairIdentity,
@@ -82,7 +84,7 @@ where
     ) -> Self {
         Self {
             identity,
-            io: NoiseFramed::new(io, session),
+            io: Framed::new(io, Codec::new(session)),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey: expected_remote_key,
             responder_webtransport_certhashes,
@@ -98,8 +100,9 @@ where
     /// Finish a handshake, yielding the established remote identity and the
     /// [`Output`] for communicating on the encrypted channel.
     pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
-        let is_initiator = self.io.is_initiator();
-        let (pubkey, io) = self.io.into_transport()?;
+        let is_initiator = self.io.codec().is_initiator();
+        let parts = self.io.into_parts();
+        let (pubkey, codec) = parts.codec.into_transport()?;
 
         let id_pk = self
             .id_remote_pubkey
@@ -137,7 +140,7 @@ where
             }
         }
 
-        Ok((id_pk, io))
+        Ok((id_pk, Output::new(Framed::new(parts.io, codec))))
     }
 }
 
@@ -226,7 +229,7 @@ where
     pb.identity_sig = state.identity.signature.clone();
 
     // If this is the responder then send WebTransport certhashes to initiator, if any.
-    if state.io.is_responder() {
+    if state.io.codec().is_responder() {
         if let Some(ref certhashes) = state.responder_webtransport_certhashes {
             let ext = pb
                 .extensions

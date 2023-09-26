@@ -18,19 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This module provides a `Sink` and `Stream` for length-delimited
-//! Noise protocol messages in form of [`NoiseFramed`].
+//! This module provides a `Codec` type implementing the `Encoder` and `Decoder`
+//! traits, making it useful alongside a `asynchronous_codec::Framed` to provide
+//! `Sink` and `Stream` for length-delimited Noise protocol messages.
 
-use crate::io::Output;
 use crate::{protocol::PublicKey, Error};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures::prelude::*;
 use log::{debug, error};
-use std::{
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::io;
 
 /// Max size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
@@ -42,55 +37,44 @@ static_assertions::const_assert! {
     MAX_FRAME_LEN + EXTRA_ENCRYPT_SPACE <= MAX_NOISE_MSG_LEN
 }
 
-/// A `NoiseFramed` is a `Sink` and `Stream` for length-delimited
-/// Noise protocol messages.
-///
-/// `T` is the type of the underlying I/O resource and `S` the
-/// type of the Noise session state.
-#[pin_project::pin_project]
-pub(crate) struct NoiseFramed<T, S> {
-    #[pin]
-    io: asynchronous_codec::Framed<T, Codec<S>>,
+/// Codec holds the noise session state `S` and acts as a medium for
+/// encoding and decoding length-delimited session messages.
+pub(crate) struct Codec<S> {
+    write_buffer: Vec<u8>,
+    decrypt_buffer: BytesMut,
+    session: S,
 }
 
-impl<T> NoiseFramed<T, snow::HandshakeState>
-where
-    T: AsyncRead + AsyncWrite,
-{
-    /// Creates a new `NoiseFramed` for beginning a Noise protocol handshake.
-    pub(crate) fn new(io: T, state: snow::HandshakeState) -> Self {
-        NoiseFramed {
-            io: asynchronous_codec::Framed::new(
-                io,
-                Codec {
-                    session: state,
-                    write_buffer: Vec::new(),
-                    decrypt_buffer: BytesMut::new(),
-                },
-            ),
+impl<S: SessionState> Codec<S> {
+    pub fn new(session: S) -> Self {
+        Codec {
+            session,
+            write_buffer: Vec::new(),
+            decrypt_buffer: BytesMut::new(),
         }
     }
+}
 
-    /// Checks if the underlying noise session was started in the `initiator` role.
+impl Codec<snow::HandshakeState> {
+    /// Checks if the session was started in the `initiator` role.
     pub(crate) fn is_initiator(&self) -> bool {
-        self.io.codec().session.is_initiator()
+        self.session.is_initiator()
     }
 
-    /// Checks if the underlying noise session was started in the `responder` role.
+    /// Checks if the session was started in the `responder` role.
     pub(crate) fn is_responder(&self) -> bool {
-        !self.io.codec().session.is_initiator()
+        !self.session.is_initiator()
     }
 
-    /// Converts the `NoiseFramed` into a `NoiseOutput` encrypted data stream
-    /// once the handshake is complete, including the static DH [`PublicKey`]
-    /// of the remote, if received.
+    /// Converts the underlying Noise session from the `Handshake` state to a
+    /// `Transport` state once the handshake is complete, including the static
+    /// DH [`PublicKey`] of the remote if received.
     ///
-    /// If the underlying Noise protocol session state does not permit
-    /// transitioning to transport mode because the handshake is incomplete,
-    /// an error is returned. Similarly if the remote's static DH key, if
-    /// present, cannot be parsed.
-    pub(crate) fn into_transport(self) -> Result<(PublicKey, Output<T>), Error> {
-        let dh_remote_pubkey = self.io.codec().session.get_remote_static().ok_or_else(|| {
+    /// If the Noise protocol session state does not permit transitioning to
+    /// transport mode because the handshake is incomplete, an error is returned.
+    /// Similarly if the remote's static DH key, if present, cannot be parsed.
+    pub(crate) fn into_transport(self) -> Result<(PublicKey, Codec<snow::TransportState>), Error> {
+        let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(
                 io::ErrorKind::Other,
                 "expect key to always be present at end of XX session",
@@ -98,28 +82,10 @@ where
         })?;
 
         let dh_remote_pubkey = PublicKey::from_slice(dh_remote_pubkey)?;
-        let framed_parts = self.io.into_parts();
+        let codec = Codec::new(self.session.into_transport_mode()?);
 
-        let io = NoiseFramed {
-            io: asynchronous_codec::Framed::new(
-                framed_parts.io,
-                Codec {
-                    session: framed_parts.codec.session.into_transport_mode()?,
-                    write_buffer: Vec::new(),
-                    decrypt_buffer: BytesMut::new(),
-                },
-            ),
-        };
-
-        Ok((dh_remote_pubkey, Output::new(io)))
+        Ok((dh_remote_pubkey, codec))
     }
-}
-
-/// Codec for writing and reading length-delimited noise messages.
-pub(crate) struct Codec<S> {
-    write_buffer: Vec<u8>,
-    decrypt_buffer: BytesMut,
-    session: S,
 }
 
 impl<S> asynchronous_codec::Encoder for Codec<S>
@@ -184,38 +150,6 @@ where
         src.advance(len);
 
         Ok(Some(self.decrypt_buffer.split().freeze()))
-    }
-}
-
-impl<T, S> futures::stream::Stream for NoiseFramed<T, S>
-where
-    T: AsyncRead + Unpin,
-    S: SessionState,
-{
-    type Item = io::Result<Bytes>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        self.io.poll_next_unpin(cx)
-    }
-}
-impl<T, S> futures::sink::Sink<Vec<u8>> for NoiseFramed<T, S>
-where
-    T: AsyncWrite + Unpin,
-    S: SessionState,
-{
-    type Error = io::Error;
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().io.poll_ready(cx)
-    }
-    fn start_send(self: Pin<&mut Self>, item: Vec<u8>) -> Result<(), Self::Error> {
-        self.project().io.start_send(item)
-    }
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().io.poll_flush(cx)
-    }
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().io.poll_close(cx)
     }
 }
 
