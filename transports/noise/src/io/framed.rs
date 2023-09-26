@@ -26,7 +26,7 @@ use super::handshake::proto;
 use crate::{protocol::PublicKey, Error};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::{debug, error};
-use quick_protobuf::{MessageWrite, Writer};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
 
 /// Max size of a noise message.
@@ -74,6 +74,35 @@ impl<S: SessionState> Codec<S> {
         dst.put(&self.write_buffer[..]);
 
         Ok(())
+    }
+
+    fn decode_bytes(&mut self, src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+        if src.len() < 2 {
+            return Ok(None);
+        }
+
+        let len = u16::from_be_bytes([src[0], src[1]]) as usize;
+        if len == 0 || src.len() < len + 2 {
+            return Ok(None);
+        }
+
+        src.advance(2);
+        self.decrypt_buffer.resize(len, 0u8);
+        let n = match self
+            .session
+            .read_message(&src[0..len], &mut self.decrypt_buffer)
+        {
+            Ok(n) => n,
+            Err(e) => {
+                debug!("decryption error {e}");
+                return Err(io::ErrorKind::InvalidData.into());
+            }
+        };
+
+        self.decrypt_buffer.truncate(n);
+        src.advance(len);
+
+        Ok(Some(self.decrypt_buffer.split().freeze()))
     }
 }
 
@@ -123,6 +152,27 @@ impl asynchronous_codec::Encoder for Codec<snow::HandshakeState> {
         self.encode_bytes(&buf, dst)
     }
 }
+impl asynchronous_codec::Decoder for Codec<snow::HandshakeState> {
+    type Error = io::Error;
+    type Item = proto::NoiseHandshakePayload;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        match self.decode_bytes(src)? {
+            Some(bytes) => {
+                let mut reader = BytesReader::from_bytes(&bytes[..]);
+                let pb = proto::NoiseHandshakePayload::from_reader(&mut reader, &bytes[..])
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "Failed decoding handshake payload",
+                        )
+                    })?;
+                Ok(Some(pb))
+            }
+            None => Ok(None),
+        }
+    }
+}
 
 impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
@@ -132,41 +182,12 @@ impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
         self.encode_bytes(&item, dst)
     }
 }
-
-impl<S> asynchronous_codec::Decoder for Codec<S>
-where
-    S: SessionState,
-{
+impl asynchronous_codec::Decoder for Codec<snow::TransportState> {
     type Error = io::Error;
     type Item = Bytes;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() < 2 {
-            return Ok(None);
-        }
-
-        let len = u16::from_be_bytes([src[0], src[1]]) as usize;
-        if len == 0 || src.len() < len + 2 {
-            return Ok(None);
-        }
-
-        src.advance(2);
-        self.decrypt_buffer.resize(len, 0u8);
-        let n = match self
-            .session
-            .read_message(&src[0..len], &mut self.decrypt_buffer)
-        {
-            Ok(n) => n,
-            Err(e) => {
-                debug!("read: decryption error {e}");
-                return Err(io::ErrorKind::InvalidData.into());
-            }
-        };
-
-        self.decrypt_buffer.truncate(n);
-        src.advance(len);
-
-        Ok(Some(self.decrypt_buffer.split().freeze()))
+        self.decode_bytes(src)
     }
 }
 

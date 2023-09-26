@@ -30,13 +30,11 @@ pub(super) mod proto {
 use super::framed::Codec;
 use crate::io::Output;
 use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
-use crate::{DecodeError, Error};
+use crate::Error;
 use asynchronous_codec::Framed;
-use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
-use quick_protobuf::{BytesReader, MessageRead};
 use std::collections::HashSet;
 use std::io;
 
@@ -160,14 +158,14 @@ impl From<proto::NoiseExtensions> for Extensions {
 // Handshake Message Futures
 
 /// A future for receiving a Noise handshake message.
-async fn recv<T>(state: &mut State<T>) -> Result<Bytes, Error>
+async fn recv<T>(state: &mut State<T>) -> Result<proto::NoiseHandshakePayload, Error>
 where
     T: AsyncRead + Unpin,
 {
     match state.io.next().await {
         None => Err(io::Error::new(io::ErrorKind::UnexpectedEof, "eof").into()),
         Some(Err(e)) => Err(e.into()),
-        Some(Ok(bytes)) => Ok(bytes),
+        Some(Ok(p)) => Ok(p),
     }
 }
 
@@ -176,8 +174,13 @@ pub(crate) async fn recv_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
-    let msg = recv(state).await?;
-    if !msg.is_empty() {
+    let proto::NoiseHandshakePayload {
+        identity_key,
+        identity_sig,
+        extensions,
+    } = recv(state).await?;
+    
+    if !(identity_key.is_empty() && identity_sig.is_empty() && extensions.is_none()) {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
 
@@ -201,11 +204,7 @@ pub(crate) async fn recv_identity<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
-    let msg = recv(state).await?;
-    let mut reader = BytesReader::from_bytes(&msg[..]);
-    let pb =
-        proto::NoiseHandshakePayload::from_reader(&mut reader, &msg[..]).map_err(DecodeError)?;
-
+    let pb = recv(state).await?;
     state.id_remote_pubkey = Some(identity::PublicKey::try_decode_protobuf(&pb.identity_key)?);
 
     if !pb.identity_sig.is_empty() {
