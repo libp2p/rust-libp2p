@@ -231,19 +231,31 @@ pub trait IntoMultiplexerUpgrade<C> {
     fn into_multiplexer_upgrade(self) -> Self::Upgrade;
 }
 
-impl<C, U> IntoMultiplexerUpgrade<C> for (U,) {
+impl<C, U, F> IntoMultiplexerUpgrade<C> for F
+where
+    F: FnOnce() -> U,
+{
     type Upgrade = U;
 
     fn into_multiplexer_upgrade(self) -> Self::Upgrade {
-        self.0
+        (self)()
     }
 }
 
-impl<C, U1, U2> IntoMultiplexerUpgrade<C> for (U1, U2) {
-    type Upgrade = SelectUpgrade<U1, U2>;
+impl<C, U1, U2> IntoMultiplexerUpgrade<C> for (U1, U2)
+where
+    U1: IntoMultiplexerUpgrade<C>,
+    U2: IntoMultiplexerUpgrade<C>,
+{
+    type Upgrade = SelectUpgrade<U1::Upgrade, U2::Upgrade>;
 
     fn into_multiplexer_upgrade(self) -> Self::Upgrade {
-        SelectUpgrade::new(self.0, self.1)
+        let (f1, f2) = self;
+
+        let u1 = f1.into_multiplexer_upgrade();
+        let u2 = f2.into_multiplexer_upgrade();
+
+        SelectUpgrade::new(u1, u2)
     }
 }
 
@@ -1469,8 +1481,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 libp2p_tls::Config::new,
-                // TODO: The single tuple is not intuitive.
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -1491,8 +1502,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 libp2p_tls::Config::new,
-                // TODO: The single tuple is not intuitive.
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -1528,8 +1538,8 @@ mod tests {
                 Default::default(),
                 (libp2p_tls::Config::new, libp2p_noise::Config::new),
                 (
-                    libp2p_yamux::Config::default(),
-                    libp2p_mplex::MplexConfig::default(),
+                    libp2p_yamux::Config::default,
+                    libp2p_mplex::MplexConfig::default,
                 ),
             )
             .unwrap()
@@ -1552,7 +1562,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 (libp2p_tls::Config::new, libp2p_noise::Config::new),
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_quic()
@@ -1582,7 +1592,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 libp2p_tls::Config::new,
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_relay()
@@ -1612,7 +1622,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 (libp2p_tls::Config::new, libp2p_noise::Config::new),
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_dns()
@@ -1660,7 +1670,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 (libp2p_tls::Config::new, libp2p_noise::Config::new),
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_websocket()
@@ -1697,7 +1707,7 @@ mod tests {
             .with_tcp(
                 Default::default(),
                 libp2p_tls::Config::new,
-                (libp2p_yamux::Config::default(),),
+                libp2p_yamux::Config::default,
             )
             .unwrap()
             .with_quic()
