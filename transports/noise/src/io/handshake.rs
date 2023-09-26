@@ -179,7 +179,7 @@ where
         identity_sig,
         extensions,
     } = recv(state).await?;
-    
+
     if !(identity_key.is_empty() && identity_sig.is_empty() && extensions.is_none()) {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
@@ -194,7 +194,7 @@ where
 {
     state
         .io
-        .send(proto::NoiseHandshakePayload::default())
+        .send(&proto::NoiseHandshakePayload::default())
         .await?;
     Ok(())
 }
@@ -241,7 +241,7 @@ where
         }
     }
 
-    state.io.send(pb).await?;
+    state.io.send(&pb).await?;
 
     Ok(())
 }

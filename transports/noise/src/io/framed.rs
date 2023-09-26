@@ -141,9 +141,9 @@ impl Codec<snow::HandshakeState> {
 
 impl asynchronous_codec::Encoder for Codec<snow::HandshakeState> {
     type Error = io::Error;
-    type Item = proto::NoiseHandshakePayload;
+    type Item<'a> = &'a proto::NoiseHandshakePayload;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut buf = Vec::with_capacity(item.get_size());
 
         let mut writer = Writer::new(&mut buf);
@@ -176,10 +176,10 @@ impl asynchronous_codec::Decoder for Codec<snow::HandshakeState> {
 
 impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
-    type Item = Vec<u8>;
+    type Item<'a> = &'a Vec<u8>;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.encode_bytes(&item, dst)
+    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        self.encode_bytes(item, dst)
     }
 }
 impl asynchronous_codec::Decoder for Codec<snow::TransportState> {
