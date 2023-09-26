@@ -488,7 +488,7 @@ fn sleep_until_or_at_least_very_long(mut duration: Duration) -> (Delay, Instant)
     while Instant::now().checked_add(duration).is_none() {
         log::debug!("Cannot represent time {duration:?} in the future, halving it ...");
 
-        duration = duration / 2;
+        duration /= 2;
     }
 
     (Delay::new(duration), Instant::now() + duration)
