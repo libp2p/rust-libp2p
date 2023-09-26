@@ -2,7 +2,7 @@ name: Feature request
 description: Suggest a new feature in rust-libp2p
 body:
   - type: markdown
-  - attributes:
+    attributes:
       value: |
         If you'd like to suggest a feature related to libp2p but not specifically related to the rust implementation, please file an issue at https://github.com/libp2p/specs instead.
   - type: textarea
