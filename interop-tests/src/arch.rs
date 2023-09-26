@@ -68,8 +68,7 @@ pub(crate) mod native {
                         tcp::Config::default(),
                         tls::Config::new,
                         yamux::Config::default,
-                    )
-                    .context("failed to build tcp transport")?
+                    )?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
@@ -83,8 +82,7 @@ pub(crate) mod native {
                         tcp::Config::default(),
                         noise::Config::new,
                         yamux::Config::default,
-                    )
-                    .context("failed to build tcp transport")?
+                    )?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
