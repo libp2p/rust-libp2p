@@ -20,7 +20,7 @@
 
 //! Noise protocol handshake I/O.
 
-mod proto {
+pub(super) mod proto {
     #![allow(unreachable_pub)]
     include!("../generated/mod.rs");
     pub use self::payload::proto::NoiseExtensions;
@@ -36,7 +36,7 @@ use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use quick_protobuf::{BytesReader, MessageRead};
 use std::collections::HashSet;
 use std::io;
 
@@ -189,7 +189,10 @@ pub(crate) async fn send_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncWrite + Unpin,
 {
-    state.io.send(Vec::new()).await?;
+    state
+        .io
+        .send(proto::NoiseHandshakePayload::default())
+        .await?;
     Ok(())
 }
 
@@ -239,11 +242,7 @@ where
         }
     }
 
-    let mut msg = Vec::with_capacity(pb.get_size());
-
-    let mut writer = Writer::new(&mut msg);
-    pb.write_message(&mut writer).expect("Encoding to succeed");
-    state.io.send(msg).await?;
+    state.io.send(pb).await?;
 
     Ok(())
 }

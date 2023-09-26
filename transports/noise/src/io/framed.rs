@@ -22,9 +22,11 @@
 //! traits, making it useful alongside a `asynchronous_codec::Framed` to provide
 //! `Sink` and `Stream` for length-delimited Noise protocol messages.
 
+use super::handshake::proto;
 use crate::{protocol::PublicKey, Error};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::{debug, error};
+use quick_protobuf::{MessageWrite, Writer};
 use std::io;
 
 /// Max size of a noise message.
@@ -52,6 +54,26 @@ impl<S: SessionState> Codec<S> {
             write_buffer: Vec::new(),
             decrypt_buffer: BytesMut::new(),
         }
+    }
+
+    fn encode_bytes(&mut self, item: &Vec<u8>, dst: &mut BytesMut) -> Result<(), io::Error> {
+        self.write_buffer
+            .resize(item.len() + EXTRA_ENCRYPT_SPACE, 0);
+        let n = match self.session.write_message(item, &mut self.write_buffer) {
+            Ok(n) => n,
+            Err(e) => {
+                error!("encryption error: {:?}", e);
+                return Err(io::ErrorKind::InvalidData.into());
+            }
+        };
+
+        let prefix = u16::to_be_bytes(n as u16);
+        self.write_buffer.truncate(n);
+
+        dst.put(&prefix[..]);
+        dst.put(&self.write_buffer[..]);
+
+        Ok(())
     }
 }
 
@@ -88,31 +110,26 @@ impl Codec<snow::HandshakeState> {
     }
 }
 
-impl<S> asynchronous_codec::Encoder for Codec<S>
-where
-    S: SessionState,
-{
+impl asynchronous_codec::Encoder for Codec<snow::HandshakeState> {
+    type Error = io::Error;
+    type Item = proto::NoiseHandshakePayload;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let mut buf = Vec::with_capacity(item.get_size());
+
+        let mut writer = Writer::new(&mut buf);
+        item.write_message(&mut writer)
+            .expect("Encoding to succeed");
+        self.encode_bytes(&buf, dst)
+    }
+}
+
+impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
     type Item = Vec<u8>;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        self.write_buffer
-            .resize(item.len() + EXTRA_ENCRYPT_SPACE, 0);
-        let n = match self.session.write_message(&item, &mut self.write_buffer) {
-            Ok(n) => n,
-            Err(e) => {
-                error!("encryption error: {:?}", e);
-                return Err(io::ErrorKind::InvalidData.into());
-            }
-        };
-
-        let prefix = u16::to_be_bytes(n as u16);
-        self.write_buffer.truncate(n);
-
-        dst.put(&prefix[..]);
-        dst.put(&self.write_buffer[..]);
-
-        Ok(())
+        self.encode_bytes(&item, dst)
     }
 }
 
