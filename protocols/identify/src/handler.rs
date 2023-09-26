@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{recv_push, Identify, OutboundPush, Push, UpgradeError};
+use crate::protocol::{recv_identify, recv_push, send, UpgradeError};
 use crate::protocol::{Info, PushInfo};
 use crate::{PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
@@ -31,8 +31,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ProtocolSupport,
+    ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolSupport,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
@@ -56,11 +55,22 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<PushInfo, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
+        [ConnectionHandlerEvent<
+            Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>,
+            (),
+            Event,
+            io::Error,
+        >; 4],
     >,
 
     /// Pending identification replies, awaiting being sent.
     pending_replies: futures_bounded::FuturesSet<Result<(), UpgradeError>>,
+
+    /// Pending identify requests.
+    outbound_identify_futs: futures_bounded::FuturesSet<Result<Info, UpgradeError>>,
+
+    /// Pending identify/push requests.
+    outbound_identify_push_futs: futures_bounded::FuturesSet<Result<(), UpgradeError>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -135,6 +145,14 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
+            outbound_identify_futs: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
+            outbound_identify_push_futs: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
             trigger_next_identify: Delay::new(initial_delay),
             exchanged_one_periodic_identify: false,
             interval,
@@ -196,32 +214,27 @@ impl Handler {
         >,
     ) {
         match output {
-            future::Either::Left(remote_info) => {
-                self.handle_incoming_info(&remote_info);
-
-                self.events
-                    .push(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                        remote_info,
-                    )));
+            future::Either::Left(stream) => {
+                if self
+                    .outbound_identify_futs
+                    .try_push(recv_identify(stream))
+                    .is_err()
+                {
+                    warn!("Dropping outbound identify stream because we are at capacity");
+                }
             }
-            future::Either::Right(()) => self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                Event::IdentificationPushed,
-            )),
-        }
-    }
+            future::Either::Right(stream) => {
+                let info = self.build_info();
 
-    fn on_dial_upgrade_error(
-        &mut self,
-        DialUpgradeError { error: err, .. }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutboundProtocol,
-        >,
-    ) {
-        let err = err.map_upgrade_err(|e| e.into_inner());
-        self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-            Event::IdentificationError(err),
-        ));
-        self.trigger_next_identify.reset(self.interval);
+                if self
+                    .outbound_identify_push_futs
+                    .try_push(send(stream, info))
+                    .is_err()
+                {
+                    warn!("Dropping outbound identify push stream because we are at capacity");
+                }
+            }
+        }
     }
 
     fn build_info(&mut self) -> Info {
@@ -286,7 +299,7 @@ impl ConnectionHandler for Handler {
     type Error = io::Error;
     type InboundProtocol =
         SelectUpgrade<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
-    type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
+    type OutboundProtocol = Either<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -306,10 +319,12 @@ impl ConnectionHandler for Handler {
                 self.external_addresses = addresses;
             }
             InEvent::Push => {
-                let info = self.build_info();
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(Either::Right(Push::outbound(info)), ()),
+                        protocol: SubstreamProtocol::new(
+                            Either::Right(ReadyUpgrade::new(PUSH_PROTOCOL_NAME)),
+                            (),
+                        ),
                     });
             }
         }
@@ -340,10 +355,13 @@ impl ConnectionHandler for Handler {
         // Poll the future that fires when we need to identify the node again.
         if let Poll::Ready(()) = self.trigger_next_identify.poll_unpin(cx) {
             self.trigger_next_identify.reset(self.interval);
-            let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
+            let event = ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(
+                    Either::Left(ReadyUpgrade::new(PROTOCOL_NAME)),
+                    (),
+                ),
             };
-            return Poll::Ready(ev);
+            return Poll::Ready(event);
         }
 
         if let Some(Poll::Ready(res)) = self
@@ -377,7 +395,48 @@ impl ConnectionHandler for Handler {
             Poll::Ready(Ok(Err(e))) => {
                 self.exchanged_one_periodic_identify = true;
 
-                // return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                ));
+            }
+            Poll::Ready(Err(Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Timeout),
+                ));
+            }
+            Poll::Pending => {}
+        }
+
+        match self.outbound_identify_futs.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(remote_info))) => {
+                self.handle_incoming_info(&remote_info);
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    remote_info,
+                )));
+            }
+            Poll::Ready(Ok(Err(e))) => {
+                self.trigger_next_identify.reset(self.interval);
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                ));
+            }
+            Poll::Ready(Err(Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Timeout),
+                ));
+            }
+            Poll::Pending => {}
+        }
+
+        match self.outbound_identify_push_futs.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(()))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationPushed,
+                ));
+            }
+            Poll::Ready(Ok(Err(e))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(StreamUpgradeError::Apply(e)),
                 ));
@@ -409,8 +468,11 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                self.on_dial_upgrade_error(dial_upgrade_error)
+            ConnectionEvent::DialUpgradeError(_dial_upgrade_error) => {
+                self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::NegotiationFailed),
+                ));
+                self.trigger_next_identify.reset(self.interval);
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
@@ -430,11 +492,10 @@ impl ConnectionHandler for Handler {
                         self.remote_peer_id
                     );
 
-                    let info = self.build_info();
                     self.events
                         .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                             protocol: SubstreamProtocol::new(
-                                Either::Right(Push::outbound(info)),
+                                Either::Right(ReadyUpgrade::new(PUSH_PROTOCOL_NAME)),
                                 (),
                             ),
                         });
