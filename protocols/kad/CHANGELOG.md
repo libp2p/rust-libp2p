@@ -1,4 +1,4 @@
-## 0.44.6
+## 0.44.6 - unreleased
 - Rename `Kademlia` symbols to follow naming convention. 
   See [PR 4547].
 
