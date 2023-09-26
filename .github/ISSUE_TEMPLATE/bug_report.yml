@@ -50,7 +50,8 @@ body:
       label: Would you like to work on fixing this bug?
       description: Any contribution towards fixing the bug is greatly appreciated. We are more than happy to provide help on the process.
       options:
-        - Yes
-        - No
-        - Maybe
+        - label: Yes
+        - label: No
+        - label: Maybe
+    validations:
       required: true

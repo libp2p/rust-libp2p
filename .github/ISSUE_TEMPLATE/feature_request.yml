@@ -3,8 +3,8 @@ description: Suggest a new feature in rust-libp2p
 body:
   - type: markdown
   - attributes:
-    value: |
-      If you'd like to suggest a feature related to libp2p but not specifically related to the rust implementation, please file an issue at https://github.com/libp2p/specs instead.
+      value: |
+        If you'd like to suggest a feature related to libp2p but not specifically related to the rust implementation, please file an issue at https://github.com/libp2p/specs instead.
   - type: textarea
     attributes:
       label: Description
@@ -21,7 +21,7 @@ body:
     attributes:
       label: Requirements
       description: Write a list of what you want this feature to do.
-      placeholder: 1. 
+      placeholder: "1." 
     validations:
       required: true
   - type: textarea
@@ -35,7 +35,8 @@ body:
       label: Are you planning to do it yourself in a pull request ?
       description: Any contribution is greatly appreciated. We are more than happy to provide help on the process.
       options:
-        - Yes
-        - No
-        - Maybe
+        - label: Yes
+        - label: No
+        - label: Maybe
+    validations:
       required: true
