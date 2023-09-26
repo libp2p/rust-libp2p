@@ -20,10 +20,10 @@
 
 use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::{future::BoxFuture, prelude::*};
+use futures::prelude::*;
 use libp2p_core::{
     multiaddr,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    upgrade::{OutboundUpgrade, UpgradeInfo},
     Multiaddr,
 };
 use libp2p_identity as identity;
@@ -33,7 +33,6 @@ use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
 use thiserror::Error;
-use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -48,14 +47,7 @@ pub struct Identify;
 /// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
 #[derive(Debug, Clone)]
 pub struct Push<T>(T);
-pub struct InboundPush();
 pub struct OutboundPush(Info);
-
-impl Push<InboundPush> {
-    pub fn inbound() -> Self {
-        Push(InboundPush())
-    }
-}
 
 impl Push<OutboundPush> {
     pub fn outbound(info: Info) -> Self {
@@ -126,16 +118,6 @@ impl UpgradeInfo for Identify {
     }
 }
 
-impl<C> InboundUpgrade<C> for Identify {
-    type Output = C;
-    type Error = UpgradeError;
-    type Future = future::Ready<Result<Self::Output, UpgradeError>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(socket)
-    }
-}
-
 impl<C> OutboundUpgrade<C> for Identify
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -155,20 +137,6 @@ impl<T> UpgradeInfo for Push<T> {
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(PUSH_PROTOCOL_NAME)
-    }
-}
-
-impl<C> InboundUpgrade<C> for Push<InboundPush>
-where
-    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = BoxFuture<'static, Result<PushInfo, UpgradeError>>;
-    type Error = Void;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
-        future::ok(recv_push(socket).boxed())
     }
 }
 
@@ -219,7 +187,7 @@ where
     Ok(())
 }
 
-async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
+pub(crate) async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {

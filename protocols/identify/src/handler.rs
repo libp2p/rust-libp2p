@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Identify, InboundPush, OutboundPush, Push, UpgradeError};
+use crate::protocol::{recv_push, Identify, OutboundPush, Push, UpgradeError};
 use crate::protocol::{Info, PushInfo};
+use crate::{PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
-use futures::stream::FuturesUnordered;
+use futures_bounded::Timeout;
 use futures_timer::Delay;
-use libp2p_core::upgrade::SelectUpgrade;
+use libp2p_core::upgrade::{ReadyUpgrade, SelectUpgrade};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
@@ -42,6 +43,9 @@ use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
 
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+
 /// Protocol handler for sending and receiving identification requests.
 ///
 /// Outbound requests are sent periodically. The handler performs expects
@@ -56,7 +60,7 @@ pub struct Handler {
     >,
 
     /// Pending identification replies, awaiting being sent.
-    pending_replies: FuturesUnordered<BoxFuture<'static, Result<(), UpgradeError>>>,
+    pending_replies: futures_bounded::FuturesSet<Result<(), UpgradeError>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -127,7 +131,10 @@ impl Handler {
             remote_peer_id,
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
-            pending_replies: FuturesUnordered::new(),
+            pending_replies: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
             trigger_next_identify: Delay::new(initial_delay),
             exchanged_one_periodic_identify: false,
             interval,
@@ -152,14 +159,23 @@ impl Handler {
         >,
     ) {
         match output {
-            future::Either::Left(substream) => {
+            future::Either::Left(stream) => {
                 let info = self.build_info();
 
-                self.pending_replies
-                    .push(crate::protocol::send(substream, info).boxed());
+                if self
+                    .pending_replies
+                    .try_push(crate::protocol::send(stream, info))
+                    .is_err()
+                {
+                    warn!("Dropping inbound stream because we are at capacity");
+                }
             }
-            future::Either::Right(fut) => {
-                if self.inbound_identify_push.replace(fut).is_some() {
+            future::Either::Right(stream) => {
+                if self
+                    .inbound_identify_push
+                    .replace(recv_push(stream).boxed())
+                    .is_some()
+                {
                     warn!(
                         "New inbound identify push stream from {} while still \
                          upgrading previous one. Replacing previous with new.",
@@ -268,13 +284,20 @@ impl ConnectionHandler for Handler {
     type FromBehaviour = InEvent;
     type ToBehaviour = Event;
     type Error = io::Error;
-    type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
+    type InboundProtocol =
+        SelectUpgrade<ReadyUpgrade<StreamProtocol>, ReadyUpgrade<StreamProtocol>>;
     type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
+        SubstreamProtocol::new(
+            SelectUpgrade::new(
+                ReadyUpgrade::new(PROTOCOL_NAME),
+                ReadyUpgrade::new(PUSH_PROTOCOL_NAME),
+            ),
+            (),
+        )
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
@@ -342,14 +365,29 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        // Check for pending replies to send.
-        if let Poll::Ready(Some(result)) = self.pending_replies.poll_next_unpin(cx) {
-            let event = result
-                .map(|()| Event::Identification)
-                .unwrap_or_else(|err| Event::IdentificationError(StreamUpgradeError::Apply(err)));
-            self.exchanged_one_periodic_identify = true;
+        // Check for pending replies.
+        match self.pending_replies.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(()))) => {
+                self.exchanged_one_periodic_identify = true;
 
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::Identification,
+                ));
+            }
+            Poll::Ready(Ok(Err(e))) => {
+                self.exchanged_one_periodic_identify = true;
+
+                // return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
+                ));
+            }
+            Poll::Ready(Err(Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationError(StreamUpgradeError::Timeout),
+                ));
+            }
+            Poll::Pending => {}
         }
 
         Poll::Pending
