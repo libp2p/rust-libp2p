@@ -36,7 +36,7 @@ pub(crate) mod native {
     }
 
     fn expect_muxer_yamux() -> Result<()> {
-       match from_env("muxer")? {
+        match from_env("muxer")? {
             Muxer::Yamux => (),
             Muxer::Mplex => {
                 bail!("Only Yamux is supported, not Mplex")

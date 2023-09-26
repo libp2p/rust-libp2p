@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::bandwidth::BandwidthSinks;
+use crate::builder::select_security::SelectSecurityUpgrade;
 use crate::TransportExt;
 
 #[cfg(all(
@@ -18,6 +19,7 @@ use crate::TransportExt;
     any(feature = "tcp", feature = "relay", feature = "websocket")
 ))]
 mod map;
+mod select_security;
 
 /// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
 ///
@@ -188,7 +190,7 @@ pub trait IntoSecurityUpgrade<C> {
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error>;
 }
 
-impl<C, T, F, E> IntoSecurityUpgrade<C> for (F,)
+impl<C, T, F, E> IntoSecurityUpgrade<C> for F
 where
     F: for<'a> FnOnce(&'a Keypair) -> Result<T, E>,
     E: std::error::Error + 'static,
@@ -197,37 +199,29 @@ where
     type Error = E;
 
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error> {
-        self.0(keypair)
+        (self)(keypair)
     }
 }
 
-impl<F1, F2, T1, T2, C, O1, O2, E1, E2> IntoSecurityUpgrade<C> for (F1, F2)
+impl<F1, F2, C> IntoSecurityUpgrade<C> for (F1, F2)
 where
-    F1: for<'a> FnOnce(&'a Keypair) -> Result<T1, E1>,
-    F2: for<'a> FnOnce(&'a Keypair) -> Result<T2, E2>,
-    T1: InboundUpgrade<Negotiated<C>, Output = (PeerId, O1)>,
-    T2: InboundUpgrade<Negotiated<C>, Output = (PeerId, O2)>,
-    E1: std::error::Error + 'static,
-    E2: std::error::Error + 'static,
+    F1: IntoSecurityUpgrade<C>,
+    F2: IntoSecurityUpgrade<C>,
 {
-    type Upgrade = map::Upgrade<
-        SelectUpgrade<T1, T2>,
-        fn(
-            futures::future::Either<
-                <T1 as InboundUpgrade<Negotiated<C>>>::Output,
-                <T2 as InboundUpgrade<Negotiated<C>>>::Output,
-            >,
-        ) -> (PeerId, futures::future::Either<O1, O2>),
-    >;
-    type Error = either::Either<E1, E2>;
+    type Upgrade = SelectSecurityUpgrade<F1::Upgrade, F2::Upgrade>;
+    type Error = either::Either<F1::Error, F2::Error>;
 
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error> {
-        let u1 = self.0(keypair).map_err(either::Either::Left)?;
-        let u2 = self.1(keypair).map_err(either::Either::Right)?;
+        let (f1, f2) = self;
 
-        Ok(map::Upgrade::new(SelectUpgrade::new(u1, u2), |either| {
-            futures::future::Either::factor_first(either)
-        }))
+        let u1 = f1
+            .into_security_upgrade(keypair)
+            .map_err(either::Either::Left)?;
+        let u2 = f2
+            .into_security_upgrade(keypair)
+            .map_err(either::Either::Right)?;
+
+        Ok(SelectSecurityUpgrade::new(u1, u2))
     }
 }
 
@@ -1474,7 +1468,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                libp2p_tls::Config::new,
                 // TODO: The single tuple is not intuitive.
                 (libp2p_yamux::Config::default(),),
             )
@@ -1496,7 +1490,7 @@ mod tests {
             .with_async_std()
             .with_tcp(
                 Default::default(),
-                (|keypair: &Keypair| libp2p_tls::Config::new(keypair),),
+                libp2p_tls::Config::new,
                 // TODO: The single tuple is not intuitive.
                 (libp2p_yamux::Config::default(),),
             )
@@ -1513,7 +1507,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (libp2p_tls::Config::new,),
+                libp2p_tls::Config::new,
                 (
                     libp2p_yamux::Config::default(),
                     libp2p_mplex::MplexConfig::default(),
@@ -1587,7 +1581,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (libp2p_tls::Config::new,),
+                libp2p_tls::Config::new,
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
@@ -1702,7 +1696,7 @@ mod tests {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (libp2p_tls::Config::new,),
+                libp2p_tls::Config::new,
                 (libp2p_yamux::Config::default(),),
             )
             .unwrap()
