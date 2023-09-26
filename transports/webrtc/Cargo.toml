@@ -38,20 +38,10 @@ tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
 pem = ["webrtc?/pem"]
 
 [dev-dependencies]
-anyhow = "1.0"
 env_logger = "0.10"
-hex-literal = "0.4"
-libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
-libp2p-ping = { workspace = true }
 tokio = { version = "1.32", features = ["full"] }
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-void = "1"
 quickcheck = "1.0.3"
 
 [[test]]
 name = "smoke"
-required-features = ["tokio"]
-
-[[example]]
-name = "listen_ping"
 required-features = ["tokio"]
