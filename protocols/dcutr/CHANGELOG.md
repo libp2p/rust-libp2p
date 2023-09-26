@@ -1,7 +1,7 @@
-## 0.11.0
+## 0.11.0 - unreleased
 
-- Add ConnectionId to dcutr::Event::DirectConnectionUpgradeSucceeded
-  See [PR XXXX]
+- Add ConnectionId to Event::DirectConnectionUpgradeSucceeded and Event::DirectConnectionUpgradeFailed
+  See [PR XXXX].
 
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
