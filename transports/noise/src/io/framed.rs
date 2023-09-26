@@ -48,7 +48,7 @@ pub(crate) struct Codec<S> {
 }
 
 impl<S: SessionState> Codec<S> {
-    pub fn new(session: S) -> Self {
+    pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
             write_buffer: Vec::new(),

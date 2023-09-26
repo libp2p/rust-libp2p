@@ -447,6 +447,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "asynchronous-codec"
+version = "0.7.0"
+source = "git+https://github.com/thomaseizinger/asynchronous-codec?branch=feat/gats#1f0db3df17a948b765be5821889bd9842ce593f6"
+dependencies = [
+ "bytes",
+ "futures-sink",
+ "futures-util",
+ "memchr",
+ "pin-project-lite 0.2.12",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2492,7 +2504,7 @@ name = "libp2p-dcutr"
 version = "0.10.0"
 dependencies = [
  "async-std",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "clap",
  "either",
  "env_logger 0.10.0",
@@ -2555,7 +2567,7 @@ dependencies = [
 name = "libp2p-floodsub"
 version = "0.43.0"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "cuckoofilter",
  "fnv",
  "futures",
@@ -2575,7 +2587,7 @@ name = "libp2p-gossipsub"
 version = "0.45.1"
 dependencies = [
  "async-std",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "base64 0.21.4",
  "byteorder",
  "bytes",
@@ -2613,7 +2625,7 @@ name = "libp2p-identify"
 version = "0.43.1"
 dependencies = [
  "async-std",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2665,7 +2677,7 @@ version = "0.44.5"
 dependencies = [
  "arrayvec",
  "async-std",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "either",
  "env_logger 0.10.0",
@@ -2761,7 +2773,7 @@ name = "libp2p-mplex"
 version = "0.40.0"
 dependencies = [
  "async-std",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "criterion",
  "env_logger 0.10.0",
@@ -2795,7 +2807,7 @@ dependencies = [
 name = "libp2p-noise"
 version = "0.43.2"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.7.0",
  "bytes",
  "curve25519-dalek 4.1.0",
  "env_logger 0.10.0",
@@ -2871,7 +2883,7 @@ dependencies = [
 name = "libp2p-plaintext"
 version = "0.40.0"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "env_logger 0.10.0",
  "futures",
@@ -2938,7 +2950,7 @@ dependencies = [
 name = "libp2p-relay"
 version = "0.16.1"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "either",
  "env_logger 0.10.0",
@@ -2967,7 +2979,7 @@ name = "libp2p-rendezvous"
 version = "0.13.0"
 dependencies = [
  "async-trait",
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bimap",
  "env_logger 0.10.0",
  "futures",
@@ -3210,7 +3222,7 @@ dependencies = [
 name = "libp2p-webrtc-utils"
 version = "0.1.0"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "futures",
  "hex",
@@ -4218,7 +4230,7 @@ dependencies = [
 name = "quick-protobuf-codec"
 version = "0.2.0"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
  "quick-protobuf",
  "thiserror",
@@ -5909,7 +5921,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6889a77d49f1f013504cec6bf97a2c730394adedaeb1deb5ea08949a50541105"
 dependencies = [
- "asynchronous-codec",
+ "asynchronous-codec 0.6.2",
  "bytes",
 ]
 
