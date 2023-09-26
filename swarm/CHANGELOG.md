@@ -1,3 +1,8 @@
+## 0.43.5 - unreleased
+
+- Fix overflow in `KeepAlive` computation that could occur if `SwarmBuilder::idle_connection_timeout` is configured with `u64::MAX`.
+  See [PR XXXX](XXXX.
+
 ## 0.43.4
 
 - Implement `Debug` for event structs.
