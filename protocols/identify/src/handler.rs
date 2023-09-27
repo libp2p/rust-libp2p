@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{recv_identify, recv_push, send, UpgradeError};
-use crate::protocol::{Info, PushInfo};
+use crate::protocol::{
+    identify_push_send, recv_identify, recv_push, Info, OperationOkValue, UpgradeError,
+};
 use crate::{PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
-use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_bounded::Timeout;
 use futures_timer::Delay;
@@ -44,7 +44,7 @@ use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 4 * 10;
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -53,7 +53,6 @@ const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 /// permitting the underlying connection to be closed.
 pub struct Handler {
     remote_peer_id: PeerId,
-    inbound_identify_push: Option<BoxFuture<'static, Result<PushInfo, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
         [ConnectionHandlerEvent<
@@ -64,14 +63,7 @@ pub struct Handler {
         >; 4],
     >,
 
-    /// Pending identification replies, awaiting being sent.
-    pending_replies: futures_bounded::FuturesSet<Result<(), UpgradeError>>,
-
-    /// Pending identify requests.
-    outbound_identify_futs: futures_bounded::FuturesSet<Result<Info, UpgradeError>>,
-
-    /// Pending identify/push requests.
-    outbound_identify_push_futs: futures_bounded::FuturesSet<Result<(), UpgradeError>>,
+    identify_futs: futures_bounded::FuturesSet<Result<OperationOkValue, UpgradeError>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -140,17 +132,8 @@ impl Handler {
     ) -> Self {
         Self {
             remote_peer_id,
-            inbound_identify_push: Default::default(),
             events: SmallVec::new(),
-            pending_replies: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
-                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
-            ),
-            outbound_identify_futs: futures_bounded::FuturesSet::new(
-                STREAM_TIMEOUT,
-                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
-            ),
-            outbound_identify_push_futs: futures_bounded::FuturesSet::new(
+            identify_futs: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -182,8 +165,8 @@ impl Handler {
                 let info = self.build_info();
 
                 if self
-                    .pending_replies
-                    .try_push(crate::protocol::send(stream, info))
+                    .identify_futs
+                    .try_push(crate::protocol::identify_send(stream, info))
                     .is_err()
                 {
                     warn!("Dropping inbound stream because we are at capacity");
@@ -191,15 +174,11 @@ impl Handler {
             }
             future::Either::Right(stream) => {
                 if self
-                    .inbound_identify_push
-                    .replace(recv_push(stream).boxed())
-                    .is_some()
+                    .identify_futs
+                    .try_push(recv_push(stream).boxed())
+                    .is_err()
                 {
-                    warn!(
-                        "New inbound identify push stream from {} while still \
-                         upgrading previous one. Replacing previous with new.",
-                        self.remote_peer_id,
-                    );
+                    warn!("Dropping inbound identify push stream because we are at capacity");
                 }
             }
         }
@@ -216,11 +195,7 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(stream) => {
-                if self
-                    .outbound_identify_futs
-                    .try_push(recv_identify(stream))
-                    .is_err()
-                {
+                if self.identify_futs.try_push(recv_identify(stream)).is_err() {
                     warn!("Dropping outbound identify stream because we are at capacity");
                 }
             }
@@ -228,8 +203,8 @@ impl Handler {
                 let info = self.build_info();
 
                 if self
-                    .outbound_identify_push_futs
-                    .try_push(send(stream, info))
+                    .identify_futs
+                    .try_push(identify_push_send(stream, info))
                     .is_err()
                 {
                     warn!("Dropping outbound identify push stream because we are at capacity");
@@ -332,11 +307,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.inbound_identify_push.is_some() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.pending_replies.is_empty() {
+        if !self.identify_futs.is_empty() {
             return KeepAlive::Yes;
         }
 
@@ -365,14 +336,27 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        if let Some(Poll::Ready(res)) = self
-            .inbound_identify_push
-            .as_mut()
-            .map(|f| f.poll_unpin(cx))
-        {
-            self.inbound_identify_push.take();
+        match self.identify_futs.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(OperationOkValue::ReceiveIdentify(remote_info)))) => {
+                self.handle_incoming_info(&remote_info);
 
-            if let Ok(remote_push_info) = res {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
+                    remote_info,
+                )));
+            }
+            Poll::Ready(Ok(Ok(OperationOkValue::SendIdentifyPush))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::IdentificationPushed,
+                ));
+            }
+            Poll::Ready(Ok(Ok(OperationOkValue::SendIdentify))) => {
+                self.exchanged_one_periodic_identify = true;
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::Identification,
+                ));
+            }
+            Poll::Ready(Ok(Ok(OperationOkValue::ReceiveIdentifyPush(remote_push_info)))) => {
                 if let Some(mut info) = self.remote_info.clone() {
                     info.merge(remote_push_info);
                     self.handle_incoming_info(&info);
@@ -382,62 +366,9 @@ impl ConnectionHandler for Handler {
                     ));
                 };
             }
-        }
-
-        // Check for pending replies.
-        match self.pending_replies.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(()))) => {
-                self.exchanged_one_periodic_identify = true;
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::Identification,
-                ));
-            }
-            Poll::Ready(Ok(Err(e))) => {
-                self.exchanged_one_periodic_identify = true;
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
-                ));
-            }
-            Poll::Ready(Err(Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Timeout),
-                ));
-            }
-            Poll::Pending => {}
-        }
-
-        match self.outbound_identify_futs.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(remote_info))) => {
-                self.handle_incoming_info(&remote_info);
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
-                    remote_info,
-                )));
-            }
             Poll::Ready(Ok(Err(e))) => {
                 self.trigger_next_identify.reset(self.interval);
 
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Apply(e)),
-                ));
-            }
-            Poll::Ready(Err(Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::Timeout),
-                ));
-            }
-            Poll::Pending => {}
-        }
-
-        match self.outbound_identify_push_futs.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(()))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed,
-                ));
-            }
-            Poll::Ready(Ok(Err(e))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(StreamUpgradeError::Apply(e)),
                 ));
