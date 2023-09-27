@@ -488,7 +488,7 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
 /// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
 fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
     while start.checked_add(duration).is_none() {
-        log::debug!("{now:?} + {duration:?} cannot be presented, halving duration");
+        log::debug!("{start:?} + {duration:?} cannot be presented, halving duration");
 
         duration /= 2;
     }
