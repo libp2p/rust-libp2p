@@ -2772,11 +2772,11 @@ pub enum GetRecordOk {
         /// _to the record key_ (not the local node) that were queried but
         /// did not return the record, sorted by distance to the record key
         /// from closest to farthest. How many of these are tracked is configured
-        /// by [`Config::set_caching`]. If the lookup used a quorum of
-        /// 1, these peers will be sent the record as a means of caching.
-        /// If the lookup used a quorum > 1, you may wish to use these
-        /// candidates with [`Behaviour::put_record_to`] after selecting
-        /// one of the returned records.
+        /// by [`Config::set_caching`].
+        ///
+        /// Writing back the cache at these peers is a manual operation.
+        /// ie. you may wish to use these candidates with [`Behaviour::put_record_to`]
+        /// after selecting one of the returned records.
         cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
     },
 }

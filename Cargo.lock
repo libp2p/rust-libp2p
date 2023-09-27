@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-deflate"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "async-std",
  "flate2",
@@ -2868,7 +2868,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3039,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.4"
+version = "0.43.5"
 dependencies = [
  "async-std",
  "either",
