@@ -976,7 +976,7 @@ mod tests {
 
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
-        env_logger::init();
+        let _ = env_logger::try_init();
         let start = Instant::now();
 
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
