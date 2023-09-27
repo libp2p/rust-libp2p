@@ -361,12 +361,13 @@ where
                     }
                 }
                 (_, KeepAlive::Until(earliest_shutdown)) => {
-                    if let Some(requested_keep_alive) =
-                        earliest_shutdown.checked_duration_since(Instant::now())
-                    {
-                        let effective_keep_alive = max(requested_keep_alive, *idle_timeout);
+                    let now = Instant::now();
 
-                        let (delay, _) = sleep_until_or_at_least_very_long(effective_keep_alive);
+                    if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
+                        let effective_keep_alive = max(requested, *idle_timeout);
+
+                        let (delay, _) =
+                            sleep_until_or_at_least_very_long(now, effective_keep_alive);
 
                         // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
                         // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
@@ -380,7 +381,8 @@ where
                     // Do nothing, i.e. let the shutdown timer continue to tick.
                 }
                 (_, KeepAlive::No) => {
-                    let (delay, deadline) = sleep_until_or_at_least_very_long(*idle_timeout);
+                    let (delay, deadline) =
+                        sleep_until_or_at_least_very_long(Instant::now(), *idle_timeout);
 
                     *shutdown = Shutdown::Later(delay, deadline);
                 }
@@ -481,17 +483,17 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .collect()
 }
 
-/// Constructs a [`Delay`] for the given [`Duration`] and returns the [`Instant`] at which it will fire.
+/// Constructs a [`Delay`] for the given [`Duration`] from `start` and returns the [`Instant`] at which it will fire.
 ///
 /// If [`Duration`] + [`Instant::now`] overflows, we will return a [`Delay`] that at least sleeps _very_ long.
-fn sleep_until_or_at_least_very_long(mut duration: Duration) -> (Delay, Instant) {
-    while Instant::now().checked_add(duration).is_none() {
+fn sleep_until_or_at_least_very_long(start: Instant, mut duration: Duration) -> (Delay, Instant) {
+    while start.checked_add(duration).is_none() {
         log::debug!("Cannot represent time {duration:?} in the future, halving it ...");
 
         duration /= 2;
     }
 
-    (Delay::new(duration), Instant::now() + duration)
+    (Delay::new(duration), start + duration)
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
@@ -976,7 +978,7 @@ mod tests {
     fn sleep_until_or_eternity_doesnt_overflow() {
         env_logger::init();
 
-        sleep_until_or_at_least_very_long(Duration::from_secs(u64::MAX));
+        sleep_until_or_at_least_very_long(Instant::now(), Duration::from_secs(u64::MAX));
     }
 
     struct KeepAliveUntilConnectionHandler {
