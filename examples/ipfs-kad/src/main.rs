@@ -20,15 +20,16 @@
 
 #![doc = include_str!("../README.md")]
 
+use clap::Parser;
 use futures::StreamExt;
-use libp2p::kad;
-use libp2p::kad::record::store::MemoryStore;
-use libp2p::{
-    development_transport, identity,
-    swarm::{SwarmBuilder, SwarmEvent},
-    PeerId,
-};
-use std::{env, error::Error, time::Duration};
+use libp2p::bytes::BufMut;
+use libp2p::identity::Keypair;
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::{development_transport, identity, kad, PeerId, Swarm};
+use std::error::Error;
+use std::num::NonZeroUsize;
+use std::ops::Add;
+use std::time::{Duration, Instant};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -46,14 +47,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
-    let transport = development_transport(local_key).await?;
+    let transport = development_transport(local_key.clone()).await?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
         // Create a Kademlia behaviour.
         let mut cfg = kad::Config::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
-        let store = MemoryStore::new(local_peer_id);
+        let store = kad::store::MemoryStore::new(local_peer_id);
         let mut behaviour = kad::Behaviour::with_config(local_peer_id, store, cfg);
 
         // Add the bootnodes to the local routing table. `libp2p-dns` built
@@ -66,9 +67,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
+    let cli_opt = Opt::parse();
+
+    match cli_opt {
+        Opt {
+            argument: CliArgument::GetPeers { peer_id },
+        } => get_closes_peers(&mut swarm, peer_id).await,
+        Opt {
+            argument: CliArgument::PutPkRecord {},
+        } => insert_pk_record(&mut swarm, local_peer_id, local_key).await,
+    }
+}
+
+async fn get_closes_peers<TStore: kad::store::RecordStore + Send + 'static>(
+    swarm: &mut Swarm<kad::Behaviour<TStore>>,
+    peer_id: Option<String>,
+) -> Result<(), Box<dyn Error>> {
     // Order Kademlia to search for a peer.
-    let to_search = env::args()
-        .nth(1)
+    let to_search = peer_id
         .map(|p| p.parse())
         .transpose()?
         .unwrap_or_else(PeerId::random);
@@ -109,4 +125,63 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+async fn insert_pk_record<TStore: kad::store::RecordStore + Send + 'static>(
+    swarm: &mut Swarm<kad::Behaviour<TStore>>,
+    local_peer_id: PeerId,
+    local_key: Keypair,
+) -> Result<(), Box<dyn Error>> {
+    let mut pk_record_key = vec![];
+    pk_record_key.put_slice("/pk/".as_bytes());
+    pk_record_key.put_slice(local_peer_id.to_bytes().as_slice());
+
+    println!("Putting PK record into the DHT");
+
+    let mut pk_record = kad::Record::new(&pk_record_key, local_key.public().encode_protobuf());
+
+    pk_record.publisher = Some(local_peer_id);
+    pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
+
+    swarm
+        .behaviour_mut()
+        .put_record(pk_record, kad::Quorum::N(NonZeroUsize::new(3).unwrap()))?;
+
+    loop {
+        let event = swarm.select_next_some().await;
+        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+            result: kad::QueryResult::PutRecord(result),
+            ..
+        }) = event
+        {
+            match result {
+                Ok(_) => {
+                    println!("Successfully inserted the PK record");
+                }
+                Err(err) => {
+                    println!("Failed to insert the PK record {err}");
+                }
+            }
+
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Parser, Debug)]
+#[clap(name = "libp2p Kademlia DHT example")]
+struct Opt {
+    #[clap(subcommand)]
+    argument: CliArgument,
+}
+
+#[derive(Debug, Parser)]
+enum CliArgument {
+    GetPeers {
+        #[clap(long)]
+        peer_id: Option<String>,
+    },
+    PutPkRecord {},
 }

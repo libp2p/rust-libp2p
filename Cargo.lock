@@ -2254,6 +2254,7 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
+ "clap",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
