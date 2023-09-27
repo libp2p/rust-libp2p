@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let quic_transport = quic::tokio::Transport::new(quic::Config::new(&local_keypair));
 
-        dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(
+        dns::tokio::Transport::system(libp2p::core::transport::OrTransport::new(
             quic_transport,
             tcp_transport,
         ))?
