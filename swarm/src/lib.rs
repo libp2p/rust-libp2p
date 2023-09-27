@@ -68,7 +68,7 @@ pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
 #[deprecated(
-    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
+note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
 )]
 pub mod keep_alive;
 mod listen_opts;
@@ -142,8 +142,8 @@ use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
     muxing::StreamMuxerBox,
-    transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Transport,
+    transport::{self, ListenerId, TransportError, TransportEvent, DialOpts as TransportDialOpts, PortMode as TransportPortMode},
+    Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 use smallvec::SmallVec;
@@ -156,6 +156,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use crate::dial_opts::PortMode;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -324,8 +325,8 @@ impl<TBehaviourOutEvent, THandlerErr> SwarmEvent<TBehaviourOutEvent, THandlerErr
 /// Note: Needs to be polled via `<Swarm as Stream>` in order to make
 /// progress.
 pub struct Swarm<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+    where
+        TBehaviour: NetworkBehaviour,
 {
     /// [`Transport`] for dialing remote peers and listening for incoming connection.
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -357,8 +358,8 @@ where
 impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
 
 impl<TBehaviour> Swarm<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+    where
+        TBehaviour: NetworkBehaviour,
 {
     /// Returns information about the connections underlying the [`Swarm`].
     pub fn network_info(&self) -> NetworkInfo {
@@ -496,14 +497,13 @@ where
             addresses_from_opts
         };
 
+        let transport_dial_opts = self.convert_dial_opts(&dial_opts);
+
         let dials = addresses
             .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
-                    let dial = match dial_opts.role_override() {
-                        Endpoint::Dialer => self.transport.dial(address.clone()),
-                        Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
-                    };
+                    let dial = self.transport.dial(address.clone(), transport_dial_opts);
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))
@@ -515,7 +515,7 @@ where
                     address.clone(),
                     Err(TransportError::MultiaddrNotSupported(address)),
                 ))
-                .boxed(),
+                    .boxed(),
             })
             .collect();
 
@@ -531,7 +531,7 @@ where
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
-    pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
+    pub fn listeners(&self) -> impl Iterator<Item=&Multiaddr> {
         self.listened_addrs.values().flatten()
     }
 
@@ -541,7 +541,7 @@ where
     }
 
     /// List all **confirmed** external address for the local node.
-    pub fn external_addresses(&self) -> impl Iterator<Item = &Multiaddr> {
+    pub fn external_addresses(&self) -> impl Iterator<Item=&Multiaddr> {
         self.confirmed_external_addr.iter()
     }
 
@@ -634,7 +634,7 @@ where
     }
 
     /// Returns the currently connected peers.
-    pub fn connected_peers(&self) -> impl Iterator<Item = &PeerId> {
+    pub fn connected_peers(&self) -> impl Iterator<Item=&PeerId> {
         self.pool.iter_connected()
     }
 
@@ -737,7 +737,7 @@ where
                 let num_established = NonZeroU32::new(
                     u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
                 )
-                .expect("n + 1 is always non-zero; qed");
+                    .expect("n + 1 is always non-zero; qed");
 
                 self.pool
                     .spawn_connection(id, peer_id, &endpoint, connection, handler);
@@ -1217,6 +1217,25 @@ where
             return Poll::Pending;
         }
     }
+
+    fn convert_port_mode(&self, port_mode: PortMode) -> TransportPortMode {
+        match port_mode {
+            PortMode::Auto => if self.listened_addrs.is_empty() {
+                TransportPortMode::New
+            } else {
+                TransportPortMode::Reuse
+            },
+            PortMode::New => TransportPortMode::New,
+            PortMode::Reuse => TransportPortMode::Reuse,
+        }
+    }
+
+    fn convert_dial_opts(&self, dial_opts: &DialOpts) -> TransportDialOpts {
+        TransportDialOpts {
+            endpoint: dial_opts.role_override(),
+            port_mode: self.convert_port_mode(dial_opts.port_mode()),
+        }
+    }
 }
 
 /// Connection to notify of a pending event.
@@ -1270,12 +1289,12 @@ fn notify_any<THandler, TBehaviour>(
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
-where
-    TBehaviour: NetworkBehaviour,
-    THandler: ConnectionHandler<
-        FromBehaviour = THandlerInEvent<TBehaviour>,
-        ToBehaviour = THandlerOutEvent<TBehaviour>,
-    >,
+    where
+        TBehaviour: NetworkBehaviour,
+        THandler: ConnectionHandler<
+            FromBehaviour=THandlerInEvent<TBehaviour>,
+            ToBehaviour=THandlerOutEvent<TBehaviour>,
+        >,
 {
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
@@ -1313,8 +1332,8 @@ where
 /// Note: This stream is infinite and it is guaranteed that
 /// [`futures::Stream::poll_next`] will never return `Poll::Ready(None)`.
 impl<TBehaviour> futures::Stream for Swarm<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+    where
+        TBehaviour: NetworkBehaviour,
 {
     type Item = SwarmEvent<TBehaviourOutEvent<TBehaviour>, THandlerErr<TBehaviour>>;
 
@@ -1325,8 +1344,8 @@ where
 
 /// The stream of swarm events never terminates, so we can implement fused for it.
 impl<TBehaviour> FusedStream for Swarm<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+    where
+        TBehaviour: NetworkBehaviour,
 {
     fn is_terminated(&self) -> bool {
         false
@@ -1356,8 +1375,8 @@ pub struct SwarmBuilder<TBehaviour> {
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
-where
-    TBehaviour: NetworkBehaviour,
+    where
+        TBehaviour: NetworkBehaviour,
 {
     /// Creates a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and
     /// executor. The `Swarm` with its underlying `Network` is obtained via
@@ -1402,8 +1421,8 @@ where
     /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
     /// `tokio` executor.
     #[cfg(all(
-        feature = "tokio",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    feature = "tokio",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
     pub fn with_tokio_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -1421,8 +1440,8 @@ where
     /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
     /// `async-std` executor.
     #[cfg(all(
-        feature = "async-std",
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    feature = "async-std",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
     ))]
     pub fn with_async_std_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -1736,8 +1755,8 @@ impl ConnectionDenied {
 
     /// Attempt to downcast to a particular reason for why the connection was denied.
     pub fn downcast<E>(self) -> Result<E, Self>
-    where
-        E: error::Error + Send + Sync + 'static,
+        where
+            E: error::Error + Send + Sync + 'static,
     {
         let inner = self
             .inner
@@ -1749,8 +1768,8 @@ impl ConnectionDenied {
 
     /// Attempt to downcast to a particular reason for why the connection was denied.
     pub fn downcast_ref<E>(&self) -> Option<&E>
-    where
-        E: error::Error + Send + Sync + 'static,
+        where
+            E: error::Error + Send + Sync + 'static,
     {
         self.inner.downcast_ref::<E>()
     }
@@ -1842,8 +1861,7 @@ mod tests {
         Disconnecting,
     }
 
-    fn new_test_swarm(
-    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>> {
+    fn new_test_swarm() -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>> {
         let id_keys = identity::Keypair::generate_ed25519();
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
@@ -1869,18 +1887,18 @@ mod tests {
         swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
         num_connections: usize,
     ) -> bool
-    where
-        TBehaviour: NetworkBehaviour,
-        THandlerOutEvent<TBehaviour>: Clone,
+        where
+            TBehaviour: NetworkBehaviour,
+            THandlerOutEvent<TBehaviour>: Clone,
     {
         swarm1
             .behaviour()
             .num_connections_to_peer(*swarm2.local_peer_id())
             == num_connections
             && swarm2
-                .behaviour()
-                .num_connections_to_peer(*swarm1.local_peer_id())
-                == num_connections
+            .behaviour()
+            .num_connections_to_peer(*swarm1.local_peer_id())
+            == num_connections
             && swarm1.is_connected(swarm2.local_peer_id())
             && swarm2.is_connected(swarm1.local_peer_id())
     }
@@ -1889,18 +1907,18 @@ mod tests {
         swarm1: &Swarm<CallTraceBehaviour<TBehaviour>>,
         swarm2: &Swarm<CallTraceBehaviour<TBehaviour>>,
     ) -> bool
-    where
-        TBehaviour: NetworkBehaviour,
-        THandlerOutEvent<TBehaviour>: Clone,
+        where
+            TBehaviour: NetworkBehaviour,
+            THandlerOutEvent<TBehaviour>: Clone,
     {
         swarm1
             .behaviour()
             .num_connections_to_peer(*swarm2.local_peer_id())
             == 0
             && swarm2
-                .behaviour()
-                .num_connections_to_peer(*swarm1.local_peer_id())
-                == 0
+            .behaviour()
+            .num_connections_to_peer(*swarm1.local_peer_id())
+            == 0
             && !swarm1.is_connected(swarm2.local_peer_id())
             && !swarm2.is_connected(swarm1.local_peer_id())
     }
@@ -2213,8 +2231,8 @@ mod tests {
 
             match swarm2.poll_next_unpin(cx) {
                 Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                    peer_id, error, ..
-                })) => Poll::Ready((peer_id, error)),
+                                     peer_id, error, ..
+                                 })) => Poll::Ready((peer_id, error)),
                 Poll::Ready(x) => panic!("unexpected {x:?}"),
                 Poll::Pending => Poll::Pending,
             }
@@ -2269,10 +2287,10 @@ mod tests {
             loop {
                 match swarm.poll_next_unpin(cx) {
                     Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                        peer_id,
-                        error: DialError::LocalPeerId { .. },
-                        ..
-                    })) => {
+                                         peer_id,
+                                         error: DialError::LocalPeerId { .. },
+                                         ..
+                                     })) => {
                         assert_eq!(&peer_id.unwrap(), swarm.local_peer_id());
                         assert!(!got_dial_err);
                         got_dial_err = true;
@@ -2281,8 +2299,8 @@ mod tests {
                         }
                     }
                     Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                        local_addr, ..
-                    })) => {
+                                         local_addr, ..
+                                     })) => {
                         assert!(!got_inc_err);
                         assert_eq!(local_addr, local_address);
                         got_inc_err = true;
@@ -2300,7 +2318,7 @@ mod tests {
                 }
             }
         }))
-        .unwrap();
+            .unwrap();
     }
 
     #[test]

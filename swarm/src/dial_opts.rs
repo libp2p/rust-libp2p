@@ -126,6 +126,8 @@ impl DialOpts {
     pub(crate) fn role_override(&self) -> Endpoint {
         self.role_override
     }
+
+    pub(crate) fn port_mode(&self) -> PortMode { self.port_mode }
 }
 
 impl From<Multiaddr> for DialOpts {
@@ -303,7 +305,6 @@ impl WithoutPeerIdWithAddress {
         self
     }
 
-
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts {
@@ -348,7 +349,7 @@ pub enum PeerCondition {
 
 /// The port mode to use. I.e. on which port an outgoing connection should dial.
 /// Irrelevant when the transport doesn't support that option.
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy)]
 pub enum PortMode {
     /// Leave the decision to the swarm:
     /// - If we have 0 listen addresses, we allocate a new port by default.

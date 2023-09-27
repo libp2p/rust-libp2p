@@ -59,6 +59,7 @@ use std::{
     task::{Context, Poll, Waker},
     time::Duration,
 };
+use libp2p_core::transport::DialOpts;
 
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
@@ -463,7 +464,7 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, _opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 return Err(TransportError::MultiaddrNotSupported(addr));
@@ -501,13 +502,6 @@ where
             Ok(stream)
         }
         .boxed())
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.dial(addr)
     }
 
     /// When port reuse is disabled and hence ephemeral local ports are

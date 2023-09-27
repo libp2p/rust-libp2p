@@ -28,6 +28,7 @@ use either::Either;
 use futures::prelude::*;
 use pin_project::pin_project;
 use std::{pin::Pin, task::Context, task::Poll};
+use crate::transport::DialOpts;
 
 impl<A, B> StreamMuxer for future::Either<A, B>
 where
@@ -172,15 +173,15 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            Either::Left(a) => match a.dial(addr) {
+            Either::Left(a) => match a.dial(addr, dial_opts) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
-            Either::Right(b) => match b.dial(addr) {
+            Either::Right(b) => match b.dial(addr, dial_opts) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),

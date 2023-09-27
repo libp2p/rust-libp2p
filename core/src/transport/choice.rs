@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::either::EitherFuture;
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use either::Either;
 use futures::future;
 use log::{debug, trace};
@@ -93,13 +93,13 @@ where
         self.0.remove_listener(id) || self.1.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
         trace!(
             "Attempting to dial {} using {}",
             addr,
             std::any::type_name::<A>()
         );
-        let addr = match self.0.dial(addr) {
+        let addr = match self.0.dial(addr, dial_opts) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 debug!(
@@ -119,7 +119,7 @@ where
             addr,
             std::any::type_name::<A>()
         );
-        let addr = match self.1.dial(addr) {
+        let addr = match self.1.dial(addr, dial_opts) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 debug!(

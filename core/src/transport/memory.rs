@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
 use futures::{
     channel::mpsc,
@@ -219,7 +219,7 @@ impl Transport for MemoryTransport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -231,13 +231,6 @@ impl Transport for MemoryTransport {
         };
 
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<DialFuture, TransportError<Self::Error>> {
-        self.dial(addr)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {

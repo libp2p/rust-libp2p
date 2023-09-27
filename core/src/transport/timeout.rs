@@ -31,6 +31,7 @@ use crate::{
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+use crate::transport::DialOpts;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -99,10 +100,10 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dial = self
             .inner
-            .dial(addr)
+            .dial(addr, opts)
             .map_err(|err| err.map(TransportTimeoutError::Other))?;
         Ok(Timeout {
             inner: dial,

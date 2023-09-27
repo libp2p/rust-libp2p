@@ -25,6 +25,7 @@ use crate::{
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
+use crate::transport::DialOpts;
 
 use super::ListenerId;
 
@@ -73,8 +74,8 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone())?;
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let future = self.transport.dial(addr.clone(), dial_opts)?;
         let p = ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,

@@ -21,9 +21,10 @@
 use crate::multiaddr::{Multiaddr, Protocol};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
 pub enum Endpoint {
     /// The socket comes from a dialer.
+    #[default]
     Dialer,
     /// The socket comes from a listener.
     Listener,

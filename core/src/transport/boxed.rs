@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use crate::transport::{DialOpts, ListenerId, Transport, TransportError, TransportEvent};
 use futures::{prelude::*, stream::FusedStream};
 use multiaddr::Multiaddr;
 use std::{
@@ -58,7 +58,7 @@ trait Abstract<O> {
         addr: Multiaddr,
     ) -> Result<(), TransportError<io::Error>>;
     fn remove_listener(&mut self, id: ListenerId) -> bool;
-    fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Dial<O>, TransportError<io::Error>>;
     fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
     fn poll(
@@ -86,8 +86,8 @@ where
         Transport::remove_listener(self, id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
-        let fut = Transport::dial(self, addr)
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Dial<O>, TransportError<io::Error>> {
+        let fut = Transport::dial(self, addr, dial_opts)
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
         Ok(Box::pin(fut) as Dial<_>)
@@ -143,8 +143,8 @@ impl<O> Transport for Boxed<O> {
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.dial(addr)
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.inner.dial(addr, dial_opts)
     }
 
     fn dial_as_listener(

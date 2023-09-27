@@ -27,6 +27,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use crate::transport::DialOpts;
 
 /// Dropping all dial requests to non-global IP addresses.
 #[derive(Debug, Clone, Default)]
@@ -288,21 +289,21 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
                 if !ipv4_global::is_global(a) {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial(addr)
+                self.inner.dial(addr, dial_opts)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial(addr)
+                self.inner.dial(addr, dial_opts)
             }
             _ => {
                 debug!("Not dialing unsupported Multiaddress {:?}.", addr);

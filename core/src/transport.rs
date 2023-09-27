@@ -57,12 +57,13 @@ pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
-#[derive(Debug)]
+#[derive(Debug, Default, Copy, Clone)]
 pub enum PortMode {
+    #[default]
     New,
-    Reuse
+    Reuse,
 }
-#[derive(Debug)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct DialOpts {
     pub endpoint: Endpoint,
     pub port_mode: PortMode,
@@ -139,7 +140,11 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>>;
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
@@ -150,7 +155,12 @@ pub trait Transport {
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>;
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.dial(addr, DialOpts {
+            endpoint: Endpoint::Listener,
+            ..Default::default()
+        })
+    }
 
     /// Poll for [`TransportEvent`]s.
     ///
