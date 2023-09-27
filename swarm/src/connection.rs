@@ -486,14 +486,14 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
 /// Constructs a [`Delay`] for the given [`Duration`] from `start` and returns the [`Instant`] at which it will fire.
 ///
 /// If [`Duration`] + [`Instant::now`] overflows, we will return a [`Delay`] that at least sleeps _very_ long.
-fn sleep_until_or_at_least_very_long(start: Instant, mut duration: Duration) -> (Delay, Instant) {
-    while start.checked_add(duration).is_none() {
+fn sleep_until_or_at_least_very_long(now: Instant, mut duration: Duration) -> (Delay, Instant) {
+    while now.checked_add(duration).is_none() {
         log::debug!("Cannot represent time {duration:?} in the future, halving it ...");
 
         duration /= 2;
     }
 
-    (Delay::new(duration), start + duration)
+    (Delay::new(duration), now + duration)
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
