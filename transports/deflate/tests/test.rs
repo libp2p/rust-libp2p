@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 // Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
