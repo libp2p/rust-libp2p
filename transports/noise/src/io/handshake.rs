@@ -35,6 +35,7 @@ use asynchronous_codec::Framed;
 use futures::prelude::*;
 use libp2p_identity as identity;
 use multihash::Multihash;
+use quick_protobuf::MessageWrite;
 use std::collections::HashSet;
 use std::io;
 
@@ -174,13 +175,8 @@ pub(crate) async fn recv_empty<T>(state: &mut State<T>) -> Result<(), Error>
 where
     T: AsyncRead + Unpin,
 {
-    let proto::NoiseHandshakePayload {
-        identity_key,
-        identity_sig,
-        extensions,
-    } = recv(state).await?;
-
-    if !(identity_key.is_empty() && identity_sig.is_empty() && extensions.is_none()) {
+    let payload = recv(state).await?;
+    if payload.get_size() != 0 {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Expected empty payload.").into());
     }
 

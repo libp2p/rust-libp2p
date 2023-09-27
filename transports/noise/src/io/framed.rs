@@ -44,7 +44,7 @@ static_assertions::const_assert! {
 /// encoding and decoding length-delimited session messages.
 pub(crate) struct Codec<S> {
     session: S,
-    write_buffer: Vec<u8>,
+    encrypt_buffer: Vec<u8>,
     decrypt_buffer: BytesMut,
 }
 
@@ -52,15 +52,15 @@ impl<S: SessionState> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
-            write_buffer: Vec::new(),
+            encrypt_buffer: Vec::new(),
             decrypt_buffer: BytesMut::new(),
         }
     }
 
-    fn encode_bytes(&mut self, item: &Vec<u8>, dst: &mut BytesMut) -> Result<(), io::Error> {
-        self.write_buffer
+    fn encode_bytes(&mut self, item: &[u8], dst: &mut BytesMut) -> Result<(), io::Error> {
+        self.encrypt_buffer
             .resize(item.len() + EXTRA_ENCRYPT_SPACE, 0);
-        let n = match self.session.write_message(item, &mut self.write_buffer) {
+        let n = match self.session.write_message(item, &mut self.encrypt_buffer) {
             Ok(n) => n,
             Err(e) => {
                 error!("encryption error: {:?}", e);
@@ -68,11 +68,10 @@ impl<S: SessionState> Codec<S> {
             }
         };
 
-        let prefix = u16::to_be_bytes(n as u16);
-        self.write_buffer.truncate(n);
+        self.encrypt_buffer.truncate(n);
 
-        dst.put(&prefix[..]);
-        dst.put(&self.write_buffer[..]);
+        dst.put_u16(n as u16);
+        dst.put(&self.encrypt_buffer[..]);
 
         Ok(())
     }
@@ -180,7 +179,7 @@ impl asynchronous_codec::Decoder for Codec<snow::HandshakeState> {
 
 impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
-    type Item<'a> = &'a Vec<u8>;
+    type Item<'a> = &'a [u8];
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         self.encode_bytes(item, dst)
