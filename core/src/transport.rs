@@ -48,7 +48,7 @@ pub mod upgrade;
 mod boxed;
 mod optional;
 
-use crate::ConnectedPoint;
+use crate::{ConnectedPoint, Endpoint};
 
 pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
@@ -57,6 +57,16 @@ pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
+#[derive(Debug)]
+pub enum PortMode {
+    New,
+    Reuse
+}
+#[derive(Debug)]
+pub struct DialOpts {
+    pub endpoint: Endpoint,
+    pub port_mode: PortMode,
+}
 
 /// A transport provides connection-oriented communication between two peers
 /// through ordered streams of data (i.e. connections).
@@ -129,13 +139,14 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>;
+    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
     /// This option is needed for NAT and firewall hole punching.
     ///
     /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
+    #[deprecated]
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,

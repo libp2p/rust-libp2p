@@ -45,6 +45,7 @@ pub struct DialOpts {
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
     connection_id: ConnectionId,
+    port_mode: PortMode,
 }
 
 impl DialOpts {
@@ -65,6 +66,7 @@ impl DialOpts {
             condition: Default::default(),
             role_override: Endpoint::Dialer,
             dial_concurrency_factor_override: Default::default(),
+            port_mode: Default::default(),
         }
     }
 
@@ -144,6 +146,7 @@ pub struct WithPeerId {
     condition: PeerCondition,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    port_mode: PortMode,
 }
 
 impl WithPeerId {
@@ -169,6 +172,7 @@ impl WithPeerId {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            port_mode: self.port_mode,
         }
     }
 
@@ -193,6 +197,7 @@ impl WithPeerId {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
+            port_mode: self.port_mode,
         }
     }
 }
@@ -205,6 +210,7 @@ pub struct WithPeerIdWithAddresses {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    port_mode: PortMode,
 }
 
 impl WithPeerIdWithAddresses {
@@ -232,6 +238,11 @@ impl WithPeerIdWithAddresses {
         self
     }
 
+    pub fn override_port_mode(mut self, port_mode: PortMode) -> Self {
+        self.port_mode = port_mode;
+        self
+    }
+
     /// Override
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
@@ -249,6 +260,7 @@ impl WithPeerIdWithAddresses {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
+            port_mode: self.port_mode,
         }
     }
 }
@@ -262,6 +274,7 @@ impl WithoutPeerId {
         WithoutPeerIdWithAddress {
             address,
             role_override: Endpoint::Dialer,
+            port_mode: Default::default(),
         }
     }
 }
@@ -270,6 +283,7 @@ impl WithoutPeerId {
 pub struct WithoutPeerIdWithAddress {
     address: Multiaddr,
     role_override: Endpoint,
+    port_mode: PortMode,
 }
 
 impl WithoutPeerIdWithAddress {
@@ -283,6 +297,13 @@ impl WithoutPeerIdWithAddress {
         self.role_override = Endpoint::Listener;
         self
     }
+
+    pub fn override_port_mode(mut self, port_mode: PortMode) -> Self {
+        self.port_mode = port_mode;
+        self
+    }
+
+
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
         DialOpts {
@@ -293,6 +314,7 @@ impl WithoutPeerIdWithAddress {
             role_override: self.role_override,
             dial_concurrency_factor_override: None,
             connection_id: ConnectionId::next(),
+            port_mode: self.port_mode,
         }
     }
 }
@@ -322,4 +344,19 @@ pub enum PeerCondition {
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
     Always,
+}
+
+/// The port mode to use. I.e. on which port an outgoing connection should dial.
+/// Irrelevant when the transport doesn't support that option.
+#[derive(Default, Debug, Clone)]
+pub enum PortMode {
+    /// Leave the decision to the swarm:
+    /// - If we have 0 listen addresses, we allocate a new port by default.
+    /// - If we have at least one address, we reuse an existing port.
+    #[default]
+    Auto,
+    /// Always allocate a new port
+    New,
+    /// Always reuse an existing port
+    Reuse,
 }
