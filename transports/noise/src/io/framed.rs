@@ -43,9 +43,9 @@ static_assertions::const_assert! {
 /// Codec holds the noise session state `S` and acts as a medium for
 /// encoding and decoding length-delimited session messages.
 pub(crate) struct Codec<S> {
+    session: S,
     write_buffer: Vec<u8>,
     decrypt_buffer: BytesMut,
-    session: S,
 }
 
 impl<S: SessionState> Codec<S> {
@@ -124,7 +124,10 @@ impl Codec<snow::HandshakeState> {
     ///
     /// If the Noise protocol session state does not permit transitioning to
     /// transport mode because the handshake is incomplete, an error is returned.
-    /// Similarly if the remote's static DH key, if present, cannot be parsed.
+    ///
+    /// An error is also returned if the remote's static DH key is not present or
+    /// cannot be parsed, as that indicates a fatal handshake error for the noise
+    /// `XX` pattern, which is the only handshake protocol libp2p currently supports.
     pub(crate) fn into_transport(self) -> Result<(PublicKey, Codec<snow::TransportState>), Error> {
         let dh_remote_pubkey = self.session.get_remote_static().ok_or_else(|| {
             Error::Io(io::Error::new(

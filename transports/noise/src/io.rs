@@ -30,7 +30,7 @@ use futures::ready;
 use log::trace;
 use std::{
     cmp::min,
-    io,
+    fmt, io,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -44,6 +44,12 @@ pub struct Output<T> {
     recv_offset: usize,
     send_buffer: Vec<u8>,
     send_offset: usize,
+}
+
+impl<T> fmt::Debug for Output<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NoiseOutput").finish()
+    }
 }
 
 impl<T> Output<T> {
