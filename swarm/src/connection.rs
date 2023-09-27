@@ -374,15 +374,16 @@ where
                     }
                 }
                 (_, KeepAlive::Until(earliest_shutdown)) => {
-                    if let Some(requested_keep_alive) =
-                        earliest_shutdown.checked_duration_since(Instant::now())
-                    {
-                        let effective_keep_alive = max(requested_keep_alive, *idle_timeout);
+                    let now = Instant::now();
+
+                    if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
+                        let effective_keep_alive = max(requested, *idle_timeout);
+
+                        let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
 
                         // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
                         // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                        *shutdown =
-                            Shutdown::Later(Delay::new(effective_keep_alive), earliest_shutdown)
+                        *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown)
                     }
                 }
                 (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
@@ -392,8 +393,10 @@ where
                     // Do nothing, i.e. let the shutdown timer continue to tick.
                 }
                 (_, KeepAlive::No) => {
-                    let deadline = Instant::now() + *idle_timeout;
-                    *shutdown = Shutdown::Later(Delay::new(*idle_timeout), deadline);
+                    let now = Instant::now();
+                    let safe_keep_alive = checked_add_fraction(now, *idle_timeout);
+
+                    *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive);
                 }
                 (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
             };
@@ -490,6 +493,20 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .protocol_info()
         .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
+}
+
+/// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
+///
+/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can represent.
+/// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
+fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
+    while start.checked_add(duration).is_none() {
+        log::debug!("{start:?} + {duration:?} cannot be presented, halving duration");
+
+        duration /= 2;
+    }
+
+    duration
 }
 
 /// Borrowed information about an incoming connection currently being negotiated.
@@ -968,6 +985,16 @@ mod tests {
             connection.poll_noop_waker(),
             Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
         ));
+    }
+
+    #[test]
+    fn checked_add_fraction_can_add_u64_max() {
+        let _ = env_logger::try_init();
+        let start = Instant::now();
+
+        let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
+
+        assert!(start.checked_add(duration).is_some())
     }
 
     struct KeepAliveUntilConnectionHandler {

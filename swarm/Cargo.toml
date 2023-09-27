@@ -21,7 +21,7 @@ libp2p-identity = { workspace = true }
 libp2p-swarm-derive = { workspace = true, optional = true }
 log = "0.4"
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 void = "1"
 wasm-bindgen-futures = { version = "0.4.37", optional = true }
 getrandom = { version = "0.2.9", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature

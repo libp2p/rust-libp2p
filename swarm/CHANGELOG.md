@@ -4,7 +4,12 @@
   If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
   See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
 
-## 0.43.4 - unreleased
+## 0.43.5
+
+- Fix overflow in `KeepAlive` computation that could occur if `SwarmBuilder::idle_connection_timeout` is configured with `u64::MAX`.
+  See [PR 4559](https://github.com/libp2p/rust-libp2p/pull/4559).
+
+## 0.43.4
 
 - Implement `Debug` for event structs.
   See [PR 4426].

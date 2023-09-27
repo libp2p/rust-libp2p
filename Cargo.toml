@@ -78,10 +78,10 @@ libp2p-connection-limits = { version = "0.2.1", path = "misc/connection-limits" 
 libp2p-core = { version = "0.40.1", path = "core" }
 libp2p-dcutr = { version = "0.10.0", path = "protocols/dcutr" }
 libp2p-deflate = { version = "0.40.0", path = "transports/deflate" }
-libp2p-dns = { version = "0.40.0", path = "transports/dns" }
+libp2p-dns = { version = "0.40.1", path = "transports/dns" }
 libp2p-floodsub = { version = "0.43.0", path = "protocols/floodsub" }
 libp2p-gossipsub = { version = "0.45.1", path = "protocols/gossipsub" }
-libp2p-identify = { version = "0.43.0", path = "protocols/identify" }
+libp2p-identify = { version = "0.43.1", path = "protocols/identify" }
 libp2p-identity = { version = "0.2.3" }
 libp2p-kad = { version = "0.44.5", path = "protocols/kad" }
 libp2p-mdns = { version = "0.44.0", path = "protocols/mdns" }
@@ -97,7 +97,7 @@ libp2p-pnet = { version = "0.23.0", path = "transports/pnet" }
 libp2p-quic = { version = "0.9.2", path = "transports/quic" }
 libp2p-relay = { version = "0.16.1", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.13.0", path = "protocols/rendezvous" }
-libp2p-upnp = { version = "0.1.0", path = "protocols/upnp" }
+libp2p-upnp = { version = "0.1.1", path = "protocols/upnp" }
 libp2p-request-response = { version = "0.25.1", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.44.0", path = "swarm" }

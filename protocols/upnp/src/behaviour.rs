@@ -544,7 +544,7 @@ fn multiaddr_to_socketaddr_protocol(
             Some(multiaddr::Protocol::Udp(port)) => {
                 return Ok((
                     SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
-                    PortMappingProtocol::TCP,
+                    PortMappingProtocol::UDP,
                 ));
             }
             _ => {}
