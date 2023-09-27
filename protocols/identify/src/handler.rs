@@ -31,7 +31,8 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::handler::{
-    ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, ProtocolSupport,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ProtocolSupport,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
@@ -468,9 +469,16 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            ConnectionEvent::DialUpgradeError(_dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+                let upgrade_error = match error {
+                    StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
+                    StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
+                    StreamUpgradeError::Io(e) => StreamUpgradeError::Io(e),
+                    StreamUpgradeError::Apply(v) => unreachable!("{}", v),
+                };
+
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(StreamUpgradeError::NegotiationFailed),
+                    Event::IdentificationError(upgrade_error),
                 ));
                 self.trigger_next_identify.reset(self.interval);
             }
