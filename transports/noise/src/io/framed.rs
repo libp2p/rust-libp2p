@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! This module provides a `Codec` type implementing the `Encoder` and `Decoder`
-//! traits, making it useful alongside a `asynchronous_codec::Framed` to provide
-//! `Sink` and `Stream` for length-delimited Noise protocol messages.
+//! Provides a [`Codec`] type implementing the [`Encoder`] and [`Decoder`] traits.
+//!
+//! Alongside a [`asynchronous_codec::Framed`] this provides a [`Sink`] and [`Stream`]
+//! for length-delimited Noise protocol messages.
 
 use super::handshake::proto;
 use crate::{protocol::PublicKey, Error};
@@ -29,7 +30,7 @@ use log::{debug, error};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
 
-/// Max size of a noise message.
+/// Max. size of a noise message.
 const MAX_NOISE_MSG_LEN: usize = 65535;
 /// Space given to the encryption buffer to hold key material.
 const EXTRA_ENCRYPT_SPACE: usize = 1024;
@@ -117,8 +118,8 @@ impl Codec<snow::HandshakeState> {
         !self.session.is_initiator()
     }
 
-    /// Converts the underlying Noise session from the `Handshake` state to a
-    /// `Transport` state once the handshake is complete, including the static
+    /// Converts the underlying Noise session from the [`snow::HandshakeState`] to a
+    /// [`snow::TransportState`] once the handshake is complete, including the static
     /// DH [`PublicKey`] of the remote if received.
     ///
     /// If the Noise protocol session state does not permit transitioning to
