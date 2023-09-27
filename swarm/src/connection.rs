@@ -483,8 +483,11 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
 }
 
 /// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
-fn checked_add_fraction(now: Instant, mut duration: Duration) -> Duration {
-    while now.checked_add(duration).is_none() {
+///
+/// [`Instant`] depends on the underlying platform and has a limit of which points in time it can represent.
+/// The [`Duration`] computed by the this function may not be the longest possible that we can add to `now` but it will work.
+fn checked_add_fraction(start: Instant, mut duration: Duration) -> Duration {
+    while start.checked_add(duration).is_none() {
         log::debug!("{now:?} + {duration:?} cannot be presented, halving duration");
 
         duration /= 2;
