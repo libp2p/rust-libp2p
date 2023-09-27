@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 //! Libp2p websocket transports built on [web-sys](https://rustwasm.github.io/wasm-bindgen/web-sys/index.html).
+
 use bytes::BytesMut;
 use futures::task::AtomicWaker;
 use futures::{future::Ready, io, prelude::*};

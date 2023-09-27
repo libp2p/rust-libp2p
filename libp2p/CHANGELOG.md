@@ -1,6 +1,6 @@
 ## 0.52.4 - unreleased
 
-- Introduce `libp2p::websys_websocket` module behind `websocket-websys` feature flag.
+- Introduce `libp2p::websocket_websys` module behind `websocket-websys` feature flag.
   This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
   See [PR 3679].
 
