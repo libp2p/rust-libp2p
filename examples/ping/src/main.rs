@@ -23,29 +23,44 @@
 use futures::prelude::*;
 use libp2p::core::upgrade::Version;
 use libp2p::{
-    identity, noise, ping,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    identify, identity, noise, ping,
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    tcp, upnp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 use std::time::Duration;
 
-#[async_std::main]
+#[derive(NetworkBehaviour)]
+struct Behaviour {
+    ping: ping::Behaviour,
+    identify: identify::Behaviour,
+    upnp: upnp::tokio::Behaviour,
+}
+
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport = tcp::async_io::Transport::default()
+    let transport = tcp::tokio::Transport::default()
         .upgrade(Version::V1Lazy)
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
 
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, ping::Behaviour::default(), local_peer_id)
-            .idle_connection_timeout(Duration::from_secs(60)) // For illustrative purposes, keep idle connections alive for a minute so we can observe a few pings.
-            .build();
+    let behaviour = Behaviour {
+        ping: ping::Behaviour::new(ping::Config::new()),
+        identify: identify::Behaviour::new(identify::Config::new(
+            "/TODO/0.0.1".to_string(),
+            local_key.public(),
+        )),
+        upnp: upnp::tokio::Behaviour::default(),
+    };
+
+    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id)
+        .idle_connection_timeout(Duration::from_secs(60)) // For illustrative purposes, keep idle connections alive for a minute so we can observe a few pings.
+        .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
