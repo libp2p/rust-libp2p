@@ -804,11 +804,11 @@ dependencies = [
 name = "chat-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "async-trait",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tokio",
 ]
 
 [[package]]
@@ -1174,9 +1174,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.1.0"
+version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "622178105f911d937a42cdb140730ba4a3ed2becd8ae6ce39c7d28b5d75d4588"
+checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -1362,7 +1362,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
- "curve25519-dalek 4.1.0",
+ "curve25519-dalek 4.1.1",
  "ed25519",
  "rand_core 0.6.4",
  "serde",
@@ -2521,7 +2521,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-deflate"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "async-std",
  "flate2",
@@ -2535,7 +2535,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-dns"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "async-std",
  "async-std-resolver",
@@ -2610,7 +2610,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.43.0"
+version = "0.43.1"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2796,7 +2796,7 @@ name = "libp2p-noise"
 version = "0.43.1"
 dependencies = [
  "bytes",
- "curve25519-dalek 4.1.0",
+ "curve25519-dalek 4.1.1",
  "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
@@ -2868,7 +2868,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -3039,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.4"
+version = "0.43.5"
 dependencies = [
  "async-std",
  "either",
@@ -3152,7 +3152,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-upnp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "futures-timer",
@@ -5161,9 +5161,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
+checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 
 [[package]]
 name = "smol"
@@ -5200,7 +5200,7 @@ dependencies = [
  "aes-gcm 0.9.2",
  "blake2",
  "chacha20poly1305",
- "curve25519-dalek 4.1.0",
+ "curve25519-dalek 4.1.1",
  "rand_core 0.6.4",
  "ring",
  "rustc_version",
@@ -5595,9 +5595,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806fe8c2c87eccc8b3267cbae29ed3ab2d0bd37fca70ab622e46aaa9375ddb7d"
+checksum = "1d68074620f57a0b21594d9735eb2e98ab38b17f80d3fcb189fca266771ca60d"
 dependencies = [
  "bytes",
  "futures-core",
@@ -6572,7 +6572,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb66477291e7e8d2b0ff1bcb900bf29489a9692816d79874bea351e7a8b6de96"
 dependencies = [
- "curve25519-dalek 4.1.0",
+ "curve25519-dalek 4.1.1",
  "rand_core 0.6.4",
  "serde",
  "zeroize",

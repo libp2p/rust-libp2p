@@ -405,7 +405,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp))?;
+        let dns = libp2p_dns::tokio::Transport::system(OrTransport::new(quic, tcp))?;
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -428,14 +428,12 @@ async fn connect(
     let start = Instant::now();
     swarm.dial(server_address.clone()).unwrap();
 
-    let server_peer_id = loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-            }
-            e => panic!("{e:?}"),
+    let server_peer_id = match swarm.next().await.unwrap() {
+        SwarmEvent::ConnectionEstablished { peer_id, .. } => peer_id,
+        SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+            bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
         }
+        e => panic!("{e:?}"),
     };
 
     let duration = start.elapsed();

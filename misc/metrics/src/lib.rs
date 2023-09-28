@@ -118,8 +118,8 @@ impl Recorder<libp2p_identify::Event> for Metrics {
 }
 
 #[cfg(feature = "kad")]
-impl Recorder<libp2p_kad::KademliaEvent> for Metrics {
-    fn record(&self, event: &libp2p_kad::KademliaEvent) {
+impl Recorder<libp2p_kad::Event> for Metrics {
+    fn record(&self, event: &libp2p_kad::Event) {
         self.kad.record(event)
     }
 }

@@ -1,8 +1,14 @@
-## 0.45.0
+## 0.45.0 - unreleased
 - Emit `ModeChanged` event whenever we automatically reconfigure the mode.
   See [PR 4503].
 
 [PR 4503]: https://github.com/libp2p/rust-libp2p/pull/4503
+
+## 0.44.6 - unreleased
+- Rename `Kademlia` symbols to follow naming convention.
+  See [PR 4547].
+
+[PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
 
 ## 0.44.5
 - Migrate to `quick-protobuf-codec` crate for codec logic.
