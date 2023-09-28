@@ -428,14 +428,12 @@ async fn connect(
     let start = Instant::now();
     swarm.dial(server_address.clone()).unwrap();
 
-    let server_peer_id = loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-            }
-            e => panic!("{e:?}"),
+    let server_peer_id = match swarm.next().await.unwrap() {
+        SwarmEvent::ConnectionEstablished { peer_id, .. } => peer_id,
+        SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+            bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
         }
+        e => panic!("{e:?}"),
     };
 
     let duration = start.elapsed();
