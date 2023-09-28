@@ -1848,9 +1848,7 @@ mod tests {
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
-            .authenticate(plaintext::PlainText2Config {
-                local_public_key: local_public_key.clone(),
-            })
+            .authenticate(plaintext::Config::new(&id_keys))
             .multiplex(yamux::Config::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
@@ -2155,19 +2153,14 @@ mod tests {
                     )
                     .unwrap();
                 for mut transport in transports.into_iter() {
-                    loop {
-                        match futures::future::select(transport.select_next_some(), swarm.next())
-                            .await
-                        {
-                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
-                                break;
-                            }
-                            future::Either::Left(_) => {
-                                panic!("Unexpected transport event.")
-                            }
-                            future::Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {e:?}")
-                            }
+                    match futures::future::select(transport.select_next_some(), swarm.next()).await
+                    {
+                        future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
+                        future::Either::Left(_) => {
+                            panic!("Unexpected transport event.")
+                        }
+                        future::Either::Right((e, _)) => {
+                            panic!("Expect swarm to not emit any event {e:?}")
                         }
                     }
                 }

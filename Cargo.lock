@@ -2662,7 +2662,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-kad"
-version = "0.44.5"
+version = "0.44.6"
 dependencies = [
  "arrayvec",
  "async-std",
@@ -2869,7 +2869,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-plaintext"
-version = "0.40.0"
+version = "0.40.1"
 dependencies = [
  "asynchronous-codec",
  "bytes",

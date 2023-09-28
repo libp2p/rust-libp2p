@@ -26,7 +26,7 @@
 //! [Identify](https://github.com/libp2p/specs/tree/master/identify) protocol might be seen as a core protocol. Rust-libp2p
 //! tries to stay as generic as possible, and does not make this assumption.
 //! This means that the Identify protocol must be manually hooked up to Kademlia through calls
-//! to [`Kademlia::add_address`].
+//! to [`Behaviour::add_address`].
 //! If you choose not to use the Identify protocol, and do not provide an alternative peer
 //! discovery mechanism, a Kademlia node will not discover nodes beyond the network's
 //! [boot nodes](https://docs.libp2p.io/concepts/glossary/#boot-node). Without the Identify protocol,
@@ -73,11 +73,10 @@ pub use behaviour::{
     QueryResult, QueryStats, RoutingUpdate,
 };
 pub use behaviour::{
-    Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
-    KademliaStoreInserts, ProgressStep, Quorum,
+    Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,
 };
 pub use kbucket::{Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey};
-pub use protocol::KadConnectionType;
+pub use protocol::ConnectionType;
 pub use query::QueryId;
 pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
 
@@ -115,3 +114,30 @@ pub const PROTOCOL_NAME: StreamProtocol = protocol::DEFAULT_PROTO_NAME;
 /// Constant shared across tests for the [`Multihash`](libp2p_core::multihash::Multihash) type.
 #[cfg(test)]
 const SHA_256_MH: u64 = 0x12;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Behaviour`.")]
+pub type Kademlia<TStore> = Behaviour<TStore>;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::BucketInserts`."
+)]
+pub type KademliaBucketInserts = BucketInserts;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::StoreInserts`."
+)]
+pub type KademliaStoreInserts = StoreInserts;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Config`.")]
+pub type KademliaConfig = Config;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Caching`.")]
+pub type KademliaCaching = Caching;
+
+#[deprecated(note = "Import the `kad` module instead and refer to this type as `kad::Event`.")]
+pub type KademliaEvent = Event;
+
+#[deprecated(
+    note = "Import the `kad` module instead and refer to this type as `kad::ConnectionType`."
+)]
+pub type KadConnectionType = ConnectionType;
