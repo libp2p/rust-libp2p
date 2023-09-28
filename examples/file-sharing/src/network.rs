@@ -5,11 +5,7 @@ use futures::prelude::*;
 
 use libp2p::{
     core::Multiaddr,
-    identity,
-    kad::{
-        self, record::store::MemoryStore, GetProvidersOk, Kademlia, KademliaEvent, QueryId,
-        QueryResult,
-    },
+    identity, kad,
     multiaddr::Protocol,
     noise,
     request_response::{self, ProtocolSupport, RequestId, ResponseChannel},
@@ -52,7 +48,7 @@ pub(crate) async fn new(
             yamux::Config::default,
         )?
         .with_behaviour(|key| ComposedBehaviour {
-            kademlia: Kademlia::new(peer_id, MemoryStore::new(key.public().to_peer_id())),
+            kademlia: kad::Behaviour::new(peer_id, kad::store::MemoryStore::new(key.public().to_peer_id())),
             request_response: request_response::cbor::Behaviour::new(
                 [(
                     StreamProtocol::new("/file-exchange/1"),
@@ -173,8 +169,8 @@ pub(crate) struct EventLoop {
     command_receiver: mpsc::Receiver<Command>,
     event_sender: mpsc::Sender<Event>,
     pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
-    pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
-    pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
+    pending_start_providing: HashMap<kad::QueryId, oneshot::Sender<()>>,
+    pending_get_providers: HashMap<kad::QueryId, oneshot::Sender<HashSet<PeerId>>>,
     pending_request_file:
         HashMap<RequestId, oneshot::Sender<Result<Vec<u8>, Box<dyn Error + Send>>>>,
 }
@@ -215,9 +211,9 @@ impl EventLoop {
     ) {
         match event {
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     id,
-                    result: QueryResult::StartProviding(_),
+                    result: kad::QueryResult::StartProviding(_),
                     ..
                 },
             )) => {
@@ -228,11 +224,12 @@ impl EventLoop {
                 let _ = sender.send(());
             }
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     id,
                     result:
-                        QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
-                            providers, ..
+                        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders {
+                            providers,
+                            ..
                         })),
                     ..
                 },
@@ -250,11 +247,11 @@ impl EventLoop {
                 }
             }
             SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                KademliaEvent::OutboundQueryProgressed {
+                kad::Event::OutboundQueryProgressed {
                     result:
-                        QueryResult::GetProviders(Ok(GetProvidersOk::FinishedWithNoAdditionalRecord {
-                            ..
-                        })),
+                        kad::QueryResult::GetProviders(Ok(
+                            kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
+                        )),
                     ..
                 },
             )) => {}
@@ -406,13 +403,13 @@ impl EventLoop {
 #[behaviour(to_swarm = "ComposedEvent")]
 struct ComposedBehaviour {
     request_response: request_response::cbor::Behaviour<FileRequest, FileResponse>,
-    kademlia: Kademlia<MemoryStore>,
+    kademlia: kad::Behaviour<kad::record::store::MemoryStore>,
 }
 
 #[derive(Debug)]
 enum ComposedEvent {
     RequestResponse(request_response::Event<FileRequest, FileResponse>),
-    Kademlia(KademliaEvent),
+    Kademlia(kad::Event),
 }
 
 impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
@@ -421,8 +418,8 @@ impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent 
     }
 }
 
-impl From<KademliaEvent> for ComposedEvent {
-    fn from(event: KademliaEvent) -> Self {
+impl From<kad::Event> for ComposedEvent {
+    fn from(event: kad::Event) -> Self {
         ComposedEvent::Kademlia(event)
     }
 }

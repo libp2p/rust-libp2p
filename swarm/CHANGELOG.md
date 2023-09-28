@@ -1,4 +1,4 @@
-## 0.43.5 - unreleased
+## 0.43.6 - unreleased
 
 - Deprecate old `libp2p::swarm::SwarmBuilder`.
   Most users should use the new `libp2p::SwarmBuilder`.
@@ -6,6 +6,11 @@
   See [PR 4120].
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+
+## 0.43.5
+
+- Fix overflow in `KeepAlive` computation that could occur if `SwarmBuilder::idle_connection_timeout` is configured with `u64::MAX`.
+  See [PR 4559](https://github.com/libp2p/rust-libp2p/pull/4559).
 
 ## 0.43.4
 

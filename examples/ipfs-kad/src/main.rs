@@ -21,8 +21,7 @@
 #![doc = include_str!("../README.md")]
 
 use futures::StreamExt;
-use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
+use libp2p::kad;
 use libp2p::{noise, swarm::SwarmEvent, tcp, yamux, PeerId};
 use std::{env, error::Error, time::Duration};
 
@@ -48,10 +47,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await?
         .with_behaviour(|key| {
             // Create a Kademlia behaviour.
-            let mut cfg = KademliaConfig::default();
+            let mut cfg = kad::Config::default();
             cfg.set_query_timeout(Duration::from_secs(5 * 60));
-            let store = MemoryStore::new(key.public().to_peer_id());
-            Kademlia::with_config(key.public().to_peer_id(), store, cfg)
+            let store = kad::store::MemoryStore::new(key.public().to_peer_id());
+            kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg)
         })
         .unwrap()
         .build();
@@ -77,8 +76,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
-            result: QueryResult::GetClosestPeers(result),
+        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+            result: kad::QueryResult::GetClosestPeers(result),
             ..
         }) = event
         {
@@ -92,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("Query finished with no closest peers.")
                     }
                 }
-                Err(GetClosestPeersError::Timeout { peers, .. }) => {
+                Err(kad::GetClosestPeersError::Timeout { peers, .. }) => {
                     if !peers.is_empty() {
                         println!("Query timed out with closest peers: {peers:#?}")
                     } else {

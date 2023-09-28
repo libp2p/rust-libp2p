@@ -30,9 +30,8 @@ use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p_core::upgrade;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
 use std::time::Duration;
@@ -307,10 +306,9 @@ fn reuse_connection() {
 
 fn build_relay() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
-    let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
 
     Swarm::new_with_config(
         transport,
@@ -331,13 +329,12 @@ fn build_relay() -> Swarm<Relay> {
 
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
     let (relay_transport, behaviour) = relay::client::new(local_peer_id);
     let transport = upgrade_transport(
         OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        local_public_key,
+        &local_key,
     );
 
     Swarm::new_with_config(
@@ -353,14 +350,14 @@ fn build_client() -> Swarm<Client> {
 
 fn upgrade_transport<StreamSink>(
     transport: Boxed<StreamSink>,
-    local_public_key: PublicKey,
+    identity: &identity::Keypair,
 ) -> Boxed<(PeerId, StreamMuxerBox)>
 where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(identity))
         .multiplex(libp2p_yamux::Config::default())
         .boxed()
 }
