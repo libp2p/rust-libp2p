@@ -18,10 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    identify_push_send, recv_identify, recv_push, Info, OperationOkValue, UpgradeError,
-};
-use crate::{PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
+use crate::protocol::{Info, OperationOkValue, UpgradeError};
+use crate::{protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
 use futures::prelude::*;
 use futures_bounded::Timeout;
@@ -44,7 +42,7 @@ use std::collections::HashSet;
 use std::{io, task::Context, task::Poll, time::Duration};
 
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
-const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 4 * 10;
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -63,7 +61,7 @@ pub struct Handler {
         >; 4],
     >,
 
-    identify_futs: futures_bounded::FuturesSet<Result<OperationOkValue, UpgradeError>>,
+    active_streams: futures_bounded::FuturesSet<Result<OperationOkValue, UpgradeError>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -133,7 +131,7 @@ impl Handler {
         Self {
             remote_peer_id,
             events: SmallVec::new(),
-            identify_futs: futures_bounded::FuturesSet::new(
+            active_streams: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -165,8 +163,8 @@ impl Handler {
                 let info = self.build_info();
 
                 if self
-                    .identify_futs
-                    .try_push(crate::protocol::identify_send(stream, info))
+                    .active_streams
+                    .try_push(protocol::identify_send(stream, info))
                     .is_err()
                 {
                     warn!("Dropping inbound stream because we are at capacity");
@@ -174,8 +172,8 @@ impl Handler {
             }
             future::Either::Right(stream) => {
                 if self
-                    .identify_futs
-                    .try_push(recv_push(stream).boxed())
+                    .active_streams
+                    .try_push(protocol::recv_push(stream))
                     .is_err()
                 {
                     warn!("Dropping inbound identify push stream because we are at capacity");
@@ -195,7 +193,7 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(stream) => {
-                if self.identify_futs.try_push(recv_identify(stream)).is_err() {
+                if self.active_streams.try_push(protocol::recv_identify(stream)).is_err() {
                     warn!("Dropping outbound identify stream because we are at capacity");
                 }
             }
@@ -203,8 +201,8 @@ impl Handler {
                 let info = self.build_info();
 
                 if self
-                    .identify_futs
-                    .try_push(identify_push_send(stream, info))
+                    .active_streams
+                    .try_push(protocol::identify_push_send(stream, info))
                     .is_err()
                 {
                     warn!("Dropping outbound identify push stream because we are at capacity");
@@ -307,7 +305,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if !self.identify_futs.is_empty() {
+        if !self.active_streams.is_empty() {
             return KeepAlive::Yes;
         }
 
@@ -336,7 +334,7 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        match self.identify_futs.poll_unpin(cx) {
+        match self.active_streams.poll_unpin(cx) {
             Poll::Ready(Ok(Ok(OperationOkValue::ReceiveIdentify(remote_info)))) => {
                 self.handle_incoming_info(&remote_info);
 
@@ -367,7 +365,10 @@ impl ConnectionHandler for Handler {
                 };
             }
             Poll::Ready(Ok(Err(e))) => {
-                self.trigger_next_identify.reset(self.interval);
+                // todo
+                // self.trigger_next_identify.reset(self.interval); //ReceiveIdentify Event::Identified(remote_info)
+                // or
+                // self.exchanged_one_periodic_identify = true; //SendIdentify Event::Identification,
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationError(StreamUpgradeError::Apply(e)),
@@ -405,7 +406,7 @@ impl ConnectionHandler for Handler {
                     StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
                     StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
                     StreamUpgradeError::Io(e) => StreamUpgradeError::Io(e),
-                    StreamUpgradeError::Apply(v) => unreachable!("{}", v),
+                    StreamUpgradeError::Apply(v) => void::unreachable(v.into_inner()),
                 };
 
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
