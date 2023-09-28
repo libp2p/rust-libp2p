@@ -79,6 +79,7 @@ impl<S: SessionState> Codec<S> {
 
     fn decode_bytes(&mut self, src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
         let bytes = match self.length_codec.decode(src)? {
+            Some(b) if b.is_empty() => return Ok(Some(b)),
             Some(b) => b,
             None => return Ok(None),
         };
