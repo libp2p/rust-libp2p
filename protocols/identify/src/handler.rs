@@ -164,11 +164,9 @@ impl Handler {
 
                 if self
                     .active_streams
-                    .try_push(async move {
-                        protocol::send_identify(stream, info).await?;
-
-                        Ok(Success::SendIdentify)
-                    })
+                    .try_push(
+                        protocol::send_identify(stream, info).map_ok(|_| Success::SentIdentify),
+                    )
                     .is_err()
                 {
                     warn!("Dropping inbound stream because we are at capacity");
@@ -177,12 +175,7 @@ impl Handler {
             future::Either::Right(stream) => {
                 if self
                     .active_streams
-                    .try_push(async {
-                        let info = protocol::recv_push(stream).await?;
-
-                        Ok(Success::ReceiveIdentifyPush(info))
-                    }
-                    )
+                    .try_push(protocol::recv_push(stream).map_ok(Success::ReceivedIdentifyPush))
                     .is_err()
                 {
                     warn!("Dropping inbound identify push stream because we are at capacity");
@@ -202,13 +195,11 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(stream) => {
-                if self.active_streams.try_push(
-                    async move {
-                        let info = protocol::recv_identify(stream).await?;
-
-                        Ok(Success::ReceiveIdentify(info))
-                    }
-                ).is_err() {
+                if self
+                    .active_streams
+                    .try_push(protocol::recv_identify(stream).map_ok(Success::ReceivedIdentify))
+                    .is_err()
+                {
                     warn!("Dropping outbound identify stream because we are at capacity");
                 }
             }
@@ -218,11 +209,7 @@ impl Handler {
                 if self
                     .active_streams
                     .try_push(
-                        async move {
-                            protocol::send_identify(stream, info).await?;
-
-                            Ok(Success::SendIdentifyPush)
-                        }
+                        protocol::send_identify(stream, info).map_ok(|_| Success::SentIdentifyPush),
                     )
                     .is_err()
                 {
@@ -356,26 +343,26 @@ impl ConnectionHandler for Handler {
         }
 
         match self.active_streams.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Success::ReceiveIdentify(remote_info)))) => {
+            Poll::Ready(Ok(Ok(Success::ReceivedIdentify(remote_info)))) => {
                 self.handle_incoming_info(&remote_info);
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                     remote_info,
                 )));
             }
-            Poll::Ready(Ok(Ok(Success::SendIdentifyPush))) => {
+            Poll::Ready(Ok(Ok(Success::SentIdentifyPush))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationPushed,
                 ));
             }
-            Poll::Ready(Ok(Ok(Success::SendIdentify))) => {
+            Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
                 self.exchanged_one_periodic_identify = true;
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::Identification,
                 ));
             }
-            Poll::Ready(Ok(Ok(Success::ReceiveIdentifyPush(remote_push_info)))) => {
+            Poll::Ready(Ok(Ok(Success::ReceivedIdentifyPush(remote_push_info)))) => {
                 if let Some(mut info) = self.remote_info.clone() {
                     info.merge(remote_push_info);
                     self.handle_incoming_info(&info);
@@ -466,9 +453,9 @@ impl ConnectionHandler for Handler {
     }
 }
 
-pub enum Success {
-    SendIdentify,
-    ReceiveIdentify(Info),
-    SendIdentifyPush,
-    ReceiveIdentifyPush(PushInfo),
+enum Success {
+    SentIdentify,
+    ReceivedIdentify(Info),
+    SentIdentifyPush,
+    ReceivedIdentifyPush(PushInfo),
 }
