@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::transport::DialOpts;
 use crate::{
     connection::{ConnectedPoint, Endpoint},
     transport::{ListenerId, Transport, TransportError, TransportEvent},
@@ -26,7 +27,6 @@ use either::Either;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
-use crate::transport::DialOpts;
 
 /// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]
@@ -69,7 +69,11 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
             .dial(addr.clone(), dial_opts)

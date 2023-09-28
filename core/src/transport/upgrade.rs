@@ -22,6 +22,7 @@
 
 pub use crate::upgrade::Version;
 
+use crate::transport::DialOpts;
 use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
@@ -45,7 +46,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use crate::transport::DialOpts;
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
 /// a `Swarm`.
@@ -336,7 +336,11 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.0.dial(addr, opts)
     }
 
@@ -405,7 +409,11 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
             .dial(addr, opts)

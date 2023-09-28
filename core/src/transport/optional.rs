@@ -80,7 +80,11 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr, opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
             inner.dial(addr, opts)
         } else {

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::muxing::StreamMuxerEvent;
+use crate::transport::DialOpts;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
@@ -28,7 +29,6 @@ use either::Either;
 use futures::prelude::*;
 use pin_project::pin_project;
 use std::{pin::Pin, task::Context, task::Poll};
-use crate::transport::DialOpts;
 
 impl<A, B> StreamMuxer for future::Either<A, B>
 where
@@ -173,7 +173,11 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
             Either::Left(a) => match a.dial(addr, dial_opts) {

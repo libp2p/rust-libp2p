@@ -93,7 +93,11 @@ where
         self.0.remove_listener(id) || self.1.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr, dial_opts: DialOpts) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+        dial_opts: DialOpts,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         trace!(
             "Attempting to dial {} using {}",
             addr,

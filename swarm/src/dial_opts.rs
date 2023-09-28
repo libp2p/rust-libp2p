@@ -22,9 +22,47 @@
 use crate::ConnectionId;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::transport::PortUse;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
+
+macro_rules! port_use_and_role_setter {
+    () => {
+        /// Override role of local node on connection. I.e. execute the dial _as a
+        /// listener_.
+        ///
+        /// See
+        /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
+        /// for details.
+        pub fn override_role(mut self) -> Self {
+            self.role_override = Endpoint::Listener;
+            self
+        }
+
+        /// Enforce the reuse of an existing port.
+        /// Default behaviour is:
+        /// 1. Swarm tracks if there already exists a listener address for this protocol
+        /// 2. Decide port use behaviour:
+        ///     - If we have 0 listen addresses, we allocate a new port
+        ///     - If we have >1 listen addresses, we reuse an existing port
+        pub fn reuse_existing_port(mut self) -> Self {
+            self.port_use = Some(PortUse::Reuse);
+            self
+        }
+
+        /// Enforce the allocation of a new port.
+        /// Default behaviour is:
+        /// 1. Swarm tracks if there already exists a listener address for this protocol
+        /// 2. Decide port use behaviour:
+        ///     - If we have 0 listen addresses, we allocate a new port
+        ///     - If we have >1 listen addresses, we reuse an existing port
+        pub fn allocate_new_port(mut self) -> Self {
+            self.port_use = Some(PortUse::New);
+            self
+        }
+    };
+}
 
 /// Options to configure a dial to a known or unknown peer.
 ///
@@ -45,7 +83,7 @@ pub struct DialOpts {
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
     connection_id: ConnectionId,
-    port_mode: PortMode,
+    port_use: Option<PortUse>,
 }
 
 impl DialOpts {
@@ -66,7 +104,7 @@ impl DialOpts {
             condition: Default::default(),
             role_override: Endpoint::Dialer,
             dial_concurrency_factor_override: Default::default(),
-            port_mode: Default::default(),
+            port_use: None,
         }
     }
 
@@ -127,7 +165,9 @@ impl DialOpts {
         self.role_override
     }
 
-    pub(crate) fn port_mode(&self) -> PortMode { self.port_mode }
+    pub(crate) fn port_use(&self) -> Option<PortUse> {
+        self.port_use
+    }
 }
 
 impl From<Multiaddr> for DialOpts {
@@ -148,7 +188,7 @@ pub struct WithPeerId {
     condition: PeerCondition,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
-    port_mode: PortMode,
+    port_use: Option<PortUse>,
 }
 
 impl WithPeerId {
@@ -174,20 +214,11 @@ impl WithPeerId {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
-            port_mode: self.port_mode,
+            port_use: self.port_use,
         }
     }
 
-    /// Override role of local node on connection. I.e. execute the dial _as a
-    /// listener_.
-    ///
-    /// See
-    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
-    /// for details.
-    pub fn override_role(mut self) -> Self {
-        self.role_override = Endpoint::Listener;
-        self
-    }
+    port_use_and_role_setter!();
 
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
@@ -199,7 +230,7 @@ impl WithPeerId {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
-            port_mode: self.port_mode,
+            port_use: self.port_use,
         }
     }
 }
@@ -212,7 +243,7 @@ pub struct WithPeerIdWithAddresses {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
-    port_mode: PortMode,
+    port_use: Option<PortUse>,
 }
 
 impl WithPeerIdWithAddresses {
@@ -229,21 +260,7 @@ impl WithPeerIdWithAddresses {
         self
     }
 
-    /// Override role of local node on connection. I.e. execute the dial _as a
-    /// listener_.
-    ///
-    /// See
-    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
-    /// for details.
-    pub fn override_role(mut self) -> Self {
-        self.role_override = Endpoint::Listener;
-        self
-    }
-
-    pub fn override_port_mode(mut self, port_mode: PortMode) -> Self {
-        self.port_mode = port_mode;
-        self
-    }
+    port_use_and_role_setter!();
 
     /// Override
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
@@ -262,7 +279,7 @@ impl WithPeerIdWithAddresses {
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
             connection_id: ConnectionId::next(),
-            port_mode: self.port_mode,
+            port_use: self.port_use,
         }
     }
 }
@@ -276,7 +293,7 @@ impl WithoutPeerId {
         WithoutPeerIdWithAddress {
             address,
             role_override: Endpoint::Dialer,
-            port_mode: Default::default(),
+            port_use: None,
         }
     }
 }
@@ -285,25 +302,11 @@ impl WithoutPeerId {
 pub struct WithoutPeerIdWithAddress {
     address: Multiaddr,
     role_override: Endpoint,
-    port_mode: PortMode,
+    port_use: Option<PortUse>,
 }
 
 impl WithoutPeerIdWithAddress {
-    /// Override role of local node on connection. I.e. execute the dial _as a
-    /// listener_.
-    ///
-    /// See
-    /// [`ConnectedPoint::Dialer`](libp2p_core::connection::ConnectedPoint::Dialer)
-    /// for details.
-    pub fn override_role(mut self) -> Self {
-        self.role_override = Endpoint::Listener;
-        self
-    }
-
-    pub fn override_port_mode(mut self, port_mode: PortMode) -> Self {
-        self.port_mode = port_mode;
-        self
-    }
+    port_use_and_role_setter!();
 
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
@@ -315,7 +318,7 @@ impl WithoutPeerIdWithAddress {
             role_override: self.role_override,
             dial_concurrency_factor_override: None,
             connection_id: ConnectionId::next(),
-            port_mode: self.port_mode,
+            port_use: self.port_use,
         }
     }
 }
@@ -345,19 +348,4 @@ pub enum PeerCondition {
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
     Always,
-}
-
-/// The port mode to use. I.e. on which port an outgoing connection should dial.
-/// Irrelevant when the transport doesn't support that option.
-#[derive(Default, Debug, Clone, Copy)]
-pub enum PortMode {
-    /// Leave the decision to the swarm:
-    /// - If we have 0 listen addresses, we allocate a new port by default.
-    /// - If we have at least one address, we reuse an existing port.
-    #[default]
-    Auto,
-    /// Always allocate a new port
-    New,
-    /// Always reuse an existing port
-    Reuse,
 }

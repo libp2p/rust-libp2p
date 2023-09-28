@@ -58,7 +58,7 @@ pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 #[derive(Debug, Default, Copy, Clone)]
-pub enum PortMode {
+pub enum PortUse {
     #[default]
     New,
     Reuse,
@@ -66,7 +66,7 @@ pub enum PortMode {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct DialOpts {
     pub endpoint: Endpoint,
-    pub port_mode: PortMode,
+    pub port_use: PortUse,
 }
 
 /// A transport provides connection-oriented communication between two peers
@@ -156,10 +156,13 @@ pub trait Transport {
         &mut self,
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.dial(addr, DialOpts {
-            endpoint: Endpoint::Listener,
-            ..Default::default()
-        })
+        self.dial(
+            addr,
+            DialOpts {
+                endpoint: Endpoint::Listener,
+                ..Default::default()
+            },
+        )
     }
 
     /// Poll for [`TransportEvent`]s.
