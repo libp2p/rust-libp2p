@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{Info, OperationOkValue, UpgradeError};
+use crate::protocol::{Info, PushInfo, UpgradeError};
 use crate::{protocol, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 use either::Either;
 use futures::prelude::*;
@@ -61,7 +61,7 @@ pub struct Handler {
         >; 4],
     >,
 
-    active_streams: futures_bounded::FuturesSet<Result<OperationOkValue, UpgradeError>>,
+    active_streams: futures_bounded::FuturesSet<Result<Success, UpgradeError>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -164,7 +164,11 @@ impl Handler {
 
                 if self
                     .active_streams
-                    .try_push(protocol::identify_send(stream, info))
+                    .try_push(async move {
+                        protocol::send_identify(stream, info).await?;
+
+                        Ok(Success::SendIdentify)
+                    })
                     .is_err()
                 {
                     warn!("Dropping inbound stream because we are at capacity");
@@ -173,7 +177,12 @@ impl Handler {
             future::Either::Right(stream) => {
                 if self
                     .active_streams
-                    .try_push(protocol::recv_push(stream))
+                    .try_push(async {
+                        let info = protocol::recv_push(stream).await?;
+
+                        Ok(Success::ReceiveIdentifyPush(info))
+                    }
+                    )
                     .is_err()
                 {
                     warn!("Dropping inbound identify push stream because we are at capacity");
@@ -193,7 +202,13 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(stream) => {
-                if self.active_streams.try_push(protocol::recv_identify(stream)).is_err() {
+                if self.active_streams.try_push(
+                    async move {
+                        let info = protocol::recv_identify(stream).await?;
+
+                        Ok(Success::ReceiveIdentify(info))
+                    }
+                ).is_err() {
                     warn!("Dropping outbound identify stream because we are at capacity");
                 }
             }
@@ -202,7 +217,13 @@ impl Handler {
 
                 if self
                     .active_streams
-                    .try_push(protocol::identify_push_send(stream, info))
+                    .try_push(
+                        async move {
+                            protocol::send_identify(stream, info).await?;
+
+                            Ok(Success::SendIdentifyPush)
+                        }
+                    )
                     .is_err()
                 {
                     warn!("Dropping outbound identify push stream because we are at capacity");
@@ -335,26 +356,26 @@ impl ConnectionHandler for Handler {
         }
 
         match self.active_streams.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(OperationOkValue::ReceiveIdentify(remote_info)))) => {
+            Poll::Ready(Ok(Ok(Success::ReceiveIdentify(remote_info)))) => {
                 self.handle_incoming_info(&remote_info);
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Identified(
                     remote_info,
                 )));
             }
-            Poll::Ready(Ok(Ok(OperationOkValue::SendIdentifyPush))) => {
+            Poll::Ready(Ok(Ok(Success::SendIdentifyPush))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::IdentificationPushed,
                 ));
             }
-            Poll::Ready(Ok(Ok(OperationOkValue::SendIdentify))) => {
+            Poll::Ready(Ok(Ok(Success::SendIdentify))) => {
                 self.exchanged_one_periodic_identify = true;
 
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::Identification,
                 ));
             }
-            Poll::Ready(Ok(Ok(OperationOkValue::ReceiveIdentifyPush(remote_push_info)))) => {
+            Poll::Ready(Ok(Ok(Success::ReceiveIdentifyPush(remote_push_info)))) => {
                 if let Some(mut info) = self.remote_info.clone() {
                     info.merge(remote_push_info);
                     self.handle_incoming_info(&info);
@@ -443,4 +464,11 @@ impl ConnectionHandler for Handler {
             }
         }
     }
+}
+
+pub enum Success {
+    SendIdentify,
+    ReceiveIdentify(Info),
+    SendIdentifyPush,
+    ReceiveIdentifyPush(PushInfo),
 }

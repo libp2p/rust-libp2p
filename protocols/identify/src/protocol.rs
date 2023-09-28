@@ -90,28 +90,7 @@ pub struct PushInfo {
     pub observed_addr: Option<Multiaddr>,
 }
 
-pub(crate) async fn identify_send<T>(io: T, info: Info) -> Result<OperationOkValue, UpgradeError>
-where
-    T: AsyncWrite + Unpin,
-{
-    send(io, info).await?;
-
-    Ok(OperationOkValue::SendIdentify)
-}
-
-pub(crate) async fn identify_push_send<T>(
-    io: T,
-    info: Info,
-) -> Result<OperationOkValue, UpgradeError>
-where
-    T: AsyncWrite + Unpin,
-{
-    send(io, info).await?;
-
-    Ok(OperationOkValue::SendIdentifyPush)
-}
-
-async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -145,26 +124,26 @@ where
     Ok(())
 }
 
-pub(crate) async fn recv_push<T>(socket: T) -> Result<OperationOkValue, UpgradeError>
+pub(crate) async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    let info: PushInfo = recv(socket).await?.try_into()?;
+    let info = recv(socket).await?.try_into()?;
 
     trace!("Received {:?}", info);
 
-    Ok(OperationOkValue::ReceiveIdentifyPush(info))
+    Ok(info)
 }
 
-pub(crate) async fn recv_identify<T>(socket: T) -> Result<OperationOkValue, UpgradeError>
+pub(crate) async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    let info: Info = recv(socket).await?.try_into()?;
+    let info = recv(socket).await?.try_into()?;
 
     trace!("Received {:?}", info);
 
-    Ok(OperationOkValue::ReceiveIdentify(info))
+    Ok(info)
 }
 
 async fn recv<T>(socket: T) -> Result<proto::Identify, UpgradeError>
@@ -273,13 +252,6 @@ impl TryFrom<proto::Identify> for PushInfo {
 
         Ok(info)
     }
-}
-
-pub(crate) enum OperationOkValue {
-    SendIdentify,
-    ReceiveIdentify(Info),
-    SendIdentifyPush,
-    ReceiveIdentifyPush(PushInfo),
 }
 
 #[derive(Debug, Error)]
