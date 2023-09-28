@@ -39,7 +39,21 @@ use crate::proto;
     feature = "ed25519",
     feature = "rsa"
 ))]
+use hkdf::Hkdf;
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
 use quick_protobuf::{BytesReader, Writer};
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
+use sha2::Sha256;
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
@@ -344,23 +358,29 @@ impl Keypair {
     }
 
     /// Return the secret key of the [`Keypair`] if it has one.
-    pub fn secret(&self) -> Option<[u8; 32]> {
-        match self.keypair {
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
+    pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
+        let secret = match self.keypair {
             #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(ref inner) => Some(inner.secret().0),
+            KeyPairInner::Ed25519(ref inner) => inner.secret().0,
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(_) => None,
+            KeyPairInner::Rsa(_) => return None,
             #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(ref inner) => Some(inner.secret().to_bytes()),
+            KeyPairInner::Secp256k1(ref inner) => inner.secret().to_bytes(),
             #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(ref inner) => Some(
-                inner
-                    .secret()
-                    .to_bytes()
-                    .try_into()
-                    .expect("Ecdsa's private key should be 32 bytes"),
-            ),
-        }
+            KeyPairInner::Ecdsa(ref inner) => inner
+                .secret()
+                .to_bytes()
+                .try_into()
+                .expect("Ecdsa's private key should be 32 bytes"),
+        };
+        let (output, _) = Hkdf::<Sha256>::extract(None, &[domain, &secret].concat());
+        Some(output.into())
     }
 }
 
@@ -926,6 +946,6 @@ mod tests {
     #[cfg(feature = "ecdsa")]
     fn test_secret_from_ecdsa_private_key() {
         let keypair = Keypair::generate_ecdsa();
-        assert!(keypair.secret().is_some())
+        assert!(keypair.derive_secret(b"domain separator!").is_some())
     }
 }

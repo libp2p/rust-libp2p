@@ -2641,6 +2641,7 @@ dependencies = [
  "criterion",
  "ed25519-dalek",
  "hex-literal",
+ "hkdf",
  "libsecp256k1",
  "log",
  "multihash",

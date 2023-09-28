@@ -132,12 +132,9 @@ impl From<Config> for QuinnConfig {
         let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let mut endpoint_config = match keypair.secret() {
+        let mut endpoint_config = match keypair.derive_secret(b"libp2p quic stateless reset key") {
             Some(secret) => {
-                let reset_key = Arc::new(ring::hmac::Key::new(
-                    ring::hmac::HMAC_SHA256,
-                    &[&b"libp2p quic stateless reset key"[..], &secret].concat(),
-                ));
+                let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &secret));
                 quinn::EndpointConfig::new(reset_key)
             }
             None => quinn::EndpointConfig::default(),
