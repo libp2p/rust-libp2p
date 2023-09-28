@@ -20,12 +20,13 @@
 
 //! Provides a [`Codec`] type implementing the [`Encoder`] and [`Decoder`] traits.
 //!
-//! Alongside a [`asynchronous_codec::Framed`] this provides a [`Sink`] and [`Stream`]
-//! for length-delimited Noise protocol messages.
+//! Alongside a [`asynchronous_codec::Framed`] this provides a [Sink](futures::Sink)
+//! and [Stream](futures::Stream) for length-delimited Noise protocol messages.
 
 use super::handshake::proto;
 use crate::{protocol::PublicKey, Error};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use asynchronous_codec::{Decoder, Encoder, LengthCodec};
+use bytes::{Bytes, BytesMut};
 use log::{debug, error};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::io;
@@ -44,16 +45,18 @@ static_assertions::const_assert! {
 /// encoding and decoding length-delimited session messages.
 pub(crate) struct Codec<S> {
     session: S,
-    encrypt_buffer: Vec<u8>,
+    encrypt_buffer: BytesMut,
     decrypt_buffer: BytesMut,
+    length_codec: LengthCodec,
 }
 
 impl<S: SessionState> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
-            encrypt_buffer: Vec::new(),
+            encrypt_buffer: BytesMut::new(),
             decrypt_buffer: BytesMut::new(),
+            length_codec: LengthCodec,
         }
     }
 
@@ -69,29 +72,18 @@ impl<S: SessionState> Codec<S> {
         };
 
         self.encrypt_buffer.truncate(n);
-
-        dst.put_u16(n as u16);
-        dst.put(&self.encrypt_buffer[..]);
-
-        Ok(())
+        self.length_codec
+            .encode(self.encrypt_buffer.split().freeze(), dst)
     }
 
     fn decode_bytes(&mut self, src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
-        if src.len() < 2 {
-            return Ok(None);
-        }
+        let bytes = match self.length_codec.decode(src)? {
+            Some(b) => b,
+            None => return Ok(None),
+        };
 
-        let len = u16::from_be_bytes([src[0], src[1]]) as usize;
-        if len == 0 || src.len() < len + 2 {
-            return Ok(None);
-        }
-
-        src.advance(2);
-        self.decrypt_buffer.resize(len, 0u8);
-        let n = match self
-            .session
-            .read_message(&src[0..len], &mut self.decrypt_buffer)
-        {
+        self.decrypt_buffer.resize(bytes.len(), 0u8);
+        let n = match self.session.read_message(&bytes, &mut self.decrypt_buffer) {
             Ok(n) => n,
             Err(e) => {
                 debug!("decryption error {e}");
@@ -100,7 +92,6 @@ impl<S: SessionState> Codec<S> {
         };
 
         self.decrypt_buffer.truncate(n);
-        src.advance(len);
 
         Ok(Some(self.decrypt_buffer.split().freeze()))
     }
@@ -142,7 +133,7 @@ impl Codec<snow::HandshakeState> {
     }
 }
 
-impl asynchronous_codec::Encoder for Codec<snow::HandshakeState> {
+impl Encoder for Codec<snow::HandshakeState> {
     type Error = io::Error;
     type Item<'a> = &'a proto::NoiseHandshakePayload;
 
@@ -155,7 +146,7 @@ impl asynchronous_codec::Encoder for Codec<snow::HandshakeState> {
         self.encode_bytes(&buf, dst)
     }
 }
-impl asynchronous_codec::Decoder for Codec<snow::HandshakeState> {
+impl Decoder for Codec<snow::HandshakeState> {
     type Error = io::Error;
     type Item = proto::NoiseHandshakePayload;
 
@@ -177,7 +168,7 @@ impl asynchronous_codec::Decoder for Codec<snow::HandshakeState> {
     }
 }
 
-impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
+impl Encoder for Codec<snow::TransportState> {
     type Error = io::Error;
     type Item<'a> = &'a [u8];
 
@@ -185,7 +176,7 @@ impl asynchronous_codec::Encoder for Codec<snow::TransportState> {
         self.encode_bytes(item, dst)
     }
 }
-impl asynchronous_codec::Decoder for Codec<snow::TransportState> {
+impl Decoder for Codec<snow::TransportState> {
     type Error = io::Error;
     type Item = Bytes;
 
