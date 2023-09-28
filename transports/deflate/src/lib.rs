@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 // Copyright 2019 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -17,13 +18,15 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use futures::{prelude::*, ready};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::{io, iter, pin::Pin, task::Context, task::Poll};
 
+#[deprecated(
+    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
+)]
 #[derive(Debug, Copy, Clone)]
 pub struct DeflateConfig {
     compression: flate2::Compression,

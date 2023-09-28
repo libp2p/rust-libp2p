@@ -74,10 +74,10 @@ use std::vec;
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
-/// `Kademlia::poll`.
+/// `Behaviour::poll`.
 pub(crate) const JOBS_MAX_QUERIES: usize = 100;
 /// The maximum number of new queries started by a background job
-/// per invocation of `Kademlia::poll`.
+/// per invocation of `Behaviour::poll`.
 pub(crate) const JOBS_MAX_NEW_QUERIES: usize = 10;
 /// A background job run periodically.
 #[derive(Debug)]
