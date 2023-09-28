@@ -45,6 +45,7 @@ static_assertions::const_assert! {
 /// encoding and decoding length-delimited session messages.
 pub(crate) struct Codec<S> {
     session: S,
+    write_buffer: BytesMut,
     encrypt_buffer: BytesMut,
     decrypt_buffer: BytesMut,
     length_codec: LengthCodec,
@@ -54,6 +55,7 @@ impl<S: SessionState> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
         Codec {
             session,
+            write_buffer: BytesMut::new(),
             encrypt_buffer: BytesMut::new(),
             decrypt_buffer: BytesMut::new(),
             length_codec: LengthCodec,
@@ -138,12 +140,13 @@ impl Encoder for Codec<snow::HandshakeState> {
     type Item<'a> = &'a proto::NoiseHandshakePayload;
 
     fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut buf = Vec::with_capacity(item.get_size());
-
-        let mut writer = Writer::new(&mut buf);
+        self.write_buffer.resize(item.get_size(), 0u8);
+        let mut writer = Writer::new(&mut self.write_buffer[..]);
         item.write_message(&mut writer)
-            .expect("Encoding to succeed");
-        self.encode_bytes(&buf, dst)
+            .expect("Protobuf encoding to succeed");
+
+        let pb = self.write_buffer.split().freeze();
+        self.encode_bytes(&pb, dst)
     }
 }
 impl Decoder for Codec<snow::HandshakeState> {
