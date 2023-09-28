@@ -69,28 +69,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let cli_opt = Opt::parse();
 
-    match cli_opt {
-        Opt {
-            argument: CliArgument::GetPeers { peer_id },
-        } => get_closes_peers(&mut swarm, peer_id).await,
-        Opt {
-            argument: CliArgument::PutPkRecord {},
-        } => insert_pk_record(&mut swarm, local_peer_id, local_key).await,
+    match cli_opt.argument {
+        CliArgument::GetPeers { peer_id } => {
+            get_closes_peers(&mut swarm, peer_id.unwrap_or_else(PeerId::random)).await
+        }
+        CliArgument::PutPkRecord {} => insert_pk_record(&mut swarm, local_peer_id, local_key).await,
     }
 }
 
-async fn get_closes_peers<TStore: kad::store::RecordStore + Send + 'static>(
-    swarm: &mut Swarm<kad::Behaviour<TStore>>,
-    peer_id: Option<String>,
+async fn get_closes_peers(
+    swarm: &mut Swarm<kad::Behaviour<kad::store::MemoryStore>>,
+    peer_id: PeerId,
 ) -> Result<(), Box<dyn Error>> {
     // Order Kademlia to search for a peer.
-    let to_search = peer_id
-        .map(|p| p.parse())
-        .transpose()?
-        .unwrap_or_else(PeerId::random);
 
-    println!("Searching for the closest peers to {to_search}");
-    swarm.behaviour_mut().get_closest_peers(to_search);
+    println!("Searching for the closest peers to {peer_id}");
+    swarm.behaviour_mut().get_closest_peers(peer_id);
 
     loop {
         let event = swarm.select_next_some().await;
@@ -138,7 +132,7 @@ async fn insert_pk_record<TStore: kad::store::RecordStore + Send + 'static>(
 
     println!("Putting PK record into the DHT");
 
-    let mut pk_record = kad::Record::new(&pk_record_key, local_key.public().encode_protobuf());
+    let mut pk_record = kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
 
     pk_record.publisher = Some(local_peer_id);
     pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
@@ -181,7 +175,7 @@ struct Opt {
 enum CliArgument {
     GetPeers {
         #[clap(long)]
-        peer_id: Option<String>,
+        peer_id: Option<PeerId>,
     },
     PutPkRecord {},
 }
