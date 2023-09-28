@@ -306,39 +306,74 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
             .without_quic()
             .with_other_transport(constructor)
     }
+}
+macro_rules! impl_tcp_phase_with_websocket {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $websocketStream:ty) => {
+        #[cfg(feature = $providerKebabCase)]
+        impl SwarmBuilder<$providerCamelCase, TcpPhase> {
+            #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+            pub async fn with_websocket <
+                SecUpgrade,
+                SecStream,
+                SecError,
+                MuxUpgrade,
+                MuxStream,
+                MuxError,
+            > (
+                self,
+                security_upgrade: SecUpgrade,
+                multiplexer_upgrade: MuxUpgrade,
+            ) -> Result<
+                    SwarmBuilder<
+                        $providerCamelCase,
+                        BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+                    >,
+                    WebsocketError<SecUpgrade::Error>,
+                >
+            where
+                SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+                SecError: std::error::Error + Send + Sync + 'static,
+                SecUpgrade: IntoSecurityUpgrade<$websocketStream>,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+            <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+            <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::Info: Send,
 
-    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-    pub fn with_websocket(
-        self,
-    ) -> SwarmBuilder<
-        Provider,
-        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-    > {
-        self.without_tcp()
-            .without_quic()
-            .without_any_other_transports()
-            .without_dns()
-            .without_relay()
-            .with_websocket()
+                MuxStream: StreamMuxer + Send + 'static,
+                MuxStream::Substream: Send + 'static,
+                MuxStream::Error: Send + Sync + 'static,
+                MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+                MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+                <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                    MuxError: std::error::Error + Send + Sync + 'static,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+            {
+                self.without_tcp()
+                    .without_quic()
+                    .without_any_other_transports()
+                    .without_dns()
+                    .without_relay()
+                    .with_websocket(security_upgrade, multiplexer_upgrade)
+                    .await
+            }
+        }
     }
 }
-
-#[cfg(any(feature = "tls", feature = "noise"))]
-pub struct WithoutTls {}
-
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct AuthenticationError(AuthenticationErrorInner);
-
-#[derive(Debug, thiserror::Error)]
-enum AuthenticationErrorInner {
-    #[error("Tls")]
-    #[cfg(all(not(target_arch = "wasm32"), feature = "tls"))]
-    Tls(#[from] libp2p_tls::certificate::GenError),
-    #[error("Noise")]
-    #[cfg(feature = "noise")]
-    Noise(#[from] libp2p_noise::Error),
-}
+impl_tcp_phase_with_websocket!(
+    "async-std",
+    AsyncStd,
+    rw_stream_sink::RwStreamSink<
+        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
+    >
+);
+impl_tcp_phase_with_websocket!(
+    "tokio",
+    Tokio,
+    rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
+);
 
 pub struct QuicPhase<T> {
     transport: T,
@@ -457,20 +492,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self.without_quic().with_other_transport(constructor)
     }
 
-    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-    pub fn with_websocket(
-        self,
-    ) -> SwarmBuilder<
-        Provider,
-        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-    > {
-        self.without_quic()
-            .without_any_other_transports()
-            .without_dns()
-            .without_relay()
-            .with_websocket()
-    }
-
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
@@ -506,6 +527,72 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, QuicPhase<T>> {
             .with_dns()
     }
 }
+macro_rules! impl_quic_phase_with_websocket {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $websocketStream:ty) => {
+        #[cfg(feature = $providerKebabCase)]
+        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
+            #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+            pub async fn with_websocket <
+                SecUpgrade,
+                SecStream,
+                SecError,
+                MuxUpgrade,
+                MuxStream,
+                MuxError,
+            > (
+                self,
+                security_upgrade: SecUpgrade,
+                multiplexer_upgrade: MuxUpgrade,
+            ) -> Result<
+                    SwarmBuilder<
+                        $providerCamelCase,
+                        BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+                    >,
+                    WebsocketError<SecUpgrade::Error>,
+                >
+            where
+                SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+                SecError: std::error::Error + Send + Sync + 'static,
+                SecUpgrade: IntoSecurityUpgrade<$websocketStream>,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+            <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+            <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+            <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+            <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::Info: Send,
+
+                MuxStream: StreamMuxer + Send + 'static,
+                MuxStream::Substream: Send + 'static,
+                MuxStream::Error: Send + Sync + 'static,
+                MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+                MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+                <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                    MuxError: std::error::Error + Send + Sync + 'static,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+            {
+                self.without_quic()
+                    .without_any_other_transports()
+                    .without_dns()
+                    .without_relay()
+                    .with_websocket(security_upgrade, multiplexer_upgrade)
+                    .await
+            }
+        }
+    }
+}
+impl_quic_phase_with_websocket!(
+    "async-std",
+    AsyncStd,
+    rw_stream_sink::RwStreamSink<
+        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
+    >
+);
+impl_quic_phase_with_websocket!(
+    "tokio",
+    Tokio,
+    rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
+);
 
 pub struct OtherTransportPhase<T> {
     transport: T,
@@ -784,15 +871,16 @@ impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
 
 // Shortcuts
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
-    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-    pub fn with_websocket(
-        self,
-    ) -> SwarmBuilder<
-        Provider,
-        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-    > {
-        self.without_relay().with_websocket()
-    }
+    // TODO
+    // #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+    // pub fn with_websocket(
+    //     self,
+    // ) -> SwarmBuilder<
+    //     Provider,
+    //     WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+    // > {
+    //     self.without_relay().with_websocket()
+    // }
 
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
@@ -809,19 +897,97 @@ pub struct WebsocketPhase<T, R> {
     relay_behaviour: R,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-impl<Provider, T, R> SwarmBuilder<Provider, WebsocketPhase<T, R>> {
-    pub fn with_websocket(self) -> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: WebsocketTlsPhase {
-                transport: self.phase.transport,
-                relay_behaviour: self.phase.relay_behaviour,
-            },
+macro_rules! impl_websocket_builder {
+    ($providerKebabCase:literal, $providerCamelCase:ident, $dnsTcp:expr, $websocketStream:ty) => {
+        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket"))]
+        impl<T, R> SwarmBuilder<$providerCamelCase, WebsocketPhase<T, R>> {
+            pub async fn with_websocket<
+                SecUpgrade,
+                SecStream,
+                SecError,
+                MuxUpgrade,
+                MuxStream,
+                MuxError,
+            >(
+                self,
+                security_upgrade: SecUpgrade,
+                multiplexer_upgrade: MuxUpgrade,
+            ) -> Result<
+                SwarmBuilder<
+                    $providerCamelCase,
+                    BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>,
+                >,
+                WebsocketError<SecUpgrade::Error>,
+            >
+
+            where
+                T: AuthenticatedMultiplexedTransport,
+
+                SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+                SecError: std::error::Error + Send + Sync + 'static,
+                SecUpgrade: IntoSecurityUpgrade<$websocketStream>,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+                <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+                <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
+                <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::Info: Send,
+
+                MuxStream: StreamMuxer + Send + 'static,
+                MuxStream::Substream: Send + 'static,
+                MuxStream::Error: Send + Sync + 'static,
+                MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+                MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+                <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+                MuxError: std::error::Error + Send + Sync + 'static,
+                <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+                <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+
+            {
+                let security_upgrade = security_upgrade.into_security_upgrade(&self.keypair)
+                    .map_err(|e| WebsocketError(WebsocketErrorInner::SecurityUpgrade(e)))?;
+                let websocket_transport = libp2p_websocket::WsConfig::new(
+                    $dnsTcp.await.map_err(|e| WebsocketError(e.into()))?,
+                )
+                    .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                    .authenticate(security_upgrade)
+                    .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+                    .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
+
+                Ok(SwarmBuilder {
+                    keypair: self.keypair,
+                    phantom: PhantomData,
+                    phase: BandwidthLoggingPhase {
+                        transport: websocket_transport
+                            .or_transport(self.phase.transport)
+                            .map(|either, _| either.into_inner()),
+                        relay_behaviour: self.phase.relay_behaviour,
+                    },
+                })
+            }
         }
-    }
+    };
 }
+
+impl_websocket_builder!(
+    "async-std",
+    AsyncStd,
+    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
+        libp2p_tcp::Config::default(),
+    )),
+    rw_stream_sink::RwStreamSink<
+        libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
+    >
+);
+// TODO: Unnecessary await for Tokio Websocket (i.e. tokio dns). Not ideal but don't know a better way.
+impl_websocket_builder!(
+    "tokio",
+    Tokio,
+    futures::future::ready(libp2p_dns::tokio::Transport::system(
+        libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
+    )),
+    rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
+);
 
 impl<Provider, T: AuthenticatedMultiplexedTransport, R>
     SwarmBuilder<Provider, WebsocketPhase<T, R>>
@@ -866,199 +1032,14 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     }
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-pub struct WebsocketTlsPhase<T, R> {
-    transport: T,
-    relay_behaviour: R,
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-impl<Provider, T, R> SwarmBuilder<Provider, WebsocketTlsPhase<T, R>> {
-    #[cfg(feature = "tls")]
-    pub fn with_tls(
-        self,
-    ) -> Result<
-        SwarmBuilder<Provider, WebsocketNoisePhase<T, R, libp2p_tls::Config>>,
-        AuthenticationError,
-    > {
-        Ok(SwarmBuilder {
-            phase: WebsocketNoisePhase {
-                tls_config: libp2p_tls::Config::new(&self.keypair)
-                    .map_err(|e| AuthenticationError(e.into()))?,
-                relay_behaviour: self.phase.relay_behaviour,
-                transport: self.phase.transport,
-                phantom: PhantomData,
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
-        })
-    }
-
-    fn without_tls(self) -> SwarmBuilder<Provider, WebsocketNoisePhase<T, R, WithoutTls>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: WebsocketNoisePhase {
-                tls_config: WithoutTls {},
-                relay_behaviour: self.phase.relay_behaviour,
-                transport: self.phase.transport,
-                phantom: PhantomData,
-            },
-        }
-    }
-}
-
-// Shortcuts
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "websocket",
-    feature = "noise",
-    feature = "async-std"
-))]
-impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<AsyncStd, WebsocketTlsPhase<T, R>> {
-    #[cfg(feature = "noise")]
-    pub async fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<AsyncStd, BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>>,
-        WebsocketError,
-    > {
-        self.without_tls().with_noise().await
-    }
-}
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "websocket",
-    feature = "noise",
-    feature = "tokio"
-))]
-impl<T: AuthenticatedMultiplexedTransport, R> SwarmBuilder<Tokio, WebsocketTlsPhase<T, R>> {
-    #[cfg(feature = "noise")]
-    pub async fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<Tokio, BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>>,
-        WebsocketError,
-    > {
-        self.without_tls().with_noise().await
-    }
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-pub struct WebsocketNoisePhase<T, R, A> {
-    tls_config: A,
-    transport: T,
-    relay_behaviour: R,
-    phantom: PhantomData<A>,
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-macro_rules! construct_behaviour_builder {
-    ($self:ident, $dnsTcp:expr, $auth:expr) => {{
-        let websocket_transport =
-            libp2p_websocket::WsConfig::new($dnsTcp.await.map_err(|e| WebsocketError(e.into()))?)
-                .upgrade(libp2p_core::upgrade::Version::V1)
-                .authenticate($auth)
-                .multiplex(libp2p_yamux::Config::default())
-                .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
-
-        Ok(SwarmBuilder {
-            keypair: $self.keypair,
-            phantom: PhantomData,
-            phase: BandwidthLoggingPhase {
-                transport: websocket_transport
-                    .or_transport($self.phase.transport)
-                    .map(|either, _| either.into_inner()),
-                relay_behaviour: $self.phase.relay_behaviour,
-            },
-        })
-    }};
-}
-
-macro_rules! impl_websocket_noise_builder {
-    ($providerKebabCase:literal, $providerCamelCase:ident, $dnsTcp:expr) => {
-        #[cfg(all(
-            not(target_arch = "wasm32"),
-            feature = $providerKebabCase,
-            feature = "websocket",
-            feature = "dns",
-            feature = "tls"
-        ))]
-        impl<T: AuthenticatedMultiplexedTransport, R>
-            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, libp2p_tls::Config>>
-        {
-            #[cfg(feature = "noise")]
-            pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>>, WebsocketError> {
-                construct_behaviour_builder!(
-                    self,
-                    $dnsTcp,
-                    map::Upgrade::new(
-                        libp2p_core::upgrade::SelectUpgrade::new(
-                            self.phase.tls_config,
-                            libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?,
-                        ),
-                        |upgrade| match upgrade {
-                            futures::future::Either::Left((peer_id, upgrade)) => {
-                                (peer_id, futures::future::Either::Left(upgrade))
-                            }
-                            futures::future::Either::Right((peer_id, upgrade)) => {
-                                (peer_id, futures::future::Either::Right(upgrade))
-                            }
-                        },
-                    )
-                )
-            }
-            pub async fn without_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>>, WebsocketError> {
-                construct_behaviour_builder!(
-                    self,
-                    $dnsTcp,
-                    libp2p_tls::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?
-                )
-            }
-        }
-
-        #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "dns", feature = "websocket", feature = "noise"))]
-        impl<T: AuthenticatedMultiplexedTransport, R>
-            SwarmBuilder<$providerCamelCase, WebsocketNoisePhase< T, R, WithoutTls>>
-        {
-            pub async fn with_noise(self) -> Result<SwarmBuilder<$providerCamelCase, BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>>, WebsocketError> {
-                let _ = self.phase.tls_config;
-
-                construct_behaviour_builder!(
-                    self,
-                    $dnsTcp,
-                    libp2p_noise::Config::new(&self.keypair).map_err(|e| WebsocketError(AuthenticationErrorInner::from(e).into()))?
-                )
-            }
-        }
-    };
-}
-
-impl_websocket_noise_builder!(
-    "async-std",
-    AsyncStd,
-    libp2p_dns::async_std::Transport::system(libp2p_tcp::async_io::Transport::new(
-        libp2p_tcp::Config::default(),
-    ))
-);
-// TODO: Unnecessary await for Tokio Websocket (i.e. tokio dns). Not ideal but don't know a better way.
-impl_websocket_noise_builder!(
-    "tokio",
-    Tokio,
-    futures::future::ready(libp2p_dns::tokio::Transport::system(
-        libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
-    ))
-);
-
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct WebsocketError(WebsocketErrorInner);
+pub struct WebsocketError<Sec>(WebsocketErrorInner<Sec>);
 
 #[derive(Debug, thiserror::Error)]
-enum WebsocketErrorInner {
-    #[error("Dns")]
-    #[cfg(any(feature = "tls", feature = "noise"))]
-    Authentication(#[from] AuthenticationErrorInner),
+enum WebsocketErrorInner<Sec> {
+    #[error("SecurityUpgrade")]
+    SecurityUpgrade(Sec),
     #[cfg(feature = "dns")]
     #[error("Dns")]
     Dns(#[from] io::Error),
@@ -1570,10 +1551,10 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .with_websocket()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_websocket(
+                (libp2p_tls::Config::new, libp2p_noise::Config::new),
+                libp2p_yamux::Config::default,
+            )
             .await
             .unwrap()
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
@@ -1612,10 +1593,10 @@ mod tests {
             .unwrap()
             .with_relay(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
-            .with_websocket()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_websocket(
+                libp2p_tls::Config::new,
+                libp2p_yamux::Config::default,
+            )
             .await
             .unwrap()
             .with_bandwidth_logging();

@@ -100,6 +100,8 @@ futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12" # Explicit dependency to be used in `wasm-bindgen` feature
+# TODO feature flag?
+rw-stream-sink = { workspace = true }
 
 libp2p-allow-block-list = { workspace = true }
 libp2p-autonat = { workspace = true, optional = true }

@@ -2405,6 +2405,7 @@ dependencies = [
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
+ "rw-stream-sink",
  "thiserror",
  "tokio",
 ]
