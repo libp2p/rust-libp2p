@@ -408,14 +408,40 @@ impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
 // Shortcuts
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     #[cfg(feature = "relay")]
-    pub fn with_relay(self) -> SwarmBuilder<Provider, RelayTlsPhase<T>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: RelayTlsPhase {
-                transport: self.phase.transport,
-            },
-        }
+    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+        self,
+        security_upgrade: SecUpgrade,
+        multiplexer_upgrade: MuxUpgrade,
+    ) -> Result<
+        SwarmBuilder<
+            Provider,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+        >,
+        SecUpgrade::Error,
+        > where
+
+        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecError: std::error::Error + Send + Sync + 'static,
+        SecUpgrade: IntoSecurityUpgrade<libp2p_relay::client::Connection>,
+        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+    <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+
+        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream::Substream: Send + 'static,
+        MuxStream::Error: Send + Sync + 'static,
+        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+        MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+    <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+    <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+        MuxError: std::error::Error + Send + Sync + 'static,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    {
+        self.without_quic()
+            .with_relay(security_upgrade, multiplexer_upgrade)
     }
 
     pub fn with_other_transport<
@@ -545,12 +571,41 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, OtherTransportPha
 impl<T: AuthenticatedMultiplexedTransport, Provider>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
-    pub fn with_relay(
+    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
-    ) -> SwarmBuilder<Provider, RelayTlsPhase<impl AuthenticatedMultiplexedTransport>> {
+        security_upgrade: SecUpgrade,
+        multiplexer_upgrade: MuxUpgrade,
+    ) -> Result<
+        SwarmBuilder<
+            Provider,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+        >,
+        SecUpgrade::Error,
+        > where
+
+        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecError: std::error::Error + Send + Sync + 'static,
+        SecUpgrade: IntoSecurityUpgrade<libp2p_relay::client::Connection>,
+        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+    <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+
+        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream::Substream: Send + 'static,
+        MuxStream::Error: Send + Sync + 'static,
+        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+        MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+    <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+    <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+        MuxError: std::error::Error + Send + Sync + 'static,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    {
         self.without_any_other_transports()
             .without_dns()
-            .with_relay()
+            .with_relay(security_upgrade, multiplexer_upgrade)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport>
@@ -653,18 +708,62 @@ pub struct RelayPhase<T> {
     transport: T,
 }
 
-// TODO: Noise feature or tls feature
 #[cfg(feature = "relay")]
-impl<Provider, T> SwarmBuilder<Provider, RelayPhase<T>> {
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
     // TODO: This should be with_relay_client.
-    pub fn with_relay(self) -> SwarmBuilder<Provider, RelayTlsPhase<T>> {
-        SwarmBuilder {
+    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+        self,
+        security_upgrade: SecUpgrade,
+        multiplexer_upgrade: MuxUpgrade,
+    ) -> Result<
+        SwarmBuilder<
+            Provider,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+        >,
+        SecUpgrade::Error,
+        > where
+
+        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecError: std::error::Error + Send + Sync + 'static,
+        SecUpgrade: IntoSecurityUpgrade<libp2p_relay::client::Connection>,
+        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+    <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+
+        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream::Substream: Send + 'static,
+        MuxStream::Error: Send + Sync + 'static,
+        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+        MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+    <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+    <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+        MuxError: std::error::Error + Send + Sync + 'static,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    {
+        let (relay_transport, relay_behaviour) =
+            libp2p_relay::client::new(self.keypair.public().to_peer_id());
+
+        Ok(SwarmBuilder {
+            phase: WebsocketPhase {
+                relay_behaviour,
+                transport: self
+                    .phase
+                    .transport
+                    .or_transport(
+                        relay_transport
+                            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+                            .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
+                            .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+                            .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
+                    )
+                    .map(|either, _| either.into_inner()),
+            },
             keypair: self.keypair,
             phantom: PhantomData,
-            phase: RelayTlsPhase {
-                transport: self.phase.transport,
-            },
-        }
+        })
     }
 }
 
@@ -700,202 +799,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_relay()
-            .without_websocket()
-            .with_behaviour(constructor)
-    }
-}
-
-#[cfg(feature = "relay")]
-pub struct RelayTlsPhase<T> {
-    transport: T,
-}
-
-#[cfg(feature = "relay")]
-impl<Provider, T> SwarmBuilder<Provider, RelayTlsPhase<T>> {
-    #[cfg(all(not(target_arch = "wasm32"), feature = "tls"))]
-    pub fn with_tls(
-        self,
-    ) -> Result<SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>, AuthenticationError>
-    {
-        Ok(SwarmBuilder {
-            phase: RelayNoisePhase {
-                tls_config: libp2p_tls::Config::new(&self.keypair)
-                    .map_err(|e| AuthenticationError(e.into()))?,
-                transport: self.phase.transport,
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
-        })
-    }
-
-    fn without_tls(self) -> SwarmBuilder<Provider, RelayNoisePhase<T, WithoutTls>> {
-        SwarmBuilder {
-            keypair: self.keypair,
-            phantom: PhantomData,
-            phase: RelayNoisePhase {
-                tls_config: WithoutTls {},
-                transport: self.phase.transport,
-            },
-        }
-    }
-}
-
-// Shortcuts
-#[cfg(all(feature = "relay", feature = "noise", feature = "async-std"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<AsyncStd, RelayTlsPhase<T>> {
-    #[cfg(feature = "noise")]
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            AsyncStd,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-        >,
-        AuthenticationError,
-    > {
-        self.without_tls().with_noise()
-    }
-}
-#[cfg(all(feature = "relay", feature = "noise", feature = "tokio"))]
-impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<Tokio, RelayTlsPhase<T>> {
-    #[cfg(feature = "noise")]
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            Tokio,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-        >,
-        AuthenticationError,
-    > {
-        self.without_tls().with_noise()
-    }
-}
-
-#[cfg(feature = "relay")]
-pub struct RelayNoisePhase<T, A> {
-    tls_config: A,
-    transport: T,
-}
-
-// TODO: Rename these macros to phase not builder. All.
-#[cfg(feature = "relay")]
-macro_rules! construct_websocket_builder {
-    ($self:ident, $auth:expr) => {{
-        let (relay_transport, relay_behaviour) =
-            libp2p_relay::client::new($self.keypair.public().to_peer_id());
-
-        SwarmBuilder {
-            phase: WebsocketPhase {
-                relay_behaviour,
-                transport: $self
-                    .phase
-                    .transport
-                    .or_transport(
-                        relay_transport
-                            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
-                            .authenticate($auth)
-                            .multiplex(libp2p_yamux::Config::default())
-                            .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
-                    )
-                    .map(|either, _| either.into_inner()),
-            },
-            keypair: $self.keypair,
-            phantom: PhantomData,
-        }
-    }};
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "relay", feature = "tls"))]
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
-{
-    #[cfg(feature = "noise")]
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            Provider,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-        >,
-        AuthenticationError,
-    > {
-        Ok(construct_websocket_builder!(
-            self,
-            map::Upgrade::new(
-                libp2p_core::upgrade::SelectUpgrade::new(
-                    self.phase.tls_config,
-                    libp2p_noise::Config::new(&self.keypair)
-                        .map_err(|e| AuthenticationError(e.into()))?,
-                ),
-                |upgrade| match upgrade {
-                    futures::future::Either::Left((peer_id, upgrade)) => {
-                        (peer_id, futures::future::Either::Left(upgrade))
-                    }
-                    futures::future::Either::Right((peer_id, upgrade)) => {
-                        (peer_id, futures::future::Either::Right(upgrade))
-                    }
-                },
-            )
-        ))
-    }
-
-    fn without_noise(
-        self,
-    ) -> SwarmBuilder<
-        Provider,
-        WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-    > {
-        construct_websocket_builder!(self, self.phase.tls_config)
-    }
-}
-
-#[cfg(feature = "relay")]
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, RelayNoisePhase<T, WithoutTls>>
-{
-    #[cfg(feature = "noise")]
-    pub fn with_noise(
-        self,
-    ) -> Result<
-        SwarmBuilder<
-            Provider,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-        >,
-        AuthenticationError,
-    > {
-        let _ = self.phase.tls_config;
-
-        Ok(construct_websocket_builder!(
-            self,
-            libp2p_noise::Config::new(&self.keypair).map_err(|e| AuthenticationError(e.into()))?
-        ))
-    }
-}
-
-// Shortcuts
-#[cfg(all(not(target_arch = "wasm32"), feature = "tls", feature = "relay"))]
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, RelayNoisePhase<T, libp2p_tls::Config>>
-{
-    #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-    pub fn with_websocket(
-        self,
-    ) -> SwarmBuilder<
-        Provider,
-        WebsocketTlsPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
-    > {
-        self.without_noise().with_websocket()
-    }
-
-    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
-        self,
-        constructor: impl FnOnce(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
-    ) -> Result<
-        SwarmBuilder<Provider, SwarmPhase<impl AuthenticatedMultiplexedTransport, B>>,
-        R::Error,
-    > {
-        self.without_noise()
             .without_websocket()
             .with_behaviour(constructor)
     }
@@ -1592,10 +1495,7 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .with_relay()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_relay(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_behaviour(|_, relay| Behaviour {
                 dummy: libp2p_swarm::dummy::Behaviour,
@@ -1710,10 +1610,7 @@ mod tests {
             .with_quic()
             .with_dns()
             .unwrap()
-            .with_relay()
-            .with_tls()
-            .unwrap()
-            .with_noise()
+            .with_relay(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_websocket()
             .with_tls()
