@@ -405,15 +405,10 @@ impl ConnectionHandler for Handler {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                let upgrade_error = match error {
-                    StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
-                    StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
-                    StreamUpgradeError::Io(e) => StreamUpgradeError::Io(e),
-                    StreamUpgradeError::Apply(v) => void::unreachable(v.into_inner()),
-                };
-
                 self.events.push(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationError(upgrade_error),
+                    Event::IdentificationError(
+                        error.map_upgrade_err(|e| void::unreachable(e.into_inner())),
+                    ),
                 ));
                 self.trigger_next_identify.reset(self.interval);
             }
