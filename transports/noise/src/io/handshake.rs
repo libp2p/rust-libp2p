@@ -45,7 +45,7 @@ use std::io;
 /// Handshake state.
 pub(crate) struct State<T> {
     /// The underlying I/O resource.
-    io: asynchronous_codec::Framed<T, Codec<snow::HandshakeState>>,
+    io: Framed<T, Codec<snow::HandshakeState>>,
     /// The associated public identity of the local node's static DH keypair,
     /// which can be sent to the remote as part of an authenticated handshake.
     identity: KeypairIdentity,
