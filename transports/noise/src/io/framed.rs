@@ -73,9 +73,8 @@ impl<S: SessionState> Codec<S> {
             }
         };
 
-        self.encrypt_buffer.truncate(n);
-        self.length_codec
-            .encode(self.encrypt_buffer.split().freeze(), dst)
+        let msg = self.encrypt_buffer.split_to(n).freeze();
+        self.length_codec.encode(msg, dst)
     }
 
     fn decode_bytes(&mut self, src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
