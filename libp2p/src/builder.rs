@@ -183,7 +183,7 @@ impl_tcp_builder!("tokio", Tokio, tokio);
 
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
-    type Error: std::error::Error + 'static;
+    type Error;
 
     fn into_security_upgrade(self, keypair: &Keypair) -> Result<Self::Upgrade, Self::Error>;
 }
@@ -191,7 +191,6 @@ pub trait IntoSecurityUpgrade<C> {
 impl<C, T, F, E> IntoSecurityUpgrade<C> for F
 where
     F: for<'a> FnOnce(&'a Keypair) -> Result<T, E>,
-    E: std::error::Error + 'static,
 {
     type Upgrade = T;
     type Error = E;
