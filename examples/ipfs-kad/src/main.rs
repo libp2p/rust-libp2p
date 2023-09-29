@@ -121,7 +121,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("Query timed out with no closest peers.");
                     }
                 }
-            };
+            }
+
+            break;
         } else if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
             result: kad::QueryResult::PutRecord(result),
             ..
