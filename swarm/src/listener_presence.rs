@@ -6,12 +6,18 @@ use std::collections::HashMap;
 
 type ProtocolStack = Vec<&'static str>;
 
-// I'm not sure about the selection here. A good example is Onion. It's not good defined what that's supposed to be and it's a protocol and an address. But since I wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just ignore that.
-// We might also choose to ignore encryption, like noise and tls
+// I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
+// supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
+// wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
+// ignore that.
+// We might also choose to ignore encryption, like noise and tls.
+// We might also consider the memory transport.
 const NON_PROTOCOL_TAGS: &[&str] = &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
 
+// We check weather a Protocol tag is a network protocol like quic, tcp and udp.
 fn is_not_protocol(tag: &str) -> bool {
-    // using contains instead of matches! isn't a lot different, when we look at the generated assembly (https://godbolt.org/z/1x9f3K16x)
+    // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
+    // assembly. https://godbolt.org/z/1x9f3K16x
     !NON_PROTOCOL_TAGS.contains(&tag)
 }
 
@@ -25,7 +31,11 @@ fn clean_multiaddr(address: &Multiaddr) -> ProtocolStack {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ListenerPresence {
-    inner: HashMap<ProtocolStack, u8>,
+    // We use a u16 because this is primarily target towards transports that use ports and this
+    // is implies that at max 2^16 - 1 ports can be listened on. While it's still possible to create
+    // a pathological example where the u16 would still overflow, but it's very unlikely to occur in
+    // the wild.
+    inner: HashMap<ProtocolStack, u16>,
 }
 
 #[cfg(test)]
@@ -41,27 +51,32 @@ impl<'a> FromIterator<&'a Multiaddr> for ListenerPresence {
 }
 
 impl ListenerPresence {
+    /// Check weather an address we want to dial already has a listener with the same ProtocolStack.
     pub fn contains(&self, address: &Multiaddr) -> bool {
         let protocol_stack = clean_multiaddr(address);
-        #[cfg(debug_assertions)]
         if let Some(key) = self.inner.get(&protocol_stack) {
             debug_assert_ne!(*key, 0, "The entry value should never be zero and exist.");
         }
         self.inner.contains_key(&protocol_stack)
     }
 
+    /// Add a new listener to the collection.
     pub fn new_listener(&mut self, address: &Multiaddr) {
         self.inner
             .entry(clean_multiaddr(address))
-            .and_modify(|e| *e = e.saturating_add(1))
+            .and_modify(|e| *e += 1)
             .or_insert(1);
     }
 
+    /// Remove an expired listener to the collection.
     pub fn expired_listener(&mut self, address: &Multiaddr) {
         let protocol_stack = clean_multiaddr(address);
         match self.inner.get_mut(&protocol_stack) {
-            Some(0) => panic!("The value associated with a ProtocolStack should never be zero"),
             Some(n) => {
+                debug_assert_ne!(
+                    0, *n,
+                    "The protocol stack counter should never be zero and exist."
+                );
                 *n -= 1;
                 if *n == 0 {
                     self.inner.remove(&protocol_stack);
