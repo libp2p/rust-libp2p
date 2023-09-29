@@ -1,8 +1,8 @@
 //! The listener presence module allows for easy and fast checking if there is a listener present
 //! for a multiaddress we want to dial.
 
-use std::collections::HashMap;
 use libp2p_core::Multiaddr;
+use std::collections::HashMap;
 
 type ProtocolStack = Vec<&'static str>;
 
@@ -63,7 +63,7 @@ impl ListenerPresence {
             Some(0) => panic!("The value associated with a ProtocolStack should never be zero"),
             Some(n) => {
                 *n -= 1;
-                if n == 0 {
+                if *n == 0 {
                     self.inner.remove(&protocol_stack);
                 }
             }
