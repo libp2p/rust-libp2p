@@ -46,15 +46,11 @@ static_assertions::const_assert! {
 /// encoding and decoding length-delimited session messages.
 pub(crate) struct Codec<S> {
     session: S,
-    length_codec: U16LengthCodec,
 }
 
 impl<S: SessionState> Codec<S> {
     pub(crate) fn new(session: S) -> Self {
-        Codec {
-            session,
-            length_codec: U16LengthCodec,
-        }
+        Codec { session }
     }
 
     fn encode_bytes(&mut self, item: &[u8], dst: &mut BytesMut) -> Result<(), io::Error> {
@@ -68,12 +64,15 @@ impl<S: SessionState> Codec<S> {
             }
         };
 
-        self.length_codec
-            .encode(encrypt_buffer.split_to(n).freeze(), dst)
+        let msg = encrypt_buffer.split_to(n).freeze();
+
+        encode_length_prefixed(&msg, dst);
+
+        Ok(())
     }
 
     fn decode_bytes(&mut self, src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
-        let bytes = match self.length_codec.decode(src)? {
+        let bytes = match decode_length_prefixed(src)? {
             Some(b) => b,
             None => return Ok(None),
         };
@@ -210,42 +209,28 @@ impl SessionState for snow::TransportState {
     }
 }
 
-/// A codec that prefixes messages with their length encoded as a big-endian u16.
-struct U16LengthCodec;
-
 const U16_LENGTH: usize = size_of::<u16>();
 
-impl Encoder for U16LengthCodec {
-    type Item<'a> = Bytes;
-    type Error = io::Error;
-
-    fn encode(&mut self, src: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        dst.reserve(U16_LENGTH + src.len());
-        dst.extend_from_slice(&(src.len() as u16).to_be_bytes());
-        dst.extend_from_slice(&src);
-        Ok(())
-    }
+fn encode_length_prefixed(src: &Bytes, dst: &mut BytesMut) {
+    dst.reserve(U16_LENGTH + src.len());
+    dst.extend_from_slice(&(src.len() as u16).to_be_bytes());
+    dst.extend_from_slice(&src);
 }
 
-impl Decoder for U16LengthCodec {
-    type Item = Bytes;
-    type Error = io::Error;
+fn decode_length_prefixed(src: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+    if src.len() < size_of::<u16>() {
+        return Ok(None);
+    }
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() < size_of::<u16>() {
-            return Ok(None);
-        }
+    let mut len_bytes = [0u8; U16_LENGTH];
+    len_bytes.copy_from_slice(&src[..U16_LENGTH]);
+    let len = u16::from_be_bytes(len_bytes) as usize;
 
-        let mut len_bytes = [0u8; U16_LENGTH];
-        len_bytes.copy_from_slice(&src[..U16_LENGTH]);
-        let len = u16::from_be_bytes(len_bytes) as usize;
-
-        if src.len() - U16_LENGTH >= len {
-            // Skip the length header we already read.
-            src.advance(U16_LENGTH);
-            Ok(Some(src.split_to(len).freeze()))
-        } else {
-            Ok(None)
-        }
+    if src.len() - U16_LENGTH >= len {
+        // Skip the length header we already read.
+        src.advance(U16_LENGTH);
+        Ok(Some(src.split_to(len).freeze()))
+    } else {
+        Ok(None)
     }
 }
