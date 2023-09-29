@@ -170,7 +170,7 @@ impl Decoder for Codec<snow::TransportState> {
 
 /// Encrypts the given cleartext to `dst`.
 ///
-/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of te noise protocol.
+/// This is a standalone function to allow us reusing the `encrypt_buffer` and to use to across different session states of the noise protocol.
 fn encrypt(
     cleartext: &[u8],
     dst: &mut BytesMut,
@@ -184,6 +184,10 @@ fn encrypt(
     Ok(())
 }
 
+/// Encrypts the given ciphertext.
+///
+/// This is a standalone function so we can use it across different session states of the noise protocol.
+/// In case `ciphertext` does not contain enough bytes to decrypt the entire frame, `Ok(None)` is returned.
 fn decrypt(
     ciphertext: &mut BytesMut,
     decrypt_fn: impl FnOnce(&[u8], &mut [u8]) -> Result<usize, snow::Error>,
