@@ -1,11 +1,10 @@
 //! The listener presence module allows for easy and fast checking if there is a listener present
 //! for a multiaddress we want to dial.
 
+use std::collections::HashMap;
 use libp2p_core::Multiaddr;
-use smallvec::SmallVec;
-use std::collections::BTreeMap;
 
-type ProtocolStack = SmallVec<[&'static str; 4]>;
+type ProtocolStack = Vec<&'static str>;
 
 // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's supposed to be and it's a protocol and an address. But since I wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just ignore that.
 // We might also choose to ignore encryption, like noise and tls
@@ -26,7 +25,7 @@ fn clean_multiaddr(address: &Multiaddr) -> ProtocolStack {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ListenerPresence {
-    inner: BTreeMap<ProtocolStack, u8>,
+    inner: HashMap<ProtocolStack, u8>,
 }
 
 #[cfg(test)]
