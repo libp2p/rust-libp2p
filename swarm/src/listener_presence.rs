@@ -7,13 +7,13 @@ use std::collections::BTreeMap;
 
 type ProtocolStack = SmallVec<[&'static str; 4]>;
 
+// I'm not sure about the selection here. A good example is Onion. It's not good defined what that's supposed to be and it's a protocol and an address. But since I wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just ignore that.
+// We might also choose to ignore encryption, like noise and tls
+const NON_PROTOCOL_TAGS: &[&str] = &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
+
 fn is_not_protocol(tag: &str) -> bool {
-    // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's supposed to be and it's a protocol and an address. But since I wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just ignore that.
-    // We might also choose to ignore encryption, like noise and tls
-    !matches!(
-        tag,
-        "dns" | "dns4" | "dns6" | "dnsaddr" | "ip4" | "ip6" | "p2p"
-    )
+    // using contains instead of matches! isn't a lot different, when we look at the generated assembly (https://godbolt.org/z/1x9f3K16x)
+    !NON_PROTOCOL_TAGS.contains(&tag)
 }
 
 // Turns a multiaddress into a vector of just the protocols.
@@ -75,9 +75,11 @@ impl ListenerPresence {
 // Some tests with real world data would be appreciated
 #[cfg(test)]
 mod tests {
-    use crate::listener_presence::ListenerPresence;
-    use libp2p_core::multiaddr::multiaddr;
+    use crate::listener_presence::{clean_multiaddr, ListenerPresence, NON_PROTOCOL_TAGS};
+    use libp2p_core::multiaddr::{multiaddr, Protocol};
     use libp2p_identity::PeerId;
+    use std::borrow::Cow;
+    use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
 
     #[test]
@@ -124,6 +126,7 @@ mod tests {
         assert!(build_up_address
             .iter()
             .all(|addr| listener_presence.contains(addr)));
+        assert_eq!(clean_multiaddr(&build_up_address[0]), clean_multiaddr(&multiaddr!(Dns4("libp2p.io"), Tls, Tcp(10u16))));
         assert!(listener_presence.contains(&multiaddr!(Dns4("libp2p.io"), Tls, Tcp(10u16))));
         assert!(listener_presence.contains(&multiaddr!(
             Dns4("libp2p.io"),
@@ -146,5 +149,24 @@ mod tests {
             Udp(100u16),
             Tls
         )));
+    }
+
+    #[test]
+    fn tags_correct() {
+        let protocols = &[
+            Protocol::Dns(Cow::Borrowed("")),
+            Protocol::Dns4(Cow::Borrowed("")),
+            Protocol::Dns6(Cow::Borrowed("")),
+            Protocol::Dnsaddr(Cow::Borrowed("")),
+            Protocol::Ip4(Ipv4Addr::new(1, 1, 1, 1)),
+            Protocol::Ip6(Ipv6Addr::new(1, 1, 1, 1, 1, 1, 1, 1)),
+            Protocol::P2p(PeerId::random()),
+        ];
+        assert_eq!(protocols.len(), NON_PROTOCOL_TAGS.len());
+        protocols
+            .iter()
+            .map(|e| e.tag())
+            .zip(NON_PROTOCOL_TAGS.iter())
+            .for_each(|(a, b)| assert_eq!(a, *b));
     }
 }
