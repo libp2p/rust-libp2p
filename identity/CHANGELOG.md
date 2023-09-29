@@ -1,6 +1,7 @@
 ## 0.2.4 - unreleased
 
-- Implement `Keypair::secret`, that returns the secret key of the keypair if it has one.
+- Implement `Keypair::derive_secret`, that derives a secret from an input domain if the inner key
+  pair supports it.
   See [PR 4554]
 
 [PR 4554]: https://github.com/libp2p/rust-libp2p/pull/4554

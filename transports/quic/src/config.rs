@@ -61,7 +61,7 @@ pub struct Config {
     client_tls_config: Arc<rustls::ClientConfig>,
     /// TLS server config for the inner [`quinn::ServerConfig`].
     server_tls_config: Arc<rustls::ServerConfig>,
-    /// Libp2p identity [`libp2p_identity::Keypair`] used for the stateless reset key.
+    /// Libp2p identity of the node.
     keypair: libp2p_identity::Keypair,
 }
 
@@ -132,13 +132,13 @@ impl From<Config> for QuinnConfig {
         let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let mut endpoint_config = match keypair.derive_secret(b"libp2p quic stateless reset key") {
-            Some(secret) => {
+        let mut endpoint_config = keypair
+            .derive_secret(b"libp2p quic stateless reset key")
+            .map(|secret| {
                 let reset_key = Arc::new(ring::hmac::Key::new(ring::hmac::HMAC_SHA256, &secret));
                 quinn::EndpointConfig::new(reset_key)
-            }
-            None => quinn::EndpointConfig::default(),
-        };
+            })
+            .unwrap_or_default();
 
         if !support_draft_29 {
             endpoint_config.supported_versions(vec![1]);

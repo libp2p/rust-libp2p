@@ -39,21 +39,7 @@ use crate::proto;
     feature = "ed25519",
     feature = "rsa"
 ))]
-use hkdf::Hkdf;
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
 use quick_protobuf::{BytesReader, Writer};
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
-use sha2::Sha256;
 #[cfg(any(
     feature = "ecdsa",
     feature = "secp256k1",
@@ -379,7 +365,7 @@ impl Keypair {
                 .try_into()
                 .expect("Ecdsa's private key should be 32 bytes"),
         };
-        let (output, _) = Hkdf::<Sha256>::extract(None, &[domain, &secret].concat());
+        let (output, _) = hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &secret].concat());
         Some(output.into())
     }
 }
