@@ -53,18 +53,19 @@ impl ListenerPresence {
     pub fn new_listener(&mut self, address: &Multiaddr) {
         self.inner
             .entry(clean_multiaddr(address))
-            .and_modify(|e| *e += 1)
+            .and_modify(|e| *e = e.saturating_add(1))
             .or_insert(1);
     }
 
     pub fn expired_listener(&mut self, address: &Multiaddr) {
         let protocol_stack = clean_multiaddr(address);
         match self.inner.get_mut(&protocol_stack) {
-            Some(1) => {
-                self.inner.remove(&protocol_stack);
-            }
+            Some(0) => panic!("The value associated with a ProtocolStack should never be zero"),
             Some(n) => {
                 *n -= 1;
+                if n == 0 {
+                    self.inner.remove(&protocol_stack);
+                }
             }
             None => {}
         }
@@ -125,7 +126,10 @@ mod tests {
         assert!(build_up_address
             .iter()
             .all(|addr| listener_presence.contains(addr)));
-        assert_eq!(clean_multiaddr(&build_up_address[0]), clean_multiaddr(&multiaddr!(Dns4("libp2p.io"), Tls, Tcp(10u16))));
+        assert_eq!(
+            clean_multiaddr(&build_up_address[0]),
+            clean_multiaddr(&multiaddr!(Dns4("libp2p.io"), Tls, Tcp(10u16)))
+        );
         assert!(listener_presence.contains(&multiaddr!(Dns4("libp2p.io"), Tls, Tcp(10u16))));
         assert!(listener_presence.contains(&multiaddr!(
             Dns4("libp2p.io"),
