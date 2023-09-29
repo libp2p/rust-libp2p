@@ -105,8 +105,8 @@ impl Behaviour {
     fn observed_addresses(&self) -> Vec<Multiaddr> {
         self.external_addresses
             .iter()
-            .cloned()
             .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
+            .cloned()
             .map(|a| a.with(Protocol::P2p(self.local_peer_id)))
             .collect()
     }
