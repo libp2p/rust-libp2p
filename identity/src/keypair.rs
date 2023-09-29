@@ -344,29 +344,44 @@ impl Keypair {
     }
 
     /// Return the secret key of the [`Keypair`] if it has one.
-    #[cfg(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    ))]
+    #[allow(unused_variables)]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
-        let secret = match self.keypair {
-            #[cfg(feature = "ed25519")]
-            KeyPairInner::Ed25519(ref inner) => inner.secret().0,
-            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            KeyPairInner::Rsa(_) => return None,
-            #[cfg(feature = "secp256k1")]
-            KeyPairInner::Secp256k1(ref inner) => inner.secret().to_bytes(),
-            #[cfg(feature = "ecdsa")]
-            KeyPairInner::Ecdsa(ref inner) => inner
-                .secret()
-                .to_bytes()
-                .try_into()
-                .expect("Ecdsa's private key should be 32 bytes"),
-        };
-        let (output, _) = hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &secret].concat());
-        Some(output.into())
+        #[cfg(not(any(
+            feature = "ecdsa",
+            feature = "secp256k1",
+            feature = "ed25519",
+            feature = "rsa"
+        )))]
+        return None;
+
+        #[cfg(any(
+            feature = "ecdsa",
+            feature = "secp256k1",
+            feature = "ed25519",
+            feature = "rsa"
+        ))]
+        {
+            let secret = match self.keypair {
+                #[cfg(feature = "ed25519")]
+                KeyPairInner::Ed25519(ref inner) => inner.secret().0,
+                #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+                KeyPairInner::Rsa(_) => return None,
+                #[cfg(feature = "secp256k1")]
+                KeyPairInner::Secp256k1(ref inner) => inner.secret().to_bytes(),
+                #[cfg(feature = "ecdsa")]
+                KeyPairInner::Ecdsa(ref inner) => inner
+                    .secret()
+                    .to_bytes()
+                    .try_into()
+                    .expect("Ecdsa's private key should be 32 bytes"),
+            };
+
+            Some(
+                hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &secret].concat())
+                    .0
+                    .into(),
+            )
+        }
     }
 }
 
