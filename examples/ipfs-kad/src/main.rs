@@ -20,16 +20,17 @@
 
 #![doc = include_str!("../README.md")]
 
-use clap::Parser;
-use futures::StreamExt;
-use libp2p::bytes::BufMut;
-use libp2p::identity::Keypair;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
-use libp2p::{development_transport, identity, kad, PeerId, Swarm};
 use std::error::Error;
 use std::num::NonZeroUsize;
 use std::ops::Add;
 use std::time::{Duration, Instant};
+
+use clap::Parser;
+use futures::StreamExt;
+
+use libp2p::bytes::BufMut;
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::{development_transport, identity, kad, PeerId};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -71,23 +72,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match cli_opt.argument {
         CliArgument::GetPeers { peer_id } => {
-            get_closes_peers(&mut swarm, peer_id.unwrap_or_else(PeerId::random)).await
+            let peer_id = peer_id.unwrap_or(PeerId::random());
+            println!("Searching for the closest peers to {peer_id}");
+            swarm.behaviour_mut().get_closest_peers(peer_id);
         }
-        CliArgument::PutPkRecord {} => insert_pk_record(&mut swarm, local_peer_id, local_key).await,
+        CliArgument::PutPkRecord {} => {
+            println!("Putting PK record into the DHT");
+
+            let mut pk_record_key = vec![];
+            pk_record_key.put_slice("/pk/".as_bytes());
+            pk_record_key.put_slice(local_peer_id.to_bytes().as_slice());
+
+            let mut pk_record =
+                kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
+            pk_record.publisher = Some(local_peer_id);
+            pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
+
+            swarm
+                .behaviour_mut()
+                .put_record(pk_record, kad::Quorum::N(NonZeroUsize::new(3).unwrap()))?;
+        }
     }
-}
-
-async fn get_closes_peers(
-    swarm: &mut Swarm<kad::Behaviour<kad::store::MemoryStore>>,
-    peer_id: PeerId,
-) -> Result<(), Box<dyn Error>> {
-    // Order Kademlia to search for a peer.
-
-    println!("Searching for the closest peers to {peer_id}");
-    swarm.behaviour_mut().get_closest_peers(peer_id);
 
     loop {
         let event = swarm.select_next_some().await;
+
         if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
             result: kad::QueryResult::GetClosestPeers(result),
             ..
@@ -113,37 +122,7 @@ async fn get_closes_peers(
                     }
                 }
             };
-
-            break;
-        }
-    }
-
-    Ok(())
-}
-
-async fn insert_pk_record<TStore: kad::store::RecordStore + Send + 'static>(
-    swarm: &mut Swarm<kad::Behaviour<TStore>>,
-    local_peer_id: PeerId,
-    local_key: Keypair,
-) -> Result<(), Box<dyn Error>> {
-    let mut pk_record_key = vec![];
-    pk_record_key.put_slice("/pk/".as_bytes());
-    pk_record_key.put_slice(local_peer_id.to_bytes().as_slice());
-
-    println!("Putting PK record into the DHT");
-
-    let mut pk_record = kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
-
-    pk_record.publisher = Some(local_peer_id);
-    pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
-
-    swarm
-        .behaviour_mut()
-        .put_record(pk_record, kad::Quorum::N(NonZeroUsize::new(3).unwrap()))?;
-
-    loop {
-        let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+        } else if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
             result: kad::QueryResult::PutRecord(result),
             ..
         }) = event
