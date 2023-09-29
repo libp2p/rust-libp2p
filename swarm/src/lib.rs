@@ -72,6 +72,7 @@ pub mod handler;
 )]
 pub mod keep_alive;
 mod listen_opts;
+mod listener_presence;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
@@ -163,6 +164,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use crate::listener_presence::ListenerPresence;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -503,31 +505,7 @@ where
             addresses_from_opts
         };
 
-        // allows to map a protocol, if the tag is one, to an idx. Allows for O(1) operations on presence checking.
-        // This might be a premature optimization and is prone to errors. If Protocol::tag would be const one could write a simpler variant, with comparable performance.
-        fn protocol_idx(tag: &str) -> Option<usize> {
-            match tag {
-                "memory" => Some(0),
-                "onion" => Some(1),
-                "onion3" => Some(2),
-                "quic" => Some(3),
-                "quic-v1" => Some(4),
-                "tcp" => Some(5),
-                "udp" => Some(6),
-                "webtransport" => Some(7),
-                "ws" => Some(8),
-                "wss" => Some(9),
-                _ => None,
-            }
-        }
-
-        // data structure to efficiently check for protocol presence
-        let mut protocol_present = [false; 10];
-        self.listeners()
-            .filter_map(|m| m.protocol_stack().find_map(protocol_idx))
-            .for_each(|idx| {
-                protocol_present[idx] = true;
-            });
+        let listener_presence: ListenerPresence = self.listeners().collect();
 
         let dials = addresses
             .into_iter()
@@ -535,11 +513,7 @@ where
                 Ok(address) => {
                     let transport_dial_opts = {
                         let transport_port_use = dial_opts.port_use().unwrap_or_else(|| {
-                            if address
-                                .protocol_stack()
-                                .find_map(protocol_idx)
-                                .map(|idx| protocol_present[idx])
-                                .unwrap_or(false)
+                            if listener_presence.contains(&address)
                             {
                                 PortUse::Reuse
                             } else {
