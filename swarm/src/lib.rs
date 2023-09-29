@@ -145,16 +145,14 @@ use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
     muxing::StreamMuxerBox,
-    transport::{
-        self, DialOpts as TransportDialOpts, ListenerId,
-        TransportError, TransportEvent,
-    },
+    transport::{self, DialOpts as TransportDialOpts, ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
 
 use smallvec::SmallVec;
 
+use crate::listener_presence::ListenerPresence;
 use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
@@ -164,7 +162,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use crate::listener_presence::ListenerPresence;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -357,6 +354,9 @@ where
     /// Multiaddresses that our listeners are listening on,
     listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
 
+    /// Listener presence monitor
+    listener_presence: ListenerPresence,
+
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
@@ -505,16 +505,13 @@ where
             addresses_from_opts
         };
 
-        let listener_presence: ListenerPresence = self.listeners().collect();
-
         let dials = addresses
             .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
                     let transport_dial_opts = {
                         let transport_port_use = dial_opts.port_use().unwrap_or_else(|| {
-                            if listener_presence.contains(&address)
-                            {
+                            if self.listener_presence.contains(&address) {
                                 PortUse::Reuse
                             } else {
                                 PortUse::New
@@ -980,6 +977,7 @@ where
                 if !addrs.contains(&listen_addr) {
                     addrs.push(listen_addr.clone())
                 }
+                self.listener_presence.new_listener(&listen_addr);
                 self.behaviour
                     .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
                         listener_id,
@@ -1002,6 +1000,7 @@ where
                 if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
                     addrs.retain(|a| a != &listen_addr);
                 }
+                self.listener_presence.expired_listener(&listen_addr);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
                         listener_id,
@@ -1019,6 +1018,7 @@ where
                 log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
+                    self.listener_presence.expired_listener(addr);
                     self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
                         ExpiredListenAddr { listener_id, addr },
                     ));
@@ -1563,6 +1563,7 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
+            listener_presence: Default::default(),
             pending_event: None,
         }
     }
