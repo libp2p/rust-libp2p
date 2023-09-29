@@ -187,7 +187,7 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
 
-            let (pk, io) = state.finish()?;
+            let (pk, io) = dbg!(state.finish())?;
 
             Ok((pk.to_peer_id(), io))
         }

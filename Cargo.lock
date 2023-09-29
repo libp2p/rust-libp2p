@@ -449,7 +449,7 @@ dependencies = [
 [[package]]
 name = "asynchronous-codec"
 version = "0.7.0"
-source = "git+https://github.com/thomaseizinger/asynchronous-codec?branch=feat/gats#1f0db3df17a948b765be5821889bd9842ce593f6"
+source = "git+https://github.com/thomaseizinger/asynchronous-codec?branch=combined#0f5155b7d96a5768aa08e0a5e30e757a57ec55d8"
 dependencies = [
  "bytes",
  "futures-sink",

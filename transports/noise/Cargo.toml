@@ -10,7 +10,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 
 [dependencies]
 #asynchronous-codec = "0.6"
-asynchronous-codec = { git = "https://github.com/thomaseizinger/asynchronous-codec", branch = "feat/gats" }
+asynchronous-codec = { git = "https://github.com/thomaseizinger/asynchronous-codec", branch = "combined" }
 bytes = "1"
 curve25519-dalek = "4.1.0"
 futures = "0.3.28"

@@ -29,7 +29,7 @@ pub(super) mod proto {
 
 use super::framed::Codec;
 use crate::io::Output;
-use crate::protocol::{KeypairIdentity, STATIC_KEY_DOMAIN};
+use crate::protocol::{KeypairIdentity, PublicKey, STATIC_KEY_DOMAIN};
 use crate::Error;
 use asynchronous_codec::Framed;
 use futures::prelude::*;
@@ -37,7 +37,7 @@ use libp2p_identity as identity;
 use multihash::Multihash;
 use quick_protobuf::MessageWrite;
 use std::collections::HashSet;
-use std::io;
+use std::{io, mem};
 
 //////////////////////////////////////////////////////////////////////////////
 // Internal
@@ -100,8 +100,8 @@ where
     /// [`Output`] for communicating on the encrypted channel.
     pub(crate) fn finish(self) -> Result<(identity::PublicKey, Output<T>), Error> {
         let is_initiator = self.io.codec().is_initiator();
-        let parts = self.io.into_parts();
-        let (pubkey, codec) = parts.codec.into_transport()?;
+
+        let (pubkey, framed) = map_into_transport(self.io)?;
 
         let id_pk = self
             .id_remote_pubkey
@@ -139,8 +139,32 @@ where
             }
         }
 
-        Ok((id_pk, Output::new(Framed::new(parts.io, codec))))
+        Ok((id_pk, Output::new(framed)))
     }
+}
+
+/// Maps the provided [`Framed`] from the [`snow::HandshakeState`] into the [`snow::TransportState`].
+///
+/// This is a bit tricky because [`Framed`] cannot just be de-composed but only into its [`FramedParts`](asynchronous_codec::FramedParts).
+/// However, we need to retain the original [`FramedParts`](asynchronous_codec::FramedParts) because they contain the active read & write buffers.
+///
+/// Those are likely **not** empty because the remote may directly write to the stream again after the noise handshake finishes.
+fn map_into_transport<T>(
+    framed: Framed<T, Codec<snow::HandshakeState>>,
+) -> Result<(PublicKey, Framed<T, Codec<snow::TransportState>>), Error>
+where
+    T: AsyncRead + AsyncWrite,
+{
+    let mut parts = framed.into_parts().map_codec(Some);
+
+    let (pubkey, codec) = mem::take(&mut parts.codec)
+        .expect("We just set it to `Some`")
+        .into_transport()?;
+
+    let parts = parts.map_codec(|_| codec);
+    let framed = Framed::from_parts(parts);
+
+    Ok((pubkey, framed))
 }
 
 impl From<proto::NoiseExtensions> for Extensions {
