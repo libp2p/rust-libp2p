@@ -1451,7 +1451,7 @@ impl Config {
     /// usage, and more importantly the latency between the moment when an
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
-    pub fn per_connection_event_buffer_size(mut self, n: usize) -> Self {
+    pub fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
         self.pool_config = self.pool_config.with_per_connection_event_buffer_size(n);
         self
     }
