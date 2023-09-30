@@ -29,17 +29,21 @@ mod select_security;
 ///
 ///  let swarm = SwarmBuilder::with_new_identity()
 ///      .with_tokio()
-///      .with_tcp()
-///      .with_tls()?
-///      .with_noise()?
+///      .with_tcp(
+///          Default::default(),
+///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
+///          libp2p_yamux::Config::default,
+///      )?
 ///      .with_quic()
 ///      .with_dns()?
-///      .with_relay()
-///      .with_tls()?
-///      .with_noise()?
-///      .with_websocket()
-///      .with_tls()?
-///      .with_noise()
+///      .with_relay(
+///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
+///          libp2p_yamux::Config::default,
+///      )?
+///      .with_websocket(
+///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
+///          libp2p_yamux::Config::default,
+///      )
 ///      .await?
 ///      .with_behaviour(|_key, relay| MyBehaviour { relay })?
 ///      .build();

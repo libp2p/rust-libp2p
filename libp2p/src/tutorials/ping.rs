@@ -99,8 +99,11 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
-//!         .with_tcp()
-//!         .with_tls()?;
+//!         .with_tcp(
+//!             Default::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?;
 //!
 //!     Ok(())
 //! }
@@ -137,9 +140,12 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
-//!         .with_tcp()
-//!         .with_tls()?
-//!         .with_behaviour(|_| Behaviour::default())?;
+//!         .with_tcp(
+//!             Default::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?
+//!         .with_behaviour(|_| ping::Behaviour::default())?;
 //!
 //!     Ok(())
 //! }
@@ -165,9 +171,12 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
-//!         .with_tcp()
-//!         .with_tls()?
-//!         .with_behaviour(|_| Behaviour::default())?
+//!         .with_tcp(
+//!             Default::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?
+//!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .build();
 //!
 //!     Ok(())
@@ -245,9 +254,12 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
-//!         .with_tcp()
-//!         .with_tls()?
-//!         .with_behaviour(|_| Behaviour::default())?
+//!         .with_tcp(
+//!             Default::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?
+//!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -283,9 +295,12 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
-//!         .with_tcp()
-//!         .with_tls()?
-//!         .with_behaviour(|_| Behaviour::default())?
+//!         .with_tcp(
+//!             Default::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?
+//!         .with_behaviour(|_| ping::Behaviour::default())?
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
