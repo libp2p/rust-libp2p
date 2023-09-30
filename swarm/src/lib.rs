@@ -2017,7 +2017,7 @@ mod tests {
             transport,
             behaviour,
             local_public_key.into(),
-            config.idle_connection_timeout(Duration::from_secs(5)),
+            config.with_idle_connection_timeout(Duration::from_secs(5)),
         )
     }
 
