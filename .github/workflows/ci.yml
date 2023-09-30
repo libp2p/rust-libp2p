@@ -201,7 +201,8 @@ jobs:
       matrix:
         rust-version: [
           1.72.0, # current stable
-          beta
+          beta,
+          nightly-2023-09-10
         ]
     steps:
       - uses: actions/checkout@v4
