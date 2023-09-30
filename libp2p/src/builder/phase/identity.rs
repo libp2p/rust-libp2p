@@ -1,7 +1,6 @@
-use std::marker::PhantomData;
-use crate::SwarmBuilder;
 use super::*;
-
+use crate::SwarmBuilder;
+use std::marker::PhantomData;
 
 // TODO: Rename to IdentityPhase
 pub struct InitialPhase {}

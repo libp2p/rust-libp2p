@@ -6,7 +6,7 @@ use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
-use libp2p_swarm::{dummy, NetworkBehaviour, Swarm, Config, SwarmEvent};
+use libp2p_swarm::{dummy, Config, NetworkBehaviour, Swarm, SwarmEvent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 

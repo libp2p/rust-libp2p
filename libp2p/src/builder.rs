@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
-mod select_security;
 mod phase;
+mod select_security;
 
 /// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
 ///
@@ -55,8 +55,8 @@ pub struct SwarmBuilder<Provider, Phase> {
 
 #[cfg(test)]
 mod tests {
-    use libp2p_swarm::{NetworkBehaviour, Swarm};
     use crate::SwarmBuilder;
+    use libp2p_swarm::{NetworkBehaviour, Swarm};
 
     #[test]
     #[cfg(all(feature = "tokio", feature = "tcp", feature = "tls", feature = "noise"))]

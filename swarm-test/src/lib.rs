@@ -27,7 +27,9 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr};
+use libp2p_swarm::{
+    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
+};
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::time::Duration;

@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
-use libp2p_swarm::{NetworkBehaviour, Swarm, Config, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 

@@ -48,7 +48,10 @@ pub(crate) async fn new(
             yamux::Config::default,
         )?
         .with_behaviour(|key| ComposedBehaviour {
-            kademlia: kad::Behaviour::new(peer_id, kad::store::MemoryStore::new(key.public().to_peer_id())),
+            kademlia: kad::Behaviour::new(
+                peer_id,
+                kad::store::MemoryStore::new(key.public().to_peer_id()),
+            ),
             request_response: request_response::cbor::Behaviour::new(
                 [(
                     StreamProtocol::new("/file-exchange/1"),

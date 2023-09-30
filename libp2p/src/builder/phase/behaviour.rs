@@ -1,8 +1,8 @@
+use super::*;
 use crate::SwarmBuilder;
-use std::marker::PhantomData;
 use libp2p_swarm::NetworkBehaviour;
 use std::convert::Infallible;
-use super::*;
+use std::marker::PhantomData;
 
 pub struct BehaviourPhase<T, R> {
     pub(crate) relay_behaviour: R,

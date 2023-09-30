@@ -2277,8 +2277,7 @@ mod tests {
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
                 let mut swarm = new_test_swarm(
-                    Config::without_executor()
-                        .with_dial_concurrency_factor(concurrency_factor.0),
+                    Config::without_executor().with_dial_concurrency_factor(concurrency_factor.0),
                 );
 
                 // Listen on `concurrency_factor + 1` addresses.

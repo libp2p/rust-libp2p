@@ -1,7 +1,7 @@
 use super::*;
 use crate::SwarmBuilder;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_core::muxing::{StreamMuxer};
+use libp2p_core::muxing::StreamMuxer;
 #[cfg(any(
     feature = "relay",
     all(not(target_arch = "wasm32"), feature = "websocket")

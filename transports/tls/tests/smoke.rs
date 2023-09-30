@@ -3,7 +3,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
-use libp2p_swarm::{dummy, Swarm, Config, SwarmEvent};
+use libp2p_swarm::{dummy, Config, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[tokio::test]

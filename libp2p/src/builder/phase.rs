@@ -1,32 +1,32 @@
-use libp2p_core::{upgrade::SelectUpgrade, Transport, muxing::StreamMuxerBox};
+use libp2p_core::{muxing::StreamMuxerBox, upgrade::SelectUpgrade, Transport};
 use libp2p_identity::Keypair;
 
 use super::select_security::SelectSecurityUpgrade;
 
-mod identity;
-mod provider;
-mod tcp;
-mod quic;
-mod other_transport;
-mod dns;
-mod relay;
-mod websocket;
 mod bandwidth_logging;
 mod behaviour;
-mod swarm;
 mod build;
+mod dns;
+mod identity;
+mod other_transport;
+mod provider;
+mod quic;
+mod relay;
+mod swarm;
+mod tcp;
+mod websocket;
 
-use provider::*;
-use tcp::*;
-use quic::*;
-use other_transport::*;
-use dns::*;
-use relay::*;
-use websocket::*;
 use bandwidth_logging::*;
 use behaviour::*;
-use swarm::*;
 use build::*;
+use dns::*;
+use other_transport::*;
+use provider::*;
+use quic::*;
+use relay::*;
+use swarm::*;
+use tcp::*;
+use websocket::*;
 
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;

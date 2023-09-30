@@ -1,7 +1,7 @@
-use crate::SwarmBuilder;
-use libp2p_swarm::Swarm;
-use libp2p_core::Transport;
 use super::*;
+use crate::SwarmBuilder;
+use libp2p_core::Transport;
+use libp2p_swarm::Swarm;
 
 pub struct BuildPhase<T, B> {
     pub(crate) behaviour: B,
