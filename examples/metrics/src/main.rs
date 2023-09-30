@@ -24,12 +24,13 @@ use env_logger::Env;
 use futures::{executor::block_on, StreamExt};
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{self as swarm, NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
+use std::time::Duration;
 
 mod http_service;
 
@@ -44,6 +45,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
+        .with_swarm_config(
+            swarm::Config::with_async_std_executor()
+                .with_idle_connection_timeout(Duration::from_secs(u64::MAX)),
+        )
         .build();
 
     info!("Local peer id: {:?}", swarm.local_peer_id());
@@ -82,9 +87,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 /// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
-/// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
 struct Behaviour {
     identify: identify::Behaviour,
