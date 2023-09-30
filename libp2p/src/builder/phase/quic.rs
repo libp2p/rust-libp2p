@@ -1,9 +1,7 @@
 use super::*;
 use crate::SwarmBuilder;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_core::Transport;
+use libp2p_core::muxing::{StreamMuxer};
 #[cfg(any(
     feature = "relay",
     all(not(target_arch = "wasm32"), feature = "websocket")
@@ -23,10 +21,11 @@ macro_rules! construct_other_transport_builder {
                 transport: $self
                     .phase
                     .transport
-                    .or_transport(
-                        libp2p_quic::$quic::Transport::new($config)
-                            .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer))),
-                    )
+                    .or_transport(libp2p_quic::$quic::Transport::new($config).map(
+                        |(peer_id, muxer), _| {
+                            (peer_id, libp2p_core::muxing::StreamMuxerBox::new(muxer))
+                        },
+                    ))
                     .map(|either, _| either.into_inner()),
             },
             keypair: $self.keypair,
