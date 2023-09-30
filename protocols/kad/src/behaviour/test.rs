@@ -37,7 +37,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
-use libp2p_swarm::{Config, ConnectionId, Swarm, SwarmEvent};
+use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -68,7 +68,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     let behaviour = Behaviour::with_config(local_id, store, cfg);
 
     let mut swarm =
-        Swarm::new_with_config(transport, behaviour, local_id, Config::without_executor());
+        Swarm::new_with_config(transport, behaviour, local_id, swarm::Config::without_executor());
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();
