@@ -200,7 +200,7 @@ pub(crate) mod wasm {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|key| {
-                        webrtc::Transport::new(webrtc::Config::new(&local_key))
+                        webrtc::Transport::new(webrtc::Config::new(&key))
                             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                     })?
                     .with_behaviour(behaviour_constructor)?
@@ -208,22 +208,6 @@ pub(crate) mod wasm {
                 return Ok((swarm, format!("/ip4/{ip}/udp/0/webrtc-direct")));
             }
             _ => bail!("Only webtransport and webrtc-direct are supported with wasm"),
-        }
-
-        if let Transport::Webtransport = transport {
-            let swarm = libp2p::SwarmBuilder::with_new_identity()
-                .with_wasm_bindgen()
-                .with_other_transport(|key| {
-                    libp2p::webtransport_websys::Transport::new(
-                        libp2p::webtransport_websys::Config::new(key),
-                    )
-                    .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-                })?
-                .with_behaviour(behaviour_constructor)?
-                .build();
-            return Ok((swarm, format!("/ip4/{ip}/udp/0/quic/webtransport")));
-        } else {
-            bail!("Only webtransport supported with wasm")
         }
     }
 

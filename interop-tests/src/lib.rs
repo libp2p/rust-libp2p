@@ -32,13 +32,15 @@ pub async fn run_test(
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
 
-    let mut maybe_id = None;
-
     // See https://github.com/libp2p/rust-libp2p/issues/4071.
     #[cfg(not(target_arch = "wasm32"))]
-    if transport == Transport::WebRtcDirect {
-        maybe_id = Some(swarm.listen_on(local_addr.parse()?)?);
-    }
+    let maybe_id = if transport == Transport::WebRtcDirect {
+        Some(swarm.listen_on(local_addr.parse()?)?)
+    } else {
+        None
+    };
+    #[cfg(target_arch = "wasm32")]
+    let maybe_id = None;
 
     // Run a ping interop test. Based on `is_dialer`, either dial the address
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have

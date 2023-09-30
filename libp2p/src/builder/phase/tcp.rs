@@ -2,8 +2,11 @@ use super::*;
 #[cfg(feature = "websocket")]
 use libp2p_core::Transport;
 use crate::SwarmBuilder;
+#[cfg(any(feature = "tcp", feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+#[cfg(any(feature = "tcp", feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
+#[cfg(any(feature = "tcp", feature = "websocket"))]
 use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 

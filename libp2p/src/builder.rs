@@ -1,12 +1,5 @@
 use std::marker::PhantomData;
 
-#[cfg(all(
-    not(target_arch = "wasm32"),
-    feature = "tls",
-    feature = "noise",
-    any(feature = "tcp", feature = "relay", feature = "websocket")
-))]
-// mod map;
 mod select_security;
 mod phase;
 
