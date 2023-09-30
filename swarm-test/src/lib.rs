@@ -220,7 +220,7 @@ where
             transport,
             behaviour_fn(identity),
             peer_id,
-            SwarmConfig::without_executor().idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+            SwarmConfig::without_executor().with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
         )
     }
 

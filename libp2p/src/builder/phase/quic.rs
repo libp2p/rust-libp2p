@@ -1,11 +1,14 @@
 use super::*;
+#[cfg(feature = "websocket")]
 use libp2p_core::Transport;
 use crate::SwarmBuilder;
+#[cfg(feature = "websocket")]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+#[cfg(feature = "websocket")]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
+#[cfg(feature = "websocket")]
 use libp2p_identity::PeerId;
 use std::marker::PhantomData;
-use std::io;
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -140,7 +143,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
     pub async fn with_dns(
         self,
-    ) -> Result<SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>, io::Error>
+    ) -> Result<SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>, std::io::Error>
     {
         self.without_quic()
             .without_any_other_transports()
@@ -152,7 +155,7 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, QuicPhase<T>> {
     pub fn with_dns(
         self,
-    ) -> Result<SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>, io::Error>
+    ) -> Result<SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>, std::io::Error>
     {
         self.without_quic()
             .without_any_other_transports()

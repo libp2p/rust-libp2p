@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(feature = "websocket")]
 use libp2p_core::Transport;
 use crate::SwarmBuilder;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};

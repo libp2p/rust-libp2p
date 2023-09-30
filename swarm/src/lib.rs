@@ -1497,7 +1497,7 @@ impl SwarmConfig {
     /// How long to keep a connection alive once it is idling.
     ///
     /// Defaults to 0.
-    pub fn idle_connection_timeout(mut self, timeout: Duration) -> Self {
+    pub fn with_idle_connection_timeout(mut self, timeout: Duration) -> Self {
         self.pool_config.idle_connection_timeout = timeout;
         self
     }
