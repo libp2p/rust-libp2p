@@ -20,8 +20,11 @@ rand = "0.8.5"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.6"
 libp2p = { path = "../libp2p", features = ["ping", "noise", "tls", "rsa", "macros", "websocket", "tokio", "yamux", "tcp", "dns", "identify", "quic"] }
-libp2p-webrtc = { workspace = true, features = ["tokio"] }
 libp2p-mplex = { path = "../muxers/mplex" }
+libp2p-noise = { workspace = true }
+libp2p-tls = { workspace = true }
+libp2p-webrtc = { workspace = true, features = ["tokio"] }
+libp2p-yamux = { workspace = true }
 mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = ["tokio-comp"] }
 rust-embed = "8.0"

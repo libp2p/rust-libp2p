@@ -1,0 +1,77 @@
+use crate::SwarmBuilder;
+use std::marker::PhantomData;
+use libp2p_swarm::NetworkBehaviour;
+use std::convert::Infallible;
+use super::*;
+
+pub struct BehaviourPhase<T, R> {
+    pub(crate) relay_behaviour: R,
+    pub(crate) transport: T,
+}
+
+#[cfg(feature = "relay")]
+impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, libp2p_relay::client::Behaviour>> {
+    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
+        self,
+        constructor: impl FnOnce(&libp2p_identity::Keypair, libp2p_relay::client::Behaviour) -> R,
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
+        Ok(SwarmBuilder {
+            phase: SwarmPhase {
+                behaviour: constructor(&self.keypair, self.phase.relay_behaviour)
+                    .try_into_behaviour()?,
+                transport: self.phase.transport,
+            },
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
+    }
+}
+
+impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, NoRelayBehaviour>> {
+    pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
+        self,
+        constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
+    ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
+        // Discard `NoRelayBehaviour`.
+        let _ = self.phase.relay_behaviour;
+
+        Ok(SwarmBuilder {
+            phase: SwarmPhase {
+                behaviour: constructor(&self.keypair).try_into_behaviour()?,
+                transport: self.phase.transport,
+            },
+            keypair: self.keypair,
+            phantom: PhantomData,
+        })
+    }
+}
+
+// TODO: Seal this.
+pub trait TryIntoBehaviour<B> {
+    type Error;
+
+    fn try_into_behaviour(self) -> Result<B, Self::Error>;
+}
+
+impl<B> TryIntoBehaviour<B> for B
+where
+    B: NetworkBehaviour,
+{
+    type Error = Infallible;
+
+    fn try_into_behaviour(self) -> Result<B, Self::Error> {
+        Ok(self)
+    }
+}
+
+impl<B> TryIntoBehaviour<B> for Result<B, Box<dyn std::error::Error + Send + Sync>>
+where
+    B: NetworkBehaviour,
+{
+    // TODO mxinden: why do we need an io error here? isn't box<dyn> enough?
+    type Error = std::io::Error; // TODO: Consider a dedicated type here with a descriptive message like "failed to build behaviour"?
+
+    fn try_into_behaviour(self) -> Result<B, Self::Error> {
+        self.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
+}

@@ -92,9 +92,7 @@ pub(crate) mod native {
 
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket()
-                    .with_tls()?
-                    .without_noise()
+                    .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
@@ -105,8 +103,7 @@ pub(crate) mod native {
 
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket()
-                    .with_noise()
+                    .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
