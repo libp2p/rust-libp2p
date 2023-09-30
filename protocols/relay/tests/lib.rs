@@ -33,7 +33,7 @@ use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, Config, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -323,7 +323,7 @@ fn build_relay() -> Swarm<Relay> {
             ),
         },
         local_peer_id,
-        SwarmConfig::with_async_std_executor(),
+        Config::with_async_std_executor(),
     )
 }
 
@@ -344,7 +344,7 @@ fn build_client() -> Swarm<Client> {
             relay: behaviour,
         },
         local_peer_id,
-        SwarmConfig::with_async_std_executor(),
+        Config::with_async_std_executor(),
     )
 }
 

@@ -361,12 +361,12 @@ where
     TBehaviour: NetworkBehaviour,
 {
     /// Creates a new [`Swarm`] from the given [`Transport`], [`NetworkBehaviour`], [`PeerId`] and
-    /// [`SwarmConfig`].
+    /// [`Config`].
     pub fn new_with_config(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
-        config: SwarmConfig,
+        config: Config,
     ) -> Self {
         Swarm {
             local_peer_id,
@@ -1367,12 +1367,12 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     }
 }
 
-pub struct SwarmConfig {
+pub struct Config {
     pool_config: PoolConfig,
 }
 
-impl SwarmConfig {
-    /// Creates a new [`SwarmConfig`] from the given executor. The [`Swarm`] is obtained via
+impl Config {
+    /// Creates a new [`Config`] from the given executor. The [`Swarm`] is obtained via
     /// [`Swarm::new_with_config`].
     pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
@@ -1394,7 +1394,7 @@ impl SwarmConfig {
         Self::with_executor(crate::executor::WasmBindgenExecutor)
     }
 
-    /// Builds a new [`SwarmConfig`] from the given `tokio` executor.
+    /// Builds a new [`Config`] from the given `tokio` executor.
     #[cfg(all(
         feature = "tokio",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
@@ -1403,7 +1403,7 @@ impl SwarmConfig {
         Self::with_executor(crate::executor::TokioExecutor)
     }
 
-    /// Builds a new [`SwarmConfig`] from the given `async-std` executor.
+    /// Builds a new [`Config`] from the given `async-std` executor.
     #[cfg(all(
         feature = "async-std",
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
@@ -1412,14 +1412,14 @@ impl SwarmConfig {
         Self::with_executor(crate::executor::AsyncStdExecutor)
     }
 
-    // TODO: Should we remove this from `SwarmConfig`?!
+    // TODO: Should we remove this from `Config`?!
     //
-    /// Creates a new [`SwarmConfig`].
+    /// Creates a new [`Config`].
     ///
     /// ## ⚠️  Performance warning
     /// All connections will be polled on the current task, thus quite bad performance
     /// characteristics should be expected. Whenever possible use an executor and
-    /// [`SwarmConfig::with_executor`].
+    /// [`Config::with_executor`].
     pub fn without_executor() -> Self {
         Self {
             pool_config: PoolConfig::new(None),
@@ -2002,7 +2002,7 @@ mod tests {
     }
 
     fn new_test_swarm(
-        config: SwarmConfig,
+        config: Config,
     ) -> Swarm<CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>> {
         let id_keys = identity::Keypair::generate_ed25519();
         let local_public_key = id_keys.public();
@@ -2069,8 +2069,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_swarm_disconnect() {
-        let mut swarm1 = new_test_swarm(SwarmConfig::without_executor());
-        let mut swarm2 = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm1 = new_test_swarm(Config::without_executor());
+        let mut swarm2 = new_test_swarm(Config::without_executor());
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2131,8 +2131,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_all() {
-        let mut swarm1 = new_test_swarm(SwarmConfig::without_executor());
-        let mut swarm2 = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm1 = new_test_swarm(Config::without_executor());
+        let mut swarm2 = new_test_swarm(Config::without_executor());
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2197,8 +2197,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_one() {
-        let mut swarm1 = new_test_swarm(SwarmConfig::without_executor());
-        let mut swarm2 = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm1 = new_test_swarm(Config::without_executor());
+        let mut swarm2 = new_test_swarm(Config::without_executor());
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2277,7 +2277,7 @@ mod tests {
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
                 let mut swarm = new_test_swarm(
-                    SwarmConfig::without_executor()
+                    Config::without_executor()
                         .with_dial_concurrency_factor(concurrency_factor.0),
                 );
 
@@ -2345,8 +2345,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm(SwarmConfig::without_executor());
-        let mut swarm2 = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm1 = new_test_swarm(Config::without_executor());
+        let mut swarm2 = new_test_swarm(Config::without_executor());
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2405,7 +2405,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm = new_test_swarm(Config::without_executor());
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2465,7 +2465,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm(SwarmConfig::without_executor());
+        let swarm = new_test_swarm(Config::without_executor());
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2476,7 +2476,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm(SwarmConfig::without_executor());
+        let mut swarm = new_test_swarm(Config::without_executor());
 
         let addresses = HashSet::from([
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
@@ -2522,8 +2522,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm(SwarmConfig::without_executor());
-        let mut listener = new_test_swarm(SwarmConfig::without_executor());
+        let mut dialer = new_test_swarm(Config::without_executor());
+        let mut listener = new_test_swarm(Config::without_executor());
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();

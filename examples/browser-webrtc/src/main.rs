@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         })?
         .with_behaviour(|_| ping::Behaviour::default())?
         .with_swarm_config(
-            libp2p::swarm::SwarmConfig::with_tokio_executor().with_idle_connection_timeout(
+            libp2p::swarm::Config::with_tokio_executor().with_idle_connection_timeout(
                 Duration::from_secs(30), // Allows us to observe the pings.
             ),
         )

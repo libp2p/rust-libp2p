@@ -2,7 +2,7 @@
 
 - Deprecate old `libp2p::swarm::SwarmBuilder`.
   Most users should use the new `libp2p::SwarmBuilder`.
-  In some special cases, users may need to use `Swarm::new_with_config` and `SwarmConfig` instead of the new `libp2p::SwarmBuilder`.
+  In some special cases, users may need to use `Swarm::new_with_config` and `Config` instead of the new `libp2p::SwarmBuilder`.
   See [PR 4120].
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120

@@ -6,7 +6,7 @@ use super::*;
 pub struct BuildPhase<T, B> {
     pub(crate) behaviour: B,
     pub(crate) transport: T,
-    pub(crate) swarm_config: libp2p_swarm::SwarmConfig,
+    pub(crate) swarm_config: libp2p_swarm::Config,
 }
 
 const CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);

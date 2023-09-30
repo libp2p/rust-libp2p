@@ -27,9 +27,7 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{
-    dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent, THandlerErr,
-};
+use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr};
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -220,7 +218,7 @@ where
             transport,
             behaviour_fn(identity),
             peer_id,
-            SwarmConfig::without_executor().with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+            swarm::Config::without_executor().with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
         )
     }
 

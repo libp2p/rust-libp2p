@@ -26,7 +26,7 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
+use libp2p_swarm::{NetworkBehaviour, Swarm, Config, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
@@ -130,7 +130,7 @@ fn build_client() -> Swarm<Client> {
             dcutr: dcutr::Behaviour::new(local_peer_id),
         },
         local_peer_id,
-        SwarmConfig::without_executor(),
+        Config::without_executor(),
     )
 }
 

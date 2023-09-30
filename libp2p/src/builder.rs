@@ -6,7 +6,7 @@ use std::marker::PhantomData;
     feature = "noise",
     any(feature = "tcp", feature = "relay", feature = "websocket")
 ))]
-mod map;
+// mod map;
 mod select_security;
 mod phase;
 

@@ -6,7 +6,7 @@ use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
-use libp2p_swarm::{dummy, NetworkBehaviour, Swarm, SwarmConfig, SwarmEvent};
+use libp2p_swarm::{dummy, NetworkBehaviour, Swarm, Config, SwarmEvent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -117,7 +117,7 @@ where
         transport,
         dummy::Behaviour,
         identity.public().to_peer_id(),
-        SwarmConfig::with_tokio_executor(),
+        Config::with_tokio_executor(),
     )
 }
 

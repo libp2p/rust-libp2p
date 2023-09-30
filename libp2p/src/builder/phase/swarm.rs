@@ -11,7 +11,7 @@ pub struct SwarmPhase<T, B> {
 impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
     pub fn with_swarm_config(
         self,
-        config: libp2p_swarm::SwarmConfig,
+        config: libp2p_swarm::Config,
     ) -> SwarmBuilder<Provider, BuildPhase<T, B>> {
         SwarmBuilder {
             phase: BuildPhase {
@@ -34,7 +34,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
                 transport: self.phase.transport,
-                swarm_config: libp2p_swarm::SwarmConfig::with_async_std_executor(),
+                swarm_config: libp2p_swarm::Config::with_async_std_executor(),
             },
             keypair: self.keypair,
             phantom: PhantomData::<super::provider::AsyncStd>,
@@ -52,7 +52,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
                 transport: self.phase.transport,
-                swarm_config: libp2p_swarm::SwarmConfig::with_tokio_executor(),
+                swarm_config: libp2p_swarm::Config::with_tokio_executor(),
             },
             keypair: self.keypair,
             phantom: PhantomData::<super::provider::Tokio>,
@@ -70,7 +70,7 @@ impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
             phase: BuildPhase {
                 behaviour: self.phase.behaviour,
                 transport: self.phase.transport,
-                swarm_config: libp2p_swarm::SwarmConfig::with_wasm_executor(),
+                swarm_config: libp2p_swarm::Config::with_wasm_executor(),
             },
             keypair: self.keypair,
             phantom: PhantomData::<super::provider::WasmBindgen>,
