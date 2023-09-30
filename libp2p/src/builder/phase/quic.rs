@@ -1,13 +1,14 @@
 use super::*;
-#[cfg(feature = "websocket")]
-use libp2p_core::Transport;
 use crate::SwarmBuilder;
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+use libp2p_core::Transport;
+#[cfg(any(
+    feature = "relay",
+    all(not(target_arch = "wasm32"), feature = "websocket")
+))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-#[cfg(feature = "websocket")]
-use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 
 pub struct QuicPhase<T> {
@@ -93,13 +94,13 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
         SecError: std::error::Error + Send + Sync + 'static,
         SecUpgrade: IntoSecurityUpgrade<libp2p_relay::client::Connection>,
-        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
     <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
     <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
     <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
 
-        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream: libp2p_core::muxing::StreamMuxer + Send + 'static,
         MuxStream::Substream: Send + 'static,
         MuxStream::Error: Send + Sync + 'static,
         MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
@@ -143,8 +144,10 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncStd, QuicPhase<T>> {
     pub async fn with_dns(
         self,
-    ) -> Result<SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>, std::io::Error>
-    {
+    ) -> Result<
+        SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        std::io::Error,
+    > {
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
@@ -155,8 +158,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
 impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, QuicPhase<T>> {
     pub fn with_dns(
         self,
-    ) -> Result<SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>, std::io::Error>
-    {
+    ) -> Result<
+        SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        std::io::Error,
+    > {
         self.without_quic()
             .without_any_other_transports()
             .with_dns()
@@ -188,7 +193,7 @@ macro_rules! impl_quic_phase_with_websocket {
                 SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
                 SecError: std::error::Error + Send + Sync + 'static,
                 SecUpgrade: IntoSecurityUpgrade<$websocketStream>,
-                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
             <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,

@@ -1,13 +1,17 @@
 use super::*;
-#[cfg(feature = "websocket")]
-use libp2p_core::Transport;
 use crate::SwarmBuilder;
-#[cfg(any(feature = "tcp", feature = "websocket"))]
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "tcp", feature = "websocket")
+))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
-#[cfg(any(feature = "tcp", feature = "websocket"))]
+#[cfg(all(feature = "websocket", not(target_arch = "wasm32")))]
+use libp2p_core::Transport;
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "tcp", feature = "websocket")
+))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-#[cfg(any(feature = "tcp", feature = "websocket"))]
-use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 
 pub struct TcpPhase {}
@@ -33,7 +37,7 @@ macro_rules! impl_tcp_builder {
                 SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
                 SecError: std::error::Error + Send + Sync + 'static,
                 SecUpgrade: IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>,
-                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
                 <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
                 <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_tcp::$path::TcpStream>>>::Future: Send,
                 <<<SecUpgrade as IntoSecurityUpgrade<libp2p_tcp::$path::TcpStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
@@ -94,7 +98,10 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
 impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
     pub fn with_quic(
         self,
-    ) -> SwarmBuilder<super::provider::AsyncStd, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<
+        super::provider::AsyncStd,
+        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
         self.without_tcp().with_quic()
     }
 }
@@ -102,7 +109,10 @@ impl SwarmBuilder<super::provider::AsyncStd, TcpPhase> {
 impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
     pub fn with_quic(
         self,
-    ) -> SwarmBuilder<super::provider::Tokio, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>> {
+    ) -> SwarmBuilder<
+        super::provider::Tokio,
+        OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
+    > {
         self.without_tcp().with_quic()
     }
 }
@@ -148,7 +158,7 @@ macro_rules! impl_tcp_phase_with_websocket {
                 SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
                 SecError: std::error::Error + Send + Sync + 'static,
                 SecUpgrade: IntoSecurityUpgrade<$websocketStream>,
-                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+                SecUpgrade::Upgrade: InboundUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<$websocketStream>, Output = (libp2p_identity::PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
             <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<$websocketStream>>>::Future: Send,
             <<<SecUpgrade as IntoSecurityUpgrade<$websocketStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,

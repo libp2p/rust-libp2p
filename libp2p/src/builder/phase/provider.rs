@@ -35,10 +35,10 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
 
 pub enum NoProviderSpecified {}
 
-#[cfg(feature = "async-std")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "async-std"))]
 pub enum AsyncStd {}
 
-#[cfg(feature = "tokio")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
 pub enum Tokio {}
 
 #[cfg(feature = "wasm-bindgen")]

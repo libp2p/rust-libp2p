@@ -1,12 +1,12 @@
 use super::*;
 use crate::SwarmBuilder;
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::Transport;
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 
@@ -152,11 +152,11 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 pub struct WebsocketError<Sec>(WebsocketErrorInner<Sec>);
 
 #[derive(Debug, thiserror::Error)]
-#[cfg(feature = "websocket")]
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 enum WebsocketErrorInner<Sec> {
     #[error("SecurityUpgrade")]
     SecurityUpgrade(Sec),
