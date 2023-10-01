@@ -180,7 +180,9 @@ impl Handler {
                     .try_push(protocol::recv_push(stream).map_ok(Success::ReceivedIdentifyPush))
                     .is_err()
                 {
-                    tracing::warn!("Dropping inbound identify push stream because we are at capacity");
+                    tracing::warn!(
+                        "Dropping inbound identify push stream because we are at capacity"
+                    );
                 }
             }
         }
@@ -215,7 +217,9 @@ impl Handler {
                     )
                     .is_err()
                 {
-                    tracing::warn!("Dropping outbound identify push stream because we are at capacity");
+                    tracing::warn!(
+                        "Dropping outbound identify push stream because we are at capacity"
+                    );
                 }
             }
         }
