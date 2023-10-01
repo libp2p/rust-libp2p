@@ -2374,7 +2374,9 @@ mod tests {
 
     #[test]
     fn aborting_pending_connection_surfaces_error() {
-        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
+        tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .init();
 
         let mut dialer = new_test_swarm().build();
         let mut listener = new_test_swarm().build();

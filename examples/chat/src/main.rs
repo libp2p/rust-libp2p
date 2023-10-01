@@ -32,8 +32,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 use tokio::{io, io::AsyncBufReadExt, select};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 
 // We create a custom network behaviour that combines Gossipsub and Mdns.
 #[derive(NetworkBehaviour)]

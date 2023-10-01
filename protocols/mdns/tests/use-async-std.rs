@@ -28,14 +28,18 @@ use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv4() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     run_discovery_test(Config::default()).await
 }
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv6() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let config = Config {
         enable_ipv6: true,
@@ -46,7 +50,9 @@ async fn test_discovery_async_std_ipv6() {
 
 #[async_std::test]
 async fn test_expired_async_std() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let config = Config {
         ttl: Duration::from_secs(1),
@@ -79,7 +85,9 @@ async fn test_expired_async_std() {
 
 #[async_std::test]
 async fn test_no_expiration_on_close_async_std() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
     let config = Config {
         ttl: Duration::from_secs(120),
         query_interval: Duration::from_secs(10),

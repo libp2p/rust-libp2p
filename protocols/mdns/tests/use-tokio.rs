@@ -26,14 +26,18 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv4() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     run_discovery_test(Config::default()).await
 }
 
 #[tokio::test]
 async fn test_discovery_tokio_ipv6() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let config = Config {
         enable_ipv6: true,
@@ -44,7 +48,9 @@ async fn test_discovery_tokio_ipv6() {
 
 #[tokio::test]
 async fn test_expired_tokio() {
-    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 
     let config = Config {
         ttl: Duration::from_secs(1),
