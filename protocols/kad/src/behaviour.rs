@@ -1084,7 +1084,7 @@ where
 
         if old_mode != self.mode {
             self.queued_events
-                .push_back(ToSwarm::GenerateEvent(KademliaEvent::ModeChanged {
+                .push_back(ToSwarm::GenerateEvent(Event::ModeChanged {
                     new_mode: self.mode,
                 }));
         }
