@@ -904,7 +904,7 @@ mod tests {
 
     #[test]
     fn communicating_between_dialer_and_listener() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -973,7 +973,7 @@ mod tests {
 
     #[test]
     fn wildcard_expansion() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1042,7 +1042,7 @@ mod tests {
 
     #[test]
     fn port_reuse_dialing() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn listener<T: Provider>(
             addr: Multiaddr,
@@ -1149,7 +1149,7 @@ mod tests {
 
     #[test]
     fn port_reuse_listening() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
@@ -1203,7 +1203,7 @@ mod tests {
 
     #[test]
     fn listen_port_0() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = Transport::<T>::default().boxed();
@@ -1238,7 +1238,7 @@ mod tests {
 
     #[test]
     fn listen_invalid_addr() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
@@ -1308,7 +1308,7 @@ mod tests {
 
     #[test]
     fn test_remove_listener() {
-        env_logger::try_init().ok();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
 
         async fn cycle_listeners<T: Provider>() -> bool {
             let mut tcp = Transport::<T>::default().boxed();

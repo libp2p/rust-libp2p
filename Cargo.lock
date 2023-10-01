@@ -668,7 +668,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
- "env_logger 0.10.0",
  "futures",
  "js-sys",
  "libp2p",
@@ -682,6 +681,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-logger",
@@ -1233,7 +1233,6 @@ name = "dcutr-example"
 version = "0.1.0"
 dependencies = [
  "clap",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "libp2p",
@@ -1430,19 +1429,6 @@ checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "log",
  "regex",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
-dependencies = [
- "humantime",
- "is-terminal",
- "log",
- "regex",
- "termcolor",
 ]
 
 [[package]]
@@ -2008,12 +1994,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
 
 [[package]]
-name = "humantime"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
-
-[[package]]
 name = "hyper"
 version = "0.14.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2071,7 +2051,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -2206,7 +2185,6 @@ dependencies = [
  "axum",
  "console_error_panic_hook",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
@@ -2372,7 +2350,6 @@ dependencies = [
  "bytes",
  "clap",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "getrandom 0.2.10",
@@ -2412,6 +2389,7 @@ dependencies = [
  "multiaddr",
  "pin-project",
  "tokio",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2433,7 +2411,6 @@ version = "0.11.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
@@ -2445,6 +2422,7 @@ dependencies = [
  "quick-protobuf",
  "rand 0.8.5",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2503,7 +2481,6 @@ dependencies = [
  "asynchronous-codec",
  "clap",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
@@ -2524,6 +2501,7 @@ dependencies = [
  "rand 0.8.5",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2548,7 +2526,6 @@ dependencies = [
  "async-std",
  "async-std-resolver",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p-core",
  "libp2p-identity",
@@ -2556,6 +2533,7 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "trust-dns-resolver",
 ]
 
@@ -2588,7 +2566,6 @@ dependencies = [
  "byteorder",
  "bytes",
  "either",
- "env_logger 0.10.0",
  "fnv",
  "futures",
  "futures-ticker",
@@ -2612,6 +2589,7 @@ dependencies = [
  "sha2 0.10.7",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
  "void",
 ]
@@ -2623,7 +2601,6 @@ dependencies = [
  "async-std",
  "asynchronous-codec",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "libp2p-core",
@@ -2636,6 +2613,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2676,7 +2654,6 @@ dependencies = [
  "asynchronous-codec",
  "bytes",
  "either",
- "env_logger 0.10.0",
  "fnv",
  "futures",
  "futures-timer",
@@ -2697,6 +2674,7 @@ dependencies = [
  "smallvec",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "uint",
  "unsigned-varint",
  "void",
@@ -2709,7 +2687,6 @@ dependencies = [
  "async-io",
  "async-std",
  "data-encoding",
- "env_logger 0.10.0",
  "futures",
  "if-watch",
  "libp2p-core",
@@ -2724,6 +2701,7 @@ dependencies = [
  "socket2 0.5.4",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "trust-dns-proto",
  "void",
 ]
@@ -2772,7 +2750,6 @@ dependencies = [
  "asynchronous-codec",
  "bytes",
  "criterion",
- "env_logger 0.10.0",
  "futures",
  "libp2p-core",
  "libp2p-identity",
@@ -2785,6 +2762,7 @@ dependencies = [
  "rand 0.8.5",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
 ]
 
@@ -2805,7 +2783,6 @@ version = "0.43.1"
 dependencies = [
  "bytes",
  "curve25519-dalek 4.1.0",
- "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
  "libp2p-core",
@@ -2821,6 +2798,7 @@ dependencies = [
  "static_assertions",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "x25519-dalek 1.1.1",
  "zeroize",
 ]
@@ -2832,7 +2810,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
- "env_logger 0.10.0",
  "futures",
  "instant",
  "libp2p-core",
@@ -2851,6 +2828,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2860,7 +2838,6 @@ version = "0.43.1"
 dependencies = [
  "async-std",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
@@ -2871,6 +2848,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2880,7 +2858,6 @@ version = "0.40.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
  "libp2p-core",
@@ -2889,6 +2866,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
 ]
 
@@ -2919,7 +2897,6 @@ version = "0.9.2"
 dependencies = [
  "async-std",
  "bytes",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "if-watch",
@@ -2939,6 +2916,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2948,7 +2926,6 @@ dependencies = [
  "asynchronous-codec",
  "bytes",
  "either",
- "env_logger 0.10.0",
  "futures",
  "futures-bounded",
  "futures-timer",
@@ -2966,6 +2943,7 @@ dependencies = [
  "static_assertions",
  "thiserror",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -2976,7 +2954,6 @@ dependencies = [
  "async-trait",
  "asynchronous-codec",
  "bimap",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "instant",
@@ -2996,6 +2973,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -3006,7 +2984,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "cbor4ii",
- "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
  "instant",
@@ -3022,6 +2999,7 @@ dependencies = [
  "serde_json",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "void",
 ]
 
@@ -3031,7 +3009,6 @@ version = "0.12.3"
 dependencies = [
  "base64 0.21.4",
  "clap",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "hyper",
@@ -3042,6 +3019,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "zeroize",
 ]
 
@@ -3051,7 +3029,6 @@ version = "0.43.4"
 dependencies = [
  "async-std",
  "either",
- "env_logger 0.10.0",
  "fnv",
  "futures",
  "futures-timer",
@@ -3073,6 +3050,7 @@ dependencies = [
  "smallvec",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "trybuild",
  "void",
  "wasm-bindgen-futures",
@@ -3112,7 +3090,6 @@ version = "0.40.0"
 dependencies = [
  "async-io",
  "async-std",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "if-watch",
@@ -3122,6 +3099,7 @@ dependencies = [
  "socket2 0.5.4",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3190,7 +3168,6 @@ version = "0.6.1-alpha"
 dependencies = [
  "async-trait",
  "bytes",
- "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "hex",
@@ -3210,6 +3187,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "webrtc",
 ]
 
@@ -3589,7 +3567,6 @@ version = "0.13.0"
 dependencies = [
  "async-std",
  "bytes",
- "env_logger 0.10.0",
  "futures",
  "futures_ringbuf",
  "pin-project",
@@ -3598,6 +3575,7 @@ dependencies = [
  "rw-stream-sink",
  "smallvec",
  "tracing",
+ "tracing-subscriber",
  "unsigned-varint",
 ]
 
@@ -4018,7 +3996,6 @@ version = "0.1.0"
 dependencies = [
  "async-std",
  "async-trait",
- "env_logger 0.10.0",
  "futures",
  "libp2p",
  "tracing",
@@ -4240,7 +4217,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
 dependencies = [
- "env_logger 0.8.4",
+ "env_logger",
  "log",
  "rand 0.8.5",
 ]

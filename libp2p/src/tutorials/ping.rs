@@ -57,8 +57,8 @@
 //!    [dependencies]
 //!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
-//!        env_logger = "0.10.0"
 //!        async-std = { version = "1.12.0", features = ["attributes"] }
+//!        tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 //!    ```
 //!
 //! ## Network identity
@@ -172,16 +172,17 @@
 //! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
 //! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
 //! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
-//! (In our example, `env_logger` is used)
+//! (In our example, `tracing_subscriber` is used)
 //!
 //! ```rust
 //! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
 //! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!
@@ -261,10 +262,11 @@
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!
@@ -304,10 +306,11 @@
 //! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //! use std::time::Duration;
+//! use tracing_subscriber::EnvFilter;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     env_logger::init();
+//!     tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
 //!

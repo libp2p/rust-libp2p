@@ -4,10 +4,11 @@ use libp2p_kad::store::MemoryStore;
 use libp2p_kad::{Kademlia, KademliaConfig, KademliaEvent, Mode};
 use libp2p_swarm::Swarm;
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn server_gets_added_to_routing_table_by_client() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -30,7 +31,7 @@ async fn server_gets_added_to_routing_table_by_client() {
 
 #[async_std::test]
 async fn two_servers_add_each_other_to_routing_table() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut server1 = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server2 = Swarm::new_ephemeral(MyBehaviour::new);
@@ -74,7 +75,7 @@ async fn two_servers_add_each_other_to_routing_table() {
 
 #[async_std::test]
 async fn adding_an_external_addresses_activates_server_mode_on_existing_connections() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     let mut server = Swarm::new_ephemeral(MyBehaviour::new);
@@ -113,7 +114,7 @@ async fn adding_an_external_addresses_activates_server_mode_on_existing_connecti
 
 #[async_std::test]
 async fn set_client_to_server_mode() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut client = Swarm::new_ephemeral(MyBehaviour::new);
     client.behaviour_mut().kad.set_mode(Some(Mode::Client));

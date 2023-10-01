@@ -33,6 +33,7 @@ use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p perf client")]
@@ -72,9 +73,7 @@ impl FromStr for Transport {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_timestamp_millis()
-        .init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let opts = Opts::parse();
     match opts {

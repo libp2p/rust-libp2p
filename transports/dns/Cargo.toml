@@ -22,9 +22,9 @@ tracing = "0.1.37"
 trust-dns-resolver = { version = "0.23", default-features = false, features = ["system-config"] }
 
 [dev-dependencies]
-env_logger = "0.10"
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 async-std = ["async-std-resolver"]

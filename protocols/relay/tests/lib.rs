@@ -36,10 +36,11 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn reservation() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -80,7 +81,7 @@ fn reservation() {
 
 #[test]
 fn new_reservation_to_same_relay_replaces_old() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -171,7 +172,7 @@ fn new_reservation_to_same_relay_replaces_old() {
 
 #[test]
 fn connect() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -255,7 +256,7 @@ async fn connection_established_to(
 
 #[test]
 fn handle_dial_failure() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
@@ -274,7 +275,7 @@ fn handle_dial_failure() {
 
 #[test]
 fn reuse_connection() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));

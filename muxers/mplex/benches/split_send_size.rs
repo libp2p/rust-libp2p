@@ -35,6 +35,7 @@ use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
 use std::pin::Pin;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
 
@@ -51,7 +52,7 @@ const BENCH_SIZES: [usize; 8] = [
 ];
 
 fn prepare(c: &mut Criterion) {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let payload: Vec<u8> = vec![1; 1024 * 1024];
 

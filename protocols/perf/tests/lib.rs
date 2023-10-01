@@ -21,10 +21,11 @@
 use libp2p_perf::{client, server, RunParams};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
+use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn perf() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();

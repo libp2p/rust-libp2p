@@ -18,7 +18,6 @@ pub(crate) mod native {
 
     use anyhow::{bail, Context, Result};
     use either::Either;
-    use env_logger::{Env, Target};
     use futures::future::BoxFuture;
     use futures::FutureExt;
     use libp2p::core::muxing::StreamMuxerBox;
@@ -30,6 +29,7 @@ pub(crate) mod native {
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
+    use tracing_subscriber::EnvFilter;
 
     use crate::{from_env, Muxer, SecProtocol, Transport};
 
@@ -38,9 +38,7 @@ pub(crate) mod native {
     pub(crate) type Instant = std::time::Instant;
 
     pub(crate) fn init_logger() {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-            .target(Target::Stdout)
-            .init();
+        tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     }
 
     pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {

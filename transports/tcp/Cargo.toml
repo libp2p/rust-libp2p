@@ -29,7 +29,7 @@ async-io = ["dep:async-io", "if-watch/smol"]
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
 tokio = { version = "1.32.0", default-features = false, features = ["full"] }
-env_logger = "0.10.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

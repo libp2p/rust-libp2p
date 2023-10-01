@@ -44,13 +44,13 @@ prometheus-client = "0.21.2"
 
 [dev-dependencies]
 async-std = { version = "1.6.3", features = ["unstable"] }
-env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-core = { workspace = true }
 libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

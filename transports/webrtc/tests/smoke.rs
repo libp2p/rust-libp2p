@@ -28,6 +28,7 @@ use libp2p_core::{Multiaddr, Transport};
 use libp2p_identity::PeerId;
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
+use tracing_subscriber::EnvFilter;
 use std::future::Future;
 use std::num::NonZeroU8;
 use std::pin::Pin;
@@ -36,7 +37,7 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn smoke() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let (a_peer_id, mut a_transport) = create_transport();
     let (b_peer_id, mut b_transport) = create_transport();
@@ -53,7 +54,7 @@ async fn smoke() {
 // Note: This test should likely be ported to the muxer compliance test suite.
 #[test]
 fn concurrent_connections_and_streams_tokio() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();

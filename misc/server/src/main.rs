@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::task::Poll;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 use zeroize::Zeroizing;
 
 mod behaviour;
@@ -55,7 +56,7 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let opt = Opts::parse();
 

@@ -23,6 +23,7 @@
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[test]
 fn select_proto_basic() {
@@ -72,7 +73,7 @@ fn select_proto_basic() {
 /// Tests the expected behaviour of failed negotiations.
 #[test]
 fn negotiation_failed() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     async fn run(
         Test {

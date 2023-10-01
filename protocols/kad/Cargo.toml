@@ -36,7 +36,6 @@ tracing = "0.1.37"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-env_logger = "0.10.0"
 futures-timer = "3.0"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { workspace = true }
@@ -44,6 +43,7 @@ libp2p-swarm = { path = "../../swarm", features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-yamux = { workspace = true }
 quickcheck = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 serde = ["dep:serde", "bytes/serde"]

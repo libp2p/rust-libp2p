@@ -4665,7 +4665,8 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
 #[test]
 fn test_iwant_penalties() {
-    let _ = env_logger::try_init();
+    use tracing_subscriber::EnvFilter;
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))

@@ -29,10 +29,11 @@ use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn connect() {
-    let _ = env_logger::try_init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let mut relay = build_relay();
     let mut dst = build_client();

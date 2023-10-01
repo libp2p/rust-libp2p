@@ -39,7 +39,6 @@ use libp2p::{
 };
 use std::error::Error;
 use std::str::FromStr;
-use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Parser)]
@@ -80,11 +79,7 @@ impl FromStr for Mode {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::DEBUG.into())
-        .from_env_lossy();
-
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let opts = Opts::parse();
 

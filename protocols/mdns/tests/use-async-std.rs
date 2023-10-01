@@ -24,17 +24,18 @@ use libp2p_mdns::{async_io::Behaviour, Config};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
+use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv4() {
-    env_logger::try_init().ok();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     run_discovery_test(Config::default()).await
 }
 
 #[async_std::test]
 async fn test_discovery_async_std_ipv6() {
-    env_logger::try_init().ok();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let config = Config {
         enable_ipv6: true,
@@ -45,7 +46,7 @@ async fn test_discovery_async_std_ipv6() {
 
 #[async_std::test]
 async fn test_expired_async_std() {
-    env_logger::try_init().ok();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let config = Config {
         ttl: Duration::from_secs(1),
@@ -78,7 +79,7 @@ async fn test_expired_async_std() {
 
 #[async_std::test]
 async fn test_no_expiration_on_close_async_std() {
-    env_logger::try_init().ok();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
     let config = Config {
         ttl: Duration::from_secs(120),
         query_interval: Duration::from_secs(10),

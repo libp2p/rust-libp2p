@@ -20,13 +20,11 @@ use rand::thread_rng;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::builder()
-        .parse_filters("browser_webrtc_example=debug,libp2p_webrtc=info,libp2p_ping=debug")
-        .parse_default_env()
-        .init();
+    tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
     let id_keys = identity::Keypair::generate_ed25519();
     let local_peer_id = id_keys.public().to_peer_id();

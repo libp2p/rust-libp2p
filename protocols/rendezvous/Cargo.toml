@@ -29,16 +29,16 @@ tracing = "0.1.37"
 void = "1"
 
 [dev-dependencies]
-env_logger = "0.10.0"
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-noise = { workspace = true }
 libp2p-ping = { workspace = true }
 libp2p-identify = { workspace = true }
-libp2p-yamux = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
+libp2p-yamux = { workspace = true }
 rand = "0.8"
 tokio = { version = "1.32", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
-libp2p-swarm-test = { path = "../../swarm-test" }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

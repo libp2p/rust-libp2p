@@ -1230,7 +1230,8 @@ mod tests {
 
     #[test]
     fn max_buffer_behaviour() {
-        let _ = env_logger::try_init();
+        use tracing_subscriber::EnvFilter;
+        tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
         fn prop(cfg: MplexConfig, overflow: NonZeroU8) {
             let mut r_buf = BytesMut::new();
@@ -1365,7 +1366,8 @@ mod tests {
 
     #[test]
     fn close_on_error() {
-        let _ = env_logger::try_init();
+        use tracing_subscriber::EnvFilter;
+        tracing_subscriber::fmt().with_env_filter(EnvFilter::from_default_env()).init();
 
         fn prop(cfg: MplexConfig, num_streams: NonZeroU8) {
             let num_streams = cmp::min(cfg.max_substreams, num_streams.get() as usize);

@@ -631,7 +631,8 @@ mod tests {
 
     #[test]
     fn basic_resolve() {
-        let _ = env_logger::try_init();
+        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).init();
+
 
         #[derive(Clone)]
         struct CustomTransport;
