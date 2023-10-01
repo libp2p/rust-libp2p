@@ -30,3 +30,6 @@ asynchronous-codec = "0.6"
 [dev-dependencies]
 hex-literal = "0.4"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+# lint
+[lints]
+workspace = true

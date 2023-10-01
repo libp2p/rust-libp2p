@@ -33,3 +33,6 @@ futures_ringbuf = "0.4.0"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+# lint
+[lints]
+workspace = true

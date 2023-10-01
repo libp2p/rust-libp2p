@@ -50,3 +50,6 @@ tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "time"] }
 [[test]]
 name = "stream_compliance"
 required-features = ["async-std"]
+# lint
+[lints]
+workspace = true

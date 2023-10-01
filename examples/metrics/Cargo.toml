@@ -13,3 +13,6 @@ libp2p = { path = "../../libp2p", features = ["async-std", "metrics", "ping", "n
 log = "0.4.20"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 prometheus-client = "0.21.2"
+# lint
+[lints]
+workspace = true

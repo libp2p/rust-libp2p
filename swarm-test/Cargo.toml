@@ -23,3 +23,6 @@ futures = "0.3.28"
 log = "0.4.20"
 rand = "0.8.5"
 futures-timer = "3.0.2"
+# lint
+[lints]
+workspace = true

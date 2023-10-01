@@ -14,3 +14,6 @@ env_logger = "0.10"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["async-std", "cbor", "dns", "kad", "noise", "macros", "request-response", "tcp", "websocket", "yamux"] }
 void = "1.0.2"
+# lint
+[lints]
+workspace = true

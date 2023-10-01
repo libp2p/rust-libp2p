@@ -46,3 +46,6 @@ multibase = "0.9.1"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+# lint
+[lints]
+workspace = true

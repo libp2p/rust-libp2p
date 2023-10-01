@@ -24,3 +24,6 @@ libp2p-identify = { workspace = true }
 libp2p-swarm-derive = { path = "../../swarm-derive" }
 libp2p-swarm-test = { path = "../../swarm-test" }
 rand = "0.8.5"
+# lint
+[lints]
+workspace = true

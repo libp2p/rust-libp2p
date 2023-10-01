@@ -38,3 +38,6 @@ prometheus-client = { version = "0.21.2"}
 all-features = true
 rustc-args = ["--cfg", "docsrs"]
 rustdoc-args = ["--cfg", "docsrs"]
+# lint
+[lints]
+workspace = true

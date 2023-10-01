@@ -12,3 +12,6 @@ futures = "0.3.28"
 futures-timer = "3.0"
 libp2p = { path = "../../libp2p", features = ["async-std", "dns", "dcutr", "identify", "macros", "noise", "ping", "quic", "relay", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
+# lint
+[lints]
+workspace = true

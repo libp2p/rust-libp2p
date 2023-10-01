@@ -200,8 +200,8 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.72.0, # current stable
-          beta,
+          # 1.72.0, # current stable
+          # beta,
           nightly-2023-09-10
         ]
     steps:
@@ -219,7 +219,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run cargo clippy
-        run: cargo custom-clippy # cargo alias to allow reuse of config locally
+        run: cargo clippy # cargo alias to allow reuse of config locally
 
   ipfs-integration-test:
     name: IPFS Integration tests

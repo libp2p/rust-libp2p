@@ -39,3 +39,6 @@ libp2p-swarm = { workspace = true, features = ["macros"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+# lint
+[lints]
+workspace = true

@@ -50,3 +50,7 @@ serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+# lint
+[lints]
+workspace = true

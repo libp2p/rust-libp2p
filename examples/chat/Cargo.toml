@@ -11,3 +11,6 @@ async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["tokio", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }
+# lint
+[lints]
+workspace = true
