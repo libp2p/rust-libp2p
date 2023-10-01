@@ -23,7 +23,6 @@ use futures::future::{BoxFuture, Either};
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
-use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -147,8 +146,6 @@ pub struct Handler {
     inbound: Option<PongFuture>,
     /// Tracks the state of our handler.
     state: State,
-    /// The peer we are connected to.
-    _peer: PeerId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,9 +163,8 @@ enum State {
 
 impl Handler {
     /// Builds a new [`Handler`] with the given configuration.
-    pub fn new(config: Config, peer: PeerId) -> Self {
+    pub fn new(config: Config) -> Self {
         Handler {
-            _peer: peer,
             config,
             interval: Delay::new(Duration::new(0, 0)),
             pending_errors: VecDeque::with_capacity(2),

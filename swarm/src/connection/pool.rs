@@ -516,8 +516,8 @@ where
             waker.wake();
         }
 
-        let span = tracing::error_span!("connection", id = %id, peer = %obtained_peer_id, remote_address = %endpoint.get_remote_address());
-        let connection: Connection<THandler> = Connection::new(
+        let span = tracing::error_span!("Connection::poll", id = %id, peer = %obtained_peer_id, remote_address = %endpoint.get_remote_address());
+        let connection = Connection::new(
             connection,
             handler,
             self.substream_upgrade_protocol_override,

@@ -115,7 +115,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone(), peer))
+        Ok(Handler::new(self.config.clone()))
     }
 
     fn handle_established_outbound_connection(
@@ -125,7 +125,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(self.config.clone(), peer))
+        Ok(Handler::new(self.config.clone()))
     }
 
     fn on_connection_handler_event(
