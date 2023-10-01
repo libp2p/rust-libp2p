@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{DecodeError, PlainTextError};
+use crate::error::{DecodeError, Error};
 use crate::proto::Exchange;
-use crate::PlainText2Config;
+use crate::Config;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::{Bytes, BytesMut};
@@ -31,7 +31,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use unsigned_varint::codec::UviBytes;
 
 struct HandshakeContext<T> {
-    config: PlainText2Config,
+    config: Config,
     state: T,
 }
 
@@ -49,7 +49,8 @@ pub(crate) struct Remote {
 }
 
 impl HandshakeContext<Local> {
-    fn new(config: PlainText2Config) -> Self {
+    fn new(config: Config) -> Self {
+        #[allow(deprecated)]
         let exchange = Exchange {
             id: Some(config.local_public_key.to_peer_id().to_bytes()),
             pubkey: Some(config.local_public_key.encode_protobuf()),
@@ -68,10 +69,7 @@ impl HandshakeContext<Local> {
         }
     }
 
-    fn with_remote(
-        self,
-        exchange_bytes: BytesMut,
-    ) -> Result<HandshakeContext<Remote>, PlainTextError> {
+    fn with_remote(self, exchange_bytes: BytesMut) -> Result<HandshakeContext<Remote>, Error> {
         let mut reader = BytesReader::from_bytes(&exchange_bytes);
         let prop = Exchange::from_reader(&mut reader, &exchange_bytes).map_err(DecodeError)?;
 
@@ -80,7 +78,7 @@ impl HandshakeContext<Local> {
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.to_peer_id() {
-            return Err(PlainTextError::PeerIdMismatch);
+            return Err(Error::PeerIdMismatch);
         }
 
         Ok(HandshakeContext {
@@ -93,10 +91,7 @@ impl HandshakeContext<Local> {
     }
 }
 
-pub(crate) async fn handshake<S>(
-    socket: S,
-    config: PlainText2Config,
-) -> Result<(S, Remote, Bytes), PlainTextError>
+pub(crate) async fn handshake<S>(socket: S, config: Config) -> Result<(S, Remote, Bytes), Error>
 where
     S: AsyncRead + AsyncWrite + Send + Unpin,
 {

@@ -19,7 +19,7 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8.3"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 socket2 = { version = "0.5.4", features = ["all"] }
 tokio = { version = "1.32", default-features = false, features = ["net", "time"], optional = true}
 tracing = "0.1.37"

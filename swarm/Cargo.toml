@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = { workspace = true }
 description = "The libp2p swarm"
-version = "0.43.4"
+version = "0.43.5"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,7 +23,7 @@ libp2p-swarm-derive = { workspace = true, optional = true }
 multistream-select = { workspace = true }
 once_cell = "1.18.0"
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 tracing = "0.1.37"
 void = "1"
 wasm-bindgen-futures = { version = "0.4.37", optional = true }

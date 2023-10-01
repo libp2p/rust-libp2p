@@ -20,47 +20,20 @@
 
 use crate::proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::{
-    multiaddr,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr,
-};
+use futures::prelude::*;
+use libp2p_core::{multiaddr, Multiaddr};
 use libp2p_identity as identity;
 use libp2p_identity::PublicKey;
 use libp2p_swarm::StreamProtocol;
 use std::convert::TryFrom;
-use std::{io, iter, pin::Pin};
+use std::io;
 use thiserror::Error;
-use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/1.0.0");
 
 pub const PUSH_PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/ipfs/id/push/1.0.0");
-
-/// Substream upgrade protocol for `/ipfs/id/1.0.0`.
-#[derive(Debug, Clone)]
-pub struct Identify;
-
-/// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
-#[derive(Debug, Clone)]
-pub struct Push<T>(T);
-pub struct InboundPush();
-pub struct OutboundPush(Info);
-
-impl Push<InboundPush> {
-    pub fn inbound() -> Self {
-        Push(InboundPush())
-    }
-}
-
-impl Push<OutboundPush> {
-    pub fn outbound(info: Info) -> Self {
-        Push(OutboundPush(info))
-    }
-}
 
 /// Identify information of a peer sent in protocol messages.
 #[derive(Debug, Clone)]
@@ -116,75 +89,7 @@ pub struct PushInfo {
     pub observed_addr: Option<Multiaddr>,
 }
 
-impl UpgradeInfo for Identify {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PROTOCOL_NAME)
-    }
-}
-
-impl<C> InboundUpgrade<C> for Identify {
-    type Output = C;
-    type Error = UpgradeError;
-    type Future = future::Ready<Result<Self::Output, UpgradeError>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(socket)
-    }
-}
-
-impl<C> OutboundUpgrade<C> for Identify
-where
-    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = Info;
-    type Error = UpgradeError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        recv_identify(socket).boxed()
-    }
-}
-
-impl<T> UpgradeInfo for Push<T> {
-    type Info = StreamProtocol;
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PUSH_PROTOCOL_NAME)
-    }
-}
-
-impl<C> InboundUpgrade<C> for Push<InboundPush>
-where
-    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = BoxFuture<'static, Result<PushInfo, UpgradeError>>;
-    type Error = Void;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
-        future::ok(recv_push(socket).boxed())
-    }
-}
-
-impl<C> OutboundUpgrade<C> for Push<OutboundPush>
-where
-    C: AsyncWrite + Unpin + Send + 'static,
-{
-    type Output = ();
-    type Error = UpgradeError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
-
-    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
-        send(socket, self.0 .0).boxed()
-    }
-}
-
-pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send_identify<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -218,7 +123,7 @@ where
     Ok(())
 }
 
-async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
+pub(crate) async fn recv_push<T>(socket: T) -> Result<PushInfo, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -229,7 +134,7 @@ where
     Ok(info)
 }
 
-async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
+pub(crate) async fn recv_identify<T>(socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {

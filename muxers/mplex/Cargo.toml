@@ -19,7 +19,7 @@ libp2p-identity = { workspace = true }
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 tracing = "0.1.37"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
