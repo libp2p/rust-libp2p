@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 mod phase;
 mod select_security;
 
-/// Build a [`Swarm`] by combining an identity, a set of [`Transport`]s and a [`NetworkBehaviour`].
+/// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of
+/// [`Transport`](libp2p_core::Transport)s and a
+/// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 ///
 /// ```
 /// # use libp2p::{swarm::NetworkBehaviour, SwarmBuilder};

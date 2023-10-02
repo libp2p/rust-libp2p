@@ -37,8 +37,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap()
         .build();
 
-    println!("Local peer id: {:?}", swarm.local_peer_id());
-
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

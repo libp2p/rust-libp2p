@@ -51,8 +51,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .build();
 
-    info!("Local peer id: {:?}", swarm.local_peer_id());
-
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     if let Some(addr) = std::env::args().nth(1) {

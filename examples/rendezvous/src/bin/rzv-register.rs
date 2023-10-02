@@ -48,7 +48,10 @@ async fn main() {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })
         .unwrap()
-        // .TODO idle_connection_timeout(Duration::from_secs(5))
+        .with_swarm_config(
+            libp2p::swarm::Config::with_tokio_executor()
+                .with_idle_connection_timeout(Duration::from_secs(5)),
+        )
         .build();
 
     // In production the external address should be the publicly facing IP address of the rendezvous point.

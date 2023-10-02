@@ -130,7 +130,7 @@ fn build_client() -> Swarm<Client> {
             dcutr: dcutr::Behaviour::new(local_peer_id),
         },
         local_peer_id,
-        Config::without_executor(),
+        Config::with_async_std_executor(),
     )
 }
 
