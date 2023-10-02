@@ -49,28 +49,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "MyBehaviourEvent")]
-    struct MyBehaviour {
+    struct Behaviour {
         kademlia: kad::Behaviour<MemoryStore>,
         mdns: mdns::async_io::Behaviour,
-    }
-
-    #[allow(clippy::large_enum_variant)]
-    enum MyBehaviourEvent {
-        Kademlia(kad::Event),
-        Mdns(mdns::Event),
-    }
-
-    impl From<kad::Event> for MyBehaviourEvent {
-        fn from(event: kad::Event) -> Self {
-            MyBehaviourEvent::Kademlia(event)
-        }
-    }
-
-    impl From<mdns::Event> for MyBehaviourEvent {
-        fn from(event: mdns::Event) -> Self {
-            MyBehaviourEvent::Mdns(event)
-        }
     }
 
     // Create a swarm to manage peers and events.
@@ -79,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let store = MemoryStore::new(local_peer_id);
         let kademlia = kad::Behaviour::new(local_peer_id, store);
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let behaviour = MyBehaviour { kademlia, mdns };
+        let behaviour = Behaviour { kademlia, mdns };
         SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
     };
 
@@ -99,12 +80,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::NewListenAddr { address, .. } => {
                 println!("Listening in {address:?}");
             },
-            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
             }
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
                 match result {
                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { key, providers, .. })) => {
                         for peer in providers {
