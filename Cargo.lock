@@ -473,11 +473,11 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "autonat-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "clap",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tokio",
 ]
 
 [[package]]
@@ -1366,7 +1366,7 @@ dependencies = [
  "ed25519",
  "rand_core 0.6.4",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "zeroize",
 ]
 
@@ -2603,7 +2603,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "smallvec",
  "unsigned-varint",
  "void",
@@ -2643,6 +2643,7 @@ dependencies = [
  "criterion",
  "ed25519-dalek",
  "hex-literal",
+ "hkdf",
  "libsecp256k1",
  "log",
  "multihash",
@@ -2655,7 +2656,7 @@ dependencies = [
  "sec1",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "void",
  "zeroize",
@@ -2688,7 +2689,7 @@ dependencies = [
  "quickcheck-ext",
  "rand 0.8.5",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "smallvec",
  "thiserror",
  "uint",
@@ -2811,7 +2812,7 @@ dependencies = [
  "quick-protobuf",
  "quickcheck-ext",
  "rand 0.8.5",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "snow",
  "static_assertions",
  "thiserror",
@@ -2929,6 +2930,7 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
+ "ring",
  "rustls 0.21.7",
  "socket2 0.5.4",
  "thiserror",
@@ -3224,7 +3226,7 @@ dependencies = [
  "quick-protobuf-codec",
  "rand 0.8.5",
  "serde",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "thiserror",
  "tinytemplate",
  "unsigned-varint",
@@ -3874,7 +3876,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "primeorder",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -3886,7 +3888,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "primeorder",
- "sha2 0.10.7",
+ "sha2 0.10.8",
 ]
 
 [[package]]
@@ -4725,7 +4727,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "873feff8cb7bf86fdf0a71bb21c95159f4e4a37dd7a4bd1855a940909b583ada"
 dependencies = [
  "globset",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "walkdir",
 ]
 
@@ -5086,9 +5088,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "479fb9d862239e610720565ca91403019f2f00410f1864c5aa7479b950a76ed8"
+checksum = "793db75ad2bcafc3ffa7c68b215fee268f537982cd901d132f89c6343f3a3dc8"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -5206,7 +5208,7 @@ dependencies = [
  "rand_core 0.6.4",
  "ring",
  "rustc_version",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "subtle",
 ]
 
@@ -6163,9 +6165,9 @@ dependencies = [
 
 [[package]]
 name = "webpki"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0e74f82d49d545ad128049b7e88f6576df2da6b02e9ce565c6f533be576957e"
+checksum = "07ecc0cd7cac091bf682ec5efa18b1cff79d617b84181f38b3951dbe135f607f"
 dependencies = [
  "ring",
  "untrusted",
@@ -6202,7 +6204,7 @@ dependencies = [
  "sdp",
  "serde",
  "serde_json",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "smol_str",
  "stun",
  "thiserror",
@@ -6263,7 +6265,7 @@ dependencies = [
  "sec1",
  "serde",
  "sha1",
- "sha2 0.10.7",
+ "sha2 0.10.8",
  "subtle",
  "thiserror",
  "tokio",
