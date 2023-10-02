@@ -1,7 +1,7 @@
 ## 0.43.6 - unreleased
 
-- Deprecate old `libp2p::swarm::SwarmBuilder`.
-  Most users should use the new `libp2p::SwarmBuilder`.
+- Deprecate `libp2p::swarm::SwarmBuilder`.
+  Most users should use `libp2p::SwarmBuilder`.
   In some special cases, users may need to use `Swarm::new` and `Config` instead of the new `libp2p::SwarmBuilder`.
   See [PR 4120].
 
