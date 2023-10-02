@@ -1412,20 +1412,6 @@ impl Config {
         Self::with_executor(crate::executor::AsyncStdExecutor)
     }
 
-    // TODO: Should we remove this from `Config`?!
-    //
-    /// Creates a new [`Config`].
-    ///
-    /// ## ⚠️  Performance warning
-    /// All connections will be polled on the current task, thus quite bad performance
-    /// characteristics should be expected. Whenever possible use an executor and
-    /// [`Config::with_executor`].
-    pub fn without_executor() -> Self {
-        Self {
-            pool_config: PoolConfig::new(None),
-        }
-    }
-
     /// Configures the number of events from the [`NetworkBehaviour`] in
     /// destination to the [`ConnectionHandler`] that can be buffered before
     /// the [`Swarm`] has to wait. An individual buffer with this number of
@@ -2067,10 +2053,10 @@ mod tests {
     ///
     /// The test expects both behaviours to be notified via calls to [`NetworkBehaviour::on_swarm_event`]
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
-    #[test]
+    #[tokio::test]
     fn test_swarm_disconnect() {
-        let mut swarm1 = new_test_swarm(Config::without_executor());
-        let mut swarm2 = new_test_swarm(Config::without_executor());
+        let mut swarm1 = new_test_swarm(Config::with_tokio_executor());
+        let mut swarm2 = new_test_swarm(Config::with_tokio_executor());
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
