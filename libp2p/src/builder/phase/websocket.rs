@@ -63,9 +63,9 @@ macro_rules! impl_websocket_builder {
 
             {
                 let security_upgrade = security_upgrade.into_security_upgrade(&self.keypair)
-                    .map_err(|e| WebsocketError(WebsocketErrorInner::SecurityUpgrade(e)))?;
+                    .map_err(WebsocketErrorInner::SecurityUpgrade)?;
                 let websocket_transport = libp2p_websocket::WsConfig::new(
-                    $dnsTcp.await.map_err(|e| WebsocketError(e.into()))?,
+                    $dnsTcp.await.map_err(WebsocketErrorInner::Dns)?,
                 )
                     .upgrade(libp2p_core::upgrade::Version::V1Lazy)
                     .authenticate(security_upgrade)
@@ -154,7 +154,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-pub struct WebsocketError<Sec>(WebsocketErrorInner<Sec>);
+pub struct WebsocketError<Sec>(#[from] WebsocketErrorInner<Sec>);
 
 #[derive(Debug, thiserror::Error)]
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
