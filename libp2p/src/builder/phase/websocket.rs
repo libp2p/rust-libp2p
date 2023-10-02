@@ -97,10 +97,11 @@ impl_websocket_builder!(
         libp2p_websocket::BytesConnection<libp2p_tcp::async_io::TcpStream>,
     >
 );
-// TODO: Unnecessary await for Tokio Websocket (i.e. tokio dns). Not ideal but don't know a better way.
 impl_websocket_builder!(
     "tokio",
     super::provider::Tokio,
+    // Note this is an unnecessary await for Tokio Websocket (i.e. tokio dns) in order to be consistent
+    // with above AsyncStd construction.
     futures::future::ready(libp2p_dns::tokio::Transport::system(
         libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default())
     )),
