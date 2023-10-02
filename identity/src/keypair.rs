@@ -343,44 +343,56 @@ impl Keypair {
         }
     }
 
-    /// Return the secret key of the [`Keypair`] if it has one.
-    #[allow(unused_variables)]
+    /// Deterministically derive a new secret from this [`Keypair`], taking into account the provided domain.
+    ///
+    /// This works for all key types except RSA where it returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn main() {
+    /// # use libp2p_identity as identity;
+    ///
+    /// let key = identity::Keypair::generate_ed25519();
+    ///
+    /// let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
+    /// # }
+    /// ```
+    #[allow(unused_variables, unreachable_code)]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
-        #[cfg(not(any(
-            feature = "ecdsa",
-            feature = "secp256k1",
-            feature = "ed25519",
-            feature = "rsa"
-        )))]
-        return None;
-
         #[cfg(any(
             feature = "ecdsa",
             feature = "secp256k1",
             feature = "ed25519",
             feature = "rsa"
         ))]
-        {
-            let secret = match self.keypair {
-                #[cfg(feature = "ed25519")]
-                KeyPairInner::Ed25519(ref inner) => inner.secret().0,
-                #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-                KeyPairInner::Rsa(_) => return None,
-                #[cfg(feature = "secp256k1")]
-                KeyPairInner::Secp256k1(ref inner) => inner.secret().to_bytes(),
-                #[cfg(feature = "ecdsa")]
-                KeyPairInner::Ecdsa(ref inner) => inner
+        return Some(
+            hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &self.secret()?].concat())
+                .0
+                .into(),
+        );
+
+        None
+    }
+
+    /// Return the secret key of the [`Keypair`].
+    #[allow(dead_code)]
+    pub(crate) fn secret(&self) -> Option<[u8; 32]> {
+        match self.keypair {
+            #[cfg(feature = "ed25519")]
+            KeyPairInner::Ed25519(ref inner) => Some(inner.secret().to_bytes()),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            KeyPairInner::Rsa(_) => return None,
+            #[cfg(feature = "secp256k1")]
+            KeyPairInner::Secp256k1(ref inner) => Some(inner.secret().to_bytes()),
+            #[cfg(feature = "ecdsa")]
+            KeyPairInner::Ecdsa(ref inner) => Some(
+                inner
                     .secret()
                     .to_bytes()
                     .try_into()
                     .expect("Ecdsa's private key should be 32 bytes"),
-            };
-
-            Some(
-                hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &secret].concat())
-                    .0
-                    .into(),
-            )
+            ),
         }
     }
 }

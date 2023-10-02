@@ -164,7 +164,7 @@ impl PublicKey {
 
 /// An Ed25519 secret key.
 #[derive(Clone)]
-pub struct SecretKey(pub(crate) ed25519::SecretKey);
+pub struct SecretKey(ed25519::SecretKey);
 
 /// View the bytes of the secret key.
 impl AsRef<[u8]> for SecretKey {
@@ -196,6 +196,10 @@ impl SecretKey {
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 secret key", e))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
+    }
+
+    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+        self.0
     }
 }
 
