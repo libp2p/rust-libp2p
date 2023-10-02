@@ -42,6 +42,6 @@ instant = "0.1.12"
 reqwest = { version = "0.11", features = ["json"] }
 console_error_panic_hook = { version = "0.1.7" }
 futures-timer = "3.0.2"
-# lint
+
 [lints]
 workspace = true

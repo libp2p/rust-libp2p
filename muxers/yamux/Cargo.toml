@@ -27,6 +27,6 @@ libp2p-muxer-test-harness = { path = "../test-harness" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
-# lint
+
 [lints]
 workspace = true

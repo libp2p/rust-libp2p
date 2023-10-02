@@ -130,8 +130,8 @@ multihash = "0.19.1"
 libp2p-identity = { path = "identity" }
 
 # lint 
-[workspace.lints.clippy]
-used_underscore_binding = "warn"
-unreachable_pub = "warn"
-pedantic = "allow"
-type_complexity = "allow"
+[workspace.lints]
+rust.unreachable_pub = "warn"
+clippy.used_underscore_binding = "warn"
+clippy.pedantic = "allow"
+clippy.type_complexity = "allow"

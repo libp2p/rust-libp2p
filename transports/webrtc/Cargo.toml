@@ -45,6 +45,6 @@ quickcheck = "1.0.3"
 [[test]]
 name = "smoke"
 required-features = ["tokio"]
-# lint
+
 [lints]
 workspace = true
