@@ -473,11 +473,11 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 name = "autonat-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "clap",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tokio",
 ]
 
 [[package]]
@@ -2624,6 +2624,7 @@ dependencies = [
  "either",
  "env_logger 0.10.0",
  "futures",
+ "futures-bounded",
  "futures-timer",
  "libp2p-core",
  "libp2p-identity",
@@ -2648,6 +2649,7 @@ dependencies = [
  "criterion",
  "ed25519-dalek",
  "hex-literal",
+ "hkdf",
  "libsecp256k1",
  "log",
  "multihash",
@@ -2934,6 +2936,7 @@ dependencies = [
  "quickcheck",
  "quinn",
  "rand 0.8.5",
+ "ring",
  "rustls 0.21.7",
  "socket2 0.5.4",
  "thiserror",
@@ -6168,9 +6171,9 @@ dependencies = [
 
 [[package]]
 name = "webpki"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0e74f82d49d545ad128049b7e88f6576df2da6b02e9ce565c6f533be576957e"
+checksum = "07ecc0cd7cac091bf682ec5efa18b1cff79d617b84181f38b3951dbe135f607f"
 dependencies = [
  "ring",
  "untrusted",

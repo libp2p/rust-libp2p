@@ -2312,19 +2312,14 @@ mod tests {
                     )
                     .unwrap();
                 for mut transport in transports.into_iter() {
-                    loop {
-                        match futures::future::select(transport.select_next_some(), swarm.next())
-                            .await
-                        {
-                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
-                                break;
-                            }
-                            future::Either::Left(_) => {
-                                panic!("Unexpected transport event.")
-                            }
-                            future::Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {e:?}")
-                            }
+                    match futures::future::select(transport.select_next_some(), swarm.next()).await
+                    {
+                        future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
+                        future::Either::Left(_) => {
+                            panic!("Unexpected transport event.")
+                        }
+                        future::Either::Right((e, _)) => {
+                            panic!("Expect swarm to not emit any event {e:?}")
                         }
                     }
                 }

@@ -43,14 +43,14 @@ struct Opt {
     server_peer_id: PeerId,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Opt::parse();
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
@@ -58,8 +58,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
         .build();
-
-    println!("Local peer id: {:?}", swarm.local_peer_id());
 
     swarm.listen_on(
         Multiaddr::empty()
