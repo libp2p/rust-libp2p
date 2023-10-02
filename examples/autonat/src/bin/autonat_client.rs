@@ -43,7 +43,7 @@ struct Opt {
     server_peer_id: PeerId,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport = tcp::async_io::Transport::default()
+    let transport = tcp::tokio::Transport::default()
         .upgrade(Version::V1Lazy)
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
@@ -60,8 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour::new(local_key.public());
 
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(
         Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))
