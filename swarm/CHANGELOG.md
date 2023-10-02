@@ -1,7 +1,7 @@
 ## 0.44.0 - unreleased
 
-- Added `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEevnt`.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+- Add `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEevnt`.
+  See [PR 4581](https://github.com/libp2p/rust-libp2p/pull/4581).
 
 ## 0.43.5
 
