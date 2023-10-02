@@ -197,6 +197,10 @@ impl SecretKey {
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
+
+    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
 }
 
 #[cfg(test)]
