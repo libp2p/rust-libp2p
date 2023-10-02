@@ -32,6 +32,7 @@ tokio = { version = "1.32.0", default-features = false, features = [
     "time",
 ], optional = true }
 socket2 = "0.5.4"
+ring = "0.16.20"
 
 [features]
 tokio = ["dep:tokio", "if-watch/tokio", "quinn/runtime-tokio"]

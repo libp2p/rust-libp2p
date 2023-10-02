@@ -22,7 +22,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
-sha2 = "0.10.7"
+sha2 = "0.10.8"
 thiserror = "1"
 tinytemplate = "1.2"
 asynchronous-codec = "0.6"
