@@ -13,27 +13,6 @@ pub struct QuicPhase<T> {
     pub(crate) transport: T,
 }
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "quic"))]
-macro_rules! construct_other_transport_builder {
-    ($self:ident, $quic:ident, $config:expr) => {
-        SwarmBuilder {
-            phase: OtherTransportPhase {
-                transport: $self
-                    .phase
-                    .transport
-                    .or_transport(libp2p_quic::$quic::Transport::new($config).map(
-                        |(peer_id, muxer), _| {
-                            (peer_id, libp2p_core::muxing::StreamMuxerBox::new(muxer))
-                        },
-                    ))
-                    .map(|either, _| either.into_inner()),
-            },
-            keypair: $self.keypair,
-            phantom: PhantomData,
-        }
-    };
-}
-
 macro_rules! impl_quic_builder {
     ($providerKebabCase:literal, $providerCamelCase:ty, $quic:ident) => {
         #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = $providerKebabCase))]
@@ -54,7 +33,21 @@ macro_rules! impl_quic_builder {
                 $providerCamelCase,
                 OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
             > {
-                construct_other_transport_builder!(self, $quic, constructor(&self.keypair))
+                SwarmBuilder {
+                    phase: OtherTransportPhase {
+                        transport: self
+                            .phase
+                            .transport
+                            .or_transport(libp2p_quic::$quic::Transport::new(constructor(&self.keypair)).map(
+                                |(peer_id, muxer), _| {
+                                    (peer_id, libp2p_core::muxing::StreamMuxerBox::new(muxer))
+                                },
+                            ))
+                            .map(|either, _| either.into_inner()),
+                    },
+                    keypair: self.keypair,
+                    phantom: PhantomData,
+                }
             }
         }
     };
