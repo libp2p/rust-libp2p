@@ -157,8 +157,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     }
 }
 
-// TODO: Seal this.
-pub trait TryIntoTransport<T> {
+pub trait TryIntoTransport<T>: private::Sealed<Self::Error> {
     type Error;
 
     fn try_into_transport(self) -> Result<T, Self::Error>;
@@ -186,6 +185,16 @@ where
     }
 }
 
+mod private {
+    pub trait Sealed<Error> {}
+}
+
+impl<T: AuthenticatedMultiplexedTransport> private::Sealed<Infallible> for T {}
+
+impl<T: AuthenticatedMultiplexedTransport> private::Sealed<TransportError>
+    for Result<T, Box<dyn std::error::Error + Send + Sync>>
+{
+}
 
 #[derive(Debug, thiserror::Error)]
 #[error("failed to build transport: {0}")]

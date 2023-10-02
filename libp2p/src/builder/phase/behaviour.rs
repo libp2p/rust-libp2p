@@ -46,8 +46,7 @@ impl<T, Provider> SwarmBuilder<Provider, BehaviourPhase<T, NoRelayBehaviour>> {
     }
 }
 
-// TODO: Seal this.
-pub trait TryIntoBehaviour<B> {
+pub trait TryIntoBehaviour<B>: private::Sealed<Self::Error> {
     type Error;
 
     fn try_into_behaviour(self) -> Result<B, Self::Error>;
@@ -73,6 +72,17 @@ where
     fn try_into_behaviour(self) -> Result<B, Self::Error> {
         self.map_err(BehaviourError)
     }
+}
+
+mod private {
+    pub trait Sealed<Error> {}
+}
+
+impl<B: NetworkBehaviour> private::Sealed<Infallible> for B {}
+
+impl<B: NetworkBehaviour> private::Sealed<BehaviourError>
+    for Result<B, Box<dyn std::error::Error + Send + Sync>>
+{
 }
 
 #[derive(Debug, thiserror::Error)]
