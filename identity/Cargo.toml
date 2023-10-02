@@ -39,13 +39,7 @@ ring = { version = "0.16.9", features = [
 ], default-features = false, optional = true }
 
 [features]
-secp256k1 = [
-    "dep:libsecp256k1",
-    "dep:asn1_der",
-    "dep:rand",
-    "dep:sha2",
-    "dep:zeroize",
-]
+secp256k1 = ["dep:libsecp256k1", "dep:asn1_der", "dep:rand", "dep:sha2", "dep:zeroize"]
 ecdsa = ["dep:p256", "dep:rand", "dep:void", "dep:zeroize", "dep:sec1"]
 rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:rand", "dep:zeroize"]
