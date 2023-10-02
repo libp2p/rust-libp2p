@@ -234,18 +234,7 @@ where
                     iface.fire_timer();
                 }
             }
-            FromSwarm::ConnectionClosed(_)
-            | FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 

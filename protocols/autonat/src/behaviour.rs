@@ -589,6 +589,7 @@ impl NetworkBehaviour for Behaviour {
                 self.inner.on_swarm_event(listener_closed)
             }
             confirmed @ FromSwarm::ExternalAddrConfirmed(_) => self.inner.on_swarm_event(confirmed),
+            _ => {}
         }
     }
 

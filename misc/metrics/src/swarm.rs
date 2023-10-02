@@ -296,6 +296,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             libp2p_swarm::SwarmEvent::Dialing { .. } => {
                 self.dial_attempt.inc();
             }
+            _ => {}
         }
     }
 }

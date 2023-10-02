@@ -365,17 +365,7 @@ impl NetworkBehaviour for Behaviour {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
-            FromSwarm::AddressChange(_)
-            | FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            _ => {}
         }
     }
 }

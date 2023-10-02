@@ -1,3 +1,8 @@
+## 0.44.0 - unreleased
+
+- Added `#[non_exhaustive]` to `FromSwarm`, `ToSwarm`, `SwarmEvent`, `ConnectionHandlerEvent`, `ConnectionEevnt`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.43.5
 
 - Fix overflow in `KeepAlive` computation that could occur if `SwarmBuilder::idle_connection_timeout` is configured with `u64::MAX`.

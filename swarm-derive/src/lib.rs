@@ -757,6 +757,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
                     return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
                 }
+                std::task::Poll::Ready(_) => {},
                 std::task::Poll::Pending => {},
             }
         }

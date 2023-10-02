@@ -281,6 +281,7 @@ impl NetworkBehaviour for Behaviour {
 
                     return Poll::Ready(new_to_swarm);
                 }
+                Poll::Ready(_) => {}
                 Poll::Pending => {}
             }
 

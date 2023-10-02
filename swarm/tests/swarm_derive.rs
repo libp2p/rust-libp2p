@@ -508,19 +508,7 @@ fn custom_out_event_no_type_parameters() {
 
         fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
             match event {
-                FromSwarm::ConnectionEstablished(_)
-                | FromSwarm::ConnectionClosed(_)
-                | FromSwarm::AddressChange(_)
-                | FromSwarm::DialFailure(_)
-                | FromSwarm::ListenFailure(_)
-                | FromSwarm::NewListener(_)
-                | FromSwarm::NewListenAddr(_)
-                | FromSwarm::ExpiredListenAddr(_)
-                | FromSwarm::ListenerError(_)
-                | FromSwarm::ListenerClosed(_)
-                | FromSwarm::NewExternalAddrCandidate(_)
-                | FromSwarm::ExternalAddrExpired(_)
-                | FromSwarm::ExternalAddrConfirmed(_) => {}
+                _ => {}
             }
         }
     }
