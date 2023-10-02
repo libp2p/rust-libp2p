@@ -69,7 +69,7 @@ impl FromStr for Mode {
     }
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -119,15 +119,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm =
         libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
-            .with_async_std()
+            .with_tokio()
             .with_tcp(
                 tcp::Config::default().port_reuse(true).nodelay(true),
                 noise::Config::new,
                 yamux::Config::default,
             )?
             .with_quic()
-            .with_dns()
-            .await?
+            .with_dns()?
             .with_relay_client(noise::Config::new, yamux::Config::default)?
             .with_behaviour(|keypair, relay_behaviour| Behaviour {
                 relay_client: relay_behaviour,

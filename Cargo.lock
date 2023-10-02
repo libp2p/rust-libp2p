@@ -1230,13 +1230,13 @@ dependencies = [
 name = "dcutr-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "clap",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
  "libp2p",
  "log",
+ "tokio",
 ]
 
 [[package]]
