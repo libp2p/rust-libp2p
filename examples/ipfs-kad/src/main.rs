@@ -20,11 +20,11 @@
 
 #![doc = include_str!("../README.md")]
 
-use std::error::Error;
 use std::num::NonZeroUsize;
 use std::ops::Add;
 use std::time::{Duration, Instant};
 
+use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
 
@@ -40,7 +40,7 @@ const BOOTNODES: [&str; 4] = [
 ];
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     env_logger::init();
 
     // Create a random key for ourselves.
@@ -102,32 +102,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 result: kad::QueryResult::GetClosestPeers(Ok(ok)),
                 ..
             }) => {
-                if !ok.peers.is_empty() {
-                    println!("Query finished with closest peers: {:#?}", ok.peers)
-                } else {
-                    // The example is considered failed as there
-                    // should always be at least 1 reachable peer.
-                    println!("Query finished with no closest peers.")
+                // The example is considered failed as there
+                // should always be at least 1 reachable peer.
+                if ok.peers.is_empty() {
+                    bail!("Query finished with no closest peers.")
                 }
 
-                break;
+                println!("Query finished with closest peers: {:#?}", ok.peers);
+
+                return Ok(());
             }
             SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
                 result:
                     kad::QueryResult::GetClosestPeers(Err(kad::GetClosestPeersError::Timeout {
-                        peers,
                         ..
                     })),
                 ..
             }) => {
-                if !peers.is_empty() {
-                    println!("Query timed out with closest peers: {peers:#?}")
-                } else {
-                    // The example is considered failed as there
-                    // should always be at least 1 reachable peer.
-                    println!("Query timed out with no closest peers.");
-                }
-                break;
+                bail!("Query for closest peers timed out")
             }
             SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
                 result: kad::QueryResult::PutRecord(Ok(_)),
@@ -135,22 +127,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }) => {
                 println!("Successfully inserted the PK record");
 
-                break;
+                return Ok(());
             }
             SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
                 result: kad::QueryResult::PutRecord(Err(err)),
                 ..
             }) => {
-                println!("Failed to insert the PK record {err}");
-
-                break;
+                bail!(anyhow::Error::new(err).context("Failed to insert the PK record"));
             }
-
-            _ => continue,
+            _ => {}
         }
     }
-
-    Ok(())
 }
 
 #[derive(Parser, Debug)]
