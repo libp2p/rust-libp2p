@@ -36,7 +36,7 @@ mod select_security;
 ///      )?
 ///      .with_quic()
 ///      .with_dns()?
-///      .with_relay(
+///      .with_relay_client(
 ///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
 ///          libp2p_yamux::Config::default,
 ///      )?
@@ -184,7 +184,7 @@ mod tests {
                 libp2p_yamux::Config::default,
             )
             .unwrap()
-            .with_relay(libp2p_tls::Config::new, libp2p_yamux::Config::default)
+            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_behaviour(|_, relay| Behaviour {
                 dummy: libp2p_swarm::dummy::Behaviour,
@@ -299,7 +299,7 @@ mod tests {
             .with_quic()
             .with_dns()
             .unwrap()
-            .with_relay(libp2p_tls::Config::new, libp2p_yamux::Config::default)
+            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .await

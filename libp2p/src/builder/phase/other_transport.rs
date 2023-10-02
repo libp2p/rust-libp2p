@@ -85,7 +85,7 @@ impl<T: AuthenticatedMultiplexedTransport>
 impl<T: AuthenticatedMultiplexedTransport, Provider>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
-    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+    pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
         security_upgrade: SecUpgrade,
         multiplexer_upgrade: MuxUpgrade,
@@ -119,7 +119,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     {
         self.without_any_other_transports()
             .without_dns()
-            .with_relay(security_upgrade, multiplexer_upgrade)
+            .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
 impl<Provider, T: AuthenticatedMultiplexedTransport>

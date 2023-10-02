@@ -82,7 +82,7 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     ) -> SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
             // TODO: Is this a good idea in a production environment? Unfortunately I don't know a
-            // way around it. One can not define two `with_relay` methods, one with a real transport
+            // way around it. One can not define two `with_relay_client` methods, one with a real transport
             // using OrTransport, one with a fake transport discarding it right away.
             keypair: self.keypair,
             phantom: PhantomData,

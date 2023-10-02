@@ -19,8 +19,7 @@ pub struct RelayPhase<T> {
 
 #[cfg(feature = "relay")]
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, RelayPhase<T>> {
-    // TODO: This should be with_relay_client.
-    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+    pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
         security_upgrade: SecUpgrade,
         multiplexer_upgrade: MuxUpgrade,

@@ -78,7 +78,7 @@ impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
 // Shortcuts
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
     #[cfg(feature = "relay")]
-    pub fn with_relay<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+    pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
         security_upgrade: SecUpgrade,
         multiplexer_upgrade: MuxUpgrade,
@@ -111,7 +111,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
     {
         self.without_quic()
-            .with_relay(security_upgrade, multiplexer_upgrade)
+            .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 
     pub fn with_other_transport<
