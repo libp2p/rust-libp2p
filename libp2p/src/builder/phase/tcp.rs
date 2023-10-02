@@ -76,17 +76,17 @@ impl_tcp_builder!("async-std", super::provider::AsyncStd, async_io);
 impl_tcp_builder!("tokio", super::provider::Tokio, tokio);
 
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
-    // TODO: This would allow one to build a faulty transport.
     pub(crate) fn without_tcp(
         self,
     ) -> SwarmBuilder<Provider, QuicPhase<impl AuthenticatedMultiplexedTransport>> {
         SwarmBuilder {
-            // TODO: Is this a good idea in a production environment? Unfortunately I don't know a
-            // way around it. One can not define two `with_relay_client` methods, one with a real transport
-            // using OrTransport, one with a fake transport discarding it right away.
             keypair: self.keypair,
             phantom: PhantomData,
             phase: QuicPhase {
+                // Note that this allows a user to build a faulty (i.e. dummy) transport only.
+                // Ideally the final build step would not exist unless one adds another transport
+                // after `without_tcp`. Though currently this would introduce significant
+                // complexity to each following step.
                 transport: libp2p_core::transport::dummy::DummyTransport::new(),
             },
         }
