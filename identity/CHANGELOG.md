@@ -1,4 +1,4 @@
-## 0.2.4 - unreleased
+## 0.2.4
 
 - Implement `Keypair::derive_secret`, to deterministically derive a new secret from the embedded secret key.
   See [PR 4554].
