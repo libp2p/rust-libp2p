@@ -1,8 +1,7 @@
 ## 0.2.4 - unreleased
 
-- Implement `Keypair::derive_secret`, that derives a secret from an input domain if the inner key
-  pair supports it.
-  See [PR 4554]
+- Implement `Keypair::derive_secret`, to deterministically derive a new secret from the embedded secret key.
+  See [PR 4554].
 
 [PR 4554]: https://github.com/libp2p/rust-libp2p/pull/4554
 
