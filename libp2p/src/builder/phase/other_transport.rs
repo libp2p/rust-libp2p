@@ -179,14 +179,14 @@ impl<T> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Syn
 where
     T: AuthenticatedMultiplexedTransport,
 {
-    type Error = BehaviourError;
+    type Error = TransportError;
 
     fn try_into_transport(self) -> Result<T, Self::Error> {
-        self.map_err(BehaviourError)
+        self.map_err(TransportError)
     }
 }
 
 
 #[derive(Debug, thiserror::Error)]
-#[error("failed to build behaviour: {0}")]
-pub struct BehaviourError(Box<dyn std::error::Error + Send + Sync>);
+#[error("failed to build transport: {0}")]
+pub struct TransportError(Box<dyn std::error::Error + Send + Sync>);
