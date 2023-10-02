@@ -310,7 +310,7 @@ fn build_relay() -> Swarm<Relay> {
 
     let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
 
-    Swarm::new_with_config(
+    Swarm::new(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -337,7 +337,7 @@ fn build_client() -> Swarm<Client> {
         &local_key,
     );
 
-    Swarm::new_with_config(
+    Swarm::new(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),

@@ -113,7 +113,7 @@ where
         .authenticate(libp2p_noise::Config::new(&identity).unwrap())
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
-    Swarm::new_with_config(
+    Swarm::new(
         transport,
         dummy::Behaviour,
         identity.public().to_peer_id(),

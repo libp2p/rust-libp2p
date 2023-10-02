@@ -123,7 +123,7 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    Swarm::new_with_config(
+    Swarm::new(
         transport,
         Client {
             relay: behaviour,

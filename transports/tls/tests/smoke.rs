@@ -65,7 +65,7 @@ fn make_swarm() -> Swarm<dummy::Behaviour> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    Swarm::new_with_config(
+    Swarm::new(
         transport,
         dummy::Behaviour,
         identity.public().to_peer_id(),

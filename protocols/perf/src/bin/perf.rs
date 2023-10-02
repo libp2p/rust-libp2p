@@ -414,7 +414,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
         .boxed()
     };
 
-    let swarm = Swarm::new_with_config(
+    let swarm = Swarm::new(
         transport,
         Default::default(),
         local_peer_id,

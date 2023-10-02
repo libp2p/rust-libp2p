@@ -68,7 +68,7 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
     let behaviour = Behaviour::with_config(local_id, store, cfg);
 
     let mut swarm =
-        Swarm::new_with_config(transport, behaviour, local_id, swarm::Config::without_executor());
+        Swarm::new(transport, behaviour, local_id, swarm::Config::without_executor());
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();

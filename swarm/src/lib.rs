@@ -362,7 +362,7 @@ where
 {
     /// Creates a new [`Swarm`] from the given [`Transport`], [`NetworkBehaviour`], [`PeerId`] and
     /// [`Config`].
-    pub fn new_with_config(
+    pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
@@ -1373,7 +1373,7 @@ pub struct Config {
 
 impl Config {
     /// Creates a new [`Config`] from the given executor. The [`Swarm`] is obtained via
-    /// [`Swarm::new_with_config`].
+    /// [`Swarm::new`].
     pub fn with_executor(executor: impl Executor + Send + 'static) -> Self {
         Self {
             pool_config: PoolConfig::new(Some(Box::new(executor))),
@@ -1491,7 +1491,7 @@ impl Config {
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
 #[deprecated(
-    note = "Use the new `libp2p::SwarmBuilder` instead of `libp2p::swarm::SwarmBuilder` or create a `Swarm` directly via `Swarm::new_with_config`."
+    note = "Use the new `libp2p::SwarmBuilder` instead of `libp2p::swarm::SwarmBuilder` or create a `Swarm` directly via `Swarm::new`."
 )]
 pub struct SwarmBuilder<TBehaviour> {
     local_peer_id: PeerId,
@@ -1999,7 +1999,7 @@ mod tests {
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
 
-        Swarm::new_with_config(
+        Swarm::new(
             transport,
             behaviour,
             local_public_key.into(),

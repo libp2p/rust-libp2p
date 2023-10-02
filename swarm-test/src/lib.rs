@@ -216,7 +216,7 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::new_with_config(
+        Swarm::new(
             transport,
             behaviour_fn(identity),
             peer_id,

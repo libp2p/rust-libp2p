@@ -15,7 +15,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport, B: libp2p_swarm::NetworkBeh
     SwarmBuilder<Provider, BuildPhase<T, B>>
 {
     pub fn build(self) -> Swarm<B> {
-        Swarm::new_with_config(
+        Swarm::new(
             libp2p_core::transport::timeout::TransportTimeout::new(
                 self.phase.transport,
                 CONNECTION_TIMEOUT,
