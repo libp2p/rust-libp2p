@@ -179,10 +179,14 @@ impl<T> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Syn
 where
     T: AuthenticatedMultiplexedTransport,
 {
-    // TODO mxinden: why do we need an io error here? isn't box<dyn> enough?
-    type Error = std::io::Error; // TODO: Consider a dedicated type here with a descriptive message like "failed to build behaviour"?
+    type Error = BehaviourError;
 
     fn try_into_transport(self) -> Result<T, Self::Error> {
-        self.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        self.map_err(BehaviourError)
     }
 }
+
+
+#[derive(Debug, thiserror::Error)]
+#[error("failed to build behaviour: {0}")]
+pub struct BehaviourError(Box<dyn std::error::Error + Send + Sync>);
