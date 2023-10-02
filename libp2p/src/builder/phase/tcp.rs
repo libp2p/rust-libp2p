@@ -17,20 +17,20 @@ use std::marker::PhantomData;
 pub struct TcpPhase {}
 
 macro_rules! impl_tcp_builder {
-    ($providerKebabCase:literal, $providerCamelCase:ty, $path:ident) => {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $path:ident) => {
         #[cfg(all(
             not(target_arch = "wasm32"),
             feature = "tcp",
             feature = $providerKebabCase,
         ))]
-        impl SwarmBuilder<$providerCamelCase, TcpPhase> {
+        impl SwarmBuilder<$providerPascalCase, TcpPhase> {
             pub fn with_tcp<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
                 self,
                 tcp_config: libp2p_tcp::Config,
                 security_upgrade: SecUpgrade,
                 multiplexer_upgrade: MuxUpgrade,
             ) -> Result<
-                SwarmBuilder<$providerCamelCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
+                SwarmBuilder<$providerPascalCase, QuicPhase<impl AuthenticatedMultiplexedTransport>>,
             SecUpgrade::Error,
             >
             where
@@ -133,9 +133,9 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     }
 }
 macro_rules! impl_tcp_phase_with_websocket {
-    ($providerKebabCase:literal, $providerCamelCase:ty, $websocketStream:ty) => {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
         #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]
-        impl SwarmBuilder<$providerCamelCase, TcpPhase> {
+        impl SwarmBuilder<$providerPascalCase, TcpPhase> {
             pub async fn with_websocket <
                 SecUpgrade,
                 SecStream,
@@ -149,7 +149,7 @@ macro_rules! impl_tcp_phase_with_websocket {
                 multiplexer_upgrade: MuxUpgrade,
             ) -> Result<
                     SwarmBuilder<
-                        $providerCamelCase,
+                        $providerPascalCase,
                         BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
                     >,
                     WebsocketError<SecUpgrade::Error>,

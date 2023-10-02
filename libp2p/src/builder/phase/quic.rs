@@ -14,13 +14,13 @@ pub struct QuicPhase<T> {
 }
 
 macro_rules! impl_quic_builder {
-    ($providerKebabCase:literal, $providerCamelCase:ty, $quic:ident) => {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $quic:ident) => {
         #[cfg(all(not(target_arch = "wasm32"), feature = "quic", feature = $providerKebabCase))]
-        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
+        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerPascalCase, QuicPhase<T>> {
             pub fn with_quic(
                 self,
             ) -> SwarmBuilder<
-                $providerCamelCase,
+                $providerPascalCase,
                 OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
             > {
                 self.with_quic_config(|key| libp2p_quic::Config::new(&key))
@@ -30,7 +30,7 @@ macro_rules! impl_quic_builder {
                 self,
                 constructor: impl FnOnce(&libp2p_identity::Keypair) -> libp2p_quic::Config,
             ) -> SwarmBuilder<
-                $providerCamelCase,
+                $providerPascalCase,
                 OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
             > {
                 SwarmBuilder {
@@ -160,9 +160,9 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
     }
 }
 macro_rules! impl_quic_phase_with_websocket {
-    ($providerKebabCase:literal, $providerCamelCase:ty, $websocketStream:ty) => {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
         #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]
-        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerCamelCase, QuicPhase<T>> {
+        impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerPascalCase, QuicPhase<T>> {
             pub async fn with_websocket <
                 SecUpgrade,
                 SecStream,
@@ -176,7 +176,7 @@ macro_rules! impl_quic_phase_with_websocket {
                 multiplexer_upgrade: MuxUpgrade,
             ) -> Result<
                     SwarmBuilder<
-                        $providerCamelCase,
+                        $providerPascalCase,
                         BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
                     >,
                     super::websocket::WebsocketError<SecUpgrade::Error>,

@@ -16,9 +16,9 @@ pub struct WebsocketPhase<T, R> {
 }
 
 macro_rules! impl_websocket_builder {
-    ($providerKebabCase:literal, $providerCamelCase:ty, $dnsTcp:expr, $websocketStream:ty) => {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $dnsTcp:expr, $websocketStream:ty) => {
         #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket"))]
-        impl<T, R> SwarmBuilder<$providerCamelCase, WebsocketPhase<T, R>> {
+        impl<T, R> SwarmBuilder<$providerPascalCase, WebsocketPhase<T, R>> {
             pub async fn with_websocket<
                 SecUpgrade,
                 SecStream,
@@ -32,7 +32,7 @@ macro_rules! impl_websocket_builder {
                 multiplexer_upgrade: MuxUpgrade,
             ) -> Result<
                 SwarmBuilder<
-                    $providerCamelCase,
+                    $providerPascalCase,
                     BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, R>,
                 >,
                 WebsocketError<SecUpgrade::Error>,
