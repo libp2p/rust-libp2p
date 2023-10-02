@@ -15,9 +15,10 @@ categories = ["cryptography"]
 asn1_der = { version = "0.7.6", optional = true }
 bs58 = { version = "0.5.0", optional = true }
 ed25519-dalek = { version = "2.0", optional = true }
+hkdf = { version = "0.12.3", optional = true }
 libsecp256k1 = { version = "0.7.0", optional = true }
 log = "0.4"
-multihash = { version = "0.19.0", optional = true }
+multihash = { version = "0.19.1", optional = true }
 p256 = { version = "0.13", default-features = false, features = ["ecdsa", "std", "pem"], optional = true }
 quick-protobuf = "0.8.1"
 rand = { version = "0.8", optional = true }
@@ -32,16 +33,18 @@ zeroize = { version = "1.6", optional = true }
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
 
 [features]
-secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:sha2", "dep:zeroize" ]
-ecdsa = [ "dep:p256", "dep:void", "dep:zeroize", "dep:sec1" ]
-rsa = [ "dep:ring", "dep:asn1_der", "rand", "dep:zeroize" ]
-ed25519 = [ "dep:ed25519-dalek", "dep:zeroize" ]
-peerid = [ "dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2" ]
+secp256k1 = [ "dep:libsecp256k1", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize" ]
+ecdsa = [ "dep:p256", "dep:void", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf" ]
+rsa = [ "dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize" ]
+ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:sha2", "dep:hkdf" ]
+peerid = [ "dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2", "dep:hkdf" ]
 rand = ["dep:rand", "ed25519-dalek?/rand_core"]
+
+default = ["rand"]
 
 [dev-dependencies]
 quickcheck = { workspace = true }
-base64 = "0.21.2"
+base64 = "0.21.4"
 serde_json = "1.0"
 rmp-serde = "1.1"
 criterion = "0.5"

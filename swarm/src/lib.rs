@@ -67,6 +67,9 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
 pub mod handler;
+#[deprecated(
+    note = "Configure an appropriate idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead. To keep connections alive 'forever', use `Duration::from_secs(u64::MAX)`."
+)]
 pub mod keep_alive;
 mod listen_opts;
 
@@ -146,6 +149,7 @@ use libp2p_identity::PeerId;
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
+use std::time::Duration;
 use std::{
     convert::TryFrom,
     error, fmt, io,
@@ -1518,8 +1522,17 @@ where
         self
     }
 
+    /// How long to keep a connection alive once it is idling.
+    ///
+    /// Defaults to 0.
+    pub fn idle_connection_timeout(mut self, timeout: Duration) -> Self {
+        self.pool_config.idle_connection_timeout = timeout;
+        self
+    }
+
     /// Builds a `Swarm` with the current configuration.
     pub fn build(self) -> Swarm<TBehaviour> {
+        log::info!("Local peer id: {}", self.local_peer_id);
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
@@ -1580,9 +1593,9 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: tried to dial local peer id at {endpoint:?}."
             ),
-            DialError::DialPeerConditionFalse(c) => {
-                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
-            }
+            DialError::DialPeerConditionFalse(PeerCondition::Disconnected) => write!(f, "Dial error: dial condition was configured to only happen when disconnected (`PeerCondition::Disconnected`), but node is already connected, thus cancelling new dial."),
+            DialError::DialPeerConditionFalse(PeerCondition::NotDialing) => write!(f, "Dial error: dial condition was configured to only happen if there is currently no ongoing dialing attempt (`PeerCondition::NotDialing`), but a dial is in progress, thus cancelling new dial."),
+            DialError::DialPeerConditionFalse(PeerCondition::Always) => unreachable!("Dial peer condition is by definition true."),
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
@@ -1715,9 +1728,9 @@ pub struct ConnectionDenied {
 }
 
 impl ConnectionDenied {
-    pub fn new(cause: impl error::Error + Send + Sync + 'static) -> Self {
+    pub fn new(cause: impl Into<Box<dyn error::Error + Send + Sync + 'static>>) -> Self {
         Self {
-            inner: Box::new(cause),
+            inner: cause.into(),
         }
     }
 
@@ -1807,6 +1820,7 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dummy;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
@@ -1828,30 +1842,24 @@ mod tests {
         Disconnecting,
     }
 
-    fn new_test_swarm<T, O>(
-        handler_proto: T,
-    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<T, O>>>
-    where
-        T: ConnectionHandler + Clone,
-        T::ToBehaviour: Clone,
-        O: Send + 'static,
-    {
+    fn new_test_swarm(
+    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<dummy::ConnectionHandler, ()>>> {
         let id_keys = identity::Keypair::generate_ed25519();
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
-            .authenticate(plaintext::PlainText2Config {
-                local_public_key: local_public_key.clone(),
-            })
+            .authenticate(plaintext::Config::new(&id_keys))
             .multiplex(yamux::Config::default())
             .boxed();
-        let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        match ThreadPool::new().ok() {
+        let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
+        let builder = match ThreadPool::new().ok() {
             Some(tp) => {
                 SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), tp)
             }
             None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
-        }
+        };
+
+        builder.idle_connection_timeout(Duration::from_secs(5))
     }
 
     fn swarms_connected<TBehaviour>(
@@ -1902,12 +1910,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_swarm_disconnect() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -1968,12 +1972,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_all() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2038,12 +2038,8 @@ mod tests {
     /// with pairs of [`FromSwarm::ConnectionEstablished`] / [`FromSwarm::ConnectionClosed`]
     #[test]
     fn test_behaviour_disconnect_one() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
@@ -2121,7 +2117,7 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut swarm = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
+                let mut swarm = new_test_swarm()
                     .dial_concurrency_factor(concurrency_factor.0)
                     .build();
 
@@ -2157,19 +2153,14 @@ mod tests {
                     )
                     .unwrap();
                 for mut transport in transports.into_iter() {
-                    loop {
-                        match futures::future::select(transport.select_next_some(), swarm.next())
-                            .await
-                        {
-                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
-                                break;
-                            }
-                            future::Either::Left(_) => {
-                                panic!("Unexpected transport event.")
-                            }
-                            future::Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {e:?}")
-                            }
+                    match futures::future::select(transport.select_next_some(), swarm.next()).await
+                    {
+                        future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
+                        future::Either::Left(_) => {
+                            panic!("Unexpected transport event.")
+                        }
+                        future::Either::Right((e, _)) => {
+                            panic!("Expect swarm to not emit any event {e:?}")
                         }
                     }
                 }
@@ -2189,8 +2180,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm1 = new_test_swarm().build();
+        let mut swarm2 = new_test_swarm().build();
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2249,7 +2240,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm().build();
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2309,7 +2300,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let swarm = new_test_swarm().build();
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2320,7 +2311,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm().build();
 
         let addresses = HashSet::from([
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
@@ -2366,8 +2357,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut listener = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut dialer = new_test_swarm().build();
+        let mut listener = new_test_swarm().build();
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();

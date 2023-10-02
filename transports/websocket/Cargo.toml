@@ -3,7 +3,7 @@ name = "libp2p-websocket"
 edition = "2021"
 rust-version = { workspace = true }
 description = "WebSocket transport for libp2p"
-version = "0.42.0"
+version = "0.42.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures-rustls = "0.22"
+futures-rustls = "0.24.0"
 either = "1.9.0"
 futures = "0.3.28"
 libp2p-core = { workspace = true }
@@ -21,7 +21,7 @@ parking_lot = "0.12.0"
 quicksink = "0.1"
 rw-stream-sink = { workspace = true }
 soketto = "0.7.0"
-url = "2.1"
+url = "2.4"
 webpki-roots = "0.25"
 
 [dev-dependencies]

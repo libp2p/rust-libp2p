@@ -54,16 +54,16 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example relay_v2 -p libp2p-relay
+//! cargo build --bin relay-server-example
 //! ```
 //!
-//! You can find the binary at `target/debug/examples/relay_v2`. In case you built it locally, copy
+//! You can find the binary at `target/debug/relay-server-example`. In case you built it locally, copy
 //! it to your server.
 //!
 //! On your server, start the relay server binary:
 //!
 //! ``` bash
-//! ./relay_v2 --port 4001 --secret-key-seed 0
+//! ./relay-server-example --port 4001 --secret-key-seed 0
 //! ```
 //!
 //! Now let's make sure that the server is public, in other words let's make sure one can reach it
@@ -122,16 +122,16 @@
 //!
 //! ``` bash
 //! ## Inside the rust-libp2p repository.
-//! cargo build --example client -p libp2p-dcutr
+//! cargo build --bin dcutr-example
 //! ```
 //!
-//! You can find the binary at `target/debug/examples/client`. In case you built it locally, copy
+//! You can find the binary at `target/debug/dcutr-example`. In case you built it locally, copy
 //! it to your listening client machine.
 //!
 //! On the listening client machine:
 //!
 //! ``` bash
-//! RUST_LOG=info ./client --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 1 --mode listen --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN
 //!
 //! [2022-05-11T10:38:52Z INFO  client] Local peer id: PeerId("XXX")
 //! [2022-05-11T10:38:52Z INFO  client] Listening on "/ip4/127.0.0.1/tcp/44703"
@@ -153,7 +153,7 @@
 //! ## Connecting to the listening client from the dialing client
 //!
 //! ``` bash
-//! RUST_LOG=info ./client --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
+//! RUST_LOG=info ./dcutr-example --secret-key-seed 2 --mode dial --relay-address /ip4/$RELAY_SERVER_IP/tcp/4001/p2p/12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN --remote-peer-id 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X
 //! ```
 //!
 //! You should see the following logs appear:

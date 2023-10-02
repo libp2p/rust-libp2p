@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.3.21", features = ["derive"] }
+clap = { version = "4.3.23", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10.0"

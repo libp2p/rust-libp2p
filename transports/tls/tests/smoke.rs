@@ -3,7 +3,8 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
-use libp2p_swarm::{keep_alive, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{dummy, Swarm, SwarmBuilder, SwarmEvent};
+use std::time::Duration;
 
 #[tokio::test]
 async fn can_establish_connection() {
@@ -55,7 +56,7 @@ async fn can_establish_connection() {
     assert_eq!(&outbound_peer_id, swarm1.local_peer_id());
 }
 
-fn make_swarm() -> Swarm<keep_alive::Behaviour> {
+fn make_swarm() -> Swarm<dummy::Behaviour> {
     let identity = libp2p_identity::Keypair::generate_ed25519();
 
     let transport = MemoryTransport::default()
@@ -64,10 +65,7 @@ fn make_swarm() -> Swarm<keep_alive::Behaviour> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    SwarmBuilder::without_executor(
-        transport,
-        keep_alive::Behaviour,
-        identity.public().to_peer_id(),
-    )
-    .build()
+    SwarmBuilder::without_executor(transport, dummy::Behaviour, identity.public().to_peer_id())
+        .idle_connection_timeout(Duration::from_secs(5))
+        .build()
 }

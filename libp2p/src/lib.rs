@@ -52,10 +52,15 @@ pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
+
 #[cfg(feature = "deflate")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_deflate as deflate;
+#[deprecated(
+    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
+)]
+pub mod deflate {
+    pub use libp2p_deflate::*;
+}
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(target_arch = "wasm32"))]
@@ -127,6 +132,10 @@ pub use libp2p_tls as tls;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
+#[cfg(feature = "upnp")]
+#[cfg(not(target_arch = "wasm32"))]
+#[doc(inline)]
+pub use libp2p_upnp as upnp;
 #[cfg(feature = "wasm-ext")]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
@@ -185,12 +194,12 @@ pub async fn development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::DnsConfig::system(tcp::async_io::Transport::new(
+        let dns_tcp = dns::async_std::Transport::system(tcp::async_io::Transport::new(
             tcp::Config::new().nodelay(true),
         ))
         .await?;
         let ws_dns_tcp = websocket::WsConfig::new(
-            dns::DnsConfig::system(tcp::async_io::Transport::new(
+            dns::async_std::Transport::system(tcp::async_io::Transport::new(
                 tcp::Config::new().nodelay(true),
             ))
             .await?,
@@ -230,10 +239,10 @@ pub fn tokio_development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::TokioDnsConfig::system(tcp::tokio::Transport::new(
+        let dns_tcp = dns::tokio::Transport::system(tcp::tokio::Transport::new(
             tcp::Config::new().nodelay(true),
         ))?;
-        let ws_dns_tcp = websocket::WsConfig::new(dns::TokioDnsConfig::system(
+        let ws_dns_tcp = websocket::WsConfig::new(dns::tokio::Transport::system(
             tcp::tokio::Transport::new(tcp::Config::new().nodelay(true)),
         )?);
         dns_tcp.or_transport(ws_dns_tcp)

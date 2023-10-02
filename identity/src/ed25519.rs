@@ -129,7 +129,7 @@ impl hash::Hash for PublicKey {
 
 impl cmp::PartialOrd for PublicKey {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        self.0.as_bytes().partial_cmp(other.0.as_bytes())
+        Some(self.cmp(other))
     }
 }
 
@@ -198,6 +198,10 @@ impl SecretKey {
             .map_err(|e| DecodingError::failed_to_parse("Ed25519 secret key", e))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
+    }
+
+    pub(crate) fn to_bytes(&self) -> [u8; 32] {
+        self.0
     }
 }
 

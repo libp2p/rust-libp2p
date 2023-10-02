@@ -19,27 +19,30 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::priv_client::transport;
-use crate::proto;
 use crate::protocol::{self, inbound_stop, outbound_hop};
+use crate::{proto, HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
+use futures::TryFutureExt;
+use futures_bounded::{PushError, Timeout};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    SubstreamProtocol,
 };
 use log::debug;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -48,6 +51,10 @@ use std::time::Duration;
 ///
 /// Circuits to be denied exceeding the limit are dropped.
 const MAX_NUMBER_DENYING_CIRCUIT: usize = 8;
+const DENYING_CIRCUIT_TIMEOUT: Duration = Duration::from_secs(60);
+
+const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
+const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum In {
     Reserve {
@@ -121,10 +128,21 @@ pub struct Handler {
     /// Queue of events to return when polled.
     queued_events: VecDeque<
         ConnectionHandlerEvent<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::ToBehaviour,
-            <Self as ConnectionHandler>::Error,
+            <Handler as ConnectionHandler>::OutboundProtocol,
+            <Handler as ConnectionHandler>::OutboundOpenInfo,
+            <Handler as ConnectionHandler>::ToBehaviour,
+            <Handler as ConnectionHandler>::Error,
+        >,
+    >,
+
+    wait_for_outbound_stream: VecDeque<outbound_hop::OutboundStreamInfo>,
+    outbound_circuits: futures_bounded::FuturesSet<
+        Result<
+            Either<
+                Result<outbound_hop::Reservation, outbound_hop::ReservationFailedReason>,
+                Result<Option<outbound_hop::Circuit>, outbound_hop::CircuitFailedReason>,
+            >,
+            outbound_hop::FatalUpgradeError,
         >,
     >,
 
@@ -140,8 +158,10 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs:
-        HashMap<PeerId, BoxFuture<'static, Result<(), protocol::inbound_stop::UpgradeError>>>,
+    open_circuit_futs:
+        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
+
+    circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::UpgradeError>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -158,163 +178,38 @@ impl Handler {
             remote_addr,
             queued_events: Default::default(),
             pending_error: Default::default(),
+            wait_for_outbound_stream: Default::default(),
+            outbound_circuits: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
-            circuit_deny_futs: Default::default(),
+            open_circuit_futs: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
+            circuit_deny_futs: futures_bounded::FuturesMap::new(
+                DENYING_CIRCUIT_TIMEOUT,
+                MAX_NUMBER_DENYING_CIRCUIT,
+            ),
             send_error_futs: Default::default(),
             keep_alive: KeepAlive::Yes,
         }
     }
 
-    fn on_fully_negotiated_inbound(
-        &mut self,
-        FullyNegotiatedInbound {
-            protocol: inbound_circuit,
-            ..
-        }: FullyNegotiatedInbound<
-            <Self as ConnectionHandler>::InboundProtocol,
-            <Self as ConnectionHandler>::InboundOpenInfo,
-        >,
-    ) {
-        match &mut self.reservation {
-            Reservation::Accepted { pending_msgs, .. }
-            | Reservation::Renewing { pending_msgs, .. } => {
-                let src_peer_id = inbound_circuit.src_peer_id();
-                let limit = inbound_circuit.limit();
-
-                let (tx, rx) = oneshot::channel();
-                self.alive_lend_out_substreams.push(rx);
-                let connection = super::ConnectionState::new_inbound(inbound_circuit, tx);
-
-                pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
-                    // stream: connection,
-                    stream: super::Connection { state: connection },
-                    src_peer_id,
-                    relay_peer_id: self.remote_peer_id,
-                    relay_addr: self.remote_addr.clone(),
-                });
-
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                        Event::InboundCircuitEstablished { src_peer_id, limit },
-                    ));
-            }
-            Reservation::None => {
-                let src_peer_id = inbound_circuit.src_peer_id();
-
-                if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
-                    && !self.circuit_deny_futs.contains_key(&src_peer_id)
-                {
-                    log::warn!(
-                        "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
-                        src_peer_id,
-                    );
-                } else if self
-                    .circuit_deny_futs
-                    .insert(
-                        src_peer_id,
-                        inbound_circuit.deny(proto::Status::NO_RESERVATION).boxed(),
-                    )
-                    .is_some()
-                {
-                    log::warn!(
-                            "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
-                            src_peer_id
-                        )
-                }
-            }
-        }
-    }
-
-    fn on_fully_negotiated_outbound(
-        &mut self,
-        FullyNegotiatedOutbound {
-            protocol: output,
-            info,
-        }: FullyNegotiatedOutbound<
-            <Self as ConnectionHandler>::OutboundProtocol,
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-        >,
-    ) {
-        match (output, info) {
-            // Outbound reservation
-            (
-                outbound_hop::Output::Reservation {
-                    renewal_timeout,
-                    addrs,
-                    limit,
-                },
-                OutboundOpenInfo::Reserve { to_listener },
-            ) => {
-                let event = self.reservation.accepted(
-                    renewal_timeout,
-                    addrs,
-                    to_listener,
-                    self.local_peer_id,
-                    limit,
-                );
-
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::NotifyBehaviour(event));
-            }
-
-            // Outbound circuit
-            (
-                outbound_hop::Output::Circuit {
-                    substream,
-                    read_buffer,
-                    limit,
-                },
-                OutboundOpenInfo::Connect { send_back },
-            ) => {
-                let (tx, rx) = oneshot::channel();
-                match send_back.send(Ok(super::Connection {
-                    state: super::ConnectionState::new_outbound(substream, read_buffer, tx),
-                })) {
-                    Ok(()) => {
-                        self.alive_lend_out_substreams.push(rx);
-                        self.queued_events
-                            .push_back(ConnectionHandlerEvent::NotifyBehaviour(
-                                Event::OutboundCircuitEstablished { limit },
-                            ));
-                    }
-                    Err(_) => debug!(
-                        "Oneshot to `client::transport::Dial` future dropped. \
-                         Dropping established relayed connection to {:?}.",
-                        self.remote_peer_id,
-                    ),
-                }
-            }
-
-            _ => unreachable!(),
-        }
-    }
-
-    fn on_listen_upgrade_error(
-        &mut self,
-        ListenUpgradeError {
-            error: inbound_stop::UpgradeError::Fatal(error),
-            ..
-        }: ListenUpgradeError<
-            <Self as ConnectionHandler>::InboundOpenInfo,
-            <Self as ConnectionHandler>::InboundProtocol,
-        >,
-    ) {
-        self.pending_error = Some(StreamUpgradeError::Apply(Either::Left(error)));
-    }
-
     fn on_dial_upgrade_error(
         &mut self,
-        DialUpgradeError {
-            info: open_info,
-            error,
-        }: DialUpgradeError<
+        DialUpgradeError { error, .. }: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        match open_info {
-            OutboundOpenInfo::Reserve { mut to_listener } => {
+        let outbound_info = self.wait_for_outbound_stream.pop_front().expect(
+            "got a stream error without a pending connection command or a reserve listener",
+        );
+        match outbound_info {
+            outbound_hop::OutboundStreamInfo::Reserve(mut to_listener) => {
                 let non_fatal_error = match error {
                     StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
                     StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
@@ -322,19 +217,7 @@ impl Handler {
                         self.pending_error = Some(StreamUpgradeError::Io(e));
                         return;
                     }
-                    StreamUpgradeError::Apply(error) => match error {
-                        outbound_hop::UpgradeError::Fatal(error) => {
-                            self.pending_error =
-                                Some(StreamUpgradeError::Apply(Either::Right(error)));
-                            return;
-                        }
-                        outbound_hop::UpgradeError::ReservationFailed(error) => {
-                            StreamUpgradeError::Apply(error)
-                        }
-                        outbound_hop::UpgradeError::CircuitFailed(_) => {
-                            unreachable!("Do not emitt `CircuitFailed` for outgoing reservation.")
-                        }
-                    },
+                    StreamUpgradeError::Apply(v) => void::unreachable(v),
                 };
 
                 if self.pending_error.is_none() {
@@ -347,11 +230,12 @@ impl Handler {
                         .boxed(),
                     );
                 } else {
-                    // Fatal error occured, thus handler is closing as quickly as possible.
+                    // Fatal error occurred, thus handler is closing as quickly as possible.
                     // Transport is notified through dropping `to_listener`.
                 }
 
                 let renewal = self.reservation.failed();
+
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
                         Event::ReservationReqFailed {
@@ -360,7 +244,7 @@ impl Handler {
                         },
                     ));
             }
-            OutboundOpenInfo::Connect { send_back } => {
+            outbound_hop::OutboundStreamInfo::CircuitConnection(cmd) => {
                 let non_fatal_error = match error {
                     StreamUpgradeError::Timeout => StreamUpgradeError::Timeout,
                     StreamUpgradeError::NegotiationFailed => StreamUpgradeError::NegotiationFailed,
@@ -368,22 +252,10 @@ impl Handler {
                         self.pending_error = Some(StreamUpgradeError::Io(e));
                         return;
                     }
-                    StreamUpgradeError::Apply(error) => match error {
-                        outbound_hop::UpgradeError::Fatal(error) => {
-                            self.pending_error =
-                                Some(StreamUpgradeError::Apply(Either::Right(error)));
-                            return;
-                        }
-                        outbound_hop::UpgradeError::CircuitFailed(error) => {
-                            StreamUpgradeError::Apply(error)
-                        }
-                        outbound_hop::UpgradeError::ReservationFailed(_) => {
-                            unreachable!("Do not emitt `ReservationFailed` for outgoing circuit.")
-                        }
-                    },
+                    StreamUpgradeError::Apply(v) => void::unreachable(v),
                 };
 
-                let _ = send_back.send(Err(()));
+                let _ = cmd.send_back.send(Err(()));
 
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(
@@ -394,6 +266,23 @@ impl Handler {
             }
         }
     }
+
+    fn insert_to_deny_futs(&mut self, circuit: inbound_stop::Circuit) {
+        let src_peer_id = circuit.src_peer_id();
+
+        match self.circuit_deny_futs.try_push(
+            src_peer_id,
+            circuit.deny(proto::Status::NO_RESERVATION),
+        ) {
+            Err(PushError::BeyondCapacity(_)) => log::warn!(
+                "Dropping inbound circuit request to be denied from {src_peer_id} due to exceeding limit."
+            ),
+            Err(PushError::ReplacedFuture(_)) => log::warn!(
+                "Dropping existing inbound circuit request to be denied from {src_peer_id} in favor of new one."
+            ),
+            Ok(()) => {}
+        }
+    }
 }
 
 impl ConnectionHandler for Handler {
@@ -402,36 +291,37 @@ impl ConnectionHandler for Handler {
     type Error = StreamUpgradeError<
         Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
-    type InboundProtocol = inbound_stop::Upgrade;
-    type OutboundProtocol = outbound_hop::Upgrade;
-    type OutboundOpenInfo = OutboundOpenInfo;
+    type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
+    type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
+    type OutboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
+        SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ())
     }
 
     fn on_behaviour_event(&mut self, event: Self::FromBehaviour) {
         match event {
             In::Reserve { to_listener } => {
+                self.wait_for_outbound_stream
+                    .push_back(outbound_hop::OutboundStreamInfo::Reserve(to_listener));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            outbound_hop::Upgrade::Reserve,
-                            OutboundOpenInfo::Reserve { to_listener },
-                        ),
+                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
                     });
             }
             In::EstablishCircuit {
                 send_back,
                 dst_peer_id,
             } => {
+                self.wait_for_outbound_stream.push_back(
+                    outbound_hop::OutboundStreamInfo::CircuitConnection(
+                        outbound_hop::Command::new(dst_peer_id, send_back),
+                    ),
+                );
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            outbound_hop::Upgrade::Connect { dst_peer_id },
-                            OutboundOpenInfo::Connect { send_back },
-                        ),
+                        protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
                     });
             }
         }
@@ -458,38 +348,132 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
+        // Inbound circuits
+        loop {
+            match self.outbound_circuits.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(Either::Left(Ok(outbound_hop::Reservation {
+                    renewal_timeout,
+                    addrs,
+                    limit,
+                    to_listener,
+                }))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        self.reservation.accepted(
+                            renewal_timeout,
+                            addrs,
+                            to_listener,
+                            self.local_peer_id,
+                            limit,
+                        ),
+                    ))
+                }
+                Poll::Ready(Ok(Ok(Either::Right(Ok(Some(outbound_hop::Circuit { limit })))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitEstablished { limit },
+                    ));
+                }
+                Poll::Ready(Ok(Ok(Either::Right(Ok(None))))) => continue,
+                Poll::Ready(Ok(Ok(Either::Right(Err(e))))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::OutboundCircuitReqFailed {
+                            error: StreamUpgradeError::Apply(e),
+                        },
+                    ));
+                }
+                Poll::Ready(Ok(Ok(Either::Left(Err(e))))) => {
+                    let renewal = self.reservation.failed();
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqFailed {
+                            renewal,
+                            error: StreamUpgradeError::Apply(e),
+                        },
+                    ));
+                }
+                Poll::Ready(Ok(Err(e))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                        Either::Right(e),
+                    )))
+                }
+                Poll::Ready(Err(Timeout { .. })) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+                Poll::Pending => break,
+            }
+        }
+
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
 
-        if let Poll::Ready(Some(protocol)) = self.reservation.poll(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
+        if let Poll::Ready(worker_res) = self.open_circuit_futs.poll_unpin(cx) {
+            let res = match worker_res {
+                Ok(r) => r,
+                Err(Timeout { .. }) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+                }
+            };
+
+            match res {
+                Ok(circuit) => match &mut self.reservation {
+                    Reservation::Accepted { pending_msgs, .. }
+                    | Reservation::Renewing { pending_msgs, .. } => {
+                        let src_peer_id = circuit.src_peer_id();
+                        let limit = circuit.limit();
+
+                        let (tx, rx) = oneshot::channel();
+                        self.alive_lend_out_substreams.push(rx);
+                        let connection = super::ConnectionState::new_inbound(circuit, tx);
+
+                        pending_msgs.push_back(
+                            transport::ToListenerMsg::IncomingRelayedConnection {
+                                stream: super::Connection { state: connection },
+                                src_peer_id,
+                                relay_peer_id: self.remote_peer_id,
+                                relay_addr: self.remote_addr.clone(),
+                            },
+                        );
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                            Event::InboundCircuitEstablished { src_peer_id, limit },
+                        ));
+                    }
+                    Reservation::None => {
+                        self.insert_to_deny_futs(circuit);
+                    }
+                },
+                Err(e) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                        Either::Left(e),
+                    )));
+                }
+            }
+        }
+
+        if let Poll::Ready(Some(to_listener)) = self.reservation.poll(cx) {
+            self.wait_for_outbound_stream
+                .push_back(outbound_hop::OutboundStreamInfo::Reserve(to_listener));
+
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(HOP_PROTOCOL_NAME), ()),
+            });
         }
 
         // Deny incoming circuit requests.
-        let maybe_event =
-            self.circuit_deny_futs
-                .iter_mut()
-                .find_map(|(src_peer_id, fut)| match fut.poll_unpin(cx) {
-                    Poll::Ready(Ok(())) => Some((
-                        *src_peer_id,
-                        Event::InboundCircuitReqDenied {
-                            src_peer_id: *src_peer_id,
-                        },
-                    )),
-                    Poll::Ready(Err(error)) => Some((
-                        *src_peer_id,
-                        Event::InboundCircuitReqDenyFailed {
-                            src_peer_id: *src_peer_id,
-                            error,
-                        },
-                    )),
-                    Poll::Pending => None,
-                });
-        if let Some((src_peer_id, event)) = maybe_event {
-            self.circuit_deny_futs.remove(&src_peer_id);
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+        match self.circuit_deny_futs.poll_unpin(cx) {
+            Poll::Ready((src_peer_id, Ok(Ok(())))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundCircuitReqDenied { src_peer_id },
+                ));
+            }
+            Poll::Ready((src_peer_id, Ok(Err(error)))) => {
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::InboundCircuitReqDenyFailed { src_peer_id, error },
+                ));
+            }
+            Poll::Ready((src_peer_id, Err(Timeout { .. }))) => {
+                log::warn!("Dropping inbound circuit request to be denied from {:?} due to exceeding limit.", src_peer_id);
+            }
+            Poll::Pending => {}
         }
 
         // Send errors to transport.
@@ -533,14 +517,62 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
-                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: stream,
+                ..
+            }) => {
+                if self
+                    .open_circuit_futs
+                    .try_push(inbound_stop::handle_open_circuit(stream))
+                    .is_err()
+                {
+                    log::warn!("Dropping inbound stream because we are at capacity")
+                }
             }
-            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
-                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: stream,
+                ..
+            }) => {
+                let outbound_info = self.wait_for_outbound_stream.pop_front().expect(
+                    "opened a stream without a pending connection command or a reserve listener",
+                );
+                match outbound_info {
+                    outbound_hop::OutboundStreamInfo::Reserve(to_listener) => {
+                        if self
+                            .outbound_circuits
+                            .try_push(
+                                outbound_hop::handle_reserve_message_response(stream, to_listener)
+                                    .map_ok(Either::Left),
+                            )
+                            .is_err()
+                        {
+                            log::warn!("Dropping outbound stream because we are at capacity")
+                        }
+                    }
+                    outbound_hop::OutboundStreamInfo::CircuitConnection(cmd) => {
+                        let (tx, rx) = oneshot::channel();
+                        self.alive_lend_out_substreams.push(rx);
+
+                        if self
+                            .outbound_circuits
+                            .try_push(
+                                outbound_hop::handle_connection_message_response(
+                                    stream,
+                                    self.remote_peer_id,
+                                    cmd,
+                                    tx,
+                                )
+                                .map_ok(Either::Right),
+                            )
+                            .is_err()
+                        {
+                            log::warn!("Dropping outbound stream because we are at capacity")
+                        }
+                    }
+                }
             }
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
-                self.on_listen_upgrade_error(listen_upgrade_error)
+                void::unreachable(listen_upgrade_error.error)
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
@@ -648,7 +680,7 @@ impl Reservation {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<SubstreamProtocol<outbound_hop::Upgrade, OutboundOpenInfo>>> {
+    ) -> Poll<Option<mpsc::Sender<transport::ToListenerMsg>>> {
         self.forward_messages_to_transport_listener(cx);
 
         // Check renewal timeout if any.
@@ -660,10 +692,7 @@ impl Reservation {
             } => match renewal_timeout.poll_unpin(cx) {
                 Poll::Ready(()) => (
                     Reservation::Renewing { pending_msgs },
-                    Poll::Ready(Some(SubstreamProtocol::new(
-                        outbound_hop::Upgrade::Reserve,
-                        OutboundOpenInfo::Reserve { to_listener },
-                    ))),
+                    Poll::Ready(Some(to_listener)),
                 ),
                 Poll::Pending => (
                     Reservation::Accepted {
@@ -680,13 +709,4 @@ impl Reservation {
 
         poll_val
     }
-}
-
-pub enum OutboundOpenInfo {
-    Reserve {
-        to_listener: mpsc::Sender<transport::ToListenerMsg>,
-    },
-    Connect {
-        send_back: oneshot::Sender<Result<super::Connection, ()>>,
-    },
 }

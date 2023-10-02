@@ -24,6 +24,7 @@ use crate::handler::{
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
+#[derive(Debug)]
 pub struct MapInEvent<TConnectionHandler, TNewIn, TMap> {
     inner: TConnectionHandler,
     map: TMap,
