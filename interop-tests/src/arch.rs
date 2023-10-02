@@ -18,6 +18,7 @@ pub(crate) mod native {
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
     use libp2p::{noise, tcp, tls, yamux, Transport as _};
+    use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
@@ -35,23 +36,17 @@ pub(crate) mod native {
         tokio::time::sleep(duration).boxed()
     }
 
-    fn expect_muxer_yamux() -> Result<()> {
-        match from_env("muxer")? {
-            Muxer::Yamux => (),
-            Muxer::Mplex => {
-                bail!("Only Yamux is supported, not Mplex")
-            }
-        };
-        Ok(())
-    }
-
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
-        let (swarm, addr) = match (transport, from_env::<SecProtocol>("security")) {
-            (Transport::QuicV1, _) => {
+        let (swarm, addr) = match (
+            transport,
+            from_env::<SecProtocol>("security"),
+            from_env::<Muxer>("muxer"),
+        ) {
+            (Transport::QuicV1, _, _) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_quic()
@@ -59,9 +54,7 @@ pub(crate) mod native {
                     .build();
                 (swarm, format!("/ip4/{ip}/udp/0/quic-v1"))
             }
-            (Transport::Tcp, Ok(SecProtocol::Tls)) => {
-                expect_muxer_yamux()?;
-
+            (Transport::Tcp, Ok(SecProtocol::Tls), Ok(Muxer::Yamux)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp(
@@ -73,9 +66,19 @@ pub(crate) mod native {
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
             }
-            (Transport::Tcp, Ok(SecProtocol::Noise)) => {
-                expect_muxer_yamux()?;
-
+            (Transport::Tcp, Ok(SecProtocol::Tls), Ok(Muxer::Mplex)) => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_tcp(
+                        tcp::Config::default(),
+                        tls::Config::new,
+                        mplex::MplexConfig::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                (swarm, format!("/ip4/{ip}/tcp/0"))
+            }
+            (Transport::Tcp, Ok(SecProtocol::Noise), Ok(Muxer::Yamux)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp(
@@ -87,29 +90,55 @@ pub(crate) mod native {
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0"))
             }
-            (Transport::Ws, Ok(SecProtocol::Tls)) => {
-                expect_muxer_yamux()?;
-
+            (Transport::Tcp, Ok(SecProtocol::Noise), Ok(Muxer::Mplex)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
+                    .with_tcp(
+                        tcp::Config::default(),
+                        noise::Config::new,
+                        mplex::MplexConfig::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                (swarm, format!("/ip4/{ip}/tcp/0"))
+            }
+            (Transport::Ws, Ok(SecProtocol::Tls), Ok(Muxer::Yamux)) => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(libp2p_tls::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0/ws"))
             }
-            (Transport::Ws, Ok(SecProtocol::Noise)) => {
-                expect_muxer_yamux()?;
-
+            (Transport::Ws, Ok(SecProtocol::Tls), Ok(Muxer::Mplex)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
+                    .with_websocket(libp2p_tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 (swarm, format!("/ip4/{ip}/tcp/0/ws"))
             }
-            (Transport::WebRtcDirect, _) => {
+            (Transport::Ws, Ok(SecProtocol::Noise), Ok(Muxer::Yamux)) => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(libp2p_tls::Config::new, yamux::Config::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
+            }
+            (Transport::Ws, Ok(SecProtocol::Noise), Ok(Muxer::Mplex)) => {
+                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(libp2p_tls::Config::new, mplex::MplexConfig::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .build();
+                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
+            }
+            (Transport::WebRtcDirect, _, _) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_other_transport(|key| {
@@ -124,9 +153,12 @@ pub(crate) mod native {
 
                 (swarm, format!("/ip4/{ip}/udp/0/webrtc-direct"))
             }
-            (Transport::Tcp, Err(_)) => bail!("Missing security protocol for TCP transport"),
-            (Transport::Ws, Err(_)) => bail!("Missing security protocol for Websocket transport"),
-            (Transport::Webtransport, _) => bail!("Webtransport can only be used with wasm"),
+            (Transport::Tcp, Err(_), _) => bail!("Missing security protocol for TCP transport"),
+            (Transport::Ws, Err(_), _) => {
+                bail!("Missing security protocol for Websocket transport")
+            }
+            (Transport::Webtransport, _, _) => bail!("Webtransport can only be used with wasm"),
+            (_, _, Err(e)) => bail!("muxer selection: {e}"),
         };
         Ok((swarm, addr))
     }

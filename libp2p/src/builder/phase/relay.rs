@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use libp2p_core::muxing::StreamMuxerBox;
 #[cfg(feature = "relay")]
 use libp2p_core::Transport;
-#[cfg(feature = "relay")]
+#[cfg(any(feature = "relay", feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
