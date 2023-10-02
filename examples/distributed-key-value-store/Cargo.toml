@@ -10,7 +10,17 @@ async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "dns", "kad", "mdns", "noise", "macros", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../libp2p", features = [
+    "async-std",
+    "dns",
+    "kad",
+    "mdns",
+    "noise",
+    "macros",
+    "tcp",
+    "websocket",
+    "yamux",
+] }
 
 [lints]
 workspace = true

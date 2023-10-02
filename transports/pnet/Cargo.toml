@@ -20,7 +20,12 @@ pin-project = "1.1.3"
 
 [dev-dependencies]
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "ecdsa", "secp256k1"] }
+libp2p-identity = { workspace = true, features = [
+    "ed25519",
+    "rsa",
+    "ecdsa",
+    "secp256k1",
+] }
 libp2p-noise = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }

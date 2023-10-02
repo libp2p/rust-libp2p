@@ -24,13 +24,20 @@ yasna = "0.5.2"
 [dependencies.rustls]
 version = "0.21.7"
 default-features = false
-features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
+features = [
+    "dangerous_configuration",
+] # Must enable this to allow for custom verification code.
 
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.4.1"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
+libp2p-identity = { workspace = true, features = [
+    "ed25519",
+    "rsa",
+    "secp256k1",
+    "ecdsa",
+] }
 libp2p-swarm = { workspace = true }
 libp2p-yamux = { workspace = true }
 tokio = { version = "1.32.0", features = ["full"] }

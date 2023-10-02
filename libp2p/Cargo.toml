@@ -50,10 +50,16 @@ full = [
     "websocket",
     "webtransport-websys",
     "yamux",
-    "upnp"
+    "upnp",
 ]
 
-async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
+async-std = [
+    "libp2p-swarm/async-std",
+    "libp2p-mdns?/async-io",
+    "libp2p-tcp?/async-io",
+    "libp2p-dns?/async-std",
+    "libp2p-quic?/async-std",
+]
 autonat = ["dep:libp2p-autonat"]
 cbor = ["libp2p-request-response?/cbor"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
@@ -83,9 +89,22 @@ secp256k1 = ["libp2p-identity/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
 tls = ["dep:libp2p-tls"]
-tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
+tokio = [
+    "libp2p-swarm/tokio",
+    "libp2p-mdns?/tokio",
+    "libp2p-tcp?/tokio",
+    "libp2p-dns?/tokio",
+    "libp2p-quic?/tokio",
+    "libp2p-upnp?/tokio",
+]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen"]
+wasm-bindgen = [
+    "futures-timer/wasm-bindgen",
+    "instant/wasm-bindgen",
+    "getrandom/js",
+    "libp2p-swarm/wasm-bindgen",
+    "libp2p-gossipsub?/wasm-bindgen",
+]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
@@ -97,8 +116,8 @@ upnp = ["dep:libp2p-upnp"]
 bytes = "1"
 futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
-getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
-instant = "0.1.12" # Explicit dependency to be used in `wasm-bindgen` feature
+getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
+instant = "0.1.12"      # Explicit dependency to be used in `wasm-bindgen` feature
 
 libp2p-allow-block-list = { workspace = true }
 libp2p-autonat = { workspace = true, optional = true }
@@ -144,7 +163,13 @@ async-trait = "0.1"
 either = "1.8.0"
 env_logger = "0.10.0"
 clap = { version = "4.1.6", features = ["derive"] }
-tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1.15", features = [
+    "io-util",
+    "io-std",
+    "macros",
+    "rt",
+    "rt-multi-thread",
+] }
 
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
