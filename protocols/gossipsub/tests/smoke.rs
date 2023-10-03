@@ -213,3 +213,86 @@ fn multi_hop_propagation() {
         .max_tests(5)
         .quickcheck(prop as fn(u8, u64) -> TestResult)
 }
+
+#[test]
+fn multi_hop_propagation_to_a_single_subscriber() {
+    let _ = env_logger::try_init();
+
+    fn prop(num_nodes: u8, seed: u64) -> TestResult {
+        if !(50..=100).contains(&num_nodes) {
+            return TestResult::discard();
+        }
+
+        debug!("number nodes: {:?}, seed: {:?}", num_nodes, seed);
+
+        async_std::task::block_on(async move {
+            let mut graph = Graph::new_connected(num_nodes as usize, seed).await;
+            assert_eq!(num_nodes as usize, graph.nodes.len());
+
+            // Subscribe one node to a topic.
+            let topic = gossipsub::IdentTopic::new(format!("test-topic"));
+
+            graph
+                .nodes
+                .iter_mut()
+                .next()
+                .unwrap()
+                .behaviour_mut()
+                .subscribe(&topic)
+                .unwrap();
+
+            // Wait for node to be subscribed.
+            let subscribed = graph
+                .wait_for(move |ev| {
+                    if let gossipsub::Event::Subscribed { .. } = ev {
+                        return true;
+                    }
+
+                    false
+                })
+                .await;
+
+            if !subscribed {
+                return TestResult::error(format!("Timed out waiting for node to subscribe."));
+            }
+
+            // It can happen that the publish occurs before all grafts have completed causing this test
+            // to fail. We drain all the poll messages before publishing.
+            graph.drain_events().await;
+
+            // Publish a single message from all nodes.
+            for node in &mut graph.nodes {
+                node.behaviour_mut()
+                    .publish(topic.clone(), vec![1, 2, 3])
+                    .unwrap();
+            }
+
+            // Wait for the node to receive the published messages.
+            let mut received_msgs = 0;
+            let all_received = graph
+                .wait_for(move |ev| {
+                    if let gossipsub::Event::Message { .. } = ev {
+                        received_msgs += 1;
+                        if received_msgs == num_nodes - 1 {
+                            return true;
+                        }
+                    }
+
+                    false
+                })
+                .await;
+
+            if !all_received {
+                return TestResult::error(format!(
+                    "Timed out waiting for all msgs to be received but only have {received_msgs:?}/{num_nodes:?}.",
+                ));
+            }
+
+            TestResult::passed()
+        })
+    }
+
+    QuickCheck::new()
+        .max_tests(50)
+        .quickcheck(prop as fn(u8, u64) -> TestResult)
+}
