@@ -24,7 +24,7 @@ use env_logger::Env;
 use futures::{executor::block_on, StreamExt};
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{self as swarm, NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, identity, noise, ping, tcp, yamux};
 use log::info;
 use prometheus_client::registry::Registry;
@@ -45,10 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| Behaviour::new(key.public()))?
-        .with_swarm_config(
-            swarm::Config::with_async_std_executor()
-                .with_idle_connection_timeout(Duration::from_secs(u64::MAX)),
-        )
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

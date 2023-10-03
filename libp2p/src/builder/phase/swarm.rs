@@ -8,22 +8,39 @@ pub struct SwarmPhase<T, B> {
     pub(crate) transport: T,
 }
 
-impl<T, B, Provider> SwarmBuilder<Provider, SwarmPhase<T, B>> {
-    pub fn with_swarm_config(
-        self,
-        config: libp2p_swarm::Config,
-    ) -> SwarmBuilder<Provider, BuildPhase<T, B>> {
-        SwarmBuilder {
-            phase: BuildPhase {
-                behaviour: self.phase.behaviour,
-                transport: self.phase.transport,
-                swarm_config: config,
-            },
-            keypair: self.keypair,
-            phantom: PhantomData,
+macro_rules! impl_with_swarm_config {
+    ($providerKebabCase:literal, $providerPascalCase:ty, $config:expr) => {
+        #[cfg(feature = $providerKebabCase)]
+        impl<T, B> SwarmBuilder<$providerPascalCase, SwarmPhase<T, B>> {
+            pub fn with_swarm_config(
+                self,
+                constructor: impl FnOnce(libp2p_swarm::Config) -> libp2p_swarm::Config,
+            ) -> SwarmBuilder<$providerPascalCase, BuildPhase<T, B>> {
+                SwarmBuilder {
+                    phase: BuildPhase {
+                        behaviour: self.phase.behaviour,
+                        transport: self.phase.transport,
+                        swarm_config: constructor($config),
+                    },
+                    keypair: self.keypair,
+                    phantom: PhantomData,
+                }
+            }
         }
-    }
+    };
 }
+
+impl_with_swarm_config!(
+    "async-std",
+    super::provider::AsyncStd,
+    libp2p_swarm::Config::with_async_std_executor()
+);
+
+impl_with_swarm_config!(
+    "tokio",
+    super::provider::Tokio,
+    libp2p_swarm::Config::with_tokio_executor()
+);
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "async-std"))]
 impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>

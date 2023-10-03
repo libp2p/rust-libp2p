@@ -37,11 +37,11 @@ async fn main() -> anyhow::Result<()> {
             .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
         })?
         .with_behaviour(|_| ping::Behaviour::default())?
-        .with_swarm_config(
-            libp2p::swarm::Config::with_tokio_executor().with_idle_connection_timeout(
+        .with_swarm_config(|cfg| {
+            cfg.with_idle_connection_timeout(
                 Duration::from_secs(30), // Allows us to observe the pings.
-            ),
-        )
+            )
+        })
         .build();
 
     let address_webrtc = Multiaddr::from(Ipv4Addr::UNSPECIFIED)
