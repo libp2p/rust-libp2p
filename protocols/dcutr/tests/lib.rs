@@ -141,24 +141,6 @@ struct Client {
     dcutr: dcutr::Behaviour,
 }
 
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(relay::client::Event),
-    Dcutr(dcutr::Event),
-}
-
-impl From<relay::client::Event> for ClientEvent {
-    fn from(event: relay::client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<dcutr::Event> for ClientEvent {
-    fn from(event: dcutr::Event) -> Self {
-        ClientEvent::Dcutr(event)
-    }
-}
-
 async fn wait_for_reservation(
     client: &mut Swarm<Client>,
     client_addr: Multiaddr,
