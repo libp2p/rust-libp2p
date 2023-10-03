@@ -40,8 +40,6 @@ ed25519 = [ "dep:ed25519-dalek", "dep:rand", "dep:zeroize", "dep:sha2", "dep:hkd
 peerid = [ "dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2", "dep:hkdf" ]
 rand = ["dep:rand", "ed25519-dalek?/rand_core"]
 
-default = ["rand"]
-
 [dev-dependencies]
 quickcheck = { workspace = true }
 base64 = "0.21.4"
