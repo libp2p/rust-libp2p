@@ -51,8 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             cfg.set_query_timeout(Duration::from_secs(5 * 60));
             let store = kad::store::MemoryStore::new(key.public().to_peer_id());
             kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg)
-        })
-        .unwrap()
+        })?
         .build();
 
     // Add the bootnodes to the local routing table. `libp2p-dns` built
