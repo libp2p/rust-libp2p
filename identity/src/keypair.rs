@@ -343,36 +343,20 @@ impl Keypair {
         }
     }
 
-    #[doc = r##"
-    Deterministically derive a new secret from this [`Keypair`], taking into account the provided domain.
-
-    This works for all key types except RSA where it returns `None`.
-
-    # Example
-
-    "##]
-    #[cfg_attr(
-        feature = "rand",
-        doc = r##"
-    ```
-    "##
-    )]
-    #[cfg_attr(
-        not(feature = "rand"),
-        doc = r##"
-    ```ignore
-    "##
-    )]
-    #[doc = r##"
-    # fn main() {
-    # use libp2p_identity as identity;
-    let key = identity::Keypair::generate_ed25519();
-
-    let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
-    # }
-    ```
-    "##
-    ]
+    /// Deterministically derive a new secret from this [`Keypair`], taking into account the provided domain.
+    ///
+    /// This works for all key types except RSA where it returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn main() {
+    /// # use libp2p_identity as identity;
+    /// let key = identity::Keypair::generate_ed25519();
+    ///
+    /// let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
+    /// # }
+    /// ```
     #[allow(unused_variables, unreachable_code)]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
         #[cfg(any(
