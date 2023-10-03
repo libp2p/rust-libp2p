@@ -40,8 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "/ipfs/id/1.0.0".to_string(),
                 key.public(),
             ))
-        })
-        .unwrap()
+        })?
         .build();
 
     println!("Local peer id: {:?}", swarm.local_peer_id());
