@@ -87,4 +87,4 @@ impl<B: NetworkBehaviour> private::Sealed<BehaviourError>
 
 #[derive(Debug, thiserror::Error)]
 #[error("failed to build behaviour: {0}")]
-pub struct BehaviourError(Box<dyn std::error::Error + Send + Sync>);
+pub struct BehaviourError(Box<dyn std::error::Error + Send + Sync + 'static>);

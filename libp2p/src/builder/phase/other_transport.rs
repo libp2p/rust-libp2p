@@ -198,4 +198,4 @@ impl<T: AuthenticatedMultiplexedTransport> private::Sealed<TransportError>
 
 #[derive(Debug, thiserror::Error)]
 #[error("failed to build transport: {0}")]
-pub struct TransportError(Box<dyn std::error::Error + Send + Sync>);
+pub struct TransportError(Box<dyn std::error::Error + Send + Sync + 'static>);
