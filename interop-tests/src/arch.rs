@@ -105,7 +105,7 @@ pub(crate) mod native {
             (Transport::Ws, Ok(SecProtocol::Tls), Ok(Muxer::Yamux)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, yamux::Config::default)
+                    .with_websocket(tls::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
@@ -114,7 +114,7 @@ pub(crate) mod native {
             (Transport::Ws, Ok(SecProtocol::Tls), Ok(Muxer::Mplex)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, mplex::MplexConfig::default)
+                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
@@ -123,7 +123,7 @@ pub(crate) mod native {
             (Transport::Ws, Ok(SecProtocol::Noise), Ok(Muxer::Yamux)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, yamux::Config::default)
+                    .with_websocket(tls::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
@@ -132,7 +132,7 @@ pub(crate) mod native {
             (Transport::Ws, Ok(SecProtocol::Noise), Ok(Muxer::Mplex)) => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(libp2p_tls::Config::new, mplex::MplexConfig::default)
+                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build();
