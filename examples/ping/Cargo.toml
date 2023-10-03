@@ -6,11 +6,10 @@ publish = false
 license = "MIT"
 
 [dependencies]
-async-std = { version = "1.12", features = ["attributes"] }
-async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = [ "async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux"] }
+libp2p = { path = "../../libp2p", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
+tokio = { version = "1.32.0", features = ["full"] }
 
 [lints]
 workspace = true
