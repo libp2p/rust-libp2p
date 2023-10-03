@@ -19,20 +19,7 @@ rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = "0.6"
-libp2p = { path = "../libp2p", features = [
-    "ping",
-    "noise",
-    "tls",
-    "rsa",
-    "macros",
-    "websocket",
-    "tokio",
-    "yamux",
-    "tcp",
-    "dns",
-    "identify",
-    "quic",
-] }
+libp2p = { path = "../libp2p", features = [ "ping", "noise", "tls", "rsa", "macros", "websocket", "tokio", "yamux", "tcp", "dns", "identify", "quic"] }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
 libp2p-mplex = { path = "../muxers/mplex" }
 mime_guess = "2.0"
@@ -48,13 +35,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-libp2p = { path = "../libp2p", features = [
-    "ping",
-    "macros",
-    "webtransport-websys",
-    "wasm-bindgen",
-    "identify",
-] }
+libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify"] }
 libp2p-webrtc-websys = { workspace = true }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }

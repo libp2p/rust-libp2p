@@ -129,7 +129,6 @@ multihash = "0.19.1"
 # This is expected to stay here until we move `libp2p-identity` to a separate repository which makes the dependency relationship more obvious.
 libp2p-identity = { path = "identity" }
 
-# lint 
 [workspace.lints]
 rust.unreachable_pub = "warn"
 clippy.used_underscore_binding = "warn"
