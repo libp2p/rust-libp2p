@@ -19,11 +19,11 @@ libp2p-tls = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4"
 parking_lot = "0.12.0"
-quinn = { version = "0.10.2", default-features = false, features = [ "tls-rustls", "futures-io"] }
+quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
 rand = "0.8.5"
 rustls = { version = "0.21.7", default-features = false }
 thiserror = "1.0.48"
-tokio = { version = "1.32.0", default-features = false, features = [ "net", "rt", "time"], optional = true }
+tokio = { version = "1.32.0", default-features = false, features = ["net", "rt", "time"], optional = true }
 socket2 = "0.5.4"
 ring = "0.16.20"
 
