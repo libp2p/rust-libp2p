@@ -18,19 +18,17 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
     let body = Body::from_current_window()?;
     body.append_p("Let's ping the WebRTC Server!")?;
 
-    let local_key = Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    let mut swarm = SwarmBuilder::with_wasm_executor(
-        libp2p_webrtc_websys::Transport::new(libp2p_webrtc_websys::Config::new(&local_key)).boxed(),
-        Behaviour {
+    let swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_wasm_bindgen()
+        .with_other_transport(|key| {
+            libp2p_webrtc_websys::Transport::new(libp2p_webrtc_websys::Config::new(&key))
+                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+        })?
+        .with_behaviour(|_| Behaviour {
             ping: ping::Behaviour::new(ping::Config::new()),
             keep_alive: keep_alive::Behaviour,
-        },
-        local_peer_id,
-    )
-    .build();
-
-    log::info!("Initialize swarm with identity: {local_peer_id}");
+        })?
+        .build();
 
     let addr = libp2p_endpoint.parse::<Multiaddr>()?;
     log::info!("Dialing {addr}");

@@ -26,72 +26,36 @@ macro_rules! impl_with_swarm_config {
                     phantom: PhantomData,
                 }
             }
+
+            // Shortcuts
+            pub fn build(self) -> Swarm<B>
+            where
+                B: NetworkBehaviour,
+                T: AuthenticatedMultiplexedTransport,
+            {
+                self.with_swarm_config(std::convert::identity).build()
+            }
         }
     };
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl_with_swarm_config!(
     "async-std",
     super::provider::AsyncStd,
     libp2p_swarm::Config::with_async_std_executor()
 );
 
+#[cfg(not(target_arch = "wasm32"))]
 impl_with_swarm_config!(
     "tokio",
     super::provider::Tokio,
     libp2p_swarm::Config::with_tokio_executor()
 );
 
-#[cfg(all(not(target_arch = "wasm32"), feature = "async-std"))]
-impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
-    SwarmBuilder<super::provider::AsyncStd, SwarmPhase<T, B>>
-{
-    pub fn build(self) -> Swarm<B> {
-        SwarmBuilder {
-            phase: BuildPhase {
-                behaviour: self.phase.behaviour,
-                transport: self.phase.transport,
-                swarm_config: libp2p_swarm::Config::with_async_std_executor(),
-            },
-            keypair: self.keypair,
-            phantom: PhantomData::<super::provider::AsyncStd>,
-        }
-        .build()
-    }
-}
-
-#[cfg(all(not(target_arch = "wasm32"), feature = "tokio"))]
-impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
-    SwarmBuilder<super::provider::Tokio, SwarmPhase<T, B>>
-{
-    pub fn build(self) -> Swarm<B> {
-        SwarmBuilder {
-            phase: BuildPhase {
-                behaviour: self.phase.behaviour,
-                transport: self.phase.transport,
-                swarm_config: libp2p_swarm::Config::with_tokio_executor(),
-            },
-            keypair: self.keypair,
-            phantom: PhantomData::<super::provider::Tokio>,
-        }
-        .build()
-    }
-}
-
-#[cfg(feature = "wasm-bindgen")]
-impl<T: AuthenticatedMultiplexedTransport, B: NetworkBehaviour>
-    SwarmBuilder<super::provider::WasmBindgen, SwarmPhase<T, B>>
-{
-    pub fn build(self) -> Swarm<B> {
-        SwarmBuilder {
-            phase: BuildPhase {
-                behaviour: self.phase.behaviour,
-                transport: self.phase.transport,
-                swarm_config: libp2p_swarm::Config::with_wasm_executor(),
-            },
-            keypair: self.keypair,
-            phantom: PhantomData::<super::provider::WasmBindgen>,
-        }
-        .build()
-    }
-}
+#[cfg(target_arch = "wasm32")]
+impl_with_swarm_config!(
+    "wasm-bindgen",
+    super::provider::WasmBindgen,
+    libp2p_swarm::Config::with_wasm_executor()
+);
