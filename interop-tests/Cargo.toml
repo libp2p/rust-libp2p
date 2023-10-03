@@ -24,7 +24,6 @@ libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { workspace = true }
 libp2p-tls = { workspace = true }
 libp2p-webrtc = { workspace = true, features = ["tokio"] }
-libp2p-yamux = { workspace = true }
 mime_guess = "2.0"
 redis = { version = "0.23.3", default-features = false, features = ["tokio-comp"] }
 rust-embed = "8.0"

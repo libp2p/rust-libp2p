@@ -2210,7 +2210,6 @@ dependencies = [
  "libp2p-tls",
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
- "libp2p-yamux",
  "log",
  "mime_guess",
  "rand 0.8.5",
