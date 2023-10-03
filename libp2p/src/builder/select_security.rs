@@ -1,3 +1,4 @@
+// Copyright 2023 Protocol Labs.
 // Copyright 2018 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
