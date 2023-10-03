@@ -360,19 +360,21 @@ impl Keypair {
     /// ```
     #[allow(unused_variables, unreachable_code)]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
-        #[cfg(any(
+        #[cfg(not(any(
             feature = "ecdsa",
             feature = "secp256k1",
             feature = "ed25519",
             feature = "rsa"
-        ))]
-        return Some(
-            hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &self.secret()?].concat())
-                .0
-                .into(),
-        );
+        )))]
+        return None;
 
-        None
+        let hkdf =
+            hkdf::Hkdf::<sha2::Sha256>::from_prk(&self.secret()?).expect("secret to have 32 bytes");
+
+        let mut okm = [0u8; 32];
+        hkdf.expand(domain, &mut okm).expect("okm.len() == 32");
+
+        return Some(okm);
     }
 
     /// Return the secret key of the [`Keypair`].
