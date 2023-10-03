@@ -22,7 +22,7 @@
 
 use futures::prelude::*;
 use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
-use std::error::Error;
+use std::{error::Error, time::Duration};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -34,6 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|_| ping::Behaviour::default())?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
