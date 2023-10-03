@@ -100,7 +100,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             Default::default(),
+//!             libp2p_tcp::Config::default(),
 //!             libp2p_tls::Config::new,
 //!             libp2p_yamux::Config::default,
 //!         )?;
@@ -141,7 +141,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             Default::default(),
+//!             libp2p_tcp::Config::default(),
 //!             libp2p_tls::Config::new,
 //!             libp2p_yamux::Config::default,
 //!         )?
@@ -172,7 +172,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             Default::default(),
+//!             libp2p_tcp::Config::default(),
 //!             libp2p_tls::Config::new,
 //!             libp2p_yamux::Config::default,
 //!         )?
@@ -255,7 +255,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             Default::default(),
+//!             libp2p_tcp::Config::default(),
 //!             libp2p_tls::Config::new,
 //!             libp2p_yamux::Config::default,
 //!         )?
@@ -296,7 +296,7 @@
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
-//!             Default::default(),
+//!             libp2p_tcp::Config::default(),
 //!             libp2p_tls::Config::new,
 //!             libp2p_yamux::Config::default,
 //!         )?
