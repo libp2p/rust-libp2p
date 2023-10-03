@@ -1856,7 +1856,9 @@ where
                 "Received message on a topic we are not subscribed to: {:?}",
                 message.topic
             );
-            return;
+            if !self.config.flood_publish() {
+                return;
+            }
         }
 
         // forward the message to mesh peers, if no validation is required
@@ -2744,6 +2746,14 @@ where
                         recipient_peers.insert(*peer_id);
                     }
                 }
+            } else if self.config.flood_publish() {
+                // forward to all peers
+                recipient_peers.extend(self.peer_topics.keys().filter(|p| {
+                    !self.score_below_threshold(p, |ts| ts.publish_threshold).0
+                        && Some(*p) != propagation_source
+                        && !originating_peers.contains(p)
+                        && Some(*p) != message.source.as_ref()
+                }));
             }
         }
 
