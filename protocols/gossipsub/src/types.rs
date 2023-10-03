@@ -330,7 +330,7 @@ impl From<Rpc> for proto::RPC {
                             .into_iter()
                             .map(|info| proto::PeerInfo {
                                 peer_id: info.peer_id.map(|id| id.to_bytes()),
-                                /// TODO, see https://github.com/libp2p/specs/pull/217
+                                // TODO, see https://github.com/libp2p/specs/pull/217
                                 signed_peer_record: None,
                             })
                             .collect(),
