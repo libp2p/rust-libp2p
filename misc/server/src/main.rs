@@ -99,6 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => return Err(e.into()),
         }
     }
+
     if config.addresses.append_announce.is_empty() {
         warn!("No external addresses configured.");
     }
