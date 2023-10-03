@@ -33,8 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_behaviour(|_| ping::Behaviour::default())
-        .unwrap()
+        .with_behaviour(|_| ping::Behaviour::default())?
         .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
