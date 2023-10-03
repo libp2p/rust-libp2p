@@ -24,10 +24,10 @@ use futures::prelude::*;
 use libp2p::{noise, ping, swarm::SwarmEvent, tcp, yamux, Multiaddr};
 use std::{error::Error, time::Duration};
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_tcp(
             tcp::Config::default(),
             noise::Config::new,
