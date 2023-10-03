@@ -506,11 +506,7 @@ fn custom_out_event_no_type_parameters() {
             Poll::Pending
         }
 
-        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-            match event {
-                _ => {}
-            }
-        }
+        fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
     }
 
     #[derive(NetworkBehaviour)]

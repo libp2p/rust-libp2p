@@ -153,9 +153,5 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            _ => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
 }

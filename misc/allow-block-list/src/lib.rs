@@ -231,11 +231,7 @@ where
         Ok(dummy::ConnectionHandler)
     }
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            _ => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _: FromSwarm<Self::ConnectionHandler>) {}
 
     fn on_connection_handler_event(
         &mut self,
