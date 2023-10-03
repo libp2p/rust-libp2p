@@ -219,7 +219,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run cargo clippy
-        run: cargo clippy # cargo alias to allow reuse of config locally
+        run: cargo clippy
 
   ipfs-integration-test:
     name: IPFS Integration tests
