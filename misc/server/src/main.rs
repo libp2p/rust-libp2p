@@ -7,7 +7,6 @@ use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::quic;
 use libp2p::swarm::SwarmEvent;
 use libp2p::tcp;
 use libp2p::{identify, noise, yamux};
@@ -80,10 +79,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_quic_config(|key| {
-            let mut config = quic::Config::new(key);
-            config.support_draft_29 = true;
-            config
+        .with_quic_config(|mut cfg| {
+            cfg.support_draft_29 = true;
+            cfg
         })
         .with_dns()?
         .with_behaviour(|key| {

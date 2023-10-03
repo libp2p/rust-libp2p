@@ -23,12 +23,12 @@ macro_rules! impl_quic_builder {
                 $providerPascalCase,
                 OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
             > {
-                self.with_quic_config(|key| libp2p_quic::Config::new(&key))
+                self.with_quic_config(std::convert::identity)
             }
 
             pub fn with_quic_config(
                 self,
-                constructor: impl FnOnce(&libp2p_identity::Keypair) -> libp2p_quic::Config,
+                constructor: impl FnOnce(libp2p_quic::Config) -> libp2p_quic::Config,
             ) -> SwarmBuilder<
                 $providerPascalCase,
                 OtherTransportPhase<impl AuthenticatedMultiplexedTransport>,
@@ -38,11 +38,14 @@ macro_rules! impl_quic_builder {
                         transport: self
                             .phase
                             .transport
-                            .or_transport(libp2p_quic::$quic::Transport::new(constructor(&self.keypair)).map(
-                                |(peer_id, muxer), _| {
+                            .or_transport(
+                                libp2p_quic::$quic::Transport::new(constructor(
+                                    libp2p_quic::Config::new(&self.keypair),
+                                ))
+                                .map(|(peer_id, muxer), _| {
                                     (peer_id, libp2p_core::muxing::StreamMuxerBox::new(muxer))
-                                },
-                            ))
+                                }),
+                            )
                             .map(|either, _| either.into_inner()),
                     },
                     keypair: self.keypair,
