@@ -174,7 +174,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
-                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent { .. })) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent {
+                    ..
+                })) => {
                     info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
