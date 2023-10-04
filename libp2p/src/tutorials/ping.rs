@@ -154,7 +154,7 @@
 //! ## Swarm
 //!
 //! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we can build the [`Swarm`]
-//! whcihconnects the two, allowing both to make progress. Put simply, a [`Swarm`] drives both a
+//! which connects the two, allowing both to make progress. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the [`NetworkBehaviour`]
 //! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
 //! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
