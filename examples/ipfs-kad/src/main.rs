@@ -24,9 +24,9 @@ use futures::StreamExt;
 use libp2p::kad;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::{
-    development_transport, identity,
+    identity,
     swarm::{SwarmBuilder, SwarmEvent},
-    PeerId,
+    tokio_development_transport, PeerId,
 };
 use std::{env, error::Error, time::Duration};
 
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
-    let transport = development_transport(local_key).await?;
+    let transport = tokio_development_transport(local_key)?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
         }
 
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Order Kademlia to search for a peer.
