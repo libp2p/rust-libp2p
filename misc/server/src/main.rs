@@ -68,7 +68,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         (peer_id, keypair)
     };
-    info!("Local peer id: {local_peer_id}");
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
         .with_tokio()
