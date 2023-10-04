@@ -152,7 +152,6 @@ use libp2p_identity::PeerId;
 
 use smallvec::SmallVec;
 
-use crate::listener_presence::ListenerPresence;
 use std::collections::{HashMap, HashSet};
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::time::Duration;
@@ -354,9 +353,6 @@ where
     /// Multiaddresses that our listeners are listening on,
     listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
 
-    /// Listener presence monitor
-    listener_presence: ListenerPresence,
-
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
@@ -511,7 +507,11 @@ where
                 Ok(address) => {
                     let transport_dial_opts = {
                         let transport_port_use = dial_opts.port_use().unwrap_or_else(|| {
-                            if self.listener_presence.contains(&address) {
+                            let is_listening_on_same_transport = self
+                                .listeners()
+                                .map(clean_multiaddr)
+                                .any(|e| e == clean_multiaddr(&address));
+                            if is_listening_on_same_transport {
                                 PortUse::Reuse
                             } else {
                                 PortUse::New
@@ -977,7 +977,6 @@ where
                 if !addrs.contains(&listen_addr) {
                     addrs.push(listen_addr.clone())
                 }
-                self.listener_presence.new_listener(&listen_addr);
                 self.behaviour
                     .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
                         listener_id,
@@ -1000,7 +999,6 @@ where
                 if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
                     addrs.retain(|a| a != &listen_addr);
                 }
-                self.listener_presence.expired_listener(&listen_addr);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
                         listener_id,
@@ -1018,7 +1016,6 @@ where
                 log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
-                    self.listener_presence.expired_listener(addr);
                     self.behaviour.on_swarm_event(FromSwarm::ExpiredListenAddr(
                         ExpiredListenAddr { listener_id, addr },
                     ));
@@ -1563,7 +1560,6 @@ where
             supported_protocols: Default::default(),
             confirmed_external_addr: Default::default(),
             listened_addrs: HashMap::new(),
-            listener_presence: Default::default(),
             pending_event: None,
         }
     }
@@ -1838,6 +1834,29 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
     }
 
     Ok(addr.with(multiaddr::Protocol::P2p(peer)))
+}
+
+// I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
+// supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
+// wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
+// ignore that.
+// We might also choose to ignore encryption, like noise and tls.
+// We might also consider the memory transport.
+const NON_PROTOCOL_TAGS: &[&str] = &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
+
+// We check weather a Protocol tag is a network protocol like quic, tcp and udp.
+fn is_not_protocol(tag: &str) -> bool {
+    // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
+    // assembly. https://godbolt.org/z/1x9f3K16x
+    !NON_PROTOCOL_TAGS.contains(&tag)
+}
+
+// Turns a multiaddress into a vector of just the protocols.
+fn clean_multiaddr(address: &Multiaddr) -> Vec<&'static str> {
+    address
+        .protocol_stack()
+        .filter(|e| is_not_protocol(e))
+        .collect()
 }
 
 #[cfg(test)]
