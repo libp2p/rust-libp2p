@@ -72,7 +72,6 @@ pub mod handler;
 )]
 pub mod keep_alive;
 mod listen_opts;
-mod listener_presence;
 
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
