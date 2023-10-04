@@ -75,6 +75,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity();
 //!
 //!     Ok(())
@@ -97,6 +99,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -138,6 +142,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -156,11 +162,7 @@
 //! Now that we have a [`Transport`] and a [`NetworkBehaviour`], we can build the [`Swarm`]
 //! which connects the two, allowing both to make progress. Put simply, a [`Swarm`] drives both a
 //! [`Transport`] and a [`NetworkBehaviour`] forward, passing commands from the [`NetworkBehaviour`]
-//! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`]. As you can see, after [`Swarm`] initialization, we
-//! removed the print of the local [`PeerId`](crate::PeerId) because every time a [`Swarm`] is
-//! created, it prints the local [`PeerId`](crate::PeerId) in the logs at the INFO level. In order
-//! to continue to see the local [`PeerId`](crate::PeerId) you must initialize the logger
-//! (In our example, `env_logger` is used)
+//! to the [`Transport`] as well as events from the [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
 //! use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
@@ -169,6 +171,8 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
+//!     env_logger::init();
+//!
 //!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
 //!         .with_async_std()
 //!         .with_tcp(
@@ -201,17 +205,17 @@
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
-//!     use std::time::Duration;
-//! let local_key = identity::Keypair::generate_ed25519();
-//!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {local_peer_id:?}");
+//!     env_logger::init();
 //!
-//!     let transport = libp2p::development_transport(local_key).await?;
-//!
-//!     let behaviour = ping::Behaviour::default();
-//!
-//!     let mut swarm = SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id)
-//!         .idle_connection_timeout(Duration::from_secs(30)) // Allows us to observe pings for 30 seconds.
+//!     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+//!         .with_async_std()
+//!         .with_tcp(
+//!             libp2p_tcp::Config::default(),
+//!             libp2p_tls::Config::new,
+//!             libp2p_yamux::Config::default,
+//!         )?
+//!         .with_behaviour(|_| ping::Behaviour::default())?
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     Ok(())
@@ -260,6 +264,7 @@
 //!             libp2p_yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
@@ -301,6 +306,7 @@
 //!             libp2p_yamux::Config::default,
 //!         )?
 //!         .with_behaviour(|_| ping::Behaviour::default())?
+//!         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(30))) // Allows us to observe pings for 30 seconds.
 //!         .build();
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
