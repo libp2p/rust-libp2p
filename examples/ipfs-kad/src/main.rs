@@ -37,7 +37,7 @@ const BOOTNODES: [&str; 4] = [
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 

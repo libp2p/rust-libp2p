@@ -2252,11 +2252,11 @@ dependencies = [
 name = "ipfs-kad-example"
 version = "0.1.0"
 dependencies = [
- "async-std",
  "async-trait",
  "env_logger 0.10.0",
  "futures",
  "libp2p",
+ "tokio",
 ]
 
 [[package]]
