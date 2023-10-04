@@ -6,6 +6,7 @@ use libp2p::core::Multiaddr;
 use libp2p::identity::{Keypair, PeerId};
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::webrtc_websys;
 use std::convert::From;
 use std::io;
 use wasm_bindgen::prelude::*;
@@ -21,7 +22,7 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
     let swarm = libp2p::SwarmBuilder::with_new_identity()
         .with_wasm_bindgen()
         .with_other_transport(|key| {
-            libp2p_webrtc_websys::Transport::new(libp2p_webrtc_websys::Config::new(&key))
+            webrtc_websys::Transport::new(webrtc_websys::Config::new(&key))
                 .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         })?
         .with_behaviour(|_| Behaviour {
