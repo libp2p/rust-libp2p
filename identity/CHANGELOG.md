@@ -1,3 +1,8 @@
+## 0.2.5
+
+- Add `rand` feature to gate methods requiring a random number generator, enabling use in
+  restricted environments (e.g. smartcontracts).  This feature is not enabled by default.
+
 ## 0.2.4
 
 - Implement `Keypair::derive_secret`, to deterministically derive a new secret from the embedded secret key.
