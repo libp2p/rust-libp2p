@@ -52,9 +52,9 @@ const BENCH_SIZES: [usize; 8] = [
 ];
 
 fn prepare(c: &mut Criterion) {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let payload: Vec<u8> = vec![1; 1024 * 1024];
 

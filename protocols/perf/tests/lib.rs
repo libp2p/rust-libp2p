@@ -25,9 +25,9 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::test]
 async fn perf() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let mut server = Swarm::new_ephemeral(|_| server::Behaviour::new());
     let server_peer_id = *server.local_peer_id();

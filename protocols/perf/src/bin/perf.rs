@@ -73,9 +73,9 @@ impl FromStr for Transport {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let opts = Opts::parse();
     match opts {

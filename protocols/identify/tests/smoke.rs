@@ -7,9 +7,9 @@ use tracing_subscriber::EnvFilter;
 
 #[async_std::test]
 async fn periodic_identify() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(
@@ -83,9 +83,9 @@ async fn periodic_identify() {
 
 #[async_std::test]
 async fn identify_push() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
@@ -135,9 +135,9 @@ async fn identify_push() {
 
 #[async_std::test]
 async fn discover_peer_after_disconnect() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
         identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))

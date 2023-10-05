@@ -34,9 +34,9 @@ use tracing_subscriber::EnvFilter;
 #[async_std::test]
 #[cfg(feature = "cbor")]
 async fn is_response_outbound() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
     let ping = Ping("ping".to_string().into_bytes());
     let offline_peer = PeerId::random();
 

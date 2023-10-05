@@ -36,7 +36,7 @@ async fn main() {
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
 
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    let _ = tracing_subscriber::fmt().with_env_filter(env_filter).try_init();
 
     let key_pair = identity::Keypair::generate_ed25519();
 

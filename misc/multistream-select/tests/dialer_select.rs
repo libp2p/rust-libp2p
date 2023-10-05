@@ -73,9 +73,9 @@ fn select_proto_basic() {
 /// Tests the expected behaviour of failed negotiations.
 #[test]
 fn negotiation_failed() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     async fn run(
         Test {

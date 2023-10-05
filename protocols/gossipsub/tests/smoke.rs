@@ -128,9 +128,9 @@ async fn build_node() -> Swarm<gossipsub::Behaviour> {
 
 #[test]
 fn multi_hop_propagation() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
         if !(2..=50).contains(&num_nodes) {

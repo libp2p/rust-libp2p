@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
 
-    tracing_subscriber::fmt().with_env_filter(env_filter).init();
+    let _ = tracing_subscriber::fmt().with_env_filter(env_filter).try_init();
 
     let ipfs_path = get_ipfs_path();
     println!("using IPFS_PATH {ipfs_path:?}");

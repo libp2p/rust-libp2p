@@ -27,9 +27,9 @@ use tracing_subscriber::EnvFilter;
 
 #[test]
 fn variable_msg_length() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     fn prop(msg: Vec<u8>) {
         let msg_to_send = msg.clone();

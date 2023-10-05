@@ -38,9 +38,9 @@ pub(crate) mod native {
     pub(crate) type Instant = std::time::Instant;
 
     pub(crate) fn init_logger() {
-        tracing_subscriber::fmt()
+        let _ = tracing_subscriber::fmt()
             .with_env_filter(EnvFilter::from_default_env())
-            .init();
+            .try_init();
     }
 
     pub(crate) fn sleep(duration: Duration) -> BoxFuture<'static, ()> {

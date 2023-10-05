@@ -40,9 +40,9 @@ fn core_upgrade_compat() {
 
 #[test]
 fn xx() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .init();
+        .try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
         let server_id = identity::Keypair::generate_ed25519();
