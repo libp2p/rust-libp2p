@@ -126,7 +126,7 @@ pub use handler::{
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
-pub use stream::Stream;
+pub use stream::{Stream, StreamCounter};
 pub use stream_protocol::{InvalidProtocol, StreamProtocol};
 
 use crate::behaviour::ExternalAddrConfirmed;
