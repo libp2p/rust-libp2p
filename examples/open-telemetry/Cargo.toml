@@ -1,0 +1,18 @@
+[package]
+name = "open-telemetry-example"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+
+[dependencies]
+async-std = { version = "1.12", features = ["attributes"] }
+async-trait = "0.1"
+futures = "0.3.28"
+libp2p = { path = "../../libp2p", features = ["async-std", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux"] }
+opentelemetry = { version = "0.19.0", features = ["rt-tokio", "metrics"] }
+opentelemetry-otlp = { version = "0.12.0", features = ["metrics"]}
+tokio = { version = "1.32", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+tracing-opentelemetry = "0.19.0"
