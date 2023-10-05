@@ -1835,27 +1835,32 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
     Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
-// I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
-// supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
-// wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
-// ignore that.
-// We might also choose to ignore encryption, like noise and tls.
-// We might also consider the memory transport.
-const NON_PROTOCOL_TAGS: &[&str] = &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
+fn any_with_same_transport(
+    mut haystack: impl Iterator<Item = &Multiaddr>,
+    needle: &Multiaddr,
+) -> bool {
+    // Turns a multiaddress into an iterator of just the protocols.
+    fn clean_multiaddr(address: &Multiaddr) -> impl Iterator<Item = &'static str> {
+        // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
+        // supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
+        // wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
+        // ignore that.
+        // We might also choose to ignore encryption, like noise and tls.
+        // We might also consider the memory transport.
+        const NON_PROTOCOL_TAGS: &[&'static str] =
+            &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
 
-// We check weather a Protocol tag is a network protocol like quic, tcp and udp.
-fn is_not_protocol(tag: &str) -> bool {
-    // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
-    // assembly. https://godbolt.org/z/1x9f3K16x
-    !NON_PROTOCOL_TAGS.contains(&tag)
-}
+        // We check weather a Protocol tag is a network protocol like quic, tcp and udp.
+        fn is_not_protocol(tag: &'static str) -> bool {
+            // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
+            // assembly. https://godbolt.org/z/1x9f3K16x
+            !NON_PROTOCOL_TAGS.contains(&tag)
+        }
 
-// Turns a multiaddress into a vector of just the protocols.
-fn clean_multiaddr(address: &Multiaddr) -> Vec<&'static str> {
-    address
-        .protocol_stack()
-        .filter(|e| is_not_protocol(e))
-        .collect()
+        address.protocol_stack().filter(is_not_protocol)
+    }
+
+    haystack.any(|e| clean_multiaddr(e).eq(clean_multiaddr(needle)))
 }
 
 #[cfg(test)]
