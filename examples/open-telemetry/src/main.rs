@@ -31,11 +31,10 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use futures::prelude::*;
-use libp2p::core::upgrade::Version;
 use libp2p::{
     identity, noise, ping,
     swarm::{SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    tcp, yamux, PeerId, Transport,
 };
 use std::time::Duration;
 
@@ -45,18 +44,9 @@ struct MyBehaviour {
     ping: ping::Behaviour,
     mdns: mdns::tokio::Behaviour,
 }
-/*
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
 
-    let env_filter =   EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .from_env_lossy();
-
-    let grpc_endpoint = format!("http://");
+async fn init_telemetry() -> Result<(), Box<dyn Error>> {
+    let grpc_endpoint = format!("http://localhost:4317");
 
     tracing::trace!(%grpc_endpoint, "Setting up OTLP exporter for collector");
 
@@ -87,10 +77,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     tracing::trace!("Successfully initialized metric controller on tokio runtime");
 
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy();
+
     let dispatch: Dispatch = tracing_subscriber::registry()
-        .with(tracing_opentelemetry::layer()
-            .with_tracer(tracer)
-            .with_filter(env_filter),
+        .with(
+            tracing_opentelemetry::layer()
+                .with_tracer(tracer)
+                .with_filter(env_filter),
         )
         .into();
 
@@ -98,12 +93,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-*/
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::INFO.into())
+        .from_env_lossy();
+
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
+        .with_env_filter(env_filter)
         .try_init();
+    
+    init_telemetry().await?;
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
