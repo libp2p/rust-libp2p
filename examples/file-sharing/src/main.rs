@@ -39,7 +39,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
 
-    let _ = tracing_subscriber::fmt().with_env_filter(env_filter).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .try_init();
 
     let opt = Opt::parse();
 

@@ -38,7 +38,9 @@ async fn main() {
         .with_default_directive(LevelFilter::DEBUG.into())
         .from_env_lossy();
 
-    let _ = tracing_subscriber::fmt().with_env_filter(env_filter).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(env_filter)
+        .try_init();
 
     let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();

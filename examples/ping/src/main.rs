@@ -33,7 +33,7 @@ use tracing_subscriber::EnvFilter;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let _ =  tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 

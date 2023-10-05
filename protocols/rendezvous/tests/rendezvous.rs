@@ -86,7 +86,7 @@ async fn given_successful_registration_then_successful_discovery() {
 
 #[tokio::test]
 async fn should_return_error_when_no_external_addresses() {
-    let _  = tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
@@ -171,7 +171,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 
 #[tokio::test]
 async fn given_invalid_ttl_then_unsuccessful_registration() {
-    let _  = tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
