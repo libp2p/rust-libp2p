@@ -11,30 +11,27 @@ use std::{
 #[derive(Debug)]
 pub struct Stream {
     stream: Negotiated<SubstreamBox>,
-    stream_counter: StreamCounter,
+    counter: StreamCounter,
 }
 
 #[derive(Debug)]
-pub enum StreamCounter {
+enum StreamCounter {
     Arc(Arc<()>),
     Weak(Weak<()>),
 }
 
 impl Stream {
-    pub(crate) fn new(stream: Negotiated<SubstreamBox>, stream_counter: StreamCounter) -> Self {
-        Self {
-            stream,
-            stream_counter,
-        }
+    pub(crate) fn new(stream: Negotiated<SubstreamBox>, counter: Arc<()>) -> Self {
+        let counter = StreamCounter::Arc(counter);
+        Self { stream, counter }
     }
 
+    /// downgrade the Arc<()> to a Weak<()> which automatically
+    /// reduces the strong_count in Connection's stream_counter
     pub fn no_keep_alive(&mut self) {
-        let stream_counter = match &self.stream_counter {
-            StreamCounter::Arc(arc_counter) => StreamCounter::Weak(Arc::downgrade(arc_counter)),
-            StreamCounter::Weak(weak_counter) => StreamCounter::Weak(weak_counter.clone()),
-        };
-
-        self.stream_counter = stream_counter;
+        if let StreamCounter::Arc(arc_counter) = &self.counter {
+            self.counter = StreamCounter::Weak(Arc::downgrade(arc_counter));
+        }
     }
 }
 

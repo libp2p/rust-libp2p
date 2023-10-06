@@ -125,10 +125,11 @@ pub trait ConnectionHandler: Send + 'static {
 
     /// Returns until when the connection should be kept alive.
     ///
-    /// This method is called by the `Swarm` after each invocation of
-    /// [`ConnectionHandler::poll`] to determine if the connection and the associated
-    /// [`ConnectionHandler`]s should be kept alive as far as this handler is concerned
-    /// and if so, for how long.
+    /// `Swarm` checks if there are still active streams on this connection after
+    /// each invocation of [`ConnectionHandler::poll`]. If no, this method will
+    /// be called by the `Swarm` to determine if the connection and the associated
+    /// [`ConnectionHandler`]s should be kept alive as far as this handler is
+    /// concerned and if so, for how long.
     ///
     /// Returning [`KeepAlive::No`] indicates that the connection should be
     /// closed and this handler destroyed immediately.
