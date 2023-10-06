@@ -506,10 +506,8 @@ where
                 Ok(address) => {
                     let transport_dial_opts = {
                         let transport_port_use = dial_opts.port_use().unwrap_or_else(|| {
-                            let is_listening_on_same_transport = self
-                                .listeners()
-                                .map(clean_multiaddr)
-                                .any(|e| e == clean_multiaddr(&address));
+                            let is_listening_on_same_transport =
+                                any_with_same_transport(self.listeners(), &address);
                             if is_listening_on_same_transport {
                                 PortUse::Reuse
                             } else {
@@ -1835,12 +1833,12 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
     Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
-fn any_with_same_transport(
-    mut haystack: impl Iterator<Item = &Multiaddr>,
+fn any_with_same_transport<'a>(
+    mut haystack: impl Iterator<Item = &'a Multiaddr>,
     needle: &Multiaddr,
 ) -> bool {
     // Turns a multiaddress into an iterator of just the protocols.
-    fn clean_multiaddr(address: &Multiaddr) -> impl Iterator<Item = &'static str> {
+    fn clean_multiaddr(address: &Multiaddr) -> impl Iterator<Item = &'static str> + '_ {
         // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
         // supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
         // wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
@@ -1851,7 +1849,7 @@ fn any_with_same_transport(
             &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
 
         // We check weather a Protocol tag is a network protocol like quic, tcp and udp.
-        fn is_not_protocol(tag: &'static str) -> bool {
+        fn is_not_protocol(tag: &&'static str) -> bool {
             // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
             // assembly. https://godbolt.org/z/1x9f3K16x
             !NON_PROTOCOL_TAGS.contains(&tag)
@@ -2449,5 +2447,65 @@ mod tests {
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
         assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
+    }
+
+    #[cfg(test)]
+    mod port_use {
+        use crate::any_with_same_transport;
+        use crate::Multiaddr;
+
+        macro_rules! test_dial_with_listener {
+        ($test_name:ident, $listen_addrs:expr, $combination:expr, $test_explanation:literal) => {
+            #[test]
+            fn $test_name() {
+                let test_explanation = $test_explanation;
+                let listen_addrs: Vec<Multiaddr> = $listen_addrs.into_iter().map(|e| e.parse().unwrap()).collect();
+                $combination.into_iter().map(|(dial_addr_str, expected_output)| (dial_addr_str.parse::<Multiaddr>().unwrap(), expected_output)).for_each(|(dial_addr, expected_output)| {
+                    let should_port_reuse = any_with_same_transport(listen_addrs.iter(), &dial_addr);
+                    if expected_output {
+                        assert!(should_port_reuse, "Port should have been reused, since there exists at least one listener in {listen_addrs:?} for {dial_addr:?}. Details: {test_explanation}")
+                    } else {
+                        assert!(!should_port_reuse, "Port should not have been reused, since there doesn't exist a listener in {listen_addrs:?} for {dial_addr:?}. Details: {test_explanation}");
+                    }
+                })
+            }
+        };
+    }
+
+        const BASIC_LISTEN_ADDRS: [&str; 6] = [
+            "/ip4/127.0.0.1",
+            "/ip6/::1",
+            "/ip4/127.0.0.1/tcp/800/tls/ws",
+            "/ip4/127.0.0.1/udp/443/quic",
+            "/ip4/127.0.0.1/udp/443/quic-v1",
+            "/dns/bootstarp.libp2p.io/tcp/80/tls/ws/tls",
+        ];
+
+        test_dial_with_listener!(
+        reuse_if_dial_to_self,
+        BASIC_LISTEN_ADDRS,
+        BASIC_LISTEN_ADDRS.map(|addr| (addr, true)),
+        "If this test fails there is likely a major problem, because we won't reuse ports to dial ourselves."
+        );
+
+        test_dial_with_listener!(
+        no_reuse_ip4_listener_for_ip6,
+        [
+            "/ip4/198.51.100.30/tcp/1234",
+            "/ip4/147.75.83.83/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+            "/ip4/127.0.0.1/udp/1234/quic-v1",
+            "/ip4/12.34.56.78/udp/4321/quic",
+            "/ip4/102.0.2.0/udp/1234/quic/webtransport"
+        ],
+        [
+            ("/ip4/198.51.100.50/tcp/42", true),
+            ("/ip6/2001:1380:2000:7a00::1/tcp/4001", false),
+            ("/ip6/fe80::883:a581:fff1:833/tcp/4002/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb", false),
+            ("/ip6/2601:9:4f82:5fff:aefd:ecff:fe0b:7cfe/udp/2023/quic-v1", false),
+            ("/ip6/2001:0db8:85a3:0000:0000:8a2e:0370:7334/udp/4321/quic", false),
+            ("/ip6/1300::1/udp/300/quic/webtransport", false),
+        ],
+        "We shouldn't reuse an ip4 listener to dial to an ip6 address."
+        );
     }
 }
