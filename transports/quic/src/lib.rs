@@ -90,10 +90,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// The task to drive a quic endpoint has crashed.
-    #[error("Endpoint driver crashed")]
-    EndpointDriverCrashed,
-
     /// The [`Connecting`] future timed out.
     #[error("Handshake with the remote timed out.")]
     HandshakeTimedOut,
