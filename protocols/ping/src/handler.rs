@@ -261,9 +261,10 @@ impl ConnectionHandler for Handler {
                     log::debug!("Inbound ping error: {:?}", e);
                     self.inbound = None;
                 }
-                Poll::Ready(Ok(stream)) => {
+                Poll::Ready(Ok(mut stream)) => {
                     log::trace!("answered inbound ping from {}", self.peer);
 
+                    stream.no_keep_alive();
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
                 }
