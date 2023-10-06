@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 futures = "0.3.28"
 libp2p-core = { workspace = true }
 thiserror = "1.0"
-yamux = "0.12"
+yamux = { git = "https://github.com/stormshield-pj50/rust-yamux.git", branch = "yamux_reserved_header_size" }
 log = "0.4"
 
 [dev-dependencies]
