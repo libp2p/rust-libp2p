@@ -1834,6 +1834,7 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
     Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
+// Clarifies if there is a listener that we can use to dial from.
 fn any_with_same_transport<'a>(
     mut haystack: impl Iterator<Item = &'a Multiaddr>,
     needle: &Multiaddr,
@@ -1863,14 +1864,6 @@ fn any_with_same_transport<'a>(
         }
 
         fn map_protocol(tag: &'static str) -> &'static str {
-            debug_assert_ne!(
-                tag, "dnsaddr",
-                "The case of dnsaddress should already have been ignored since it's ambigious."
-            );
-            debug_assert_eq!(
-                tag, "dns",
-                "The case of dns should already have been ignored."
-            );
             match tag {
                 // DNS4 resolves to an IPv4 address
                 "dns4" => "ip4",
