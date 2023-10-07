@@ -123,6 +123,7 @@ pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
+use libp2p_core::multiaddr::Protocol;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
@@ -1837,16 +1838,22 @@ fn any_with_same_transport<'a>(
     mut haystack: impl Iterator<Item = &'a Multiaddr>,
     needle: &Multiaddr,
 ) -> bool {
+    // it's ambigious wheather a dns or dnsaddr resolves to an ipv4 or ipv6 address. To be sure we
+    // default to using a new port.
+    if needle
+        .iter()
+        .any(|p| matches!(p, Protocol::Dns(_) | Protocol::Dnsaddr(_)))
+    {
+        return false;
+    }
+
     // Turns a multiaddress into an iterator of just the protocols.
     fn clean_multiaddr(address: &Multiaddr) -> impl Iterator<Item = &'static str> + '_ {
         // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
         // supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
-        // wrote the only Tor transport for libp2p and it doesn't support these Onion addresses, I will just
+        // wrote the only Tor transport for rust-libp2p and it doesn't support these Onion addresses, I will just
         // ignore that.
-        // We might also choose to ignore encryption, like noise and tls.
-        // We might also consider the memory transport.
-        const NON_PROTOCOL_TAGS: &[&'static str] =
-            &["dns", "dns4", "dns6", "dnsaddr", "ip4", "ip6", "p2p"];
+        const NON_PROTOCOL_TAGS: &[&'static str] = &["p2p"];
 
         // We check weather a Protocol tag is a network protocol like quic, tcp and udp.
         fn is_not_protocol(tag: &&'static str) -> bool {
@@ -1855,7 +1862,28 @@ fn any_with_same_transport<'a>(
             !NON_PROTOCOL_TAGS.contains(&tag)
         }
 
-        address.protocol_stack().filter(is_not_protocol)
+        fn map_protocol(tag: &'static str) -> &'static str {
+            debug_assert_ne!(
+                tag, "dnsaddr",
+                "The case of dnsaddress should already have been ignored since it's ambigious."
+            );
+            debug_assert_eq!(
+                tag, "dns",
+                "The case of dns should already have been ignored."
+            );
+            match tag {
+                // DNS4 resolves to an IPv4 address
+                "dns4" => "ip4",
+                // DNS6 resolves to an IPv6 address
+                "dns6" => "ip6",
+                _ => tag,
+            }
+        }
+
+        address
+            .protocol_stack()
+            .filter(is_not_protocol)
+            .map(map_protocol)
     }
 
     haystack.any(|e| clean_multiaddr(e).eq(clean_multiaddr(needle)))
@@ -2478,13 +2506,14 @@ mod tests {
         };
     }
 
-        const BASIC_LISTEN_ADDRS: [&str; 6] = [
+        const BASIC_LISTEN_ADDRS: [&str; 7] = [
             "/ip4/127.0.0.1",
             "/ip6/::1",
             "/ip4/127.0.0.1/tcp/800/tls/ws",
             "/ip4/127.0.0.1/udp/443/quic",
             "/ip4/127.0.0.1/udp/443/quic-v1",
-            "/dns/bootstarp.libp2p.io/tcp/80/tls/ws/tls",
+            "/dns4/bootstrap.libp2p.io/tcp/80/tls/ws/tls",
+            "/dns6/bootstrap.libp2p.io/tcp/443/tls/ws/tls",
         ];
 
         test_dial_with_listener!(
