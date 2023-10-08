@@ -51,7 +51,7 @@ pub(crate) async fn new(
     // higher layer network behaviour logic.
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
-        ComposedBehaviour {
+        Behaviour {
             kademlia: kad::Behaviour::new(peer_id, kad::record::store::MemoryStore::new(peer_id)),
             request_response: request_response::cbor::Behaviour::new(
                 [(
@@ -171,7 +171,7 @@ impl Client {
 }
 
 pub(crate) struct EventLoop {
-    swarm: Swarm<ComposedBehaviour>,
+    swarm: Swarm<Behaviour>,
     command_receiver: mpsc::Receiver<Command>,
     event_sender: mpsc::Sender<Event>,
     pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
@@ -183,7 +183,7 @@ pub(crate) struct EventLoop {
 
 impl EventLoop {
     fn new(
-        swarm: Swarm<ComposedBehaviour>,
+        swarm: Swarm<Behaviour>,
         command_receiver: mpsc::Receiver<Command>,
         event_sender: mpsc::Sender<Event>,
     ) -> Self {
@@ -213,10 +213,10 @@ impl EventLoop {
 
     async fn handle_event(
         &mut self,
-        event: SwarmEvent<ComposedEvent, Either<void::Void, io::Error>>,
+        event: SwarmEvent<BehaviourEvent, Either<void::Void, io::Error>>,
     ) {
         match event {
-            SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(
                 kad::Event::OutboundQueryProgressed {
                     id,
                     result: kad::QueryResult::StartProviding(_),
@@ -229,7 +229,7 @@ impl EventLoop {
                     .expect("Completed query to be previously pending.");
                 let _ = sender.send(());
             }
-            SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(
                 kad::Event::OutboundQueryProgressed {
                     id,
                     result:
@@ -252,7 +252,7 @@ impl EventLoop {
                         .finish();
                 }
             }
-            SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(
                 kad::Event::OutboundQueryProgressed {
                     result:
                         kad::QueryResult::GetProviders(Ok(
@@ -261,8 +261,8 @@ impl EventLoop {
                     ..
                 },
             )) => {}
-            SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
-            SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(_)) => {}
+            SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
                 request_response::Event::Message { message, .. },
             )) => match message {
                 request_response::Message::Request {
@@ -287,7 +287,7 @@ impl EventLoop {
                         .send(Ok(response.0));
                 }
             },
-            SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
+            SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
                 request_response::Event::OutboundFailure {
                     request_id, error, ..
                 },
@@ -298,7 +298,7 @@ impl EventLoop {
                     .expect("Request to still be pending.")
                     .send(Err(Box::new(error)));
             }
-            SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
+            SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(
                 request_response::Event::ResponseSent { .. },
             )) => {}
             SwarmEvent::NewListenAddr { address, .. } => {
@@ -406,28 +406,9 @@ impl EventLoop {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "ComposedEvent")]
-struct ComposedBehaviour {
+struct Behaviour {
     request_response: request_response::cbor::Behaviour<FileRequest, FileResponse>,
     kademlia: kad::Behaviour<kad::record::store::MemoryStore>,
-}
-
-#[derive(Debug)]
-enum ComposedEvent {
-    RequestResponse(request_response::Event<FileRequest, FileResponse>),
-    Kademlia(kad::Event),
-}
-
-impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
-    fn from(event: request_response::Event<FileRequest, FileResponse>) -> Self {
-        ComposedEvent::RequestResponse(event)
-    }
-}
-
-impl From<kad::Event> for ComposedEvent {
-    fn from(event: kad::Event) -> Self {
-        ComposedEvent::Kademlia(event)
-    }
 }
 
 #[derive(Debug)]
