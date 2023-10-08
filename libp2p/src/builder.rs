@@ -224,18 +224,23 @@ mod tests {
     #[test]
     #[cfg(feature = "tokio")]
     fn other_transport() -> Result<(), Box<dyn std::error::Error>> {
+        use libp2p_core::{muxing::StreamMuxerBox, transport::dummy::DummyTransport};
+        use libp2p_identity::PeerId;
+
         let _ = SwarmBuilder::with_new_identity()
             .with_tokio()
             // Closure can either return a Transport directly.
-            .with_other_transport(|_| libp2p_core::transport::dummy::DummyTransport::new())?
+            .with_other_transport(|_| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
             // Or a Result containing a Transport.
-            .with_other_transport(|_| {
-                if true {
-                    Ok(libp2p_core::transport::dummy::DummyTransport::new())
-                } else {
-                    Err(Box::from("test"))
-                }
-            })?
+            .with_other_transport(
+                |_| {
+                    if true {
+                        Ok(DummyTransport::<(PeerId, StreamMuxerBox)>::new())
+                    } else {
+                        Err(Box::from("test"))
+                    }
+                },
+            )?
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();

@@ -118,7 +118,8 @@ impl SwarmBuilder<super::provider::Tokio, TcpPhase> {
 }
 impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     pub fn with_other_transport<
-        OtherTransport: AuthenticatedMultiplexedTransport,
+        Muxer: libp2p_core::muxing::StreamMuxer + Send + 'static,
+        OtherTransport: Transport<Output = (libp2p_identity::PeerId, Muxer)> + Send + Unpin + 'static,
         R: TryIntoTransport<OtherTransport>,
     >(
         self,
@@ -126,7 +127,14 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
     ) -> Result<
         SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>,
         R::Error,
-    > {
+    >
+    where
+        <OtherTransport as Transport>::Error: Send + Sync + 'static,
+        <OtherTransport as Transport>::Dial: Send,
+        <OtherTransport as Transport>::ListenerUpgrade: Send,
+        <Muxer as libp2p_core::muxing::StreamMuxer>::Substream: Send,
+        <Muxer as libp2p_core::muxing::StreamMuxer>::Error: Send + Sync,
+    {
         self.without_tcp()
             .without_quic()
             .with_other_transport(constructor)

@@ -24,7 +24,7 @@ use async_std::io;
 use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
-    core::{muxing::StreamMuxerBox, transport::upgrade::Version},
+    core::transport::upgrade::Version,
     gossipsub, identify,
     multiaddr::Protocol,
     noise, ping,
@@ -129,7 +129,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .upgrade(Version::V1Lazy)
                 .authenticate(noise_config)
                 .multiplex(yamux_config)
-                .map(|(peer_id, muxer), _| (peer_id, StreamMuxerBox::new(muxer)))
         })?
         .with_dns()
         .await?

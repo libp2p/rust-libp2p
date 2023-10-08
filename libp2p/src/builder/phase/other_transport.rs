@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use libp2p_core::Transport;
 #[cfg(feature = "relay")]
-use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, StreamMuxer, UpgradeInfo};
+use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
@@ -21,7 +21,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
     pub fn with_other_transport<
-        OtherTransport: AuthenticatedMultiplexedTransport,
+        Muxer: libp2p_core::muxing::StreamMuxer + Send + 'static,
+        OtherTransport: Transport<Output = (libp2p_identity::PeerId, Muxer)> + Send + Unpin + 'static,
         R: TryIntoTransport<OtherTransport>,
     >(
         self,
@@ -29,13 +30,24 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     ) -> Result<
         SwarmBuilder<Provider, OtherTransportPhase<impl AuthenticatedMultiplexedTransport>>,
         R::Error,
-    > {
+    >
+    where
+        <OtherTransport as Transport>::Error: Send + Sync + 'static,
+        <OtherTransport as Transport>::Dial: Send,
+        <OtherTransport as Transport>::ListenerUpgrade: Send,
+        <Muxer as libp2p_core::muxing::StreamMuxer>::Substream: Send,
+        <Muxer as libp2p_core::muxing::StreamMuxer>::Error: Send + Sync,
+    {
         Ok(SwarmBuilder {
             phase: OtherTransportPhase {
                 transport: self
                     .phase
                     .transport
-                    .or_transport(constructor(&self.keypair).try_into_transport()?)
+                    .or_transport(
+                        constructor(&self.keypair)
+                            .try_into_transport()?
+                            .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))),
+                    )
                     .map(|either, _| either.into_inner()),
             },
             keypair: self.keypair,
@@ -106,7 +118,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
     <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
 
-        MuxStream: StreamMuxer + Send + 'static,
+        MuxStream: libp2p_core::muxing::StreamMuxer + Send + 'static,
         MuxStream::Substream: Send + 'static,
         MuxStream::Error: Send + Sync + 'static,
         MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
@@ -163,10 +175,7 @@ pub trait TryIntoTransport<T>: private::Sealed<Self::Error> {
     fn try_into_transport(self) -> Result<T, Self::Error>;
 }
 
-impl<T> TryIntoTransport<T> for T
-where
-    T: AuthenticatedMultiplexedTransport,
-{
+impl<T: Transport> TryIntoTransport<T> for T {
     type Error = Infallible;
 
     fn try_into_transport(self) -> Result<T, Self::Error> {
@@ -174,10 +183,7 @@ where
     }
 }
 
-impl<T> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Sync>>
-where
-    T: AuthenticatedMultiplexedTransport,
-{
+impl<T: Transport> TryIntoTransport<T> for Result<T, Box<dyn std::error::Error + Send + Sync>> {
     type Error = TransportError;
 
     fn try_into_transport(self) -> Result<T, Self::Error> {
@@ -189,12 +195,9 @@ mod private {
     pub trait Sealed<Error> {}
 }
 
-impl<T: AuthenticatedMultiplexedTransport> private::Sealed<Infallible> for T {}
+impl<T: Transport> private::Sealed<Infallible> for T {}
 
-impl<T: AuthenticatedMultiplexedTransport> private::Sealed<TransportError>
-    for Result<T, Box<dyn std::error::Error + Send + Sync>>
-{
-}
+impl<T: Transport> private::Sealed<TransportError> for Result<T, Box<dyn std::error::Error + Send + Sync>> {}
 
 #[derive(Debug, thiserror::Error)]
 #[error("failed to build transport: {0}")]

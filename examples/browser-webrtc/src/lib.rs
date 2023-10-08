@@ -23,7 +23,6 @@ pub async fn run(libp2p_endpoint: String) -> Result<(), JsError> {
         .with_wasm_bindgen()
         .with_other_transport(|key| {
             webrtc_websys::Transport::new(webrtc_websys::Config::new(&key))
-                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         })?
         .with_behaviour(|_| Behaviour {
             ping: ping::Behaviour::new(ping::Config::new()),

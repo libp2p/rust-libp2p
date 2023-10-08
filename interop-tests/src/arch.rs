@@ -14,10 +14,9 @@ pub(crate) mod native {
     use env_logger::{Env, Target};
     use futures::future::BoxFuture;
     use futures::FutureExt;
-    use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
-    use libp2p::{noise, tcp, tls, yamux, Transport as _};
+    use libp2p::{noise, tcp, tls, yamux};
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
@@ -145,8 +144,7 @@ pub(crate) mod native {
                         Ok(webrtc::tokio::Transport::new(
                             key.clone(),
                             webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
-                        )
-                        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn))))
+                        ))
                     })?
                     .with_behaviour(behaviour_constructor)?
                     .build();
@@ -189,7 +187,6 @@ pub(crate) mod native {
 pub(crate) mod wasm {
     use anyhow::{bail, Result};
     use futures::future::{BoxFuture, FutureExt};
-    use libp2p::core::muxing::StreamMuxerBox;
     use libp2p::identity::Keypair;
     use libp2p::swarm::{NetworkBehaviour, Swarm};
     use libp2p::Transport as _;
@@ -222,7 +219,6 @@ pub(crate) mod wasm {
                         libp2p::webtransport_websys::Transport::new(
                             libp2p::webtransport_websys::Config::new(key),
                         )
-                        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
                     })?
                     .with_behaviour(behaviour_constructor)?
                     .build();
