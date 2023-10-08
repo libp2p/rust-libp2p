@@ -197,7 +197,10 @@ mod private {
 
 impl<T: Transport> private::Sealed<Infallible> for T {}
 
-impl<T: Transport> private::Sealed<TransportError> for Result<T, Box<dyn std::error::Error + Send + Sync>> {}
+impl<T: Transport> private::Sealed<TransportError>
+    for Result<T, Box<dyn std::error::Error + Send + Sync>>
+{
+}
 
 #[derive(Debug, thiserror::Error)]
 #[error("failed to build transport: {0}")]

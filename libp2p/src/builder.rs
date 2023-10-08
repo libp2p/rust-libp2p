@@ -232,15 +232,13 @@ mod tests {
             // Closure can either return a Transport directly.
             .with_other_transport(|_| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
             // Or a Result containing a Transport.
-            .with_other_transport(
-                |_| {
-                    if true {
-                        Ok(DummyTransport::<(PeerId, StreamMuxerBox)>::new())
-                    } else {
-                        Err(Box::from("test"))
-                    }
-                },
-            )?
+            .with_other_transport(|_| {
+                if true {
+                    Ok(DummyTransport::<(PeerId, StreamMuxerBox)>::new())
+                } else {
+                    Err(Box::from("test"))
+                }
+            })?
             .with_behaviour(|_| libp2p_swarm::dummy::Behaviour)
             .unwrap()
             .build();
