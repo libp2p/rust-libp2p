@@ -227,10 +227,7 @@ pub(crate) mod wasm {
             Transport::WebRtcDirect => {
                 let swarm = libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
-                    .with_other_transport(|key| {
-                        webrtc::Transport::new(webrtc::Config::new(&key))
-                            .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-                    })?
+                    .with_other_transport(|key| webrtc::Transport::new(webrtc::Config::new(&key)))?
                     .with_behaviour(behaviour_constructor)?
                     .build();
                 return Ok((swarm, format!("/ip4/{ip}/udp/0/webrtc-direct")));
