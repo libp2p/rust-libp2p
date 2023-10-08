@@ -9,6 +9,9 @@ mod select_security;
 ///
 /// ```
 /// # use libp2p::{swarm::NetworkBehaviour, SwarmBuilder};
+/// # use libp2p::core::transport::dummy::DummyTransport;
+/// # use libp2p::core::muxing::StreamMuxerBox;
+/// # use libp2p::identity::PeerId;
 /// # use std::error::Error;
 /// #
 /// # #[cfg(all(
@@ -37,6 +40,7 @@ mod select_security;
 ///          libp2p_yamux::Config::default,
 ///      )?
 ///      .with_quic()
+///      .with_other_transport(|_key| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
 ///      .with_dns()?
 ///      .with_relay_client(
 ///          (libp2p_tls::Config::new, libp2p_noise::Config::new),

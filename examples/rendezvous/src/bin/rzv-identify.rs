@@ -52,7 +52,7 @@ async fn main() {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         })
         .unwrap()
-        // TODO .idle_connection_timeout(Duration::from_secs(5))
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());

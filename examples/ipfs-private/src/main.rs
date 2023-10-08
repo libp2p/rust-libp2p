@@ -150,8 +150,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?
         .build();
 
-    println!("using random peer id: {:?}", swarm.local_peer_id());
-
     println!("Subscribing to {gossipsub_topic:?}");
     swarm
         .behaviour_mut()
