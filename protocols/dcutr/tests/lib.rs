@@ -135,28 +135,10 @@ fn build_client() -> Swarm<Client> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "ClientEvent", prelude = "libp2p_swarm::derive_prelude")]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(relay::client::Event),
-    Dcutr(dcutr::Event),
-}
-
-impl From<relay::client::Event> for ClientEvent {
-    fn from(event: relay::client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<dcutr::Event> for ClientEvent {
-    fn from(event: dcutr::Event) -> Self {
-        ClientEvent::Dcutr(event)
-    }
 }
 
 async fn wait_for_reservation(

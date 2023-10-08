@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Zeroizing::new(config::Config::from_file(opt.config.as_path())?);
 
-    let (local_peer_id, local_keypair) = {
+    let local_keypair = {
         let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
             base64::engine::general_purpose::STANDARD
                 .decode(config.identity.priv_key.as_bytes())?,
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Expect peer id derived from private key and peer id retrieved from config to match."
         );
 
-        (peer_id, keypair)
+        keypair
     };
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)

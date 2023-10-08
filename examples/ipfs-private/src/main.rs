@@ -20,9 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
-use async_std::io;
 use either::Either;
-use futures::{prelude::*, select};
+use futures::prelude::*;
 use libp2p::{
     core::transport::upgrade::Version,
     gossipsub, identify,
@@ -33,6 +32,7 @@ use libp2p::{
     tcp, yamux, Multiaddr, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr};
+use tokio::{io, io::AsyncBufReadExt, select};
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or
 /// from the default $HOME/.ipfs
@@ -85,7 +85,7 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
     Ok(res)
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -111,13 +111,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut swarm = libp2p::SwarmBuilder::with_new_identity()
-        .with_async_std()
+        .with_tokio()
         .with_other_transport(|key| {
             let noise_config = noise::Config::new(key).unwrap();
             let yamux_config = yamux::Config::default();
 
-            let base_transport =
-                tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
+            let base_transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true));
             let maybe_encrypted = match psk {
                 Some(psk) => Either::Left(
                     base_transport
@@ -130,8 +129,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .authenticate(noise_config)
                 .multiplex(yamux_config)
         })?
-        .with_dns()
-        .await?
+        .with_dns()?
         .with_behaviour(|key| {
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .max_transmit_size(262144)
@@ -169,7 +167,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -177,11 +175,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.select_next_some() => {
+            Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut()
                     .gossipsub
-                    .publish(gossipsub_topic.clone(), line.expect("Stdin not to close").as_bytes())
+                    .publish(gossipsub_topic.clone(), line.as_bytes())
                 {
                     println!("Publish error: {e:?}");
                 }

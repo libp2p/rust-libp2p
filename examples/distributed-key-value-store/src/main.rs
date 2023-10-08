@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    struct MyBehaviour {
+    struct Behaviour {
         kademlia: kad::Behaviour<MemoryStore>,
         mdns: mdns::async_io::Behaviour,
     }
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| {
-            Ok(MyBehaviour {
+            Ok(Behaviour {
                 kademlia: kad::Behaviour::new(
                     key.public().to_peer_id(),
                     MemoryStore::new(key.public().to_peer_id()),
@@ -80,12 +80,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::NewListenAddr { address, .. } => {
                 println!("Listening in {address:?}");
             },
-            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
             }
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
                 match result {
                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { key, providers, .. })) => {
                         for peer in providers {
