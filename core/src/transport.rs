@@ -149,9 +149,7 @@ pub trait Transport {
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
     /// This option is needed for NAT and firewall hole punching.
-    ///
-    /// See [`ConnectedPoint::Dialer`](crate::connection::ConnectedPoint::Dialer) for related option.
-    #[deprecated]
+    /// See [`ConnectedPoint::Dialer`] for related option.
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -259,8 +257,7 @@ pub trait Transport {
         and_then::AndThen::new(self, f)
     }
 
-    /// Begins a series of protocol upgrades via an
-    /// [`upgrade::Builder`](upgrade::Builder).
+    /// Begins a series of protocol upgrades via an [`upgrade::Builder`].
     fn upgrade(self, version: upgrade::Version) -> upgrade::Builder<Self>
     where
         Self: Sized,

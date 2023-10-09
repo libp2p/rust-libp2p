@@ -31,3 +31,6 @@ thiserror = "1.0.49"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
