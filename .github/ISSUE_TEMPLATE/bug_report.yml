@@ -43,13 +43,13 @@ body:
       description: Which version of libp2p are you using? libp2p version (version number, commit, or branch)
     validations:
       required: false
-  - type: checkboxes
+  - type: dropdown
     attributes:
-      label: Would you like to work on fixing this bug?
+      label: Would you like to work on fixing this bug ?
       description: Any contribution towards fixing the bug is greatly appreciated. We are more than happy to provide help on the process.
       options:
-        - label: "Yes"
-        - label: "No"
-        - label: Maybe
+        - "Yes"
+        - "No"
+        - Maybe
     validations:
       required: true

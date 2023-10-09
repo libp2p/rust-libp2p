@@ -19,13 +19,13 @@ body:
       description: Describe the current implementation.
     validations:
       required: true
-  - type: checkboxes
+  - type: dropdown
     attributes:
       label: Are you planning to do it yourself in a pull request ?
       description: Any contribution is greatly appreciated. We are more than happy to provide help on the process.
       options:
-        - label: "Yes"
-        - label: "No"
-        - label: Maybe
+        - "Yes"
+        - "No"
+        - Maybe
     validations:
       required: true
