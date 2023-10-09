@@ -28,7 +28,8 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
 use libp2p::{
-    bytes::BufMut, identity, kad,
+    bytes::BufMut,
+    identity, kad,
     swarm::{SwarmBuilder, SwarmEvent},
     tokio_development_transport, PeerId,
 };
