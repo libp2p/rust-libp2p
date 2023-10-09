@@ -159,8 +159,7 @@ use std::{
 
 /// Substream for which a protocol has been chosen.
 ///
-/// Implements the [`AsyncRead`](futures::io::AsyncRead) and
-/// [`AsyncWrite`](futures::io::AsyncWrite) traits.
+/// Implements the [`AsyncRead`] and [`AsyncWrite`] traits.
 #[deprecated(note = "The 'substream' terminology is deprecated. Use 'Stream' instead")]
 pub type NegotiatedSubstream = Stream;
 
@@ -1515,8 +1514,7 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
     pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
@@ -1848,9 +1846,7 @@ mod tests {
         let local_public_key = id_keys.public();
         let transport = transport::MemoryTransport::default()
             .upgrade(upgrade::Version::V1)
-            .authenticate(plaintext::PlainText2Config {
-                local_public_key: local_public_key.clone(),
-            })
+            .authenticate(plaintext::Config::new(&id_keys))
             .multiplex(yamux::Config::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(dummy::ConnectionHandler));
@@ -2155,19 +2151,14 @@ mod tests {
                     )
                     .unwrap();
                 for mut transport in transports.into_iter() {
-                    loop {
-                        match futures::future::select(transport.select_next_some(), swarm.next())
-                            .await
-                        {
-                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
-                                break;
-                            }
-                            future::Either::Left(_) => {
-                                panic!("Unexpected transport event.")
-                            }
-                            future::Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {e:?}")
-                            }
+                    match futures::future::select(transport.select_next_some(), swarm.next()).await
+                    {
+                        future::Either::Left((TransportEvent::Incoming { .. }, _)) => {}
+                        future::Either::Left(_) => {
+                            panic!("Unexpected transport event.")
+                        }
+                        future::Either::Right((e, _)) => {
+                            panic!("Expect swarm to not emit any event {e:?}")
                         }
                     }
                 }

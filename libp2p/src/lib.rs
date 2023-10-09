@@ -20,12 +20,10 @@
 
 //! libp2p is a modular peer-to-peer networking framework.
 //!
-//! To learn more about the general libp2p multi-language framework visit
-//! [libp2p.io](https://libp2p.io/).
+//! To learn more about the general libp2p multi-language framework visit <https://libp2p.io>.
 //!
-//! To get started with this libp2p implementation in Rust, please take a look
-//! at the [`tutorials`](crate::tutorials). Further examples can be found in the
-//! [examples] directory.
+//! To get started with this libp2p implementation in Rust, please take a look at the [`tutorials`].
+//! Further examples can be found in the [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
 
@@ -52,10 +50,15 @@ pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
+
 #[cfg(feature = "deflate")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_deflate as deflate;
+#[deprecated(
+    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
+)]
+pub mod deflate {
+    pub use libp2p_deflate::*;
+}
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(target_arch = "wasm32"))]

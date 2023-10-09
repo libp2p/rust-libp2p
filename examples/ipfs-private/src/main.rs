@@ -20,9 +20,8 @@
 
 #![doc = include_str!("../README.md")]
 
-use async_std::io;
 use either::Either;
-use futures::{prelude::*, select};
+use futures::prelude::*;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
     gossipsub, identify, identity,
@@ -33,6 +32,7 @@ use libp2p::{
     tcp, yamux, Multiaddr, PeerId, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
+use tokio::{io, io::AsyncBufReadExt, select};
 
 /// Builds the transport that serves as a common ground for all connections.
 pub fn build_transport(
@@ -42,7 +42,7 @@ pub fn build_transport(
     let noise_config = noise::Config::new(&key_pair).unwrap();
     let yamux_config = yamux::Config::default();
 
-    let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
+    let base_transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
         Some(psk) => Either::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
@@ -108,7 +108,7 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
     Ok(res)
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -186,7 +186,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Subscribing to {gossipsub_topic:?}");
         behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Reach out to other nodes if specified
@@ -197,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+    let mut stdin = io::BufReader::new(io::stdin()).lines();
 
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
@@ -205,11 +205,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off
     loop {
         select! {
-            line = stdin.select_next_some() => {
+            Ok(Some(line)) = stdin.next_line() => {
                 if let Err(e) = swarm
                     .behaviour_mut()
                     .gossipsub
-                    .publish(gossipsub_topic.clone(), line.expect("Stdin not to close").as_bytes())
+                    .publish(gossipsub_topic.clone(), line.as_bytes())
                 {
                     println!("Publish error: {e:?}");
                 }

@@ -1,3 +1,9 @@
+## 0.40.1 - unreleased
+
+- Deprecate in preparation for removal from the workspace.
+  See [issue 4522](https://github.com/libp2p/rust-libp2p/issues/4522) for details.
+  See [PR 4540](https://github.com/libp2p/rust-libp2p/pull/4540).
+
 ## 0.40.0 
 
 - Raise MSRV to 1.65.

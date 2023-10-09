@@ -14,6 +14,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 futures = "0.3.28"
 futures-timer = "3.0.2"
+futures-bounded = { workspace = true }
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -38,3 +39,6 @@ libp2p-swarm = { workspace = true, features = ["macros"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

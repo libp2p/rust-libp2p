@@ -41,3 +41,6 @@ tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustl
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
