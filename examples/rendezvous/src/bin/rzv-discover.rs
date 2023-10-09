@@ -49,8 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_behaviour(|key| MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-        })
-        .unwrap()
+        })?
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
