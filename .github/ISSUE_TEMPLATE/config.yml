@@ -1,8 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Report a vulnerability
-    url: https://github.com/libp2p/rust-libp2p/security/advisories/new
-    about: For security related issues please file a private security vulnerability report.
   - name: Question
     url:  https://github.com/libp2p/rust-libp2p/discussions/new?category=q-a
     about: Please ask questions in the rust-libp2p GitHub Discussions forum.

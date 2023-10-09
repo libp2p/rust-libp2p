@@ -110,45 +110,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "Event")]
     struct Behaviour {
         relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
         dcutr: dcutr::Behaviour,
-    }
-
-    #[derive(Debug)]
-    #[allow(clippy::large_enum_variant)]
-    enum Event {
-        Ping(ping::Event),
-        Identify(identify::Event),
-        Relay(relay::client::Event),
-        Dcutr(dcutr::Event),
-    }
-
-    impl From<ping::Event> for Event {
-        fn from(e: ping::Event) -> Self {
-            Event::Ping(e)
-        }
-    }
-
-    impl From<identify::Event> for Event {
-        fn from(e: identify::Event) -> Self {
-            Event::Identify(e)
-        }
-    }
-
-    impl From<relay::client::Event> for Event {
-        fn from(e: relay::client::Event) -> Self {
-            Event::Relay(e)
-        }
-    }
-
-    impl From<dcutr::Event> for Event {
-        fn from(e: dcutr::Event) -> Self {
-            Event::Dcutr(e)
-        }
     }
 
     let behaviour = Behaviour {
@@ -207,12 +173,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { .. } => {}
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent {
+                    ..
+                })) => {
                     info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
                     info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
@@ -252,22 +220,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
                 }
-                SwarmEvent::Behaviour(Event::Relay(
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
                     relay::client::Event::ReservationReqAccepted { .. },
                 )) => {
                     assert!(opts.mode == Mode::Listen);
                     info!("Relay accepted our reservation request.");
                 }
-                SwarmEvent::Behaviour(Event::Relay(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Dcutr(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Identify(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Ping(_)) => {}
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {

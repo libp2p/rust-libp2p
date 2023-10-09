@@ -27,10 +27,12 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
-
-use libp2p::bytes::BufMut;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
-use libp2p::{development_transport, identity, kad, PeerId};
+use libp2p::kad::record::store::MemoryStore;
+use libp2p::{
+    bytes::BufMut, identity, kad,
+    swarm::{SwarmBuilder, SwarmEvent},
+    tokio_development_transport, PeerId,
+};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -39,7 +41,7 @@ const BOOTNODES: [&str; 4] = [
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
 
@@ -48,7 +50,7 @@ async fn main() -> Result<()> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
-    let transport = development_transport(local_key.clone()).await?;
+    let transport = tokio_development_transport(local_key.clone())?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
@@ -65,7 +67,7 @@ async fn main() -> Result<()> {
             behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
         }
 
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
     let cli_opt = Opt::parse();

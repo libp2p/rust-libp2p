@@ -200,8 +200,9 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.72.0, # current stable
-          beta
+          # 1.72.0, # current stable
+          # beta,
+          nightly-2023-09-10
         ]
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +219,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run cargo clippy
-        run: cargo custom-clippy # cargo alias to allow reuse of config locally
+        run: cargo clippy
 
   ipfs-integration-test:
     name: IPFS Integration tests
@@ -266,9 +267,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.23.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.24.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
         shell: bash
-      - uses: obi1kenobi/cargo-semver-checks-action@v2
+      - uses: obi1kenobi/cargo-semver-checks-action@e275dda72e250d4df5b564e969e1348d67fefa52 # v2
 
   rustfmt:
     runs-on: ubuntu-latest
