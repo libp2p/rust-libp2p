@@ -368,11 +368,10 @@ impl Keypair {
         )))]
         return None;
 
-        let hkdf =
-            hkdf::Hkdf::<sha2::Sha256>::from_prk(&self.secret()?).expect("secret to have 32 bytes");
-
         let mut okm = [0u8; 32];
-        hkdf.expand(domain, &mut okm).expect("okm.len() == 32");
+        hkdf::Hkdf::<sha2::Sha256>::new(None, &self.secret()?)
+            .expand(domain, &mut okm)
+            .expect("okm.len() == 32");
 
         return Some(okm);
     }
