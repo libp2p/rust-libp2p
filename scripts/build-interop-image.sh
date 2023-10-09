@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# This uses the same S3 cache as all test-plans images. Because we use `cargo-chef` in the Dockerfile, we have a layer available with all dependencies built.
+
 CACHE_TO=""
 
 # If we have credentials, write to cache

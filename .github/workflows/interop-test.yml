@@ -21,7 +21,6 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # This uses the same S3 cache as all test-plans images. Because we use `cargo-chef` in the Dockerfile, we have a layer available with all dependencies built.
       - name: Build ${{ matrix.flavour }} image
         run: ./scripts/build-interop-image.sh
         env:
