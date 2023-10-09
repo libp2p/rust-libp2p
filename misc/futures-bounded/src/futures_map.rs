@@ -79,7 +79,7 @@ where
                     },
                 );
 
-                Err(PushError::ReplacedFuture(old_future.inner))
+                Err(PushError::Replaced(old_future.inner))
             }
         }
     }
