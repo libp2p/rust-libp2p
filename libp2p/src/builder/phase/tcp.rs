@@ -83,10 +83,6 @@ impl<Provider> SwarmBuilder<Provider, TcpPhase> {
             keypair: self.keypair,
             phantom: PhantomData,
             phase: QuicPhase {
-                // Note that this allows a user to build a faulty (i.e. dummy) transport only.
-                // Ideally the final build step would not exist unless one adds another transport
-                // after `without_tcp`. Though currently this would introduce significant
-                // complexity to each following step.
                 transport: libp2p_core::transport::dummy::DummyTransport::new(),
             },
         }
