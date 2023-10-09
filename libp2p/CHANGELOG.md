@@ -1,3 +1,7 @@
+## 0.52.4
+
+- Update `libp2p-identity` version to 0.2.6.
+
 ## 0.52.3
 
 - Add `libp2p-quic` stable release.
