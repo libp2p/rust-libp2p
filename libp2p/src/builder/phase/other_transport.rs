@@ -97,6 +97,7 @@ impl<T: AuthenticatedMultiplexedTransport>
 impl<T: AuthenticatedMultiplexedTransport, Provider>
     SwarmBuilder<Provider, OtherTransportPhase<T>>
 {
+    /// See [`SwarmBuilder::with_relay_client`].
     pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
         security_upgrade: SecUpgrade,

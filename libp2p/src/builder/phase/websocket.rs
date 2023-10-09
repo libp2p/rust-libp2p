@@ -17,6 +17,27 @@ pub struct WebsocketPhase<T, R> {
 
 macro_rules! impl_websocket_builder {
     ($providerKebabCase:literal, $providerPascalCase:ty, $dnsTcp:expr, $websocketStream:ty) => {
+        /// Adds a websocket client transport.
+        ///
+        /// Note that both `security_upgrade` and `multiplexer_upgrade` take function pointers,
+        /// i.e. they take the function themselves (without the invocation via `()`), not the
+        /// result of the function invocation. See example below.
+        ///
+        /// ``` rust
+        /// # use libp2p::SwarmBuilder;
+        /// # use std::error::Error;
+        /// # async fn build_swarm() -> Result<(), Box<dyn Error>> {
+        /// let swarm = SwarmBuilder::with_new_identity()
+        ///     .with_tokio()
+        ///     .with_websocket(
+        ///         (libp2p_tls::Config::new, libp2p_noise::Config::new),
+        ///         libp2p_yamux::Config::default,
+        ///     )
+        ///     .await?
+        /// # ;
+        /// # Ok(())
+        /// # }
+        /// ```
         #[cfg(all(not(target_arch = "wasm32"), feature = $providerKebabCase, feature = "websocket"))]
         impl<T, R> SwarmBuilder<$providerPascalCase, WebsocketPhase<T, R>> {
             pub async fn with_websocket<

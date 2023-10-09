@@ -73,6 +73,7 @@ impl<Provider, T> SwarmBuilder<Provider, QuicPhase<T>> {
 
 // Shortcuts
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    /// See [`SwarmBuilder::with_relay_client`].
     #[cfg(feature = "relay")]
     pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
         self,
@@ -174,6 +175,7 @@ macro_rules! impl_quic_phase_with_websocket {
     ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
         #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]
         impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<$providerPascalCase, QuicPhase<T>> {
+            /// See [`SwarmBuilder::with_websocket`].
             pub async fn with_websocket <
                 SecUpgrade,
                 SecStream,

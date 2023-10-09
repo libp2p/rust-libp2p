@@ -24,6 +24,27 @@ macro_rules! impl_tcp_builder {
             feature = $providerKebabCase,
         ))]
         impl SwarmBuilder<$providerPascalCase, TcpPhase> {
+            /// Adds a TCP based transport.
+            ///
+            /// Note that both `security_upgrade` and `multiplexer_upgrade` take function pointers,
+            /// i.e. they take the function themselves (without the invocation via `()`), not the
+            /// result of the function invocation. See example below.
+            ///
+            /// ``` rust
+            /// # use libp2p::SwarmBuilder;
+            /// # use std::error::Error;
+            /// # async fn build_swarm() -> Result<(), Box<dyn Error>> {
+            /// let swarm = SwarmBuilder::with_new_identity()
+            ///     .with_tokio()
+            ///     .with_tcp(
+            ///         Default::default(),
+            ///         (libp2p_tls::Config::new, libp2p_noise::Config::new),
+            ///         libp2p_yamux::Config::default,
+            ///     )?
+            /// # ;
+            /// # Ok(())
+            /// # }
+            /// ```
             pub fn with_tcp<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
                 self,
                 tcp_config: libp2p_tcp::Config,
@@ -140,6 +161,7 @@ macro_rules! impl_tcp_phase_with_websocket {
     ($providerKebabCase:literal, $providerPascalCase:ty, $websocketStream:ty) => {
         #[cfg(all(feature = $providerKebabCase, not(target_arch = "wasm32"), feature = "websocket"))]
         impl SwarmBuilder<$providerPascalCase, TcpPhase> {
+            /// See [`SwarmBuilder::with_websocket`].
             pub async fn with_websocket <
                 SecUpgrade,
                 SecStream,
