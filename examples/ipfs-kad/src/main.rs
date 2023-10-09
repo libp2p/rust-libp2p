@@ -20,10 +20,14 @@
 
 #![doc = include_str!("../README.md")]
 
+use std::num::NonZeroUsize;
+use std::ops::Add;
+use std::time::{Duration, Instant};
+
+use anyhow::{bail, Result};
+use clap::Parser;
 use futures::StreamExt;
-use libp2p::kad;
-use libp2p::{noise, swarm::SwarmEvent, tcp, yamux, PeerId};
-use std::{env, error::Error, time::Duration};
+use libp2p::{bytes::BufMut, identity, kad, noise, swarm::SwarmEvent, tcp, yamux, PeerId};
 
 const BOOTNODES: [&str; 4] = [
     "QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
@@ -33,10 +37,13 @@ const BOOTNODES: [&str; 4] = [
 ];
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     env_logger::init();
 
-    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+    // Create a random key for ourselves.
+    let local_key = identity::Keypair::generate_ed25519();
+
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
         .with_tokio()
         .with_tcp(
             tcp::Config::default(),
@@ -62,47 +69,90 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
     }
 
-    // Order Kademlia to search for a peer.
-    let to_search = env::args()
-        .nth(1)
-        .map(|p| p.parse())
-        .transpose()?
-        .unwrap_or_else(PeerId::random);
+    let cli_opt = Opt::parse();
 
-    println!("Searching for the closest peers to {to_search}");
-    swarm.behaviour_mut().get_closest_peers(to_search);
+    match cli_opt.argument {
+        CliArgument::GetPeers { peer_id } => {
+            let peer_id = peer_id.unwrap_or(PeerId::random());
+            println!("Searching for the closest peers to {peer_id}");
+            swarm.behaviour_mut().get_closest_peers(peer_id);
+        }
+        CliArgument::PutPkRecord {} => {
+            println!("Putting PK record into the DHT");
 
-    loop {
-        let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
-            result: kad::QueryResult::GetClosestPeers(result),
-            ..
-        }) = event
-        {
-            match result {
-                Ok(ok) => {
-                    if !ok.peers.is_empty() {
-                        println!("Query finished with closest peers: {:#?}", ok.peers)
-                    } else {
-                        // The example is considered failed as there
-                        // should always be at least 1 reachable peer.
-                        println!("Query finished with no closest peers.")
-                    }
-                }
-                Err(kad::GetClosestPeersError::Timeout { peers, .. }) => {
-                    if !peers.is_empty() {
-                        println!("Query timed out with closest peers: {peers:#?}")
-                    } else {
-                        // The example is considered failed as there
-                        // should always be at least 1 reachable peer.
-                        println!("Query timed out with no closest peers.");
-                    }
-                }
-            };
+            let mut pk_record_key = vec![];
+            pk_record_key.put_slice("/pk/".as_bytes());
+            pk_record_key.put_slice(swarm.local_peer_id().to_bytes().as_slice());
 
-            break;
+            let mut pk_record =
+                kad::Record::new(pk_record_key, local_key.public().encode_protobuf());
+            pk_record.publisher = Some(*swarm.local_peer_id());
+            pk_record.expires = Some(Instant::now().add(Duration::from_secs(60)));
+
+            swarm
+                .behaviour_mut()
+                .put_record(pk_record, kad::Quorum::N(NonZeroUsize::new(3).unwrap()))?;
         }
     }
 
-    Ok(())
+    loop {
+        let event = swarm.select_next_some().await;
+
+        match event {
+            SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+                result: kad::QueryResult::GetClosestPeers(Ok(ok)),
+                ..
+            }) => {
+                // The example is considered failed as there
+                // should always be at least 1 reachable peer.
+                if ok.peers.is_empty() {
+                    bail!("Query finished with no closest peers.")
+                }
+
+                println!("Query finished with closest peers: {:#?}", ok.peers);
+
+                return Ok(());
+            }
+            SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+                result:
+                    kad::QueryResult::GetClosestPeers(Err(kad::GetClosestPeersError::Timeout {
+                        ..
+                    })),
+                ..
+            }) => {
+                bail!("Query for closest peers timed out")
+            }
+            SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+                result: kad::QueryResult::PutRecord(Ok(_)),
+                ..
+            }) => {
+                println!("Successfully inserted the PK record");
+
+                return Ok(());
+            }
+            SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+                result: kad::QueryResult::PutRecord(Err(err)),
+                ..
+            }) => {
+                bail!(anyhow::Error::new(err).context("Failed to insert the PK record"));
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(Parser, Debug)]
+#[clap(name = "libp2p Kademlia DHT example")]
+struct Opt {
+    #[clap(subcommand)]
+    argument: CliArgument,
+}
+
+#[derive(Debug, Parser)]
+enum CliArgument {
+    GetPeers {
+        #[clap(long)]
+        peer_id: Option<PeerId>,
+    },
+    PutPkRecord {},
 }
