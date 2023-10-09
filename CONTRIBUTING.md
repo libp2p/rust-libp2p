@@ -26,7 +26,6 @@ The PR title, which will become the commit message after the squashing process, 
 When making user-facing changes, it is important to include corresponding entries in the changelog, providing a comprehensive summary for the users.
 For detailed instructions on how to write changelog entries, please refer to the documentation in [`docs/release.md`](https://github.com/libp2p/rust-libp2p/blob/master/docs/release.md).
 
-
 ### Merging of PRs is automated
 
 To streamline our workflow, we utilize Mergify and the "send-it" label.
@@ -38,3 +37,8 @@ Please refrain from making further commits after the "send-it" label has been ap
 
 We have a lot of automated CI checks for common errors.
 Please treat our CI as a self-service platform and try to fix any issues before requesting a review.
+
+### Use nightly Rust for better diagnostics
+
+We recommend the use of nightly Rust during local development for better diagnostics.
+Our CI will ensure that all code correctly builds on stable Rust and adheres to our MSRV requirements.
