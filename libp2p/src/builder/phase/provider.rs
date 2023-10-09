@@ -1,6 +1,7 @@
+#[allow(unused_imports)]
 use super::*;
+
 use crate::SwarmBuilder;
-use std::marker::PhantomData;
 
 pub struct ProviderPhase {}
 
@@ -9,7 +10,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     pub fn with_async_std(self) -> SwarmBuilder<AsyncStd, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
-            phantom: PhantomData,
+            phantom: std::marker::PhantomData,
             phase: TcpPhase {},
         }
     }
@@ -18,7 +19,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     pub fn with_tokio(self) -> SwarmBuilder<Tokio, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
-            phantom: PhantomData,
+            phantom: std::marker::PhantomData,
             phase: TcpPhase {},
         }
     }
@@ -27,7 +28,7 @@ impl SwarmBuilder<NoProviderSpecified, ProviderPhase> {
     pub fn with_wasm_bindgen(self) -> SwarmBuilder<WasmBindgen, TcpPhase> {
         SwarmBuilder {
             keypair: self.keypair,
-            phantom: PhantomData,
+            phantom: std::marker::PhantomData,
             phase: TcpPhase {},
         }
     }

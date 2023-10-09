@@ -31,7 +31,7 @@ hex = "0.4.3"
 hex-literal = "0.4.1"
 libp2p-core = { workspace = true }
 libp2p-identity = { workspace = true, features = ["ed25519", "rsa", "secp256k1", "ecdsa"] }
-libp2p-swarm = { workspace = true }
+libp2p-swarm = { workspace = true, features = ["tokio"] }
 libp2p-yamux = { workspace = true }
 tokio = { version = "1.32.0", features = ["full"] }
 

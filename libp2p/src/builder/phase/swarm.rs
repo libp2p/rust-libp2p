@@ -1,8 +1,7 @@
+#[allow(unused_imports)]
 use super::*;
-use crate::SwarmBuilder;
-use libp2p_swarm::{NetworkBehaviour, Swarm};
-use std::marker::PhantomData;
 
+#[allow(dead_code)]
 pub struct SwarmPhase<T, B> {
     pub(crate) behaviour: B,
     pub(crate) transport: T,
@@ -23,14 +22,14 @@ macro_rules! impl_with_swarm_config {
                         swarm_config: constructor($config),
                     },
                     keypair: self.keypair,
-                    phantom: PhantomData,
+                    phantom: std::marker::PhantomData,
                 }
             }
 
             // Shortcuts
-            pub fn build(self) -> Swarm<B>
+            pub fn build(self) -> libp2p_swarm::Swarm<B>
             where
-                B: NetworkBehaviour,
+                B: libp2p_swarm::NetworkBehaviour,
                 T: AuthenticatedMultiplexedTransport,
             {
                 self.with_swarm_config(std::convert::identity).build()

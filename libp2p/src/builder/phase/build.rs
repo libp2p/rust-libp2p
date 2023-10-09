@@ -1,4 +1,6 @@
+#[allow(unused_imports)]
 use super::*;
+
 use crate::SwarmBuilder;
 use libp2p_core::Transport;
 use libp2p_swarm::Swarm;

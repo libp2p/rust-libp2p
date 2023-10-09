@@ -1,7 +1,4 @@
-use libp2p_core::{muxing::StreamMuxerBox, upgrade::SelectUpgrade, Transport};
-use libp2p_identity::Keypair;
-
-use super::select_security::SelectSecurityUpgrade;
+#![allow(unused_imports)]
 
 mod bandwidth_logging;
 mod behaviour;
@@ -27,6 +24,12 @@ use relay::*;
 use swarm::*;
 use tcp::*;
 use websocket::*;
+
+use super::select_security::SelectSecurityUpgrade;
+use super::SwarmBuilder;
+
+use libp2p_core::{muxing::StreamMuxerBox, upgrade::SelectUpgrade, Transport};
+use libp2p_identity::Keypair;
 
 pub trait IntoSecurityUpgrade<C> {
     type Upgrade;
