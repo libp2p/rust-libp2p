@@ -20,12 +20,10 @@
 
 //! libp2p is a modular peer-to-peer networking framework.
 //!
-//! To learn more about the general libp2p multi-language framework visit
-//! [libp2p.io](https://libp2p.io/).
+//! To learn more about the general libp2p multi-language framework visit <https://libp2p.io>.
 //!
-//! To get started with this libp2p implementation in Rust, please take a look
-//! at the [`tutorials`](crate::tutorials). Further examples can be found in the
-//! [examples] directory.
+//! To get started with this libp2p implementation in Rust, please take a look at the [`tutorials`].
+//! Further examples can be found in the [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
 

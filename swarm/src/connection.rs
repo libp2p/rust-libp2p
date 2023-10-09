@@ -144,8 +144,7 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
