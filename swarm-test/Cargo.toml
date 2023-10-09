@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 async-trait = "0.1.73"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
