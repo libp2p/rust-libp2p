@@ -27,7 +27,6 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Result};
 use clap::Parser;
 use futures::StreamExt;
-use libp2p::kad::record::store::MemoryStore;
 use libp2p::{
     bytes::BufMut, identity, kad,
     swarm::{SwarmBuilder, SwarmEvent},
