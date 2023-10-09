@@ -8,7 +8,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["futures", "async", "backpressure"]
 categories = ["data-structures", "asynchronous"]
 description = "Utilities for bounding futures in size and time."
-publish = false # TEMP FIX until https://github.com/obi1kenobi/cargo-semver-checks-action/issues/53 is fixed.
+publish = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -18,3 +18,6 @@ futures-timer = "3.0.2"
 
 [dev-dependencies]
 tokio = { version = "1.29.1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

@@ -21,12 +21,12 @@
 #![doc = include_str!("../README.md")]
 
 use futures::StreamExt;
+use libp2p::kad;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
 use libp2p::{
-    development_transport, identity,
+    identity,
     swarm::{SwarmBuilder, SwarmEvent},
-    PeerId,
+    tokio_development_transport, PeerId,
 };
 use std::{env, error::Error, time::Duration};
 
@@ -37,7 +37,7 @@ const BOOTNODES: [&str; 4] = [
     "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
 ];
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
@@ -46,15 +46,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
 
     // Set up a an encrypted DNS-enabled TCP Transport over the yamux protocol
-    let transport = development_transport(local_key).await?;
+    let transport = tokio_development_transport(local_key)?;
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
         // Create a Kademlia behaviour.
-        let mut cfg = KademliaConfig::default();
+        let mut cfg = kad::Config::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
         let store = MemoryStore::new(local_peer_id);
-        let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
+        let mut behaviour = kad::Behaviour::with_config(local_peer_id, store, cfg);
 
         // Add the bootnodes to the local routing table. `libp2p-dns` built
         // into the `transport` resolves the `dnsaddr` when Kademlia tries
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             behaviour.add_address(&peer.parse()?, "/dnsaddr/bootstrap.libp2p.io".parse()?);
         }
 
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
+        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build()
     };
 
     // Order Kademlia to search for a peer.
@@ -78,8 +78,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
-            result: QueryResult::GetClosestPeers(result),
+        if let SwarmEvent::Behaviour(kad::Event::OutboundQueryProgressed {
+            result: kad::QueryResult::GetClosestPeers(result),
             ..
         }) = event
         {
@@ -93,7 +93,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         println!("Query finished with no closest peers.")
                     }
                 }
-                Err(GetClosestPeersError::Timeout { peers, .. }) => {
+                Err(kad::GetClosestPeersError::Timeout { peers, .. }) => {
                     if !peers.is_empty() {
                         println!("Query timed out with closest peers: {peers:#?}")
                     } else {

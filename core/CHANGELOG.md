@@ -1,4 +1,4 @@
-## 0.40.1 - unreleased
+## 0.40.1
 
 - Implement `Debug` for `StreamMuxerEvent`.
   See [PR 4426].
