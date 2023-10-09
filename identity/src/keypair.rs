@@ -357,20 +357,30 @@ impl Keypair {
     /// let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
     /// # }
     /// ```
-    #[allow(unused_variables, unreachable_code)]
+    ///
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
-        #[cfg(any(
-            feature = "ecdsa",
-            feature = "secp256k1",
-            feature = "ed25519",
-            feature = "rsa"
-        ))]
-        return Some(
-            hkdf::Hkdf::<sha2::Sha256>::extract(None, &[domain, &self.secret()?].concat())
-                .0
-                .into(),
-        );
+        let mut okm = [0u8; 32];
+        hkdf::Hkdf::<sha2::Sha256>::new(None, &self.secret()?)
+            .expand(domain, &mut okm)
+            .expect("okm.len() == 32");
 
+        Some(okm)
+    }
+
+    // We build docs with all features so this doesn't need to have any docs.
+    #[cfg(not(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    )))]
+    pub fn derive_secret(&self, _: &[u8]) -> Option<[u8; 32]> {
         None
     }
 

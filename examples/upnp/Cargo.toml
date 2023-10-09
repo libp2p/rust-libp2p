@@ -6,6 +6,9 @@ publish = false
 license = "MIT"
 
 [dependencies]
-tokio = { version = "1", features = [ "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["tokio", "dns", "macros", "noise", "ping", "tcp", "websocket", "yamux", "upnp"] }
+
+[lints]
+workspace = true
