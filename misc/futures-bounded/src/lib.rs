@@ -1,10 +1,12 @@
 mod futures_map;
 mod futures_set;
 mod stream_map;
+mod stream_set;
 
 pub use futures_map::FuturesMap;
 pub use futures_set::FuturesSet;
 pub use stream_map::StreamMap;
+pub use stream_set::StreamSet;
 
 use std::fmt;
 use std::fmt::Formatter;
