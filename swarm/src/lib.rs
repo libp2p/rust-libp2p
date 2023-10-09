@@ -1476,7 +1476,7 @@ impl Config {
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
     /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// [`StreamMuxerBox`] level.
     pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
