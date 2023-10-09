@@ -371,7 +371,7 @@ impl Keypair {
             .expand(domain, &mut okm)
             .expect("okm.len() == 32");
 
-        return Some(okm);
+        Some(okm)
     }
 
     // We build docs with all features so this doesn't need to have any docs.
