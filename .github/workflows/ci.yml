@@ -235,8 +235,11 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Run ipfs-kad example
-        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
+      - name: Run ipfs-kad example - get peers
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- get-peers
+
+      - name: Run ipfs-kad example - put PK record
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- put-pk-record
 
   examples:
     runs-on: ubuntu-latest
