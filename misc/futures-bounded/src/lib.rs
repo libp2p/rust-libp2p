@@ -1,8 +1,11 @@
 mod futures_map;
 mod futures_set;
+mod stream_map;
 
-pub use futures_map::{FuturesMap, PushError};
+pub use futures_map::FuturesMap;
 pub use futures_set::FuturesSet;
+pub use stream_map::StreamMap;
+
 use std::fmt;
 use std::fmt::Formatter;
 use std::time::Duration;
@@ -23,6 +26,17 @@ impl fmt::Display for Timeout {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "future failed to complete within {:?}", self.limit)
     }
+}
+
+/// Error of a future pushing
+#[derive(PartialEq, Debug)]
+pub enum PushError<T> {
+    /// The length of the set is equal to the capacity
+    BeyondCapacity(T),
+    /// The set already contained an item with this key.
+    ///
+    /// The old item is returned.
+    Replaced(T),
 }
 
 impl std::error::Error for Timeout {}

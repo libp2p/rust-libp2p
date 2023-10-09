@@ -10,7 +10,7 @@ use futures_util::future::BoxFuture;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{FutureExt, StreamExt};
 
-use crate::Timeout;
+use crate::{PushError, Timeout};
 
 /// Represents a map of [`Future`]s.
 ///
@@ -21,15 +21,6 @@ pub struct FuturesMap<ID, O> {
     inner: FuturesUnordered<TaggedFuture<ID, TimeoutFuture<BoxFuture<'static, O>>>>,
     empty_waker: Option<Waker>,
     full_waker: Option<Waker>,
-}
-
-/// Error of a future pushing
-#[derive(PartialEq, Debug)]
-pub enum PushError<F> {
-    /// The length of the set is equal to the capacity
-    BeyondCapacity(F),
-    /// The set already contains the given future's ID
-    ReplacedFuture(F),
 }
 
 impl<ID, O> FuturesMap<ID, O> {
