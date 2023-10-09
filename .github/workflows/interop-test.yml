@@ -24,9 +24,16 @@ jobs:
       # This uses the same S3 cache as all test-plans images. Because we use `cargo-chef` in the Dockerfile, we have a layer available with all dependencies built.
       - name: Build ${{ matrix.flavour }} image
         run: |
+          CACHE_TO=""
+          
+          # If we have credentials, write to cache
+          if [[ -n "${AWS_SECRET_ACCESS_KEY}" ]]; then
+            CACHE_TO="--cache-to   type=s3,mode=max,bucket=libp2p-by-tf-aws-bootstrap,region=us-east-1,prefix=buildCache,name=${{ matrix.flavour }}-rust-libp2p-head \"
+          fi
+          
           docker buildx build \
             --load \
-            --cache-to   type=s3,mode=max,bucket=libp2p-by-tf-aws-bootstrap,region=us-east-1,prefix=buildCache,name=${{ matrix.flavour }}-rust-libp2p-head \
+            $CACHE_TO
             --cache-from type=s3,mode=max,bucket=libp2p-by-tf-aws-bootstrap,region=us-east-1,prefix=buildCache,name=${{ matrix.flavour }}-rust-libp2p-head \
             -t ${{ matrix.flavour }}-rust-libp2p-head \
             . \
