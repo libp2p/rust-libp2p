@@ -1,8 +1,8 @@
-mod map;
-mod set;
+mod futures_map;
+mod futures_set;
 
-pub use map::{FuturesMap, PushError};
-pub use set::FuturesSet;
+pub use futures_map::{FuturesMap, PushError};
+pub use futures_set::FuturesSet;
 use std::fmt;
 use std::fmt::Formatter;
 use std::time::Duration;
