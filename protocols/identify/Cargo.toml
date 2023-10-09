@@ -19,7 +19,7 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4.20"
-lru = "0.11.1"
+lru = "0.12.0"
 quick-protobuf-codec = { workspace = true }
 quick-protobuf = "0.8"
 smallvec = "1.11.1"
