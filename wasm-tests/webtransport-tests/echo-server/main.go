@@ -23,7 +23,8 @@ func addrReporter(ma multiaddr.Multiaddr) {
         h.Add("Cross-Origin-Resource-Policy", "cross-origin")
         h.Add("Content-Type", "text/plain; charset=utf-8")
 
-        fmt.Fprint(w, ma.String())
+        fmt.Fprint(w, "/ip6/::1/udp/4433/quic-v1/webtransport/certhash/uEiBAOgXcfExykedZKTU4zp3TRdt_qsaOepASE_sE92D1Cw/p2p/12D3KooWN4H4urugWTvubDGpEMH21VZsiZGWXUzLZ3SQUEjfmD1y")
+
     })
 
     http.ListenAndServe(":4455", nil)

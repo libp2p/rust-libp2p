@@ -1,0 +1,57 @@
+[package]
+name = "libp2p-webtransport"
+version = "0.9.2"
+edition = "2021"
+rust-version = { workspace = true }
+description = "TODO"
+repository = "https://github.com/libp2p/rust-libp2p"
+license = "MIT"
+
+# TODO: Update
+[dependencies]
+async-std = { version = "1.12.0", optional = true }
+bytes = "1.4.0"
+futures = "0.3.28"
+futures-timer = "3.0.2"
+hex = "0.4"
+if-watch = "3.0.1"
+# TODO: Remove
+libp2p = { path = "../../libp2p", features = ["tokio", "macros", "ping"] }
+libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true }
+libp2p-noise = { workspace = true }
+log = "0.4"
+parking_lot = "0.12.0"
+quinn = { version = "0.10.1", default-features = false, features = ["tls-rustls", "futures-io", "runtime-tokio"] }
+rand = "0.8.5"
+rustls = { version = "0.21.2", default-features = false }
+sha2 = "0.10.7"
+thiserror = "1.0.44"
+# TODO redo features
+tokio = { version = "1.31.0", default-features = false, features = ["net", "rt", "time", "macros", "rt-multi-thread"] }
+socket2 = "0.5.3"
+h3 = { git = "https://github.com/hyperium/h3" }
+h3-quinn = { git = "https://github.com/hyperium/h3" }
+h3-webtransport = { git = "https://github.com/hyperium/h3" }
+http = "0.2.9"
+env_logger = "0.10.0"
+# TODO
+rcgen = "*"
+time = "0.3"
+
+[features]
+tokio = ["if-watch/tokio", "quinn/runtime-tokio"]
+async-std = ["dep:async-std", "if-watch/smol", "quinn/runtime-async-std"]
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+quickcheck = "1"
+tokio = { version = "1.31.0", features = ["macros", "rt-multi-thread", "time"] }
+hex-literal = "0.4"

@@ -62,6 +62,7 @@ members = [
     "transports/webrtc-websys",
     "transports/websocket",
     "transports/webtransport-websys",
+    "transports/webtransport",
     "wasm-tests/webtransport-tests",
 ]
 resolver = "2"
@@ -112,6 +113,7 @@ libp2p-webrtc-utils = { version = "0.1.0", path = "misc/webrtc-utils" }
 libp2p-webrtc-websys = { version = "0.1.0-alpha", path = "transports/webrtc-websys" }
 libp2p-websocket = { version = "0.42.1", path = "transports/websocket" }
 libp2p-webtransport-websys = { version = "0.1.0", path = "transports/webtransport-websys" }
+libp2p-webtransport = { version = "0.1.0", path = "transports/webtransport" }
 libp2p-yamux = { version = "0.44.1", path = "muxers/yamux" }
 multistream-select = { version = "0.13.0", path = "misc/multistream-select" }
 quick-protobuf-codec = { version = "0.2.0", path = "misc/quick-protobuf-codec" }
