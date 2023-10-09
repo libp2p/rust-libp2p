@@ -29,11 +29,22 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}-server
 
+      - name: Sanitize github.ref_name
+        run: |
+          REF="${{ github.ref_name }}" # `ref_name` contains `/` which is not a valid docker image tag.
+          CACHE_TAG="${REF//\//-}"
+          echo "CACHE_TAG=$CACHE_TAG" >> "$GITHUB_ENV"
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./misc/server/Dockerfile
           push: ${{ ! github.event.pull_request.head.repo.fork }} # Only push image if we have the required permissions, i.e. not running from a fork
+          cache-from: |
+            type=registry,ref=ghcr.io/cache/${{ github.repository }}-server:${{ env.CACHE_TAG }}
+            type=registry,ref=ghcr.io/cache/${{ github.repository }}-server:master
+          cache-to: >-
+            type=registry,ref=ghcr.io/cache/${{ github.repository }}-server:${{ env.CACHE_TAG }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
