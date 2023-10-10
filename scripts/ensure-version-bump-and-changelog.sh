@@ -5,8 +5,8 @@ set -ex;
 MANIFEST_PATH=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .manifest_path')
 DIR_TO_CRATE=$(dirname "$MANIFEST_PATH")
 
-DIFF_TO_MASTER=$(git diff "$HEAD_SHA"..master --name-status -- "$DIR_TO_CRATE")
-CHANGELOG_DIFF=$(git diff "$HEAD_SHA"..master --name-only -- "$DIR_TO_CRATE/CHANGELOG.md")
+DIFF_TO_MASTER=$(git diff "$HEAD_SHA"...master --name-status -- "$DIR_TO_CRATE")
+CHANGELOG_DIFF=$(git diff "$HEAD_SHA"...master --name-only -- "$DIR_TO_CRATE/CHANGELOG.md")
 
 VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
 VERSION_IN_MANIFEST=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
