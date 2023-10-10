@@ -120,7 +120,7 @@ pub(crate) mod native {
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
+                    .with_websocket(noise::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .build(),
