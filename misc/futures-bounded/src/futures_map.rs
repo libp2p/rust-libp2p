@@ -45,7 +45,7 @@ where
     /// If the length of the map is equal to the capacity, this method returns [PushError::BeyondCapacity],
     /// that contains the passed future. In that case, the future is not inserted to the map.
     /// If a future with the given `future_id` already exists, then the old future will be replaced by a new one.
-    /// In that case, the returned error [PushError::ReplacedFuture] contains the old future.
+    /// In that case, the returned error [PushError::Replaced] contains the old future.
     pub fn try_push<F>(&mut self, future_id: ID, future: F) -> Result<(), PushError<BoxFuture<O>>>
     where
         F: Future<Output = O> + Send + 'static,
