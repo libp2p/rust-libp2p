@@ -38,33 +38,21 @@ pub(crate) mod native {
     pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
-        security_protocol: Option<SecProtocol>,
+        sec_protocol: Option<SecProtocol>,
         muxer: Option<Muxer>,
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
-        let (swarm, addr) = match (transport, security_protocol, muxer) {
-            (Transport::QuicV1, None, None) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+        let (swarm, addr) = match (transport, sec_protocol, muxer) {
+            (Transport::QuicV1, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_quic()
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/udp/0/quic-v1"))
-            }
-            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
-                    .with_tokio()
-                    .with_tcp(
-                        tcp::Config::default(),
-                        tls::Config::new,
-                        yamux::Config::default,
-                    )?
-                    .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0"))
-            }
-            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/udp/0/quic-v1"),
+            ),
+            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp(
                         tcp::Config::default(),
@@ -72,23 +60,23 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0"))
-            }
-            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp(
                         tcp::Config::default(),
-                        noise::Config::new,
+                        tls::Config::new,
                         yamux::Config::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0"))
-            }
-            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_tcp(
                         tcp::Config::default(),
@@ -96,47 +84,59 @@ pub(crate) mod native {
                         mplex::MplexConfig::default,
                     )?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0"))
-            }
-            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(tls::Config::new, yamux::Config::default)
-                    .await?
+                    .with_tcp(
+                        tcp::Config::default(),
+                        noise::Config::new,
+                        yamux::Config::default,
+                    )?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
-            }
-            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
-                    .with_tokio()
-                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
-                    .await?
-                    .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
-            }
-            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
-                    .with_tokio()
-                    .with_websocket(tls::Config::new, yamux::Config::default)
-                    .await?
-                    .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
-            }
-            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_websocket(tls::Config::new, mplex::MplexConfig::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-                (swarm, format!("/ip4/{ip}/tcp/0/ws"))
-            }
-            (Transport::WebRtcDirect, None, None) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(tls::Config::new, yamux::Config::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(tls::Config::new, yamux::Config::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/ws"),
+            ),
+            (Transport::WebRtcDirect, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
                     .with_other_transport(|key| {
                         Ok(webrtc::tokio::Transport::new(
@@ -145,10 +145,9 @@ pub(crate) mod native {
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-
-                (swarm, format!("/ip4/{ip}/udp/0/webrtc-direct"))
-            }
+                    .build(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+            ),
             (t, s, m) => bail!("Unsupported combination: {t:?} {s:?} {m:?}"),
         };
         Ok((swarm, addr))
