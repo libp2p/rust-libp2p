@@ -20,12 +20,10 @@
 
 //! libp2p is a modular peer-to-peer networking framework.
 //!
-//! To learn more about the general libp2p multi-language framework visit
-//! [libp2p.io](https://libp2p.io/).
+//! To learn more about the general libp2p multi-language framework visit <https://libp2p.io>.
 //!
-//! To get started with this libp2p implementation in Rust, please take a look
-//! at the [`tutorials`](crate::tutorials). Further examples can be found in the
-//! [examples] directory.
+//! To get started with this libp2p implementation in Rust, please take a look at the [`tutorials`].
+//! Further examples can be found in the [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
 
@@ -137,12 +135,20 @@ pub use libp2p_uds as uds;
 #[doc(inline)]
 pub use libp2p_upnp as upnp;
 #[cfg(feature = "wasm-ext")]
-#[doc(inline)]
-pub use libp2p_wasm_ext as wasm_ext;
+#[deprecated(
+    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websocket-websys`."
+)]
+pub mod wasm_ext {
+    #[doc(inline)]
+    pub use libp2p_wasm_ext::*;
+}
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
+#[cfg(feature = "websocket-websys")]
+#[doc(inline)]
+pub use libp2p_websocket_websys as websocket_websys;
 #[cfg(feature = "webtransport-websys")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webtransport-websys")))]
 #[doc(inline)]
