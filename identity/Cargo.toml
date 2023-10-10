@@ -35,7 +35,7 @@ ring = { version = "0.16.9", features = [ "alloc", "std"], default-features = fa
 [features]
 secp256k1 = ["dep:libsecp256k1", "dep:asn1_der", "dep:sha2", "dep:hkdf", "dep:zeroize"]
 ecdsa = ["dep:p256", "dep:void", "dep:zeroize", "dep:sec1", "dep:sha2", "dep:hkdf"]
-rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"] # It is ok for RSA to depend on rand as it doesn't compile to WASM and similar environments anyway.
+rsa = ["dep:ring", "dep:asn1_der", "dep:rand", "dep:zeroize"]
 ed25519 = ["dep:ed25519-dalek", "dep:zeroize", "dep:sha2", "dep:hkdf"]
 peerid = ["dep:multihash", "dep:bs58", "dep:thiserror", "dep:sha2", "dep:hkdf"]
 rand = ["dep:rand", "ed25519-dalek?/rand_core"]
