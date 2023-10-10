@@ -304,7 +304,7 @@ impl Connection {
             .expect("to have a window")
             .set_interval_with_callback_and_timeout_and_arguments(
                 on_buffered_amount_low_closure.as_ref().unchecked_ref(),
-                500,
+                100, // Chosen arbitrarily and likely worth tuning. Due to low impact of the /ws transport, no further effort was invested at the time.
                 &Array::new(),
             )
             .expect("to be able to set an interval");
