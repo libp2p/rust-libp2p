@@ -6,7 +6,7 @@ use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
 use libp2p_core::{multiaddr::Protocol, Multiaddr};
 use libp2p_pnet::{PnetConfig, PreSharedKey};
-use libp2p_swarm::{dummy, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{dummy, Config, NetworkBehaviour, Swarm, SwarmEvent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -113,9 +113,12 @@ where
         .authenticate(libp2p_noise::Config::new(&identity).unwrap())
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
-    SwarmBuilder::with_tokio_executor(transport, dummy::Behaviour, identity.public().to_peer_id())
-        .idle_connection_timeout(Duration::from_secs(5))
-        .build()
+    Swarm::new(
+        transport,
+        dummy::Behaviour,
+        identity.public().to_peer_id(),
+        Config::with_tokio_executor(),
+    )
 }
 
 async fn listen_on<B: NetworkBehaviour>(swarm: &mut Swarm<B>, addr: Multiaddr) -> Multiaddr {
