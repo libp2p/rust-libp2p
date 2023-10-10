@@ -73,7 +73,7 @@ jobs:
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
       - name: Ensure manifest and CHANGELOG are properly updated
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.mergeable_state != 'behind' # Out of date PRs show unrelated diffs, hence we don't want to run this unless the PR is up to date.
         run: |
           git fetch origin master:master
           ./scripts/ensure-version-bump-and-changelog.sh
