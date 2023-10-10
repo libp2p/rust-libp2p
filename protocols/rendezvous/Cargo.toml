@@ -37,7 +37,7 @@ libp2p-identify = { workspace = true }
 libp2p-yamux = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 rand = "0.8"
-tokio = { version = "1.32", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
+tokio = { version = "1.33", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
