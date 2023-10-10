@@ -2359,7 +2359,7 @@ checksum = "a08173bc88b7955d1b3145aa561539096c421ac8debde8cbc3612ec635fee29b"
 
 [[package]]
 name = "libp2p"
-version = "0.52.3"
+version = "0.52.4"
 dependencies = [
  "async-std",
  "async-trait",
@@ -2401,6 +2401,7 @@ dependencies = [
  "libp2p-upnp",
  "libp2p-wasm-ext",
  "libp2p-websocket",
+ "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
  "libp2p-yamux",
  "multiaddr",
@@ -3279,6 +3280,25 @@ dependencies = [
  "soketto",
  "url",
  "webpki-roots",
+]
+
+[[package]]
+name = "libp2p-websocket-websys"
+version = "0.2.0"
+dependencies = [
+ "bytes",
+ "futures",
+ "js-sys",
+ "libp2p-core",
+ "libp2p-identity",
+ "libp2p-noise",
+ "libp2p-yamux",
+ "log",
+ "parking_lot",
+ "send_wrapper 0.6.0",
+ "thiserror",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

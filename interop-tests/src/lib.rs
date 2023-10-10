@@ -18,18 +18,35 @@ pub async fn run_test(
     is_dialer: bool,
     test_timeout_seconds: u64,
     redis_addr: &str,
+    sec_protocol: Option<String>,
+    muxer: Option<String>,
 ) -> Result<Report> {
     init_logger();
 
     let test_timeout = Duration::from_secs(test_timeout_seconds);
     let transport = transport.parse().context("Couldn't parse transport")?;
+    let sec_protocol = sec_protocol
+        .map(|sec_protocol| {
+            sec_protocol
+                .parse()
+                .context("Couldn't parse security protocol")
+        })
+        .transpose()?;
+    let muxer = muxer
+        .map(|sec_protocol| {
+            sec_protocol
+                .parse()
+                .context("Couldn't parse muxer protocol")
+        })
+        .transpose()?;
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     let redis_client = RedisClient::new(redis_addr).context("Could not connect to redis")?;
 
     // Build the transport from the passed ENV var.
-    let (boxed_transport, local_addr) = build_transport(local_key.clone(), ip, transport)?;
+    let (boxed_transport, local_addr) =
+        build_transport(local_key.clone(), ip, transport, sec_protocol, muxer)?;
     let mut swarm = swarm_builder(
         boxed_transport,
         Behaviour {
@@ -113,7 +130,8 @@ pub async fn run_test(
                     }
                     if listener_id == id {
                         let ma = format!("{address}/p2p/{local_peer_id}");
-                        redis_client.rpush("listenerAddr", ma).await?;
+                        redis_client.rpush("listenerAddr", ma.clone()).await?;
+
                         break;
                     }
                 }
@@ -123,7 +141,9 @@ pub async fn run_test(
             futures::future::select(
                 async move {
                     loop {
-                        swarm.next().await;
+                        let event = swarm.next().await.unwrap();
+
+                        log::debug!("{event:?}");
                     }
                 }
                 .boxed(),
@@ -145,8 +165,19 @@ pub async fn run_test_wasm(
     is_dialer: bool,
     test_timeout_secs: u64,
     base_url: &str,
+    sec_protocol: Option<String>,
+    muxer: Option<String>,
 ) -> Result<(), JsValue> {
-    let result = run_test(transport, ip, is_dialer, test_timeout_secs, base_url).await;
+    let result = run_test(
+        transport,
+        ip,
+        is_dialer,
+        test_timeout_secs,
+        base_url,
+        sec_protocol,
+        muxer,
+    )
+    .await;
     log::info!("Sending test result: {result:?}");
     reqwest::Client::new()
         .post(&format!("http://{}/results", base_url))
@@ -243,15 +274,4 @@ impl FromStr for SecProtocol {
 struct Behaviour {
     ping: ping::Behaviour,
     identify: identify::Behaviour,
-}
-
-/// Helper function to get a ENV variable into an test parameter like `Transport`.
-pub fn from_env<T>(env_var: &str) -> Result<T>
-where
-    T: FromStr<Err = anyhow::Error>,
-{
-    std::env::var(env_var)
-        .with_context(|| format!("{env_var} environment variable is not set"))?
-        .parse()
-        .map_err(Into::into)
 }
