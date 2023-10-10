@@ -22,30 +22,19 @@
 
 use async_std::io;
 use futures::{prelude::*, select};
-use libp2p::core::upgrade::Version;
 use libp2p::kad;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::Mode;
 use libp2p::{
-    identity, mdns, noise,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    mdns, noise,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
-
-    // Create a random key for ourselves.
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
@@ -54,15 +43,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: mdns::async_io::Behaviour,
     }
 
-    // Create a swarm to manage peers and events.
-    let mut swarm = {
-        // Create a Kademlia behaviour.
-        let store = MemoryStore::new(local_peer_id);
-        let kademlia = kad::Behaviour::new(local_peer_id, store);
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let behaviour = Behaviour { kademlia, mdns };
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
-    };
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_async_std()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| {
+            Ok(Behaviour {
+                kademlia: kad::Behaviour::new(
+                    key.public().to_peer_id(),
+                    MemoryStore::new(key.public().to_peer_id()),
+                ),
+                mdns: mdns::async_io::Behaviour::new(
+                    mdns::Config::default(),
+                    key.public().to_peer_id(),
+                )?,
+            })
+        })?
+        .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 

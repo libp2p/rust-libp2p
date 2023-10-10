@@ -144,8 +144,7 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the
-    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`] level.
     max_negotiating_inbound_streams: usize,
     /// Contains all upgrades that are waiting for a new outbound substream.
     ///
@@ -749,6 +748,8 @@ mod tests {
 
     #[test]
     fn max_negotiating_inbound_streams() {
+        let _ = env_logger::try_init();
+
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
@@ -757,7 +758,7 @@ mod tests {
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
-                MockConnectionHandler::new(Duration::ZERO),
+                MockConnectionHandler::new(Duration::from_secs(10)),
                 None,
                 max_negotiating_inbound_streams,
                 Duration::ZERO,
