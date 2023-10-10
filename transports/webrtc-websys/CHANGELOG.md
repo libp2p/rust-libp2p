@@ -1,4 +1,4 @@
-## 0.1.0-alpha - unreleased
+## 0.1.0-alpha
 
 - Initial alpha release.
   See [PR 4248].

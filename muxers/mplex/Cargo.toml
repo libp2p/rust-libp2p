@@ -20,7 +20,7 @@ log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
@@ -43,3 +43,6 @@ harness = false
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
