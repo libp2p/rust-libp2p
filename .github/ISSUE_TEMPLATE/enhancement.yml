@@ -1,0 +1,31 @@
+name: Enhancement
+description: Suggest an improvement to an existing rust-libp2p feature.
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: Describe the enhancement that you are proposing.    
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Motivation
+      description: Explain why this enhancement is beneficial.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Current Implementation
+      description: Describe the current implementation.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Are you planning to do it yourself in a pull request ?
+      description: Any contribution is greatly appreciated. We are more than happy to provide help on the process.
+      options:
+        - "Yes"
+        - "No"
+        - Maybe
+    validations:
+      required: true
