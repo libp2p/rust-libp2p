@@ -208,8 +208,8 @@ pub(crate) mod wasm {
         behaviour_constructor: impl FnOnce(&Keypair) -> B,
     ) -> Result<(Swarm<B>, String)> {
         Ok(match (transport, sec_protocol, muxer) {
-            (Transport::Webtransport, None, None) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+            (Transport::Webtransport, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         webtransport_websys::Transport::new(webtransport_websys::Config::new(
@@ -217,12 +217,11 @@ pub(crate) mod wasm {
                         ))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-
-                (swarm, format!("/ip4/{ip}/udp/0/quic/webtransport"))
-            }
-            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/udp/0/quic/webtransport"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         Ok(websocket_websys::Transport::default()
@@ -234,12 +233,11 @@ pub(crate) mod wasm {
                             .multiplex(mplex::MplexConfig::new()))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-
-                (swarm, format!("/ip4/{ip}/tcp/0/wss"))
-            }
-            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         Ok(websocket_websys::Transport::default()
@@ -251,21 +249,19 @@ pub(crate) mod wasm {
                             .multiplex(yamux::Config::default()))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-
-                (swarm, format!("/ip4/{ip}/tcp/0/wss"))
-            }
-            (Transport::WebRtcDirect, None, None) => {
-                let swarm = libp2p::SwarmBuilder::with_new_identity()
+                    .build(),
+                format!("/ip4/{ip}/tcp/0/wss"),
+            ),
+            (Transport::WebRtcDirect, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
                     .with_wasm_bindgen()
                     .with_other_transport(|local_key| {
                         webrtc_websys::Transport::new(webrtc_websys::Config::new(&local_key))
                     })?
                     .with_behaviour(behaviour_constructor)?
-                    .build();
-
-                (swarm, format!("/ip4/{ip}/udp/0/webrtc-direct"))
-            }
+                    .build(),
+                format!("/ip4/{ip}/udp/0/webrtc-direct"),
+            ),
             (t, s, m) => bail!("Unsupported combination: {t:?} {s:?} {m:?}"),
         })
     }
