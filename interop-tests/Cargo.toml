@@ -35,7 +35,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify"] }
+libp2p = { path = "../libp2p", features = [ "ping", "macros", "webtransport-websys", "wasm-bindgen", "identify", "websocket-websys", "yamux", "noise"] }
+libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-webrtc-websys = { workspace = true }
 wasm-bindgen = { version = "0.2" }
 wasm-bindgen-futures = { version = "0.4" }
