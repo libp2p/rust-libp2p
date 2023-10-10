@@ -137,7 +137,7 @@ pub(crate) mod native {
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
                 libp2p::SwarmBuilder::with_new_identity()
                     .with_tokio()
-                    .with_websocket(tls::Config::new, yamux::Config::default)
+                    .with_websocket(noise::Config::new, yamux::Config::default)
                     .await?
                     .with_behaviour(behaviour_constructor)?
                     .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
