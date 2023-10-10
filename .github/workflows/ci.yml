@@ -70,6 +70,12 @@ jobs:
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
+      - name: Ensure manifest and CHANGELOG are properly updated
+        if: github.event_name == 'pull_request'
+        run: ./scripts/ensure-version-bump-and-changelog.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
   wasm_tests:
     name: Run all WASM tests
     runs-on: ubuntu-latest
