@@ -168,3 +168,115 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use futures_util::stream::{once, pending};
+    use std::future::{poll_fn, ready, Future};
+    use std::pin::Pin;
+    use std::time::Instant;
+
+    use super::*;
+
+    #[test]
+    fn cannot_push_more_than_capacity_tasks() {
+        let mut streams = StreamMap::new(Duration::from_secs(10), 1);
+
+        assert!(streams.try_push("ID_1", once(ready(()))).is_ok());
+        matches!(
+            streams.try_push("ID_2", once(ready(()))),
+            Err(PushError::BeyondCapacity(_))
+        );
+    }
+
+    #[test]
+    fn cannot_push_the_same_id_few_times() {
+        let mut streams = StreamMap::new(Duration::from_secs(10), 5);
+
+        assert!(streams.try_push("ID", once(ready(()))).is_ok());
+        matches!(
+            streams.try_push("ID", once(ready(()))),
+            Err(PushError::Replaced(_))
+        );
+    }
+
+    #[tokio::test]
+    async fn streams_timeout() {
+        let mut streams = StreamMap::new(Duration::from_millis(100), 1);
+
+        let _ = streams.try_push("ID", pending::<()>());
+        Delay::new(Duration::from_millis(150)).await;
+        let (_, result) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+
+        assert!(result.unwrap().is_err())
+    }
+
+    // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
+    // We stop after NUM_STREAMS tasks, meaning the overall execution must at least take DELAY * NUM_FUTURES.
+    #[tokio::test]
+    async fn backpressure() {
+        const DELAY: Duration = Duration::from_millis(100);
+        const NUM_STREAMS: u32 = 10;
+
+        let start = Instant::now();
+        Task::new(DELAY, NUM_STREAMS, 1).await;
+        let duration = start.elapsed();
+
+        assert!(duration >= DELAY * NUM_STREAMS);
+    }
+
+    struct Task {
+        item_delay: Duration,
+        num_streams: usize,
+        num_processed: usize,
+        inner: StreamMap<u8, ()>,
+    }
+
+    impl Task {
+        fn new(item_delay: Duration, num_streams: u32, capacity: usize) -> Self {
+            Self {
+                item_delay,
+                num_streams: num_streams as usize,
+                num_processed: 0,
+                inner: StreamMap::new(Duration::from_secs(60), capacity),
+            }
+        }
+    }
+
+    impl Future for Task {
+        type Output = ();
+
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let this = self.get_mut();
+
+            while this.num_processed < this.num_streams {
+                match this.inner.poll_next_unpin(cx) {
+                    Poll::Ready((_, Some(result))) => {
+                        if result.is_err() {
+                            panic!("Timeout is great than item delay")
+                        }
+
+                        this.num_processed += 1;
+                        continue;
+                    }
+                    Poll::Ready((_, None)) => {
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                if let Poll::Ready(()) = this.inner.poll_ready_unpin(cx) {
+                    // We push the constant ID to prove that user can use the same ID if the stream was finished
+                    let maybe_future = this.inner.try_push(1u8, once(Delay::new(this.item_delay)));
+                    assert!(maybe_future.is_ok(), "we polled for readiness");
+
+                    continue;
+                }
+
+                return Poll::Pending;
+            }
+
+            Poll::Ready(())
+        }
+    }
+}

@@ -178,7 +178,7 @@ mod tests {
         assert!(futures.try_push("ID", ready(())).is_ok());
         matches!(
             futures.try_push("ID", ready(())),
-            Err(PushError::ReplacedFuture(_))
+            Err(PushError::Replaced(_))
         );
     }
 
