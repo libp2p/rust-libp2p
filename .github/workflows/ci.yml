@@ -36,6 +36,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - run: git log -5
+
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - uses: dtolnay/rust-toolchain@stable
