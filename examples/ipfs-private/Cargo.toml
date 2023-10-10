@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-tokio = { version = "1.32", features = ["rt-multi-thread", "macros", "io-std"] }
+tokio = { version = "1.33", features = ["rt-multi-thread", "macros", "io-std"] }
 async-trait = "0.1"
 either = "1.9"
 env_logger = "0.10"

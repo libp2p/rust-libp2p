@@ -23,7 +23,7 @@ quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls"
 rand = "0.8.5"
 rustls = { version = "0.21.7", default-features = false }
 thiserror = "1.0.49"
-tokio = { version = "1.32.0", default-features = false, features = ["net", "rt", "time"], optional = true }
+tokio = { version = "1.33.0", default-features = false, features = ["net", "rt", "time"], optional = true }
 socket2 = "0.5.4"
 ring = "0.16.20"
 
@@ -46,7 +46,7 @@ libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 quickcheck = "1"
-tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "1.33.0", features = ["macros", "rt-multi-thread", "time"] }
 
 [[test]]
 name = "stream_compliance"
