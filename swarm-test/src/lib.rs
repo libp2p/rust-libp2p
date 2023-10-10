@@ -28,7 +28,7 @@ use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
+    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
 };
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
@@ -216,9 +216,13 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id)
-            .idle_connection_timeout(Duration::from_secs(5)) // Some tests need connections to be kept alive beyond what the individual behaviour configures.
-            .build()
+        Swarm::new(
+            transport,
+            behaviour_fn(identity),
+            peer_id,
+            swarm::Config::with_async_std_executor()
+                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+        )
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)

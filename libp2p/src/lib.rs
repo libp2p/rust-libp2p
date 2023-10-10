@@ -22,8 +22,9 @@
 //!
 //! To learn more about the general libp2p multi-language framework visit <https://libp2p.io>.
 //!
-//! To get started with this libp2p implementation in Rust, please take a look at the [`tutorials`].
-//! Further examples can be found in the [examples] directory.
+//! To get started with this libp2p implementation in Rust, please take a look
+//! at the [`tutorials`]. Further examples can be found in the
+//! [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
 
@@ -157,6 +158,7 @@ pub use libp2p_webtransport_websys as webtransport_websys;
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
+mod builder;
 mod transport_ext;
 
 pub mod bandwidth;
@@ -164,6 +166,7 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
+pub use self::builder::SwarmBuilder;
 pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, OutboundUpgrade},
@@ -187,6 +190,7 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "tcp",
@@ -232,6 +236,7 @@ pub async fn development_transport(
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
     feature = "tcp",

@@ -97,10 +97,13 @@ upnp = ["dep:libp2p-upnp"]
 
 [dependencies]
 bytes = "1"
+either = "1.9.0"
 futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3"     # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.12"      # Explicit dependency to be used in `wasm-bindgen` feature
+# TODO feature flag?
+rw-stream-sink = { workspace = true }
 
 libp2p-allow-block-list = { workspace = true }
 libp2p-autonat = { workspace = true, optional = true }
@@ -127,6 +130,7 @@ libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
 multiaddr = { workspace = true }
 pin-project = "1.0.0"
+thiserror = "1.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libp2p-deflate = { workspace = true, optional = true }
@@ -148,6 +152,7 @@ env_logger = "0.10.0"
 clap = { version = "4.1.6", features = ["derive"] }
 tokio = { version = "1.15", features = [ "io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
+libp2p-mplex = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
 

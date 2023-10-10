@@ -20,41 +20,38 @@
 
 use futures::StreamExt;
 use libp2p::{
-    core::transport::upgrade::Version,
-    identity,
     multiaddr::Protocol,
     noise, ping, rendezvous,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Transport,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Multiaddr,
 };
+use std::error::Error;
 use std::time::Duration;
 
 const NAMESPACE: &str = "rendezvous";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
     let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
         .parse()
         .unwrap();
 
-    let mut swarm = SwarmBuilder::with_tokio_executor(
-        tcp::tokio::Transport::default()
-            .upgrade(Version::V1Lazy)
-            .authenticate(noise::Config::new(&key_pair).unwrap())
-            .multiplex(yamux::Config::default())
-            .boxed(),
-        MyBehaviour {
-            rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| MyBehaviour {
+            rendezvous: rendezvous::client::Behaviour::new(key.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
-        },
-        PeerId::from(key_pair.public()),
-    )
-    .idle_connection_timeout(Duration::from_secs(5))
-    .build();
+        })?
+        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(5)))
+        .build();
 
     swarm.dial(rendezvous_point_address.clone()).unwrap();
 
