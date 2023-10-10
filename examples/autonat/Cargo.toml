@@ -6,8 +6,11 @@ publish = false
 license = "MIT"
 
 [dependencies]
-tokio = { version = "1.32", features = ["full"] }
+tokio = { version = "1.33", features = ["full"] }
 clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
+
+[lints]
+workspace = true
