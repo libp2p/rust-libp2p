@@ -1236,6 +1236,7 @@ dependencies = [
  "futures-timer",
  "libp2p",
  "log",
+ "tokio",
 ]
 
 [[package]]
@@ -2205,6 +2206,8 @@ dependencies = [
  "instant",
  "libp2p",
  "libp2p-mplex",
+ "libp2p-noise",
+ "libp2p-tls",
  "libp2p-webrtc",
  "libp2p-webrtc-websys",
  "log",
@@ -2386,6 +2389,7 @@ dependencies = [
  "libp2p-mdns",
  "libp2p-memory-connection-limits",
  "libp2p-metrics",
+ "libp2p-mplex",
  "libp2p-noise",
  "libp2p-ping",
  "libp2p-plaintext",
@@ -2406,6 +2410,8 @@ dependencies = [
  "libp2p-yamux",
  "multiaddr",
  "pin-project",
+ "rw-stream-sink",
+ "thiserror",
  "tokio",
 ]
 
@@ -3045,7 +3051,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.5"
+version = "0.43.6"
 dependencies = [
  "async-std",
  "either",
