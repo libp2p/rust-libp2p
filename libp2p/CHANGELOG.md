@@ -1,3 +1,11 @@
+## 0.52.4 - unreleased
+
+- Introduce `libp2p::websocket_websys` module behind `websocket-websys` feature flag.
+  This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
+  See [PR 3679].
+
+[PR 3679]: https://github.com/libp2p/rust-libp2p/pull/3679
+
 ## 0.52.3
 
 - Add `libp2p-quic` stable release.
@@ -64,8 +72,8 @@
 ## 0.51.3
 
 - Deprecate the `mplex` feature.
-The recommended baseline stream multiplexer is `yamux`.
-See [PR 3689].
+  The recommended baseline stream multiplexer is `yamux`.
+  See [PR 3689].
 
 [PR 3689]: https://github.com/libp2p/rust-libp2p/pull/3689
 
