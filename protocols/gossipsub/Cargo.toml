@@ -47,6 +47,7 @@ async-std = { version = "1.6.3", features = ["unstable"] }
 env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-core = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }

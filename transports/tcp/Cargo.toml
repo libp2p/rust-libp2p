@@ -28,6 +28,7 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { version = "1.33.0", default-features = false, features = ["full"] }
 env_logger = "0.10.0"
 

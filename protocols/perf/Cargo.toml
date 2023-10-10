@@ -35,6 +35,7 @@ void = "1"
 
 [dev-dependencies]
 rand = "0.8"
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

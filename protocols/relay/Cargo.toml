@@ -31,6 +31,7 @@ void = "1"
 
 [dev-dependencies]
 env_logger = "0.10.0"
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }

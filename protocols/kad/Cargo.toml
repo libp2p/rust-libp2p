@@ -39,6 +39,7 @@ async-std = { version = "1.12.0", features = ["attributes"] }
 env_logger = "0.10.0"
 futures-timer = "3.0"
 libp2p-identify = { path = "../identify" }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }
 libp2p-swarm = { path = "../../swarm", features = ["macros"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
