@@ -513,12 +513,7 @@ impl NetworkBehaviour for Behaviour {
                     self.mappings.renew(gateway, cx);
                     return Poll::Pending;
                 }
-                GatewayState::GatewayNotFound => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
-                }
-                GatewayState::NonRoutableGateway(_) => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::NonRoutableGateway));
-                }
+                _ => return Poll::Pending,
             }
         }
     }
