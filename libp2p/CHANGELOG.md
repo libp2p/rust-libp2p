@@ -5,6 +5,8 @@
   See [PR 3679].
 
 - Update `libp2p-identity` version to 0.2.6.
+  Under the hood, we feature-flagged `libp2p-identity`'s `rand` dependency but it is enabled by default when using `libp2p`.
+  See [PR 4349](https://github.com/libp2p/rust-libp2p/pull/4349).
 
 [PR 3679]: https://github.com/libp2p/rust-libp2p/pull/3679
 
