@@ -40,27 +40,9 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           git fetch origin master:master
-          git branch -a       # List all branches
-          git log --oneline   # Check the recent commits
-  
           ./scripts/ensure-version-bump-and-changelog.sh
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-
-      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
-        with:
-          shared-key: stable-cache
-          save-if: false
-
-      - name: Run all tests
-        run: cargo test --package "$CRATE" --all-features
-
-      - name: Check if we compile without any features activated
-        run: cargo build --package "$CRATE" --no-default-features
 
       - name: Enforce no dependency on meta crate
         if: env.CRATE != 'libp2p-server'
@@ -83,6 +65,20 @@ jobs:
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
+        with:
+          shared-key: stable-cache
+          save-if: false
+
+      - name: Run all tests
+        run: cargo test --package "$CRATE" --all-features
+
+      - name: Check if we compile without any features activated
+        run: cargo build --package "$CRATE" --no-default-features
 
   wasm_tests:
     name: Run all WASM tests
