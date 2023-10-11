@@ -1,0 +1,35 @@
+[package]
+name = "libp2p-websocket-websys"
+edition = "2021"
+rust-version = "1.60.0"
+description = "WebSocket for libp2p under WASM environment"
+version = "0.2.0"
+authors = ["Vince Vasta <vince.vasta@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+bytes = "1.4.0"
+futures = "0.3.26"
+js-sys = "0.3.61"
+libp2p-core = { workspace = true }
+log = "0.4.19"
+parking_lot = "0.12.1"
+send_wrapper = "0.6.0"
+thiserror = "1.0.38"
+wasm-bindgen = "0.2.84"
+web-sys = { version = "0.3.61", features = ["BinaryType", "CloseEvent", "MessageEvent", "WebSocket", "Window"] }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+libp2p-yamux = { workspace = true }
+libp2p-noise = { workspace = true }
+libp2p-identity = { workspace = true }

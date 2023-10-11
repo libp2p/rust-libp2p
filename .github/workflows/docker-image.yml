@@ -34,6 +34,6 @@ jobs:
         with:
           context: .
           file: ./misc/server/Dockerfile
-          push: ${{ ! github.event.pull_request.head.repo.fork }} # Only push image if we have the required permissions, i.e. not running from a fork
+          push: ${{ ! github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }} # Only push image if we have the required permissions, i.e. not running from a fork
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
