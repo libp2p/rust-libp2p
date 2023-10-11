@@ -26,8 +26,14 @@ impl Stream {
         Self { stream, counter }
     }
 
-    /// downgrade the Arc<()> to a Weak<()> which automatically
-    /// reduces the strong_count in Connection's stream_counter
+    /// Opt-out this stream from the [`Swarm`]s connection keep alive algorithm.
+    ///
+    /// By default, any active stream keeps a connection alive. For most protocols,
+    /// this is a good default as it ensures that the protocol is completed before
+    /// a connection is shut down.
+    /// Some protocols like libp2p's [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md)
+    /// for example never complete and are of an auxiliary nature.
+    /// These protocols should opt-out of the keep alive algorithm using this method.
     pub fn no_keep_alive(&mut self) {
         if let StreamCounter::Arc(arc_counter) = &self.counter {
             self.counter = StreamCounter::Weak(Arc::downgrade(arc_counter));

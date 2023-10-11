@@ -356,7 +356,7 @@ where
             if active_stream_count == 1 {
                 // Ask the handler whether it wants the connection (and the handler itself)
                 // to be kept alive, which determines the planned shutdown, if any.
-                handle_should_keep_alive(handler, shutdown, idle_timeout);
+                *shutdown = compute_new_shutdown(handler, shutdown, *idle_timeout);
 
                 // Check if the connection (and handler) should be shut down.
                 // As long as we're still negotiating substreams, shutdown is always postponed.
@@ -460,50 +460,58 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .collect()
 }
 
-fn handle_should_keep_alive(
+fn compute_new_shutdown(
     handler: &impl ConnectionHandler,
-    shutdown: &mut Shutdown,
-    idle_timeout: &mut Duration,
-) {
+    current_shutdown: &Shutdown,
+    idle_timeout: Duration,
+) -> Shutdown {
     let keep_alive = handler.connection_keep_alive();
-    match (&mut *shutdown, keep_alive) {
-        (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
-            if *deadline != t {
-                *deadline = t;
-                if let Some(new_duration) = deadline.checked_duration_since(Instant::now()) {
-                    let effective_keep_alive = max(new_duration, *idle_timeout);
+    match (current_shutdown, keep_alive) {
+        (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
+            let now = Instant::now();
 
-                    timer.reset(effective_keep_alive)
+            if *deadline != t {
+                let new_deadline = t;
+                if let Some(new_duration) = new_deadline.checked_duration_since(now) {
+                    let effective_keep_alive = max(new_duration, idle_timeout);
+
+                    return Shutdown::Later(Delay::new(effective_keep_alive), new_deadline);
                 }
             }
+
+            let duration = deadline.duration_since(now);
+            Shutdown::Later(Delay::new(duration), *deadline)
         }
         (_, KeepAlive::Until(earliest_shutdown)) => {
             let now = Instant::now();
 
             if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
-                let effective_keep_alive = max(requested, *idle_timeout);
+                let effective_keep_alive = max(requested, idle_timeout);
 
                 let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
 
                 // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
                 // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown)
+                return Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown);
             }
+
+            let duration = earliest_shutdown.duration_since(now);
+            Shutdown::Later(Delay::new(duration), earliest_shutdown)
         }
-        (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
-            *shutdown = Shutdown::Asap;
-        }
-        (Shutdown::Later(_, _), KeepAlive::No) => {
+        (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Shutdown::Asap,
+        (Shutdown::Later(_, deadline), KeepAlive::No) => {
             // Do nothing, i.e. let the shutdown timer continue to tick.
+            let duration = deadline.duration_since(Instant::now());
+            Shutdown::Later(Delay::new(duration), *deadline)
         }
         (_, KeepAlive::No) => {
             let now = Instant::now();
-            let safe_keep_alive = checked_add_fraction(now, *idle_timeout);
+            let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
-            *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive);
+            Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive)
         }
-        (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
-    };
+        (_, KeepAlive::Yes) => Shutdown::None,
+    }
 }
 
 /// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.

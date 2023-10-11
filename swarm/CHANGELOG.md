@@ -1,3 +1,7 @@
+## 0.43.7 - unreleased
+- Default to keeping connections alive whilst there are active streams and add `Stream::no_keep_alive` to opt-out of this behaviour.
+  See [PR 4595](https://github.com/libp2p/rust-libp2p/pull/4595).
+
 ## 0.43.6 - unreleased
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.

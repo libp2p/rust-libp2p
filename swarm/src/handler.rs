@@ -140,10 +140,19 @@ pub trait ConnectionHandler: Send + 'static {
     /// Returning [`KeepAlive::Yes`] indicates that the connection should
     /// be kept alive until the next call to this method.
     ///
-    /// > **Note**: The connection is always closed and the handler destroyed
-    /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
-    /// > connection may be closed for reasons outside of the control
-    /// > of the handler.
+    /// By default, connections are considered active and thus kept-alive whilst:
+    ///
+    /// - There are streams currently being upgraded, see [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) and [`OutboundUpgrade`](libp2p_core::upgrade::OutboundUpgrade).
+    /// - There are still active streams, i.e. instances of [`Stream`](crate::stream::Stream) where the user did not call [`Stream::no_keep_alive`].
+    /// - The ConnectionHandler returns Poll::Ready.
+    ///
+    /// Only once none of these conditions are true do we invoke this function to determine,
+    /// whether the connection should be kept alive even further.
+    /// Note that for most protocols, this is not necessary as it represents a completely idle
+    /// connection with no active and no pending streams.
+    ///
+    /// If you'd like to delay the shutdown of idle connections, consider configuring
+    /// [SwarmBuilder::idle_connection_timeout] in your applications.
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.

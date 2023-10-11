@@ -1,3 +1,5 @@
+## 0.43.2  - unreleased
+
 ## 0.43.1
 
 - Honor ping interval in case of errors.

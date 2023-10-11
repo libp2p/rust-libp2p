@@ -2606,7 +2606,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identify"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
  "async-std",
  "asynchronous-codec",
@@ -2846,7 +2846,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-ping"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
  "async-std",
  "either",
@@ -3038,7 +3038,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.43.6"
+version = "0.43.7"
 dependencies = [
  "async-std",
  "either",
