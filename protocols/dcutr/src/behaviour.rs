@@ -371,8 +371,6 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                log::debug!("Got new candidate: {addr}");
-
                 if addr.iter().any(|p| p == Protocol::P2pCircuit) {
                     return;
                 }
