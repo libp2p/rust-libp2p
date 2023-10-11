@@ -26,7 +26,7 @@ getrandom = "0.2.9"
 hex_fmt = "0.3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm = { workspace = true }
 log = "0.4.20"
 quick-protobuf = "0.8"
@@ -47,7 +47,6 @@ async-std = { version = "1.6.3", features = ["unstable"] }
 env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-yamux = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-swarm-test = { path = "../../swarm-test" }
