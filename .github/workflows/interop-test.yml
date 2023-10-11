@@ -18,9 +18,16 @@ jobs:
         flavour: [chromium, native]
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/setup-buildx-action@v3
+
       - name: Build ${{ matrix.flavour }} image
-        run: docker buildx build --load -t ${{ matrix.flavour }}-rust-libp2p-head . -f interop-tests/Dockerfile.${{ matrix.flavour }}
+        run: ./scripts/build-interop-image.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
+          FLAVOUR: ${{ matrix.flavour }}
+
       - name: Run ${{ matrix.flavour }} tests
         uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
         with:

@@ -5,6 +5,8 @@ use anyhow::{Context, Result};
 #[derive(Debug, Clone)]
 pub(crate) struct Config {
     pub(crate) transport: String,
+    pub(crate) sec_protocol: Option<String>,
+    pub(crate) muxer: Option<String>,
     pub(crate) ip: String,
     pub(crate) is_dialer: bool,
     pub(crate) test_timeout: u64,
@@ -26,8 +28,13 @@ impl Config {
             .map(|addr| format!("redis://{addr}"))
             .unwrap_or_else(|_| "redis://redis:6379".into());
 
+        let sec_protocol = env::var("security").ok();
+        let muxer = env::var("muxer").ok();
+
         Ok(Self {
             transport,
+            sec_protocol,
+            muxer,
             ip,
             is_dialer,
             test_timeout,
