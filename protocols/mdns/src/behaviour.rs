@@ -235,14 +235,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        let listen_addresses_changed = self.listen_addresses.on_swarm_event(&event);
-
-        if listen_addresses_changed {
-            log::trace!("waking interface state because listening address changed");
-            for iface in self.iface_states.values_mut() {
-                iface.fire_timer();
-            }
-        }
+        self.listen_addresses.on_swarm_event(&event);
     }
 
     fn poll(

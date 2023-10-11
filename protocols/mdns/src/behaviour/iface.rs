@@ -172,10 +172,6 @@ where
         self.timeout = T::interval(interval);
     }
 
-    pub(crate) fn fire_timer(&mut self) {
-        self.timeout = T::interval_at(Instant::now(), INITIAL_TIMEOUT_INTERVAL);
-    }
-
     pub(crate) fn poll(
         &mut self,
         cx: &mut Context,
