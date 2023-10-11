@@ -1,7 +1,6 @@
 ## 0.44.1 - unreleased
 
-- Seal `Provider` trait.
-  Whilst technically a breaking change, this was never considered public API.
+- Move IO off main behaviour task.
   See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.44.0 
