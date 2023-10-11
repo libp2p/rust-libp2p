@@ -18,17 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod dns;
-mod query;
-
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
+use futures::channel::mpsc;
+use futures::SinkExt;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
+use std::sync::{Arc, RwLock};
 use std::{
     collections::VecDeque,
     io,
@@ -37,6 +37,9 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
+
+mod dns;
+mod query;
 
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
@@ -72,6 +75,11 @@ pub(crate) struct InterfaceState<U, T> {
     recv_socket: U,
     /// Send socket.
     send_socket: U,
+
+    listen_addresses: Arc<RwLock<ListenAddresses>>,
+
+    query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
+
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
     /// bytes, if it can be ensured that all participating devices can handle such large packets.
@@ -101,7 +109,13 @@ where
     T: Builder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
-    pub(crate) fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
+    pub(crate) fn new(
+        addr: IpAddr,
+        config: Config,
+        local_peer_id: PeerId,
+        listen_addresses: Arc<RwLock<ListenAddresses>>,
+        query_response_sender: mpsc::Sender<(PeerId, Multiaddr, Instant)>,
+    ) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
@@ -154,6 +168,8 @@ where
             addr,
             recv_socket,
             send_socket,
+            listen_addresses,
+            query_response_sender,
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
             discovered: Default::default(),
@@ -172,11 +188,7 @@ where
         self.timeout = T::interval(interval);
     }
 
-    pub(crate) fn poll(
-        &mut self,
-        cx: &mut Context,
-        listen_addresses: &ListenAddresses,
-    ) -> Poll<(PeerId, Multiaddr, Instant)> {
+    pub(crate) fn poll(&mut self, cx: &mut Context) -> Poll<()> {
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
@@ -219,8 +231,20 @@ where
             }
 
             // 3rd priority: Keep local buffers small: Return discovered addresses.
-            if let Some(discovered) = self.discovered.pop_front() {
-                return Poll::Ready(discovered);
+            if self.query_response_sender.poll_ready_unpin(cx).is_ready() {
+                if let Some(discovered) = self.discovered.pop_front() {
+                    match self.query_response_sender.try_send(discovered) {
+                        Ok(()) => {}
+                        Err(e) if e.is_disconnected() => {
+                            return Poll::Ready(());
+                        }
+                        Err(e) => {
+                            self.discovered.push_front(e.into_inner());
+                        }
+                    }
+
+                    continue;
+                }
             }
 
             // 4th priority: Remote work: Answer incoming requests.
@@ -238,7 +262,10 @@ where
                     self.send_buffer.extend(build_query_response(
                         query.query_id(),
                         self.local_peer_id,
-                        listen_addresses.iter(),
+                        self.listen_addresses
+                            .read()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .iter(),
                         self.ttl,
                     ));
                     continue;
