@@ -155,6 +155,7 @@ where
     }
 
     /// Returns true if the given `PeerId` is in the list of nodes discovered through mDNS.
+    #[deprecated(note = "Use `discovered_nodes` iterator instead.")]
     pub fn has_node(&self, peer_id: &PeerId) -> bool {
         self.discovered_nodes().any(|p| p == peer_id)
     }
@@ -165,6 +166,7 @@ where
     }
 
     /// Expires a node before the ttl.
+    #[deprecated(note = "Unused API. Will be removed in the next release.")]
     pub fn expire_node(&mut self, peer_id: &PeerId) {
         let now = Instant::now();
         for (peer, _addr, expires) in &mut self.discovered_nodes {
