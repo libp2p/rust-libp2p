@@ -79,15 +79,7 @@ pub struct Behaviour {
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 
-    /// Stores our address candidates.
-    ///
-    /// We use an [`LruCache`] to favor addresses that are reported more often.
-    /// When attempting a hole-punch, we will try more frequent addresses first.
-    /// Most of these addresses will come from observations by other nodes (via e.g. the identify protocol).
-    /// More common observations mean a more likely stable port-mapping and thus a higher chance of a successful hole-punch.
-    address_candidates: LruCache<Multiaddr, ()>,
-
-    local_peer_id: PeerId,
+    address_candidates: Candidates,
 
     direct_to_relayed_connections: HashMap<ConnectionId, ConnectionId>,
 
@@ -101,19 +93,14 @@ impl Behaviour {
         Behaviour {
             queued_events: Default::default(),
             direct_connections: Default::default(),
-            address_candidates: LruCache::new(NonZeroUsize::new(100).expect("100 > 0")),
-            local_peer_id,
+            address_candidates: Candidates::new(local_peer_id),
             direct_to_relayed_connections: Default::default(),
             outgoing_direct_connection_attempts: Default::default(),
         }
     }
 
     fn observed_addresses(&self) -> Vec<Multiaddr> {
-        self.address_candidates
-            .iter()
-            .map(|(addr, _)| addr)
-            .cloned()
-            .collect()
+        self.address_candidates.iter().cloned().collect()
     }
 
     fn on_dial_failure(
@@ -371,17 +358,7 @@ impl NetworkBehaviour for Behaviour {
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::NewExternalAddrCandidate(NewExternalAddrCandidate { addr }) => {
-                if addr.iter().any(is_relayed) {
-                    return;
-                }
-
-                let mut addr = addr.clone();
-
-                if addr.iter().last() != Some(Protocol::P2p(self.local_peer_id)) {
-                    addr.push(Protocol::P2p(self.local_peer_id));
-                }
-
-                self.address_candidates.put(addr, ());
+                self.address_candidates.add(addr.clone());
             }
             FromSwarm::AddressChange(_)
             | FromSwarm::ConnectionEstablished(_)
@@ -394,6 +371,44 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExternalAddrExpired(_)
             | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
+    }
+}
+
+/// Stores our address candidates.
+///
+/// We use an [`LruCache`] to favor addresses that are reported more often.
+/// When attempting a hole-punch, we will try more frequent addresses first.
+/// Most of these addresses will come from observations by other nodes (via e.g. the identify protocol).
+/// More common observations mean a more likely stable port-mapping and thus a higher chance of a successful hole-punch.
+struct Candidates {
+    inner: LruCache<Multiaddr, ()>,
+    me: PeerId,
+}
+
+impl Candidates {
+    fn new(me: PeerId) -> Self {
+        Self {
+            inner: LruCache::new(NonZeroUsize::new(100).expect("100 > 0")),
+            me,
+        }
+    }
+
+    fn add(&mut self, address: Multiaddr) {
+        if is_relayed(&address) {
+            return;
+        }
+
+        let mut addr = address.clone();
+
+        if addr.iter().last() != Some(Protocol::P2p(self.me)) {
+            addr.push(Protocol::P2p(self.me));
+        }
+
+        self.inner.push(addr, ());
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
+        self.inner.iter().map(|(a, _)| a)
     }
 }
 
