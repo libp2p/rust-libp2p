@@ -356,7 +356,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "tokio"))]
+    #[cfg(feature = "tokio")]
     fn other_transport_bandwidth_logging() -> Result<(), Box<dyn std::error::Error>> {
         let (builder, _logging) = SwarmBuilder::with_new_identity()
             .with_tokio()
