@@ -1,3 +1,9 @@
+## 0.10.1 - unreleased
+
+- Exchange address _candidates_ instead of external addresses in `CONNECT`.
+  If hole-punching wasn't working properly for you until now, this might be the reason why.
+  See [PR 4624](https://github.com/libp2p/rust-libp2p/pull/4624).
+
 ## 0.10.0 
 
 - Raise MSRV to 1.65.
