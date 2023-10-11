@@ -222,7 +222,7 @@ impl Transport for MemoryTransport {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        opts: DialOpts,
+        _opts: DialOpts,
     ) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {

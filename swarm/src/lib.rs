@@ -123,7 +123,6 @@ pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, StreamUpgradeError, SubstreamProtocol,
 };
-use libp2p_core::multiaddr::Protocol;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use listen_opts::ListenOpts;
@@ -140,7 +139,6 @@ use connection::{
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{prelude::*, stream::FusedStream};
 
-use libp2p_core::transport::PortUse;
 use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
@@ -505,15 +503,7 @@ where
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
                     let transport_dial_opts = {
-                        let transport_port_use = dial_opts.port_use().unwrap_or_else(|| {
-                            let is_listening_on_same_transport =
-                                any_with_same_transport(self.listeners(), &address);
-                            if is_listening_on_same_transport {
-                                PortUse::Reuse
-                            } else {
-                                PortUse::New
-                            }
-                        });
+                        let transport_port_use = dial_opts.port_use();
                         TransportDialOpts {
                             endpoint: dial_opts.role_override(),
                             port_use: transport_port_use,
@@ -1832,54 +1822,6 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
     Ok(addr.with(multiaddr::Protocol::P2p(peer)))
 }
 
-// Clarifies if there is a listener that we can use to dial from.
-fn any_with_same_transport<'a>(
-    mut haystack: impl Iterator<Item = &'a Multiaddr>,
-    needle: &Multiaddr,
-) -> bool {
-    // it's ambigious wheather a dns or dnsaddr resolves to an ipv4 or ipv6 address. To be sure we
-    // default to using a new port.
-    if needle
-        .iter()
-        .any(|p| matches!(p, Protocol::Dns(_) | Protocol::Dnsaddr(_)))
-    {
-        return false;
-    }
-
-    // Turns a multiaddress into an iterator of just the protocols.
-    fn clean_multiaddr(address: &Multiaddr) -> impl Iterator<Item = &'static str> + '_ {
-        // I'm not sure about the selection here. A good example is Onion. It's not good defined what that's
-        // supposed to be and it's a protocol and an address. But since I (https://github.com/umgefahren)
-        // wrote the only Tor transport for rust-libp2p and it doesn't support these Onion addresses, I will just
-        // ignore that.
-        const NON_PROTOCOL_TAGS: &[&'static str] = &["p2p"];
-
-        // We check weather a Protocol tag is a network protocol like quic, tcp and udp.
-        fn is_not_protocol(tag: &&'static str) -> bool {
-            // Using `.contains()` instead of matches! isn't a lot different, when we look at the generated
-            // assembly. https://godbolt.org/z/1x9f3K16x
-            !NON_PROTOCOL_TAGS.contains(&tag)
-        }
-
-        fn map_protocol(tag: &'static str) -> &'static str {
-            match tag {
-                // DNS4 resolves to an IPv4 address
-                "dns4" => "ip4",
-                // DNS6 resolves to an IPv6 address
-                "dns6" => "ip6",
-                _ => tag,
-            }
-        }
-
-        address
-            .protocol_stack()
-            .filter(is_not_protocol)
-            .map(map_protocol)
-    }
-
-    haystack.any(|e| clean_multiaddr(e).eq(clean_multiaddr(needle)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2466,237 +2408,5 @@ mod tests {
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
         assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : No listener on the given port.)]", string)
-    }
-
-    #[cfg(test)]
-    mod port_use {
-        use std::str::FromStr;
-
-        use libp2p_core::multiaddr::Protocol;
-        use libp2p_core::multihash::Multihash;
-        use libp2p_identity::PeerId;
-
-        use crate::any_with_same_transport;
-        use crate::Multiaddr;
-
-        macro_rules! test_dial_with_listener {
-        ($test_name:ident, $listen_addrs:expr, $combination:expr, $test_explanation:expr) => {
-            #[test]
-            fn $test_name() {
-                let test_explanation = $test_explanation;
-                let listen_addrs: Vec<Multiaddr> = $listen_addrs.into_iter().map(|e| e.parse().unwrap()).collect();
-                $combination.into_iter().map(|(dial_addr_str, expected_output)| (dial_addr_str.parse::<Multiaddr>().unwrap(), expected_output)).for_each(|(dial_addr, expected_output)| {
-                    let should_port_reuse = any_with_same_transport(listen_addrs.iter(), &dial_addr);
-                    if expected_output {
-                        assert!(should_port_reuse, "Port should have been reused, since there exists at least one listener in {listen_addrs:?} for {dial_addr:?}. Details: {test_explanation}")
-                    } else {
-                        assert!(!should_port_reuse, "Port should not have been reused, since there doesn't exist a listener in {listen_addrs:?} for {dial_addr:?}. Details: {test_explanation}");
-                    }
-                })
-            }
-        };
-    }
-
-        const BASIC_LISTEN_ADDRS: [&str; 7] = [
-            "/ip4/127.0.0.1",
-            "/ip6/::1",
-            "/ip4/127.0.0.1/tcp/800/tls/ws",
-            "/ip4/127.0.0.1/udp/443/quic",
-            "/ip4/127.0.0.1/udp/443/quic-v1",
-            "/dns4/bootstrap.libp2p.io/tcp/80/tls/ws/tls",
-            "/dns6/bootstrap.libp2p.io/tcp/443/tls/ws/tls",
-        ];
-
-        test_dial_with_listener!(
-        reuse_if_dial_to_self,
-        BASIC_LISTEN_ADDRS,
-        BASIC_LISTEN_ADDRS.map(|addr| (addr, true)),
-        "If this test fails there is likely a major problem, because we won't reuse ports to dial ourselves."
-        );
-
-        test_dial_with_listener!(
-        no_reuse_ip4_listener_for_ip6,
-        [
-            "/ip4/198.51.100.30/tcp/1234",
-            "/ip4/147.75.83.83/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-            "/ip4/127.0.0.1/udp/1234/quic-v1",
-            "/ip4/12.34.56.78/udp/4321/quic",
-            "/ip4/102.0.2.0/udp/1234/quic/webtransport"
-        ],
-        [
-            ("/ip4/198.51.100.50/tcp/42", true),
-            ("/ip6/2001:1380:2000:7a00::1/tcp/4001", false),
-            ("/ip6/fe80::883:a581:fff1:833/tcp/4002/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb", false),
-            ("/ip6/2601:9:4f82:5fff:aefd:ecff:fe0b:7cfe/udp/2023/quic-v1", false),
-            ("/ip6/2001:0db8:85a3:0000:0000:8a2e:0370:7334/udp/4321/quic", false),
-            ("/ip6/1300::1/udp/300/quic/webtransport", false),
-        ],
-            "We shouldn't reuse an ip4 listener to dial to an ip6 address."
-        );
-
-        test_dial_with_listener!(
-        no_reuse_ip6_listener_for_ip4,
-        [
-            "/ip6/2001:1380:2000:7a00::1/tcp/4001",
-            "/ip6/fe80::883:a581:fff1:833/tcp/4002/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-            "/ip6/2601:9:4f82:5fff:aefd:ecff:fe0b:7cfe/udp/2023/quic-v1",
-            "/ip6/2001:0db8:85a3:0000:0000:8a2e:0370:7334/udp/4321/quic",
-            "/ip6/1300::1/udp/300/quic/webtransport",
-        ],
-        [
-            ("/ip6/2001:1380:2000:7a00::1/tcp/4001", true),
-            ("/ip4/198.51.100.30/tcp/1234", false),
-            ("/ip4/147.75.83.83/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb", false),
-            ("/ip4/127.0.0.1/udp/1234/quic-v1", false),
-            ("/ip4/12.34.56.78/udp/4321/quic", false),
-            ("/ip4/102.0.2.0/udp/1234/quic/webtransport", false)
-        ],
-            "We shouldn't reuse an ip6 listener to dial to an ip4 address."
-        );
-
-        const DNS_AND_IP_ADDRS: [&'static str; 6] = [
-            "/ip4/143.244.56.51/tcp/4001",
-            "/ip6/2a02:2e0:3fe:1001:302::/tcp/4001",
-            "/dns/protocol.ai/tcp/4001",
-            "/dnsaddr/protocol.ai/tcp/4001",
-            "/dns4/protocol.ai/tcp/4001",
-            "/dns6/protocol.ai/tcp/4001",
-        ];
-
-        test_dial_with_listener!(
-            no_reuse_since_dns_is_ambigious,
-            ["/dns/bootstrap.libp2p.io/tcp/4001",],
-            DNS_AND_IP_ADDRS.map(|addr| (addr, false)),
-            "We can't know wheather a dns address resolves to an ip4 or ip6 address."
-        );
-
-        test_dial_with_listener!(
-            no_reuse_since_dnsaddr_is_ambigious,
-            ["/dnsaddr/bootstrap.libp2p.io/tcp/4001"],
-            DNS_AND_IP_ADDRS.map(|addr| (addr, false)),
-            "We can't know wheather a dns address resolves to an ip4 or ip6 address."
-        );
-
-        test_dial_with_listener!(
-            reuse_since_dns4_resolves_to_ip4,
-            ["/dns4/libp2p.io/tcp/80", "/ip4/185.93.3.233/udp/443/quic"],
-            [
-                ("/ip4/185.93.3.233/tcp/80", true),
-                ("/ip6/2400:52e0:1e00::1080:1/tcp/80", false),
-                ("/dns4/libp2p.io/udp/443/quic", true),
-                ("/dns6/libp2p.io/udp/443/quic", false),
-            ],
-            "We know that dns4 resolves to an ip4 address and vice versa."
-        );
-
-        test_dial_with_listener!(
-            reuse_since_dns6_resolves_to_ip6,
-            [
-                "/dns6/libp2p.io/tcp/80",
-                "/ip6/2400:52e0:1e00::1080:1/udp/443/quic",
-            ],
-            [
-                ("/ip6/2400:52e0:1e00::1080:1/tcp/80", true),
-                ("/ip4/185.93.3.233/tcp/80", false),
-                ("/dns6/libp2p.io/udp/443/quic", true),
-                ("/dns4/libp2p.io/udp/443/quic", false),
-            ],
-            "We know that dns6 resolves to an ip6 address and vice versa."
-        );
-
-        const IP_DIFFERENT_PROTOCOLS: [&str; 4] = [
-            "/ip4/1.1.1.1/tcp/80",
-            "/ip4/1.1.1.1/udp/443/quic",
-            "/ip4/1.1.1.1/udp/443/quic-v1",
-            "/ip4/1.1.1.1/udp/1234/webrtc-direct/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
-        ];
-
-        macro_rules! no_reuse_since_no_protocol_listener {
-            ($fun_name:ident, $protocol:literal) => {
-                test_dial_with_listener!(
-                    $fun_name,
-                    IP_DIFFERENT_PROTOCOLS
-                        .into_iter()
-                        .filter(|e| !e.contains($protocol)),
-                    IP_DIFFERENT_PROTOCOLS
-                        .into_iter()
-                        .filter(|e| e.contains($protocol))
-                        .map(|addr| (addr, false)),
-                    concat!(
-                        "We can't reuse a port since there exists no ",
-                        $protocol,
-                        "listener yet."
-                    )
-                );
-            };
-        }
-
-        no_reuse_since_no_protocol_listener!(no_reuse_since_no_tcp_listener, "tcp");
-        no_reuse_since_no_protocol_listener!(no_reuse_since_no_quic_listener, "quic");
-        no_reuse_since_no_protocol_listener!(no_reuse_since_no_quicv1_listener, "quic-v1");
-        no_reuse_since_no_protocol_listener!(
-            no_reuse_since_no_webrtc_direct_listener,
-            "webrtc-direct"
-        );
-
-        const LISTEN_IP4_ADDRS: [&str; 4] = [
-            "/ip4/127.0.0.1",
-            "/ip4/1.1.1.1",
-            "/dns4/libp2p.io",
-            "/dns4/filecoin.io",
-        ];
-        const DIAL_IP4_ADDRS: [&str; 4] = [
-            "/ip4/39.13.30.9",
-            "/ip4/8.8.8.8",
-            "/dns4/bootstrap.libp2p.io",
-            "/dns4/filecoin.io",
-        ];
-
-        macro_rules! reuse_same_protocol_different_ip {
-            ($fun_name:ident, $protocol_name:literal, $($protocol:expr),+) => {
-                test_dial_with_listener!(
-                    $fun_name,
-                    LISTEN_IP4_ADDRS.map(|e| {
-                    let mut addr = e.parse::<Multiaddr>().unwrap();
-                        $(
-                            addr.push($protocol);
-                        )+
-                        addr.to_string()
-                    }),
-                    DIAL_IP4_ADDRS.map(|e| {
-                    let mut addr = e.parse::<Multiaddr>().unwrap();
-                        $(
-                            addr.push($protocol);
-                        )+
-                        (addr.to_string(), true)
-                }),
-                    concat!(
-                    "We can reuse a port, since there exists a listener with different ip but same protocol (", $protocol_name, ")."
-                )
-                );
-            };
-        }
-        reuse_same_protocol_different_ip!(reuse_since_tcp_listener, "tcp", Protocol::Tcp(800));
-        reuse_same_protocol_different_ip!(
-            reuse_since_quic_listener,
-            "quic",
-            Protocol::Udp(10),
-            Protocol::Quic
-        );
-        reuse_same_protocol_different_ip!(
-            reuse_since_quicv1_listener,
-            "quic-v1",
-            Protocol::Udp(20),
-            Protocol::QuicV1
-        );
-        reuse_same_protocol_different_ip!(
-            reuse_since_webrtc_direct_listener,
-            "webrtc-direct",
-            Protocol::WebRTCDirect,
-            Protocol::Certhash(Multihash::<64>::wrap(0x12, b"umgefahren was here").unwrap()),
-            Protocol::P2p(
-                PeerId::from_str("QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb").unwrap()
-            )
-        );
     }
 }

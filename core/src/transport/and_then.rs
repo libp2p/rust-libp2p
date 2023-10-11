@@ -92,28 +92,6 @@ where
         Ok(future)
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let dialed_fut = self
-            .transport
-            .dial_as_listener(addr.clone())
-            .map_err(|err| err.map(Either::Left))?;
-        let future = AndThenFuture {
-            inner: Either::Left(Box::pin(dialed_fut)),
-            args: Some((
-                self.fun.clone(),
-                ConnectedPoint::Dialer {
-                    address: addr,
-                    role_override: Endpoint::Listener,
-                },
-            )),
-            _marker: PhantomPinned,
-        };
-        Ok(future)
-    }
-
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }
@@ -183,7 +161,7 @@ where
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Left(err))),
                         Poll::Pending => return Poll::Pending,
                     };
-                    let (f, a) = self
+                    let (f, mut a) = self
                         .args
                         .take()
                         .expect("AndThenFuture has already finished.");

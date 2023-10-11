@@ -40,25 +40,11 @@ macro_rules! port_use_and_role_setter {
             self
         }
 
-        /// Enforce the reuse of an existing port.
-        /// Default behaviour is:
-        /// 1. Swarm tracks if there already exists a listener address for this protocol
-        /// 2. Decide port use behaviour:
-        ///     - If we have 0 listen addresses, we allocate a new port
-        ///     - If we have >1 listen addresses, we reuse an existing port
-        pub fn reuse_existing_port(mut self) -> Self {
-            self.port_use = Some(PortUse::Reuse);
-            self
-        }
-
         /// Enforce the allocation of a new port.
-        /// Default behaviour is:
-        /// 1. Swarm tracks if there already exists a listener address for this protocol
-        /// 2. Decide port use behaviour:
-        ///     - If we have 0 listen addresses, we allocate a new port
-        ///     - If we have >1 listen addresses, we reuse an existing port
+        /// Default behaviour is best effort reuse of existing ports. If there is no existing
+        /// fitting listener, a new port is allocated.
         pub fn allocate_new_port(mut self) -> Self {
-            self.port_use = Some(PortUse::New);
+            self.port_use = PortUse::New;
             self
         }
     };
@@ -83,7 +69,7 @@ pub struct DialOpts {
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
     connection_id: ConnectionId,
-    port_use: Option<PortUse>,
+    port_use: PortUse,
 }
 
 impl DialOpts {
@@ -104,7 +90,7 @@ impl DialOpts {
             condition: Default::default(),
             role_override: Endpoint::Dialer,
             dial_concurrency_factor_override: Default::default(),
-            port_use: None,
+            port_use: PortUse::Reuse,
         }
     }
 
@@ -165,7 +151,7 @@ impl DialOpts {
         self.role_override
     }
 
-    pub(crate) fn port_use(&self) -> Option<PortUse> {
+    pub(crate) fn port_use(&self) -> PortUse {
         self.port_use
     }
 }
@@ -188,7 +174,7 @@ pub struct WithPeerId {
     condition: PeerCondition,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
-    port_use: Option<PortUse>,
+    port_use: PortUse,
 }
 
 impl WithPeerId {
@@ -243,7 +229,7 @@ pub struct WithPeerIdWithAddresses {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
-    port_use: Option<PortUse>,
+    port_use: PortUse,
 }
 
 impl WithPeerIdWithAddresses {
@@ -293,7 +279,7 @@ impl WithoutPeerId {
         WithoutPeerIdWithAddress {
             address,
             role_override: Endpoint::Dialer,
-            port_use: None,
+            port_use: PortUse::Reuse,
         }
     }
 }
@@ -302,7 +288,7 @@ impl WithoutPeerId {
 pub struct WithoutPeerIdWithAddress {
     address: Multiaddr,
     role_override: Endpoint,
-    port_use: Option<PortUse>,
+    port_use: PortUse,
 }
 
 impl WithoutPeerIdWithAddress {

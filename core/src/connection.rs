@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::multiaddr::{Multiaddr, Protocol};
+use crate::{
+    multiaddr::{Multiaddr, Protocol},
+    transport::PortUse,
+};
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
@@ -81,6 +84,9 @@ pub enum ConnectedPoint {
         ///   connection as a dialer and one peer dial the other and upgrade the
         ///   connection _as a listener_ overriding its role.
         role_override: Endpoint,
+        /// Whether the port for the outgoing connection was reused from a listener
+        /// or a new port was allocated. This is useful for address translation.
+        port_use: PortUse,
     },
     /// We received the node.
     Listener {
@@ -134,6 +140,7 @@ impl ConnectedPoint {
             ConnectedPoint::Dialer {
                 address,
                 role_override: _,
+                port_use: _,
             } => address,
             ConnectedPoint::Listener { local_addr, .. } => local_addr,
         }

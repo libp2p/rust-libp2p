@@ -57,13 +57,20 @@ pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
-#[derive(Debug, Default, Copy, Clone)]
+
+/// Defines the port use policy. Decides whether to reuse an existing port of a listener
+/// or to allocate a new one.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub enum PortUse {
-    #[default]
+    /// Always allocate a new port for the dial.
     New,
+    /// Best effor reusing of the port. If there is no listener present that can be used to dial,
+    /// a new port is allocated.
+    #[default]
     Reuse,
 }
-#[derive(Debug, Default, Copy, Clone)]
+
+#[derive(Debug, Copy, Clone)]
 pub struct DialOpts {
     pub endpoint: Endpoint,
     pub port_use: PortUse,
@@ -145,23 +152,6 @@ pub trait Transport {
         addr: Multiaddr,
         opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>>;
-
-    /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
-    ///
-    /// This option is needed for NAT and firewall hole punching.
-    /// See [`ConnectedPoint::Dialer`] for related option.
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.dial(
-            addr,
-            DialOpts {
-                endpoint: Endpoint::Listener,
-                ..Default::default()
-            },
-        )
-    }
 
     /// Poll for [`TransportEvent`]s.
     ///

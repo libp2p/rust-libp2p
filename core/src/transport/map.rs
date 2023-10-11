@@ -90,21 +90,6 @@ where
         })
     }
 
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial_as_listener(addr.clone())?;
-        let p = ConnectedPoint::Dialer {
-            address: addr,
-            role_override: Endpoint::Listener,
-        };
-        Ok(MapFuture {
-            inner: future,
-            args: Some((self.fun.clone(), p)),
-        })
-    }
-
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }

@@ -646,6 +646,7 @@ where
                             ConnectedPoint::Dialer {
                                 address,
                                 role_override,
+                                port_use,
                             },
                             Some(errors),
                         ),
