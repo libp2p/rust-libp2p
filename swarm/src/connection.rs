@@ -356,7 +356,9 @@ where
             if active_stream_count == 1 {
                 // Ask the handler whether it wants the connection (and the handler itself)
                 // to be kept alive, which determines the planned shutdown, if any.
-                *shutdown = compute_new_shutdown(handler, shutdown, *idle_timeout);
+                if let Some(new_timeout) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
+                    *shutdown = new_timeout;
+                }
 
                 // Check if the connection (and handler) should be shut down.
                 // As long as we're still negotiating substreams, shutdown is always postponed.
@@ -464,7 +466,7 @@ fn compute_new_shutdown(
     handler: &impl ConnectionHandler,
     current_shutdown: &Shutdown,
     idle_timeout: Duration,
-) -> Shutdown {
+) -> Option<Shutdown> {
     let keep_alive = handler.connection_keep_alive();
     match (current_shutdown, keep_alive) {
         (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
@@ -475,12 +477,14 @@ fn compute_new_shutdown(
                 if let Some(new_duration) = new_deadline.checked_duration_since(now) {
                     let effective_keep_alive = max(new_duration, idle_timeout);
 
-                    return Shutdown::Later(Delay::new(effective_keep_alive), new_deadline);
+                    return Some(Shutdown::Later(
+                        Delay::new(effective_keep_alive),
+                        new_deadline,
+                    ));
                 }
             }
 
-            let duration = deadline.duration_since(now);
-            Shutdown::Later(Delay::new(duration), *deadline)
+            None
         }
         (_, KeepAlive::Until(earliest_shutdown)) => {
             let now = Instant::now();
@@ -492,25 +496,29 @@ fn compute_new_shutdown(
 
                 // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
                 // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                return Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown);
+                return Some(Shutdown::Later(
+                    Delay::new(safe_keep_alive),
+                    earliest_shutdown,
+                ));
             }
 
-            let duration = earliest_shutdown.duration_since(now);
-            Shutdown::Later(Delay::new(duration), earliest_shutdown)
+            None
         }
-        (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Shutdown::Asap,
-        (Shutdown::Later(_, deadline), KeepAlive::No) => {
+        (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
+        (Shutdown::Later(_, _), KeepAlive::No) => {
             // Do nothing, i.e. let the shutdown timer continue to tick.
-            let duration = deadline.duration_since(Instant::now());
-            Shutdown::Later(Delay::new(duration), *deadline)
+            None
         }
         (_, KeepAlive::No) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
-            Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive)
+            Some(Shutdown::Later(
+                Delay::new(safe_keep_alive),
+                now + safe_keep_alive,
+            ))
         }
-        (_, KeepAlive::Yes) => Shutdown::None,
+        (_, KeepAlive::Yes) => Some(Shutdown::None),
     }
 }
 
