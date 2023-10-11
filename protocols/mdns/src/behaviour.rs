@@ -23,7 +23,6 @@ mod socket;
 mod timer;
 
 use self::iface::InterfaceState;
-use crate::behaviour::sealed::Sealed;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::channel::mpsc;
@@ -43,7 +42,6 @@ use std::sync::{Arc, RwLock};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
 /// An abstraction to allow for compatibility with various async runtimes.
-#[doc(hidden)]
 pub trait Provider: 'static {
     /// The Async Socket type.
     type Socket: AsyncSocket;
@@ -52,7 +50,7 @@ pub trait Provider: 'static {
     /// The IfWatcher type.
     type Watcher: Stream<Item = std::io::Result<IfEvent>> + fmt::Debug + Unpin;
 
-    type TaskHandle;
+    type TaskHandle: Abort;
 
     /// Create a new instance of the `IfWatcher` type.
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
@@ -60,11 +58,16 @@ pub trait Provider: 'static {
     fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle;
 }
 
+#[allow(unreachable_pub)] // Not re-exported.
+pub trait Abort {
+    fn abort(self);
+}
+
 /// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub mod async_io {
     use super::Provider;
-    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer, Abort};
     use async_std::task::JoinHandle;
     use if_watch::smol::IfWatcher;
     use std::future::Future;
@@ -87,6 +90,12 @@ pub mod async_io {
         }
     }
 
+    impl Abort for JoinHandle<()> {
+        fn abort(self) {
+            async_std::task::spawn(self.cancel());
+        }
+    }
+
     pub type Behaviour = super::Behaviour<AsyncIo>;
 }
 
@@ -94,7 +103,7 @@ pub mod async_io {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::Provider;
-    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer, Abort};
     use if_watch::tokio::IfWatcher;
     use std::future::Future;
     use tokio::task::JoinHandle;
@@ -114,6 +123,12 @@ pub mod tokio {
 
         fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle {
             tokio::spawn(task)
+        }
+    }
+
+    impl Abort for JoinHandle<()> {
+        fn abort(self) {
+            JoinHandle::abort(&self)
         }
     }
 
@@ -303,9 +318,10 @@ where
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if self.if_tasks.contains_key(&inet.addr()) {
+                    if let Some(handle) = self.if_tasks.remove(&inet.addr()) {
                         log::info!("dropping instance {}", inet.addr());
-                        self.if_tasks.remove(&inet.addr());
+
+                        handle.abort();
                     }
                 }
                 Err(err) => log::error!("if watch returned an error: {}", err),
