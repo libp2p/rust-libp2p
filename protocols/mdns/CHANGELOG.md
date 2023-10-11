@@ -1,4 +1,4 @@
-## 0.45.0 - unreleased
+## 0.44.1 - unreleased
 
 - Move IO off main behaviour task.
   See [PR 4623](https://github.com/libp2p/rust-libp2p/pull/4623).
