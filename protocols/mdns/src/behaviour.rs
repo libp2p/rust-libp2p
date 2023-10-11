@@ -23,6 +23,7 @@ mod socket;
 mod timer;
 
 use self::iface::InterfaceState;
+use crate::behaviour::sealed::Sealed;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::Stream;
@@ -39,7 +40,8 @@ use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
 /// An abstraction to allow for compatibility with various async runtimes.
-pub trait Provider: 'static {
+#[doc(hidden)]
+pub trait Provider: 'static + Sealed {
     /// The Async Socket type.
     type Socket: AsyncSocket;
     /// The Async Timer type.
@@ -49,6 +51,12 @@ pub trait Provider: 'static {
 
     /// Create a new instance of the `IfWatcher` type.
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for super::async_io::AsyncIo {}
+    impl Sealed for super::tokio::Tokio {}
 }
 
 /// The type of a [`Behaviour`] using the `async-io` implementation.
