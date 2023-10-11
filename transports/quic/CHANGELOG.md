@@ -1,6 +1,7 @@
 ## 0.9.3 - unreleased
 
-- Close quinn's `Endpoint` with `Ok(())` when `Accept` returns `None`. See [PR 4621].
+- No longer report error when explicit closing of a QUIC endpoint succeeds.
+  See [PR 4621].
 
 - Support QUIC stateless resets for supported `libp2p_identity::Keypair`s. See [PR 4554].
 
