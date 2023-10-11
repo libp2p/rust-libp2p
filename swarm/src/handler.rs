@@ -143,7 +143,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// By default, connections are considered active and thus kept-alive whilst:
     ///
     /// - There are streams currently being upgraded, see [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) and [`OutboundUpgrade`](libp2p_core::upgrade::OutboundUpgrade).
-    /// - There are still active streams, i.e. instances of [`Stream`](crate::stream::Stream) where the user did not call [`Stream::no_keep_alive`].
+    /// - There are still active streams, i.e. instances of [`Stream`](crate::stream::Stream) where the user did not call [Stream::no_keep_alive](crate::stream::Stream::no_keep_alive).
     /// - The ConnectionHandler returns Poll::Ready.
     ///
     /// Only once none of these conditions are true do we invoke this function to determine,
@@ -152,7 +152,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// connection with no active and no pending streams.
     ///
     /// If you'd like to delay the shutdown of idle connections, consider configuring
-    /// [SwarmBuilder::idle_connection_timeout] in your applications.
+    /// [SwarmBuilder::idle_connection_timeout](crate::SwarmBuilder) in your applications.
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.

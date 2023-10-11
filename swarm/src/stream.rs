@@ -26,7 +26,7 @@ impl Stream {
         Self { stream, counter }
     }
 
-    /// Opt-out this stream from the [`Swarm`]s connection keep alive algorithm.
+    /// Opt-out this stream from the [Swarm](crate::Swarm)s connection keep alive algorithm.
     ///
     /// By default, any active stream keeps a connection alive. For most protocols,
     /// this is a good default as it ensures that the protocol is completed before
