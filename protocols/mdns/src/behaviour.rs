@@ -44,7 +44,7 @@ use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::
 
 /// An abstraction to allow for compatibility with various async runtimes.
 #[doc(hidden)]
-pub trait Provider: 'static + Sealed {
+pub trait Provider: 'static {
     /// The Async Socket type.
     type Socket: AsyncSocket;
     /// The Async Timer type.
@@ -58,14 +58,6 @@ pub trait Provider: 'static + Sealed {
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
 
     fn spawn(task: impl Future<Output = ()> + Send + 'static) -> Self::TaskHandle;
-}
-
-mod sealed {
-    pub trait Sealed {}
-    #[cfg(feature = "async-io")]
-    impl Sealed for super::async_io::AsyncIo {}
-    #[cfg(feature = "tokio")]
-    impl Sealed for super::tokio::Tokio {}
 }
 
 /// The type of a [`Behaviour`] using the `async-io` implementation.
