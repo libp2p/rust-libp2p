@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod dns;
+mod query;
+
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
@@ -37,9 +40,6 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-
-mod dns;
-mod query;
 
 /// Initial interval for starting probe
 const INITIAL_TIMEOUT_INTERVAL: Duration = Duration::from_millis(500);
