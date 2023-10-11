@@ -23,7 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod behaviour_impl; // TODO: Rename back `behaviour` once deprecation symbols are removed.
+mod behaviour;
 mod handler;
 mod protocol;
 
@@ -33,9 +33,7 @@ mod proto {
     pub(crate) use self::holepunch::pb::{mod_HolePunch::*, HolePunch};
 }
 
-pub use behaviour_impl::Behaviour;
-pub use behaviour_impl::Error;
-pub use behaviour_impl::Event;
+pub use behaviour::{Behaviour, Error, Event};
 pub use protocol::PROTOCOL_NAME;
 pub mod inbound {
     pub use crate::protocol::inbound::UpgradeError;

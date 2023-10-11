@@ -20,7 +20,7 @@
 
 //! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
 
-use crate::behaviour_impl::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
+use crate::behaviour::MAX_NUMBER_OF_UPGRADE_ATTEMPTS;
 use crate::protocol;
 use either::Either;
 use futures::future;
