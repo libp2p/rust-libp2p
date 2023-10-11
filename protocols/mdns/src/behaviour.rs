@@ -233,27 +233,13 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.listen_addresses.on_swarm_event(&event);
+        let listen_addresses_changed = self.listen_addresses.on_swarm_event(&event);
 
-        match event {
-            FromSwarm::NewListener(_) => {
-                log::trace!("waking interface state because listening address changed");
-                for iface in self.iface_states.values_mut() {
-                    iface.fire_timer();
-                }
+        if listen_addresses_changed {
+            log::trace!("waking interface state because listening address changed");
+            for iface in self.iface_states.values_mut() {
+                iface.fire_timer();
             }
-            FromSwarm::ConnectionClosed(_)
-            | FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddrCandidate(_)
-            | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 
