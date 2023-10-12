@@ -13,13 +13,8 @@ CHANGELOG_DIFF=$(git diff "$HEAD_SHA".."$MERGE_BASE" --name-only -- "$DIR_TO_CRA
 VERSION_IN_CHANGELOG=$(awk -F' ' '/^## [0-9]+\.[0-9]+\.[0-9]+/{print $2; exit}' "$DIR_TO_CRATE/CHANGELOG.md")
 VERSION_IN_MANIFEST=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
 
-# If this PR does not touch any files of this crate, don't perform any further checks.
-if [ -z "$DIFF_TO_MASTER" ]; then
-  exit 0
-fi
-
 # Ensure CHANGELOG is updated if any files are touched.
-if [ -z "$CHANGELOG_DIFF" ]; then
+if [ -n "$DIFF_TO_MASTER" ] && [ -z "$CHANGELOG_DIFF" ]; then
     echo "Files in $DIR_TO_CRATE have changed, please write a changelog entry in $DIR_TO_CRATE/CHANGELOG.md"
     exit 1
 fi
