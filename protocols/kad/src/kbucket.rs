@@ -72,6 +72,7 @@ mod entry;
 #[allow(clippy::assign_op_pattern)]
 mod key;
 
+pub use bucket::NodeStatus;
 pub use entry::*;
 
 use arrayvec::{self, ArrayVec};
