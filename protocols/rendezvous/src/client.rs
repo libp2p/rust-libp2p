@@ -49,6 +49,8 @@ pub struct Behaviour {
     /// Storing these internally allows us to assist the [`libp2p_swarm::Swarm`] in dialing by returning addresses from [`NetworkBehaviour::handle_pending_outbound_connection`].
     discovered_peers: HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
 
+    registered_namespaces: HashMap<(PeerId, Namespace), Ttl>,
+
     /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
     expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
 
@@ -68,6 +70,7 @@ impl Behaviour {
             waiting_for_register: Default::default(),
             waiting_for_discovery: Default::default(),
             discovered_peers: Default::default(),
+            registered_namespaces: Default::default(),
             expiring_registrations: FuturesUnordered::from_iter(vec![
                 futures::future::pending().boxed()
             ]),
@@ -104,7 +107,10 @@ impl Behaviour {
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
         self.inner
-            .send_request(&rendezvous_node, Unregister(namespace));
+            .send_request(&rendezvous_node, Unregister(namespace.clone()));
+
+        self.registered_namespaces
+            .remove(&(rendezvous_node, namespace));
     }
 
     /// Discover other peers at a given rendezvous peer.
@@ -218,9 +224,18 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarm_event(&event);
+        let changed = self.external_addresses.on_swarm_event(&event);
 
         self.inner.on_swarm_event(event);
+
+        if changed && self.external_addresses.iter().count() > 0 {
+            let registered = self.registered_namespaces.clone();
+            for ((rz_node, ns), ttl) in registered {
+                if let Err(e) = self.register(ns.clone(), rz_node, Some(ttl)) {
+                    log::error!("Error refreshing registration: {e}")
+                }
+            }
+        }
     }
 
     fn poll(
@@ -348,6 +363,9 @@ impl Behaviour {
                 if let Some((rendezvous_node, namespace)) =
                     self.waiting_for_register.remove(request_id)
                 {
+                    self.registered_namespaces
+                        .insert((rendezvous_node, namespace.clone()), ttl);
+
                     return Some(Event::Registered {
                         rendezvous_node,
                         ttl,

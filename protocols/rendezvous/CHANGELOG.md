@@ -1,3 +1,9 @@
+## 0.13.1
+- Refresh registration upon a change in external addresses.
+  See [PR XXXX]
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 ## 0.13.0 
 
 - Changed the signature of the function `client::Behavior::register()`,

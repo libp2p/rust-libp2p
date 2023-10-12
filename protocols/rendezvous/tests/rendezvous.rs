@@ -20,6 +20,8 @@
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::Multiaddr;
 use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_rendezvous::client::RegisterError;
@@ -158,6 +160,62 @@ async fn given_successful_registration_then_refresh_ttl() {
             }
             _ => panic!("Expected exactly one registration to be returned from discover"),
         },
+        events => panic!("Unexpected events: {events:?}"),
+    }
+}
+
+#[tokio::test]
+async fn given_successful_registration_then_refresh_external_addrs() {
+    let _ = env_logger::try_init();
+    let namespace = rendezvous::Namespace::from_static("some-namespace");
+    let ([mut alice, mut bob], mut robert) =
+        new_server_with_connected_clients(rendezvous::server::Config::default()).await;
+
+    let roberts_peer_id = *robert.local_peer_id();
+
+    alice
+        .behaviour_mut()
+        .register(namespace.clone(), roberts_peer_id, None)
+        .unwrap();
+
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
+        (
+            [rendezvous::client::Event::Registered { .. }],
+            [rendezvous::server::Event::PeerRegistered { .. }],
+        ) => {}
+        events => panic!("Unexpected events: {events:?}"),
+    }
+
+    bob.behaviour_mut()
+        .discover(Some(namespace.clone()), None, None, roberts_peer_id);
+
+    match libp2p_swarm_test::drive(&mut bob, &mut robert).await {
+        (
+            [rendezvous::client::Event::Discovered { .. }],
+            [rendezvous::server::Event::DiscoverServed { .. }],
+        ) => {}
+        events => panic!("Unexpected events: {events:?}"),
+    }
+
+    let external_addr = Multiaddr::empty().with(Protocol::Memory(0));
+
+    alice.add_external_address(external_addr.clone());
+
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
+        (
+            [rendezvous::client::Event::Registered { .. }],
+            [rendezvous::server::Event::PeerRegistered { .. }],
+        ) => {}
+        events => panic!("Unexpected events: {events:?}"),
+    }
+
+    alice.remove_external_address(&external_addr);
+
+    match libp2p_swarm_test::drive(&mut alice, &mut robert).await {
+        (
+            [rendezvous::client::Event::Registered { .. }],
+            [rendezvous::server::Event::PeerRegistered { .. }],
+        ) => {}
         events => panic!("Unexpected events: {events:?}"),
     }
 }
