@@ -352,32 +352,26 @@ where
                 }
             }
 
-            let active_stream_count = Arc::strong_count(stream_counter);
-            if active_stream_count == 1 {
-                // Ask the handler whether it wants the connection (and the handler itself)
-                // to be kept alive, which determines the planned shutdown, if any.
+            // Check if the connection (and handler) should be shut down.
+            // As long as we're still negotiating substreams, shutdown is always postponed.
+            if negotiating_in.is_empty()
+                && negotiating_out.is_empty()
+                && requested_substreams.is_empty()
+                && Arc::strong_count(stream_counter) == 1
+            {
                 if let Some(new_timeout) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
                     *shutdown = new_timeout;
                 }
 
-                // Check if the connection (and handler) should be shut down.
-                // As long as we're still negotiating substreams, shutdown is always postponed.
-                if negotiating_in.is_empty()
-                    && negotiating_out.is_empty()
-                    && requested_substreams.is_empty()
-                {
-                    match shutdown {
-                        Shutdown::None => {}
-                        Shutdown::Asap => {
+                match shutdown {
+                    Shutdown::None => {}
+                    Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
+                    Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
+                        Poll::Ready(_) => {
                             return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
                         }
-                        Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
-                            Poll::Ready(_) => {
-                                return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-                            }
-                            Poll::Pending => {}
-                        },
-                    }
+                        Poll::Pending => {}
+                    },
                 }
             }
 
