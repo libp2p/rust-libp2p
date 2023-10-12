@@ -879,7 +879,6 @@ impl ConnectionHandler for Handler {
         if self.reservation_request_future.is_none()
             && self.circuit_accept_futures.is_empty()
             && self.circuit_deny_futures.is_empty()
-            && self.alive_lend_out_substreams.is_empty()
             && self.circuits.is_empty()
             && self.active_reservation.is_none()
         {

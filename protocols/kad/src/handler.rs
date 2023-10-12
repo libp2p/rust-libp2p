@@ -718,7 +718,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        KeepAlive::No
     }
 
     fn poll(
@@ -770,7 +770,6 @@ impl ConnectionHandler for Handler {
         }
 
         let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-
         self.keep_alive = {
             #[allow(deprecated)]
             match (no_streams, self.keep_alive) {

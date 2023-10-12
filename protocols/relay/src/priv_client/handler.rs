@@ -491,10 +491,8 @@ impl ConnectionHandler for Handler {
         // Update keep-alive handling.
         #[allow(deprecated)]
         {
-            if matches!(self.reservation, Reservation::None)
-                && self.alive_lend_out_substreams.is_empty()
-                && self.circuit_deny_futs.is_empty()
-            {
+            // Update keep-alive handling.
+            if matches!(self.reservation, Reservation::None) {
                 match self.keep_alive {
                     KeepAlive::Yes => {
                         self.keep_alive =
@@ -507,6 +505,7 @@ impl ConnectionHandler for Handler {
                 self.keep_alive = KeepAlive::Yes;
             }
         }
+
         Poll::Pending
     }
 
