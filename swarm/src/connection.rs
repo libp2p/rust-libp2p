@@ -351,13 +351,13 @@ where
                 (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
                     if *deadline != t {
                         *deadline = t;
+                        let now = Instant::now();
                         if let Some(new_duration) = deadline.checked_duration_since(Instant::now())
                         {
                             let effective_keep_alive = max(new_duration, *idle_timeout);
                             
-                            let now = Instant::now();
-                            let safe_effective_keep_alive = checked_add_fraction(now, effective_keep_alive);
-                            
+                            // `Delay::reset` panics if `now + effective_keep_alive` is `> u64::MAX`.
+                            let safe_effective_keep_alive = checked_add_fraction(now, effective_keep_alive);                            
                             timer.reset(safe_effective_keep_alive)
                         }
                     }
