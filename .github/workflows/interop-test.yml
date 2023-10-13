@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  run-multidim-interop:
-    name: Run multidimensional interoperability tests
+  run-transport-interop:
+    name: Run transport interoperability tests
     runs-on: ${{ fromJSON(github.repository == 'libp2p/rust-libp2p' && '["self-hosted", "linux", "x64", "4xlarge"]' || '"ubuntu-latest"') }}
     strategy:
       matrix:
@@ -29,7 +29,7 @@ jobs:
           FLAVOUR: ${{ matrix.flavour }}
 
       - name: Run ${{ matrix.flavour }} tests
-        uses: libp2p/test-plans/.github/actions/run-interop-ping-test@master
+        uses: libp2p/test-plans/.github/actions/run-transport-interop-test@master
         with:
           test-filter: ${{ matrix.flavour }}-rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/${{ matrix.flavour }}-ping-version.json
