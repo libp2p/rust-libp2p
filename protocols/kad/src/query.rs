@@ -326,15 +326,6 @@ impl<TInner> Query<TInner> {
         }
     }
 
-    /// Checks whether the query is currently waiting for a result from `peer`.
-    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
-        match &self.peer_iter {
-            QueryPeerIter::Closest(iter) => iter.is_waiting(peer),
-            QueryPeerIter::ClosestDisjoint(iter) => iter.is_waiting(peer),
-            QueryPeerIter::Fixed(iter) => iter.is_waiting(peer),
-        }
-    }
-
     /// Advances the state of the underlying peer iterator.
     fn next(&mut self, now: Instant) -> PeersIterState<'_> {
         let state = match &mut self.peer_iter {
