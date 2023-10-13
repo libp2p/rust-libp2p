@@ -880,7 +880,6 @@ impl ConnectionHandler for Handler {
             && self.circuit_accept_futures.is_empty()
             && self.circuit_deny_futures.is_empty()
             && self.circuits.is_empty()
-            && self.active_reservation.is_none()
         {
             #[allow(deprecated)]
             match self.keep_alive {

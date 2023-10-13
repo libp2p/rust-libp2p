@@ -718,7 +718,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+        self.keep_alive
     }
 
     fn poll(
