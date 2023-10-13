@@ -76,10 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             noise::Config::new,
             yamux::Config::default,
         )?
-        .with_quic_config(|mut cfg| {
-            cfg.support_draft_29 = true;
-            cfg
-        })
+        .with_quic()
         .with_dns()?
         .with_behaviour(|key| {
             behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
