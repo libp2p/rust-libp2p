@@ -1,3 +1,8 @@
+## 0.43.7 - unreleased
+
+- Fix overflow in `KeepAlive` computation that could occur panic at `Delay::reset` if `SwarmBuilder::idle_connection_timeout` is configured too large.
+  See [PR 4644](https://github.com/libp2p/rust-libp2p/pull/4644).
+
 ## 0.43.6 - unreleased
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.
