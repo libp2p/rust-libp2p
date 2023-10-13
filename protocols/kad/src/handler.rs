@@ -732,7 +732,7 @@ impl ConnectionHandler for Handler {
         >,
     > {
         match &mut self.protocol_status {
-            Some(status) if status.reported == false => {
+            Some(status) if !status.reported => {
                 status.reported = true;
                 let event = if status.supported {
                     HandlerEvent::ProtocolConfirmed {
