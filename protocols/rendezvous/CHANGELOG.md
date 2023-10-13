@@ -1,8 +1,8 @@
-## 0.13.1
+## 0.13.1 - unreleased
 - Refresh registration upon a change in external addresses.
-  See [PR XXXX]
+  See [PR 4629]
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 4629]: https://github.com/libp2p/rust-libp2p/pull/4629
 
 ## 0.13.0 
 
