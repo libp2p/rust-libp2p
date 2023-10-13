@@ -354,8 +354,11 @@ where
                         if let Some(new_duration) = deadline.checked_duration_since(Instant::now())
                         {
                             let effective_keep_alive = max(new_duration, *idle_timeout);
-
-                            timer.reset(effective_keep_alive)
+                            
+                            let now = Instant::now();
+                            let safe_effective_keep_alive = checked_add_fraction(now, effective_keep_alive);
+                            
+                            timer.reset(safe_effective_keep_alive)
                         }
                     }
                 }
