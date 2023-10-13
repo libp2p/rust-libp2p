@@ -38,7 +38,6 @@ use smallvec::SmallVec;
 use std::{
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 use void::Void;
 
@@ -119,9 +118,6 @@ pub struct EnabledHandler {
 
     last_io_activity: Instant,
 
-    /// The amount of time we keep an idle connection alive.
-    idle_timeout: Duration,
-
     /// Keeps track of whether this connection is for a peer in the mesh. This is used to make
     /// decisions about the keep alive state for this connection.
     in_mesh: bool,
@@ -164,7 +160,7 @@ enum OutboundSubstreamState {
 
 impl Handler {
     /// Builds a new [`Handler`].
-    pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
+    pub fn new(protocol_config: ProtocolConfig) -> Self {
         Handler::Enabled(EnabledHandler {
             listen_protocol: protocol_config,
             inbound_substream: None,
@@ -176,7 +172,6 @@ impl Handler {
             peer_kind: None,
             peer_kind_sent: false,
             last_io_activity: Instant::now(),
-            idle_timeout,
             in_mesh: false,
         })
     }
@@ -444,7 +439,7 @@ impl ConnectionHandler for Handler {
                     return KeepAlive::Yes;
                 }
 
-                KeepAlive::Until(handler.last_io_activity + handler.idle_timeout)
+                KeepAlive::No
             }
             Handler::Disabled(_) => KeepAlive::No,
         }

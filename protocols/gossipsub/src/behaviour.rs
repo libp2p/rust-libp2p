@@ -3312,10 +3312,7 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
     fn handle_established_outbound_connection(
@@ -3325,10 +3322,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
     fn on_connection_handler_event(
