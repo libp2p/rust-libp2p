@@ -2,7 +2,7 @@ use libp2p_identify as identify;
 use libp2p_identity as identity;
 use libp2p_kad::store::MemoryStore;
 use libp2p_kad::{Behaviour, Config, Event, Mode};
-use libp2p_swarm::Swarm;
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 
 #[async_std::test]
@@ -57,19 +57,16 @@ async fn two_servers_add_each_other_to_routing_table() {
     server1.listen().await;
     server2.connect(&mut server1).await;
 
-    match libp2p_swarm_test::drive(&mut server2, &mut server1).await {
-        (
-            [Identify(_), Kad(RoutingUpdated { peer: peer2, .. }), Identify(_)],
-            [Identify(_), Identify(_)],
-        )
-        | (
-            [Identify(_), Identify(_), Kad(RoutingUpdated { peer: peer2, .. })],
-            [Identify(_), Identify(_)],
-        ) => {
-            assert_eq!(peer2, server1_peer_id);
-        }
-        other => panic!("Unexpected events: {other:?}"),
-    }
+    async_std::task::spawn(server1.loop_on_next());
+
+    let peer = server2
+        .wait(|e| match e {
+            SwarmEvent::Behaviour(Kad(RoutingUpdated { peer, .. })) => Some(peer),
+            _ => None,
+        })
+        .await;
+
+    assert_eq!(peer, server1_peer_id);
 }
 
 #[async_std::test]
