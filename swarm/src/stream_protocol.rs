@@ -125,7 +125,7 @@ mod tests {
             "protocol to debug print as string with quotes"
         );
         assert_eq!(
-            debug, "/foo/bar/1.0.0",
+            display, "/foo/bar/1.0.0",
             "protocol to display print as string without quotes"
         );
     }
