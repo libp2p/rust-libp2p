@@ -106,11 +106,11 @@ impl Behaviour {
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
-        self.inner
-            .send_request(&rendezvous_node, Unregister(namespace.clone()));
-
         self.registered_namespaces
-            .remove(&(rendezvous_node, namespace));
+            .retain(|(rz_node, ns), _| rz_node.ne(&rendezvous_node) && ns.ne(&namespace));
+
+        self.inner
+            .send_request(&rendezvous_node, Unregister(namespace));
     }
 
     /// Discover other peers at a given rendezvous peer.
