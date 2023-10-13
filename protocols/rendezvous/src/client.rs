@@ -231,7 +231,7 @@ impl NetworkBehaviour for Behaviour {
         if changed && self.external_addresses.iter().count() > 0 {
             let registered = self.registered_namespaces.clone();
             for ((rz_node, ns), ttl) in registered {
-                if let Err(e) = self.register(ns.clone(), rz_node, Some(ttl)) {
+                if let Err(e) = self.register(ns, rz_node, Some(ttl)) {
                     log::error!("Error refreshing registration: {e}")
                 }
             }
