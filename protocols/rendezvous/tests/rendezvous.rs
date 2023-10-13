@@ -168,7 +168,7 @@ async fn given_successful_registration_then_refresh_ttl() {
 async fn given_successful_registration_then_refresh_external_addrs() {
     let _ = env_logger::try_init();
     let namespace = rendezvous::Namespace::from_static("some-namespace");
-    let ([mut alice, _], mut robert) =
+    let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
     let roberts_peer_id = *robert.local_peer_id();
