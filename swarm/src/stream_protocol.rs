@@ -7,7 +7,7 @@ use std::sync::Arc;
 ///
 /// libp2p nodes use stream protocols to negotiate what to do with a newly opened stream.
 /// Stream protocols are string-based and must start with a forward slash: `/`.
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub struct StreamProtocol {
     inner: Either<&'static str, Arc<str>>,
 }
@@ -47,6 +47,12 @@ impl StreamProtocol {
 impl AsRef<str> for StreamProtocol {
     fn as_ref(&self) -> &str {
         either::for_both!(&self.inner, s => s)
+    }
+}
+
+impl fmt::Debug for StreamProtocol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        either::for_both!(&self.inner, s => s.fmt(f))
     }
 }
 
@@ -102,3 +108,25 @@ impl fmt::Display for InvalidProtocol {
 }
 
 impl std::error::Error for InvalidProtocol {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_protocol_print() {
+        let protocol = StreamProtocol::new("/foo/bar/1.0.0");
+
+        let debug = format!("{protocol:?}");
+        let display = format!("{protocol}");
+
+        assert_eq!(
+            debug, r#""/foo/bar/1.0.0""#,
+            "protocol to debug print as string with quotes"
+        );
+        assert_eq!(
+            display, "/foo/bar/1.0.0",
+            "protocol to display print as string without quotes"
+        );
+    }
+}

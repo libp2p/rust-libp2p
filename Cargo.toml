@@ -95,7 +95,7 @@ libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.43.1", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.40.1", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.23.0", path = "transports/pnet" }
-libp2p-quic = { version = "0.9.2", path = "transports/quic" }
+libp2p-quic = { version = "0.9.3", path = "transports/quic" }
 libp2p-relay = { version = "0.16.1", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.13.0", path = "protocols/rendezvous" }
 libp2p-upnp = { version = "0.1.1", path = "protocols/upnp" }
