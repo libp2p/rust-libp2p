@@ -7,7 +7,7 @@ use libp2p_core::muxing::StreamMuxer;
     all(not(target_arch = "wasm32"), feature = "websocket")
 ))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct QuicPhase<T> {
     pub(crate) transport: T,
@@ -237,3 +237,21 @@ impl_quic_phase_with_websocket!(
     super::provider::Tokio,
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, QuicPhase<T>> {
+    pub fn with_bandwidth_logging(
+        self,
+    ) -> (
+        SwarmBuilder<
+            Provider,
+            BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+        >,
+        Arc<crate::bandwidth::BandwidthSinks>,
+    ) {
+        self.without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_relay()
+            .without_websocket()
+            .with_bandwidth_logging()
+    }
+}
