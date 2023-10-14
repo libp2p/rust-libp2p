@@ -31,10 +31,10 @@ impl<In, Out> Codec<In, Out> {
 }
 
 impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
-    type Item<'a> = In;
+    type Item = In;
     type Error = Error;
 
-    fn encode(&mut self, item: Self::Item<'_>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut encoded_msg = Vec::new();
         let mut writer = Writer::new(&mut encoded_msg);
         item.write_message(&mut writer)
