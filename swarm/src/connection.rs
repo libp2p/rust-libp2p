@@ -57,11 +57,15 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
+
+///  Counter of the number of active streams on a connection
+type ActiveStreamCounter = Arc<()>;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,6 +161,8 @@ where
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
+    /// The counter of active streams
+    stream_counter: ActiveStreamCounter,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -205,6 +211,7 @@ where
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
             idle_timeout,
+            stream_counter: Arc::new(()),
         }
     }
 
@@ -237,6 +244,7 @@ where
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
             idle_timeout,
+            stream_counter,
         } = self.get_mut();
 
         loop {
@@ -344,58 +352,17 @@ where
                 }
             }
 
-            // Ask the handler whether it wants the connection (and the handler itself)
-            // to be kept alive, which determines the planned shutdown, if any.
-            let keep_alive = handler.connection_keep_alive();
-            match (&mut *shutdown, keep_alive) {
-                (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
-                    if *deadline != t {
-                        *deadline = t;
-                        let now = Instant::now();
-                        if let Some(new_duration) = deadline.checked_duration_since(Instant::now())
-                        {
-                            let effective_keep_alive = max(new_duration, *idle_timeout);
-                            
-                            // `Delay::reset` panics if `now + effective_keep_alive` is `> u64::MAX`.
-                            let safe_effective_keep_alive = checked_add_fraction(now, effective_keep_alive);                            
-                            timer.reset(safe_effective_keep_alive)
-                        }
-                    }
-                }
-                (_, KeepAlive::Until(earliest_shutdown)) => {
-                    let now = Instant::now();
-
-                    if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
-                        let effective_keep_alive = max(requested, *idle_timeout);
-
-                        let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
-
-                        // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
-                        // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                        *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), earliest_shutdown)
-                    }
-                }
-                (_, KeepAlive::No) if idle_timeout == &Duration::ZERO => {
-                    *shutdown = Shutdown::Asap;
-                }
-                (Shutdown::Later(_, _), KeepAlive::No) => {
-                    // Do nothing, i.e. let the shutdown timer continue to tick.
-                }
-                (_, KeepAlive::No) => {
-                    let now = Instant::now();
-                    let safe_keep_alive = checked_add_fraction(now, *idle_timeout);
-
-                    *shutdown = Shutdown::Later(Delay::new(safe_keep_alive), now + safe_keep_alive);
-                }
-                (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
-            };
-
             // Check if the connection (and handler) should be shut down.
             // As long as we're still negotiating substreams, shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
+                && Arc::strong_count(stream_counter) == 1
             {
+                if let Some(new_timeout) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
+                    *shutdown = new_timeout;
+                }
+
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
@@ -430,6 +397,7 @@ where
                             timeout,
                             upgrade,
                             *substream_upgrade_protocol_override,
+                            stream_counter.clone(),
                         ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
@@ -443,7 +411,11 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(StreamUpgrade::new_inbound(substream, protocol));
+                        negotiating_in.push(StreamUpgrade::new_inbound(
+                            substream,
+                            protocol,
+                            stream_counter.clone(),
+                        ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -482,6 +454,69 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
         .protocol_info()
         .filter_map(|i| StreamProtocol::try_from_owned(i.as_ref().to_owned()).ok())
         .collect()
+}
+
+fn compute_new_shutdown(
+    handler: &impl ConnectionHandler,
+    current_shutdown: &Shutdown,
+    idle_timeout: Duration,
+) -> Option<Shutdown> {
+    // Ask the handler whether it wants the connection (and the handler itself)
+    // to be kept alive, which determines the planned shutdown, if any.
+    let keep_alive = handler.connection_keep_alive();
+    match (current_shutdown, keep_alive) {
+        (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
+            let now = Instant::now();
+
+            if *deadline != t {
+                let new_deadline = t;
+                if let Some(new_duration) = new_deadline.checked_duration_since(now) {
+                    let effective_keep_alive = max(new_duration, idle_timeout);
+
+                    let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
+                    return Some(Shutdown::Later(
+                        Delay::new(safe_keep_alive),
+                        new_deadline,
+                    ));
+                }
+            }
+
+            None
+        }
+        (_, KeepAlive::Until(earliest_shutdown)) => {
+            let now = Instant::now();
+
+            if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
+                let effective_keep_alive = max(requested, idle_timeout);
+
+                let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
+
+                // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
+                // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
+                return Some(Shutdown::Later(
+                    Delay::new(safe_keep_alive),
+                    earliest_shutdown,
+                ));
+            }
+
+            None
+        }
+        (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
+        (Shutdown::Later(_, _), KeepAlive::No) => {
+            // Do nothing, i.e. let the shutdown timer continue to tick.
+            None
+        }
+        (_, KeepAlive::No) => {
+            let now = Instant::now();
+            let safe_keep_alive = checked_add_fraction(now, idle_timeout);
+
+            Some(Shutdown::Later(
+                Delay::new(safe_keep_alive),
+                now + safe_keep_alive,
+            ))
+        }
+        (_, KeepAlive::Yes) => Some(Shutdown::None),
+    }
 }
 
 /// Repeatedly halves and adds the [`Duration`] to the [`Instant`] until [`Instant::checked_add`] succeeds.
@@ -530,6 +565,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         timeout: Delay,
         upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
+        counter: Arc<()>,
     ) -> Self
     where
         Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -561,7 +597,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                 .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_outbound(Stream::new(stream), info)
+                    .upgrade_outbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
@@ -575,6 +611,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
+        counter: Arc<()>,
     ) -> Self
     where
         Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -593,7 +630,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                         .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_inbound(Stream::new(stream), info)
+                    .upgrade_inbound(Stream::new(stream, counter), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
