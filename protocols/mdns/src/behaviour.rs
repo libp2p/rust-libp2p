@@ -308,10 +308,8 @@ where
                             self.listen_addresses.clone(),
                             self.query_response_sender.clone(),
                         ) {
-                            Ok(mut iface_state) => {
-                                e.insert(P::spawn(async move {
-                                    futures::future::poll_fn(move |cx| iface_state.poll(cx)).await;
-                                }));
+                            Ok(iface_state) => {
+                                e.insert(P::spawn(iface_state));
                             }
                             Err(err) => log::error!("failed to create `InterfaceState`: {}", err),
                         }
