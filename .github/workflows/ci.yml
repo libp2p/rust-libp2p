@@ -33,6 +33,8 @@ jobs:
       CRATE: ${{ matrix.crate }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
@@ -69,6 +71,15 @@ jobs:
           echo "Specified version: $SPECIFIED_VERSION";
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
+      - name: Ensure manifest and CHANGELOG are properly updated
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin master:master
+          ./scripts/ensure-version-bump-and-changelog.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
 
   wasm_tests:
     name: Run all WASM tests
