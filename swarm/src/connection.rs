@@ -57,15 +57,11 @@ use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
-
-///  Counter of the number of active streams on a connection
-type ActiveStreamCounter = Arc<()>;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -161,8 +157,6 @@ where
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
-    /// The counter of active streams
-    stream_counter: ActiveStreamCounter,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -211,7 +205,6 @@ where
             local_supported_protocols: initial_protocols,
             remote_supported_protocols: Default::default(),
             idle_timeout,
-            stream_counter: Arc::new(()),
         }
     }
 
@@ -244,7 +237,6 @@ where
             local_supported_protocols: supported_protocols,
             remote_supported_protocols,
             idle_timeout,
-            stream_counter,
         } = self.get_mut();
 
         loop {
@@ -352,17 +344,17 @@ where
                 }
             }
 
+            // Compute new shutdown
+            if let Some(new_shutdown) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
+              *shutdown = new_shutdown;
+            }
+
             // Check if the connection (and handler) should be shut down.
             // As long as we're still negotiating substreams, shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
-                && Arc::strong_count(stream_counter) == 1
             {
-                if let Some(new_timeout) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
-                    *shutdown = new_timeout;
-                }
-
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
@@ -397,7 +389,6 @@ where
                             timeout,
                             upgrade,
                             *substream_upgrade_protocol_override,
-                            stream_counter.clone(),
                         ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
@@ -411,11 +402,7 @@ where
                     Poll::Ready(substream) => {
                         let protocol = handler.listen_protocol();
 
-                        negotiating_in.push(StreamUpgrade::new_inbound(
-                            substream,
-                            protocol,
-                            stream_counter.clone(),
-                        ));
+                        negotiating_in.push(StreamUpgrade::new_inbound(substream, protocol));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -469,18 +456,17 @@ fn compute_new_shutdown(
             let now = Instant::now();
 
             if *deadline != t {
-                let new_deadline = t;
-                if let Some(new_duration) = new_deadline.checked_duration_since(now) {
+                let deadline = t;
+                if let Some(new_duration) = deadline.checked_duration_since(Instant::now()) {
                     let effective_keep_alive = max(new_duration, idle_timeout);
 
                     let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
                     return Some(Shutdown::Later(
                         Delay::new(safe_keep_alive),
-                        new_deadline,
+                        deadline,
                     ));
                 }
             }
-
             None
         }
         (_, KeepAlive::Until(earliest_shutdown)) => {
@@ -498,7 +484,6 @@ fn compute_new_shutdown(
                     earliest_shutdown,
                 ));
             }
-
             None
         }
         (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
@@ -565,7 +550,6 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         timeout: Delay,
         upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
-        counter: Arc<()>,
     ) -> Self
     where
         Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -597,7 +581,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                 .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_outbound(Stream::new(stream, counter), info)
+                    .upgrade_outbound(Stream::new(stream), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
@@ -611,7 +595,6 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
-        counter: Arc<()>,
     ) -> Self
     where
         Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -630,7 +613,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
                         .map_err(to_stream_upgrade_error)?;
 
                 let output = upgrade
-                    .upgrade_inbound(Stream::new(stream, counter), info)
+                    .upgrade_inbound(Stream::new(stream), info)
                     .await
                     .map_err(StreamUpgradeError::Apply)?;
 
