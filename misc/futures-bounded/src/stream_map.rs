@@ -79,7 +79,7 @@ where
         }
     }
 
-    pub fn try_cancel(&mut self, id: ID) -> Option<BoxStream<O>> {
+    pub fn remove(&mut self, id: ID) -> Option<BoxStream<O>> {
         let tagged = self.inner.iter_mut().find(|s| s.key == id)?;
 
         let inner = mem::replace(&mut tagged.inner.inner, stream::pending().boxed());
@@ -222,13 +222,13 @@ mod tests {
     }
 
     #[test]
-    fn cancelled_stream_does_not_emit_anything() {
+    fn removing_stream() {
         let mut streams = StreamMap::new(Duration::from_millis(100), 1);
 
         let _ = streams.try_push("ID", stream::once(ready(())));
 
         {
-            let cancelled_stream = streams.try_cancel("ID");
+            let cancelled_stream = streams.remove("ID");
             assert!(cancelled_stream.is_some());
         }
 
