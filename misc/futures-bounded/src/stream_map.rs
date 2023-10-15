@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use futures_timer::Delay;
 use futures_util::stream::{BoxStream, SelectAll};
-use futures_util::{FutureExt, Stream, StreamExt};
+use futures_util::{stream, FutureExt, Stream, StreamExt};
 
 use crate::{PushError, Timeout};
 
@@ -38,6 +38,7 @@ where
 impl<ID, O> StreamMap<ID, O>
 where
     ID: Clone + PartialEq + Send + Unpin + 'static,
+    O: Send + 'static,
 {
     /// Push a stream into the map.
     pub fn try_push<F>(&mut self, id: ID, stream: F) -> Result<(), PushError<BoxStream<O>>>
@@ -76,6 +77,15 @@ where
                 Err(PushError::Replaced(old.inner))
             }
         }
+    }
+
+    pub fn try_cancel(&mut self, id: ID) -> Option<BoxStream<O>> {
+        let tagged = self.inner.iter_mut().find(|s| s.key == id)?;
+
+        let inner = mem::replace(&mut tagged.inner.inner, stream::pending().boxed());
+        tagged.exhausted = true; // Setting this will emit `None` on the next poll and ensure `SelectAll` cleans up the resources.
+
+        Some(inner)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -133,7 +143,7 @@ struct TaggedStream<K, S> {
     key: K,
     inner: S,
 
-    reported_none: bool,
+    exhausted: bool,
 }
 
 impl<K, S> TaggedStream<K, S> {
@@ -141,7 +151,7 @@ impl<K, S> TaggedStream<K, S> {
         Self {
             key,
             inner,
-            reported_none: false,
+            exhausted: false,
         }
     }
 }
@@ -154,14 +164,14 @@ where
     type Item = (K, Option<S::Item>);
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.reported_none {
+        if self.exhausted {
             return Poll::Ready(None);
         }
 
         match futures_util::ready!(self.inner.poll_next_unpin(cx)) {
             Some(item) => Poll::Ready(Some((self.key.clone(), Some(item)))),
             None => {
-                self.reported_none = true;
+                self.exhausted = true;
 
                 Poll::Ready(Some((self.key.clone(), None)))
             }
@@ -209,6 +219,29 @@ mod tests {
         let (_, result) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
 
         assert!(result.unwrap().is_err())
+    }
+
+    #[test]
+    fn cancelled_stream_does_not_emit_anything() {
+        let mut streams = StreamMap::new(Duration::from_millis(100), 1);
+
+        let _ = streams.try_push("ID", stream::once(ready(())));
+
+        {
+            let cancelled_stream = streams.try_cancel("ID");
+            assert!(cancelled_stream.is_some());
+        }
+
+        let poll = streams.poll_next_unpin(&mut Context::from_waker(
+            futures_util::task::noop_waker_ref(),
+        ));
+
+        assert!(poll.is_pending());
+        assert_eq!(
+            streams.inner.len(),
+            0,
+            "resources of cancelled streams are cleaned up properly"
+        );
     }
 
     // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.

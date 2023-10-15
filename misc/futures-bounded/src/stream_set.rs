@@ -22,7 +22,10 @@ impl<O> StreamSet<O> {
     }
 }
 
-impl<O> StreamSet<O> {
+impl<O> StreamSet<O>
+where
+    O: Send + 'static,
+{
     /// Push a stream into the list.
     ///
     /// This method adds the given stream to the list.
