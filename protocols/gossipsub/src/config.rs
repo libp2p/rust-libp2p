@@ -189,7 +189,6 @@ impl Config {
     #[deprecated(
         note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
     )]
-    #[allow(deprecated)]
     pub fn idle_timeout(&self) -> Duration {
         self.idle_timeout
     }
