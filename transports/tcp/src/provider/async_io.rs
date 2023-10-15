@@ -54,7 +54,7 @@ pub type Transport = crate::Transport<Tcp>;
 pub enum Tcp {}
 
 impl Provider for Tcp {
-    type Stream = Async<net::TcpStream>;
+    type Stream = TcpStream;
     type Listener = Async<net::TcpListener>;
     type IfWatcher = if_watch::smol::IfWatcher;
 
@@ -116,3 +116,5 @@ impl Provider for Tcp {
         }))
     }
 }
+
+pub type TcpStream = Async<net::TcpStream>;

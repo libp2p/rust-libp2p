@@ -34,3 +34,6 @@ web-sys = { version = "0.3.64", features = ["Document", "Location", "MessageEven
 hex-literal = "0.4"
 libp2p-ping = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["wasm-bindgen"] }
+
+[lints]
+workspace = true
