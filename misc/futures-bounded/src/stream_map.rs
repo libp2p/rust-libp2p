@@ -113,7 +113,11 @@ where
                 Poll::Pending
             }
             Some((id, Some(Ok(output)))) => Poll::Ready((id, Some(Ok(output)))),
-            Some((id, Some(Err(())))) => Poll::Ready((id, Some(Err(Timeout::new(self.timeout))))),
+            Some((id, Some(Err(())))) => {
+                self.remove(id.clone()); // Remove stream, otherwise we keep reporting the timeout.
+
+                Poll::Ready((id, Some(Err(Timeout::new(self.timeout)))))
+            }
             Some((id, None)) => Poll::Ready((id, None)),
         }
     }
@@ -219,6 +223,20 @@ mod tests {
         let (_, result) = poll_fn(|cx| streams.poll_next_unpin(cx)).await;
 
         assert!(result.unwrap().is_err())
+    }
+
+    #[tokio::test]
+    async fn timed_out_stream_gets_removed() {
+        let mut streams = StreamMap::new(Duration::from_millis(100), 1);
+
+        let _ = streams.try_push("ID", pending::<()>());
+        Delay::new(Duration::from_millis(150)).await;
+        poll_fn(|cx| streams.poll_next_unpin(cx)).await;
+
+        let poll = streams.poll_next_unpin(&mut Context::from_waker(
+            futures_util::task::noop_waker_ref(),
+        ));
+        assert!(poll.is_pending())
     }
 
     #[test]
