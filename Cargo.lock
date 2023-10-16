@@ -2791,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-noise"
-version = "0.43.1"
+version = "0.43.2"
 dependencies = [
  "bytes",
  "curve25519-dalek",
