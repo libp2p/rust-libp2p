@@ -13,3 +13,6 @@ futures = "0.3.28"
 futures-timer = "3.0.2"
 futures_ringbuf = "0.4.0"
 tracing = "0.1.37"
+
+[lints]
+workspace = true

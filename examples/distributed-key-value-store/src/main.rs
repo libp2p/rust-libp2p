@@ -22,14 +22,13 @@
 
 use async_std::io;
 use futures::{prelude::*, select};
-use libp2p::core::upgrade::Version;
 use libp2p::kad;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::Mode;
 use libp2p::{
-    identity, mdns, noise,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Transport,
+    mdns, noise,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux,
 };
 use std::error::Error;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
@@ -44,51 +43,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .with_env_filter(env_filter)
         .try_init();
 
-    // Create a random key for ourselves.
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "MyBehaviourEvent")]
-    struct MyBehaviour {
+    struct Behaviour {
         kademlia: kad::Behaviour<MemoryStore>,
         mdns: mdns::async_io::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
-    enum MyBehaviourEvent {
-        Kademlia(kad::Event),
-        Mdns(mdns::Event),
-    }
-
-    impl From<kad::Event> for MyBehaviourEvent {
-        fn from(event: kad::Event) -> Self {
-            MyBehaviourEvent::Kademlia(event)
-        }
-    }
-
-    impl From<mdns::Event> for MyBehaviourEvent {
-        fn from(event: mdns::Event) -> Self {
-            MyBehaviourEvent::Mdns(event)
-        }
-    }
-
-    // Create a swarm to manage peers and events.
-    let mut swarm = {
-        // Create a Kademlia behaviour.
-        let store = MemoryStore::new(local_peer_id);
-        let kademlia = kad::Behaviour::new(local_peer_id, store);
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let behaviour = MyBehaviour { kademlia, mdns };
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build()
-    };
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_async_std()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| {
+            Ok(Behaviour {
+                kademlia: kad::Behaviour::new(
+                    key.public().to_peer_id(),
+                    MemoryStore::new(key.public().to_peer_id()),
+                ),
+                mdns: mdns::async_io::Behaviour::new(
+                    mdns::Config::default(),
+                    key.public().to_peer_id(),
+                )?,
+            })
+        })?
+        .build();
 
     swarm.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
 
@@ -106,12 +87,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::NewListenAddr { address, .. } => {
                 println!("Listening in {address:?}");
             },
-            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
             }
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { result, ..})) => {
                 match result {
                     kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { key, providers, .. })) => {
                         for peer in providers {

@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-std = { version = "1.6.2", optional = true }
 libp2p-core = { workspace = true }
 futures = "0.3.28"
-tokio = { version = "1.32", default-features = false, features = ["net"], optional = true }
+tokio = { version = "1.33", default-features = false, features = ["net"], optional = true }
 tracing = "0.1.37"
 
 [dev-dependencies]
@@ -26,3 +26,6 @@ tempfile = "3.8"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

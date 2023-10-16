@@ -599,7 +599,7 @@ impl<P: Provider> Stream for Listener<P> {
                     return Poll::Ready(Some(event));
                 }
                 Poll::Ready(None) => {
-                    self.close(Err(Error::EndpointDriverCrashed));
+                    self.close(Ok(()));
                     continue;
                 }
                 Poll::Pending => {}

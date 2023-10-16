@@ -883,6 +883,7 @@ impl ConnectionHandler for Handler {
             && self.circuits.is_empty()
             && self.active_reservation.is_none()
         {
+            #[allow(deprecated)]
             match self.keep_alive {
                 KeepAlive::Yes => {
                     self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));

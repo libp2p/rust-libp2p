@@ -179,8 +179,18 @@ async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, 
         ip,
         is_dialer,
         test_timeout,
+        sec_protocol,
+        muxer,
         ..
     } = state.0.config;
+
+    let sec_protocol = sec_protocol
+        .map(|p| format!(r#""{p}""#))
+        .unwrap_or("null".to_owned());
+    let muxer = muxer
+        .map(|p| format!(r#""{p}""#))
+        .unwrap_or("null".to_owned());
+
     Ok(Html(format!(
         r#"
         <!DOCTYPE html>
@@ -200,7 +210,9 @@ async fn serve_index_html(state: State<TestState>) -> Result<impl IntoResponse, 
                     "{ip}",
                     {is_dialer},
                     "{test_timeout}",
-                    "{BIND_ADDR}"
+                    "{BIND_ADDR}",
+                    {sec_protocol},
+                    {muxer}
                 )
             </script>
         </head>

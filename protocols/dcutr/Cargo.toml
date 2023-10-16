@@ -47,3 +47,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

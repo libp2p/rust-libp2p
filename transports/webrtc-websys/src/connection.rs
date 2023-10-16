@@ -252,11 +252,11 @@ impl RtcPeerConnection {
         let sdp = &self
             .inner
             .local_description()
-            .ok_or_else(|| Error::JsError("No local description".to_string()))?
+            .ok_or_else(|| Error::Js("No local description".to_string()))?
             .sdp();
 
-        let fingerprint = parse_fingerprint(sdp)
-            .ok_or_else(|| Error::JsError("No fingerprint in SDP".to_string()))?;
+        let fingerprint =
+            parse_fingerprint(sdp).ok_or_else(|| Error::Js("No fingerprint in SDP".to_string()))?;
 
         Ok(fingerprint)
     }

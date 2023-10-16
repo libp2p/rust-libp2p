@@ -493,21 +493,24 @@ impl ConnectionHandler for Handler {
         }
 
         // Update keep-alive handling.
-        if matches!(self.reservation, Reservation::None)
-            && self.alive_lend_out_substreams.is_empty()
-            && self.circuit_deny_futs.is_empty()
+        #[allow(deprecated)]
         {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+            if matches!(self.reservation, Reservation::None)
+                && self.alive_lend_out_substreams.is_empty()
+                && self.circuit_deny_futs.is_empty()
+            {
+                match self.keep_alive {
+                    KeepAlive::Yes => {
+                        self.keep_alive =
+                            KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                    }
+                    KeepAlive::Until(_) => {}
+                    KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
                 }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+            } else {
+                self.keep_alive = KeepAlive::Yes;
             }
-        } else {
-            self.keep_alive = KeepAlive::Yes;
         }
-
         Poll::Pending
     }
 

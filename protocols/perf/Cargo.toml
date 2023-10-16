@@ -30,7 +30,7 @@ serde_json = "1.0"
 thiserror = "1.0"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.33.0", features = ["full"] }
 void = "1"
 
 [dev-dependencies]
@@ -43,3 +43,6 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

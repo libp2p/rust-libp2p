@@ -12,8 +12,11 @@ publish = false
 [dependencies]
 clap = { version = "4.3.23", features = ["derive"] }
 zeroize = "1"
-serde = { version = "1.0.188", features = ["derive"] }
+serde = { version = "1.0.189", features = ["derive"] }
 serde_json = "1.0.107"
 libp2p-core = { workspace = true }
 base64 = "0.21.4"
 libp2p-identity = { workspace = true }
+
+[lints]
+workspace = true

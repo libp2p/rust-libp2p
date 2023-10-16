@@ -23,7 +23,7 @@ quick-protobuf = "0.8"
 quick-protobuf-codec = { workspace = true }
 libp2p-identity = { workspace = true }
 rand = "0.8"
-sha2 = "0.10.7"
+sha2 = "0.10.8"
 smallvec = "1.11.1"
 uint = "0.9"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
@@ -54,3 +54,6 @@ serde = ["dep:serde", "bytes/serde"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
