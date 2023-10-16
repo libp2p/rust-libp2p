@@ -513,12 +513,7 @@ impl NetworkBehaviour for Behaviour {
                     self.mappings.renew(gateway, cx);
                     return Poll::Pending;
                 }
-                GatewayState::GatewayNotFound => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::GatewayNotFound));
-                }
-                GatewayState::NonRoutableGateway(_) => {
-                    return Poll::Ready(ToSwarm::GenerateEvent(Event::NonRoutableGateway));
-                }
+                _ => return Poll::Pending,
             }
         }
     }
@@ -544,7 +539,7 @@ fn multiaddr_to_socketaddr_protocol(
             Some(multiaddr::Protocol::Udp(port)) => {
                 return Ok((
                     SocketAddr::V4(SocketAddrV4::new(ipv4, port)),
-                    PortMappingProtocol::TCP,
+                    PortMappingProtocol::UDP,
                 ));
             }
             _ => {}

@@ -422,6 +422,7 @@ where
             self.pending_outbound.shrink_to_fit();
         }
 
+        #[allow(deprecated)]
         if self.worker_streams.is_empty() && self.keep_alive.is_yes() {
             // No new inbound or outbound requests. However, we may just have
             // started the latest inbound or outbound upgrade(s), so make sure

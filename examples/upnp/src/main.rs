@@ -21,32 +21,20 @@
 #![doc = include_str!("../README.md")]
 
 use futures::prelude::*;
-use libp2p::core::upgrade::Version;
-use libp2p::{
-    identity, noise,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, upnp, yamux, Multiaddr, PeerId, Transport,
-};
+use libp2p::{noise, swarm::SwarmEvent, upnp, yamux, Multiaddr};
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
-
-    let transport = tcp::tokio::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    let mut swarm = SwarmBuilder::with_tokio_executor(
-        transport,
-        upnp::tokio::Behaviour::default(),
-        local_peer_id,
-    )
-    .build();
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            Default::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|_| upnp::tokio::Behaviour::default())?
+        .build();
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

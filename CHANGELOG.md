@@ -32,10 +32,11 @@
 - [`libp2p-pnet` CHANGELOG](transports/pnet/CHANGELOG.md)
 - [`libp2p-quic` CHANGELOG](transports/quic/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
+- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
-- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
+- [`libp2p-websocket-websys` CHANGELOG](transports/websocket-websys/CHANGELOG.md)
 
 ## Multiplexers
 

@@ -1,3 +1,11 @@
+## 0.25.2 - unreleased
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
+
 ## 0.25.1
 
 - Replace unmaintained `serde_cbor` dependency with `cbor4ii`.

@@ -23,7 +23,7 @@ log = "0.4.20"
 multiaddr = { workspace = true }
 multihash = { workspace = true }
 send_wrapper = { version = "0.6.0", features = ["futures"] }
-thiserror = "1.0.48"
+thiserror = "1.0.49"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4.37"
 web-sys = { version = "0.3.64", features = [
@@ -46,3 +46,6 @@ multibase = "0.9.1"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
