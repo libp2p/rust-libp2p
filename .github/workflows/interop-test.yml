@@ -1,5 +1,6 @@
 name: Interoperability Testing
 on:
+  merge_group:
   pull_request:
   push:
     branches:
