@@ -3,7 +3,19 @@
 - Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4648].
 
+<!-- Interal changes:
+
+- Allow new clippy lint.
+
+-->
+
 [PR 4648]: (https://github.com/libp2p/rust-libp2p/pull/4648)
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
 
 ## 0.45.1
 

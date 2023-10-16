@@ -2630,7 +2630,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-identity"
-version = "0.2.5"
+version = "0.2.6"
 dependencies = [
  "asn1_der",
  "base64 0.21.4",
@@ -2884,7 +2884,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-pnet"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "futures",
  "libp2p-core",
@@ -2934,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-relay"
-version = "0.16.1"
+version = "0.16.2"
 dependencies = [
  "asynchronous-codec",
  "bytes",
@@ -2992,7 +2992,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.25.1"
+version = "0.25.2"
 dependencies = [
  "async-std",
  "async-trait",
@@ -3229,7 +3229,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-webrtc-websys"
-version = "0.1.0-alpha"
+version = "0.2.0-alpha"
 dependencies = [
  "bytes",
  "futures",

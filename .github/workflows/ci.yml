@@ -76,7 +76,9 @@ jobs:
         if: >
           github.event_name == 'pull_request' &&
           !startsWith(github.event.pull_request.title, 'chore') &&
-          !startsWith(github.event.pull_request.title, 'refactor')
+          !startsWith(github.event.pull_request.title, 'refactor') &&
+          !startsWith(github.event.pull_request.title, 'deps') &&
+          !startsWith(github.event.pull_request.title, 'docs')
         run: |
           git fetch origin master:master
           ./scripts/ensure-version-bump-and-changelog.sh

@@ -484,6 +484,7 @@ impl Handler {
             }
         }
 
+        #[allow(deprecated)]
         let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
 
         Handler {
@@ -769,13 +770,17 @@ impl ConnectionHandler for Handler {
         }
 
         let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-        self.keep_alive = match (no_streams, self.keep_alive) {
-            // No open streams. Preserve the existing idle timeout.
-            (true, k @ KeepAlive::Until(_)) => k,
-            // No open streams. Set idle timeout.
-            (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
-            // Keep alive for open streams.
-            (false, _) => KeepAlive::Yes,
+
+        self.keep_alive = {
+            #[allow(deprecated)]
+            match (no_streams, self.keep_alive) {
+                // No open streams. Preserve the existing idle timeout.
+                (true, k @ KeepAlive::Until(_)) => k,
+                // No open streams. Set idle timeout.
+                (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
+                // Keep alive for open streams.
+                (false, _) => KeepAlive::Yes,
+            }
         };
 
         Poll::Pending
