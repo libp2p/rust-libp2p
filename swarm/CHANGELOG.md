@@ -4,6 +4,12 @@
   Most users should use `libp2p::SwarmBuilder`.
   In some special cases, users may need to use `Swarm::new` and `Config` instead of the new `libp2p::SwarmBuilder`.
   See [PR 4120].
+- Make the `Debug` implementation of `StreamProtocol` more concise.
+  See [PR 4631](https://github.com/libp2p/rust-libp2p/pull/4631).
+- Deprecate `KeepAlive::Until`.
+  Individual protocols should not keep connections alive for longer than necessary.
+  Users should use `swarm::Config::idle_connection_timeout` instead.
+  See [PR 4656](https://github.com/libp2p/rust-libp2p/pull/4656).
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
 
