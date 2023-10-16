@@ -78,20 +78,17 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
     {
         let (relay_transport, relay_behaviour) =
             libp2p_relay::client::new(self.keypair.public().to_peer_id());
+        let relay_transport = relay_transport
+            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
+            .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
+            .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
+            .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
 
         Ok(SwarmBuilder {
             phase: WebsocketPhase {
                 relay_behaviour,
-                transport: self
-                    .phase
-                    .transport
-                    .or_transport(
-                        relay_transport
-                            .upgrade(libp2p_core::upgrade::Version::V1Lazy)
-                            .authenticate(security_upgrade.into_security_upgrade(&self.keypair)?)
-                            .multiplex(multiplexer_upgrade.into_multiplexer_upgrade())
-                            .map(|(p, c), _| (p, StreamMuxerBox::new(c))),
-                    )
+                transport: relay_transport
+                    .or_transport(self.phase.transport)
                     .map(|either, _| either.into_inner()),
             },
             keypair: self.keypair,
