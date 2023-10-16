@@ -72,7 +72,8 @@ fn build_node_with_config(cfg: Config) -> (Multiaddr, TestSwarm) {
         transport,
         behaviour,
         local_id,
-        swarm::Config::with_async_std_executor(),
+        swarm::Config::with_async_std_executor()
+            .with_idle_connection_timeout(Duration::from_secs(60 * 5)),
     );
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();

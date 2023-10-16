@@ -1884,11 +1884,17 @@ where
         ConnectionEstablished {
             peer_id,
             failed_addresses,
+            other_established,
             ..
         }: ConnectionEstablished,
     ) {
         for addr in failed_addresses {
             self.address_failed(peer_id, addr);
+        }
+
+        // Peer's first connection.
+        if other_established == 0 {
+            self.connected_peers.insert(peer_id);
         }
     }
 
@@ -2025,8 +2031,6 @@ where
         }) {
             handler.on_behaviour_event(event)
         }
-
-        self.connected_peers.insert(peer);
     }
 }
 
