@@ -393,18 +393,16 @@ impl Candidates {
         }
     }
 
-    fn add(&mut self, address: Multiaddr) {
+    fn add(&mut self, mut address: Multiaddr) {
         if is_relayed(&address) {
             return;
         }
 
-        let mut addr = address.clone();
-
-        if addr.iter().last() != Some(Protocol::P2p(self.me)) {
-            addr.push(Protocol::P2p(self.me));
+        if address.iter().last() != Some(Protocol::P2p(self.me)) {
+            address.push(Protocol::P2p(self.me));
         }
 
-        self.inner.push(addr, ());
+        self.inner.push(address, ());
     }
 
     fn iter(&self) -> impl Iterator<Item = &Multiaddr> {
