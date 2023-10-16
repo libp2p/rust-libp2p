@@ -340,7 +340,7 @@ impl From<StreamUpgradeError<io::Error>> for HandlerQueryErr {
 }
 
 /// Event to send to the handler.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum HandlerIn {
     /// Resets the (sub)stream associated with the given request ID,
     /// thus signaling an error to the remote.

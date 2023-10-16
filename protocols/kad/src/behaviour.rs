@@ -38,7 +38,9 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
+};
 use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -1877,6 +1879,19 @@ where
         }
     }
 
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            failed_addresses,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        for addr in failed_addresses {
+            self.address_failed(peer_id, addr);
+        }
+    }
+
     fn on_address_change(
         &mut self,
         AddressChange {
@@ -1998,24 +2013,19 @@ where
         connection_id: ConnectionId,
         peer: PeerId,
     ) {
+        self.connections.insert(connection_id, peer);
         // Queue events for sending pending RPCs to the connected peer.
         // There can be only one pending RPC for a particular peer and query per definition.
-        for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+        for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
             q.inner
                 .pending_rpcs
                 .iter()
                 .position(|(p, _)| p == &peer)
                 .map(|p| q.inner.pending_rpcs.remove(p))
         }) {
-            self.queued_events.push_back(ToSwarm::NotifyHandler {
-                peer_id,
-                event: event.clone(),
-                handler: NotifyHandler::Any,
-            });
             handler.on_behaviour_event(event)
         }
 
-        self.connections.insert(connection_id, peer);
         self.connected_peers.insert(peer);
     }
 }
@@ -2512,6 +2522,9 @@ where
         }
 
         match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
@@ -2525,8 +2538,7 @@ where
             | FromSwarm::ListenerClosed(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_)
-            | FromSwarm::ConnectionEstablished(_) => {}
+            | FromSwarm::ExternalAddrConfirmed(_) => {}
         }
     }
 }
