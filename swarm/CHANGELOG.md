@@ -9,7 +9,7 @@
 - Deprecate `KeepAlive::Until`.
   Individual protocols should not keep connections alive for longer than necessary.
   Users should use `swarm::Config::idle_connection_timeout` instead.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4656](https://github.com/libp2p/rust-libp2p/pull/4656).
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
 
