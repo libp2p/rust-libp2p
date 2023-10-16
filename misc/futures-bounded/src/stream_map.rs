@@ -119,8 +119,8 @@ where
     }
 }
 
-struct TimeoutStream<F> {
-    inner: F,
+struct TimeoutStream<S> {
+    inner: S,
     timeout: Delay,
 }
 
