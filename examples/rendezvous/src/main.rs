@@ -33,6 +33,8 @@ use std::time::Duration;
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
+    // Results in PeerID 12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN which is
+    // used as the rendezvous point by the other peer examples.
     let keypair = libp2p::identity::Keypair::ed25519_from_bytes([0; 32]).unwrap();
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
