@@ -73,7 +73,10 @@ jobs:
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
 
       - name: Ensure manifest and CHANGELOG are properly updated
-        if: github.event_name == 'pull_request'
+        if: >
+          github.event_name == 'pull_request' &&
+          !startsWith(github.event.pull_request.title, 'chore') &&
+          !startsWith(github.event.pull_request.title, 'refactor')
         run: |
           git fetch origin master:master
           ./scripts/ensure-version-bump-and-changelog.sh
