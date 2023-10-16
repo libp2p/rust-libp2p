@@ -8,6 +8,12 @@
 
 [PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
 
+<!-- Internal changes:
+
+- Fix lints in tests
+
+-->
+
 ## 0.44.5
 - Migrate to `quick-protobuf-codec` crate for codec logic.
   See [PR 4501].
