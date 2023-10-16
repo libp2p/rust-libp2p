@@ -19,19 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use anyhow::{Context, Result};
-use futures::{future::Either, stream::StreamExt};
+use futures::stream::StreamExt;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::ConnectionId;
 use libp2p::{
-    core::{
-        multiaddr::{Multiaddr, Protocol},
-        muxing::StreamMuxerBox,
-        transport::Transport,
-        upgrade,
-    },
-    dcutr, identify, identity, noise, ping, quic, relay,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    tcp, yamux, PeerId, Swarm,
+    core::multiaddr::{Multiaddr, Protocol},
+    dcutr, identify, noise, ping, relay,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Swarm,
 };
 use redis::AsyncCommands;
 use std::collections::HashMap;
@@ -65,7 +60,31 @@ async fn main() -> Result<()> {
         TransportProtocol::Quic => redis.pop::<Multiaddr>(RELAY_QUIC_ADDRESS).await?,
     };
 
-    let mut swarm = make_swarm()?;
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::new().port_reuse(true).nodelay(true),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_quic()
+        .with_relay_client(noise::Config::new, yamux::Config::default)?
+        .with_behaviour(|key, relay_client| {
+            Ok(Behaviour {
+                relay_client,
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/hole-punch-tests/1".to_owned(),
+                    key.public(),
+                )),
+                dcutr: dcutr::Behaviour::new(key.public().to_peer_id()),
+                ping: ping::Behaviour::new(
+                    ping::Config::default().with_interval(Duration::from_secs(1)),
+                ),
+            })
+        })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
+        .build();
+
     client_listen_on_transport(&mut swarm, transport).await?;
     let relay_conn_id = client_connect_to_relay(&mut swarm, relay_addr.clone())
         .await
@@ -281,49 +300,6 @@ fn quic_addr(addr: IpAddr) -> Multiaddr {
         .with(addr.into())
         .with(Protocol::Udp(0))
         .with(Protocol::QuicV1)
-}
-
-fn make_swarm() -> Result<Swarm<Behaviour>> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-    log::info!("Local peer id: {local_peer_id}");
-
-    let (relay_transport, client) = relay::client::new(local_peer_id);
-
-    let transport = {
-        let relay_tcp_quic_transport = relay_transport
-            .or_transport(tcp::tokio::Transport::new(
-                tcp::Config::default().port_reuse(true).nodelay(true),
-            ))
-            .upgrade(upgrade::Version::V1Lazy)
-            .authenticate(noise::Config::new(&local_key)?)
-            .multiplex(yamux::Config::default())
-            .or_transport(quic::tokio::Transport::new(quic::Config::new(&local_key)));
-
-        relay_tcp_quic_transport
-            .map(|either_output, _| match either_output {
-                Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-                Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            })
-            .boxed()
-    };
-
-    let behaviour = Behaviour {
-        relay_client: client,
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/hole-punch-tests/1".to_owned(),
-            local_key.public(),
-        )),
-        dcutr: dcutr::Behaviour::new(local_peer_id),
-        ping: ping::Behaviour::new(ping::Config::default().with_interval(Duration::from_secs(1))),
-    };
-
-    Ok(
-        SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id)
-            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-            .idle_connection_timeout(Duration::from_secs(2 * 60))
-            .build(),
-    )
 }
 
 struct RedisClient {
