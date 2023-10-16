@@ -38,9 +38,8 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
-};
+use libp2p_swarm::behaviour::{AddressChange, ConnectionClosed, DialFailure, FromSwarm};
+use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
@@ -1878,46 +1877,6 @@ where
         }
     }
 
-    fn on_connection_established(
-        &mut self,
-        ConnectionEstablished {
-            peer_id,
-            failed_addresses,
-            other_established,
-            ..
-        }: ConnectionEstablished,
-    ) {
-        for addr in failed_addresses {
-            self.address_failed(peer_id, addr);
-        }
-
-        // When a connection is established, we don't know yet whether the
-        // remote supports the configured protocol name. Only once a connection
-        // handler reports [`HandlerEvent::ProtocolConfirmed`] do we
-        // update the local routing table.
-
-        // Peer's first connection.
-        if other_established == 0 {
-            // Queue events for sending pending RPCs to the connected peer.
-            // There can be only one pending RPC for a particular peer and query per definition.
-            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-                q.inner
-                    .pending_rpcs
-                    .iter()
-                    .position(|(p, _)| p == &peer_id)
-                    .map(|p| q.inner.pending_rpcs.remove(p))
-            }) {
-                self.queued_events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
-            }
-
-            self.connected_peers.insert(peer_id);
-        }
-    }
-
     fn on_address_change(
         &mut self,
         AddressChange {
@@ -2031,6 +1990,34 @@ where
             self.connected_peers.remove(&peer_id);
         }
     }
+
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    fn preload_new_handler(
+        &mut self,
+        handler: &mut Handler,
+        connection_id: ConnectionId,
+        peer: PeerId,
+    ) {
+        // Queue events for sending pending RPCs to the connected peer.
+        // There can be only one pending RPC for a particular peer and query per definition.
+        for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+            q.inner
+                .pending_rpcs
+                .iter()
+                .position(|(p, _)| p == &peer)
+                .map(|p| q.inner.pending_rpcs.remove(p))
+        }) {
+            self.queued_events.push_back(ToSwarm::NotifyHandler {
+                peer_id,
+                event: event.clone(),
+                handler: NotifyHandler::Any,
+            });
+            handler.on_behaviour_event(event)
+        }
+
+        self.connections.insert(connection_id, peer);
+        self.connected_peers.insert(peer);
+    }
 }
 
 /// Exponentially decrease the given duration (base 2).
@@ -2056,15 +2043,17 @@ where
             local_addr: local_addr.clone(),
             send_back_addr: remote_addr.clone(),
         };
-        self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
             connected_point,
             peer,
             self.mode,
             connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_established_outbound_connection(
@@ -2078,15 +2067,17 @@ where
             address: addr.clone(),
             role_override,
         };
-        self.connections.insert(connection_id, peer);
 
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
             connected_point,
             peer,
             self.mode,
             connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
@@ -2521,9 +2512,6 @@ where
         }
 
         match event {
-            FromSwarm::ConnectionEstablished(connection_established) => {
-                self.on_connection_established(connection_established)
-            }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
@@ -2537,7 +2525,8 @@ where
             | FromSwarm::ListenerClosed(_)
             | FromSwarm::ListenerError(_)
             | FromSwarm::ExternalAddrExpired(_)
-            | FromSwarm::ExternalAddrConfirmed(_) => {}
+            | FromSwarm::ExternalAddrConfirmed(_)
+            | FromSwarm::ConnectionEstablished(_) => {}
         }
     }
 }

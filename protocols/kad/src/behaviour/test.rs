@@ -37,6 +37,7 @@ use libp2p_core::{
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_noise as noise;
+use libp2p_swarm::behaviour::ConnectionEstablished;
 use libp2p_swarm::{self as swarm, ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
