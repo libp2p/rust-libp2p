@@ -90,7 +90,7 @@ pub struct Handler {
     remote_peer_id: PeerId,
 
     /// The current state of protocol confirmation.
-    protocol_status: ProtocolStatus,
+    protocol_status: Option<ProtocolStatus>,
 
     remote_supported_protocols: SupportedProtocols,
 
@@ -100,19 +100,12 @@ pub struct Handler {
 
 /// The states of protocol confirmation that a connection
 /// handler transitions through.
-#[derive(Copy, Clone)]
-enum ProtocolStatus {
-    /// It is as yet unknown whether the remote supports the
-    /// configured protocol name.
-    Unknown,
-    /// The configured protocol name has been confirmed by the remote
-    /// but has not yet been reported to the `Kademlia` behaviour.
-    Confirmed,
-    /// The configured protocol name(s) are not or no longer supported by the remote.
-    NotSupported,
-    /// The configured protocol has been confirmed by the remote
-    /// and the confirmation reported to the `Kademlia` behaviour.
-    Reported,
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct ProtocolStatus {
+    /// Whether the remote node supports one of our kademlia protocols.
+    supported: bool,
+    /// Whether we reported the state to the behaviour.
+    reported: bool,
 }
 
 /// State of an active outbound substream.
@@ -505,7 +498,7 @@ impl Handler {
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
             keep_alive,
-            protocol_status: ProtocolStatus::Unknown,
+            protocol_status: None,
             remote_supported_protocols: Default::default(),
             connection_id,
         }
@@ -527,11 +520,14 @@ impl Handler {
 
         self.num_requested_outbound_streams -= 1;
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if self.protocol_status.is_none() {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
+            self.protocol_status = Some(ProtocolStatus {
+                supported: true,
+                reported: false,
+            });
         }
     }
 
@@ -549,11 +545,14 @@ impl Handler {
             future::Either::Right(p) => void::unreachable(p),
         };
 
-        if let ProtocolStatus::Unknown = self.protocol_status {
+        if self.protocol_status.is_none() {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
-            self.protocol_status = ProtocolStatus::Confirmed;
+            self.protocol_status = Some(ProtocolStatus {
+                supported: true,
+                reported: false,
+            });
         }
 
         if self.inbound_substreams.len() == MAX_NUM_SUBSTREAMS {
@@ -732,13 +731,22 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        if let ProtocolStatus::Confirmed = self.protocol_status {
-            self.protocol_status = ProtocolStatus::Reported;
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                HandlerEvent::ProtocolConfirmed {
-                    endpoint: self.endpoint.clone(),
-                },
-            ));
+        match &mut self.protocol_status {
+            Some(status) if !status.reported => {
+                status.reported = true;
+                let event = if status.supported {
+                    HandlerEvent::ProtocolConfirmed {
+                        endpoint: self.endpoint.clone(),
+                    }
+                } else {
+                    HandlerEvent::ProtocolNotSupported {
+                        endpoint: self.endpoint.clone(),
+                    }
+                };
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+            }
+            _ => {}
         }
 
         if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
@@ -804,31 +812,50 @@ impl ConnectionHandler for Handler {
                         .iter()
                         .any(|p| self.protocol_config.protocol_names().contains(p));
 
-                    match (remote_supports_our_kademlia_protocols, self.protocol_status) {
-                        (true, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {}
-                        (true, _) => {
-                            log::debug!(
-                                "Remote {} now supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::Confirmed;
-                        }
-                        (false, ProtocolStatus::Confirmed | ProtocolStatus::Reported) => {
-                            log::debug!(
-                                "Remote {} no longer supports our kademlia protocol on connection {}",
-                                self.remote_peer_id,
-                                self.connection_id,
-                            );
-
-                            self.protocol_status = ProtocolStatus::NotSupported;
-                        }
-                        (false, _) => {}
-                    }
+                    self.protocol_status = Some(compute_new_protocol_status(
+                        remote_supports_our_kademlia_protocols,
+                        self.protocol_status,
+                        self.remote_peer_id,
+                        self.connection_id,
+                    ))
                 }
             }
         }
+    }
+}
+
+fn compute_new_protocol_status(
+    now_supported: bool,
+    current_status: Option<ProtocolStatus>,
+    remote_peer_id: PeerId,
+    connection_id: ConnectionId,
+) -> ProtocolStatus {
+    let current_status = match current_status {
+        None => {
+            return ProtocolStatus {
+                supported: now_supported,
+                reported: false,
+            }
+        }
+        Some(current) => current,
+    };
+
+    if now_supported == current_status.supported {
+        return ProtocolStatus {
+            supported: now_supported,
+            reported: true,
+        };
+    }
+
+    if now_supported {
+        log::debug!("Remote {remote_peer_id} now supports our kademlia protocol on connection {connection_id}");
+    } else {
+        log::debug!("Remote {remote_peer_id} no longer supports our kademlia protocol on connection {connection_id}");
+    }
+
+    ProtocolStatus {
+        supported: now_supported,
+        reported: false,
     }
 }
 
@@ -1166,5 +1193,52 @@ fn process_kad_response(event: KadResponseMsg, query_id: QueryId) -> HandlerEven
             value,
             query_id,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quickcheck::{Arbitrary, Gen};
+
+    impl Arbitrary for ProtocolStatus {
+        fn arbitrary(g: &mut Gen) -> Self {
+            Self {
+                supported: bool::arbitrary(g),
+                reported: bool::arbitrary(g),
+            }
+        }
+    }
+
+    #[test]
+    fn compute_next_protocol_status_test() {
+        let _ = env_logger::try_init();
+
+        fn prop(now_supported: bool, current: Option<ProtocolStatus>) {
+            let new = compute_new_protocol_status(
+                now_supported,
+                current,
+                PeerId::random(),
+                ConnectionId::new_unchecked(0),
+            );
+
+            match current {
+                None => {
+                    assert!(!new.reported);
+                    assert_eq!(new.supported, now_supported);
+                }
+                Some(current) => {
+                    if current.supported == now_supported {
+                        assert!(new.reported);
+                    } else {
+                        assert!(!new.reported);
+                    }
+
+                    assert_eq!(new.supported, now_supported);
+                }
+            }
+        }
+
+        quickcheck::quickcheck(prop as fn(_, _))
     }
 }
