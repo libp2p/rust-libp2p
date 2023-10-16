@@ -1,3 +1,11 @@
+## 0.23.1 - unreleased
+
+<!-- Interal changes:
+
+- Allow new clippy lint.
+
+-->
+
 ## 0.23.0 
 
 - Raise MSRV to 1.65.
