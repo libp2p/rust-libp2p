@@ -2897,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-pnet"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "futures",
  "libp2p-core",
