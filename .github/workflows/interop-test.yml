@@ -46,7 +46,7 @@ jobs:
       - name: Build image
         run: docker buildx build --load -t rust-libp2p-head . -f hole-punching-tests/Dockerfile
       - name: Run tests
-        uses: thomaseizinger/test-plans/.github/actions/run-interop-hole-punch-test@feat/hole-punch-tests
+        uses: libp2p/test-plans/.github/actions/run-interop-hole-punch-test@master
         with:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/hole-punching-tests/version.json
