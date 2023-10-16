@@ -90,7 +90,7 @@ libp2p-memory-connection-limits = { version = "0.1.0", path = "misc/memory-conne
 libp2p-metrics = { version = "0.13.1", path = "misc/metrics" }
 libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
-libp2p-noise = { version = "0.43.1", path = "transports/noise" }
+libp2p-noise = { version = "0.43.2", path = "transports/noise" }
 libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
 libp2p-ping = { version = "0.43.1", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.40.1", path = "transports/plaintext" }
@@ -136,3 +136,4 @@ rust.unreachable_pub = "warn"
 clippy.used_underscore_binding = "warn"
 clippy.pedantic = "allow"
 clippy.type_complexity = "allow"
+clippy.unnecessary_wraps = "warn"
