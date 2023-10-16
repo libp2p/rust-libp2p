@@ -4,7 +4,7 @@
   See [PR 4547].
 - Fix a bug where we didn't detect a remote peer moving into client-state.
   See [PR 4639](https://github.com/libp2p/rust-libp2p/pull/4639).
-- Re-export NodeStatus
+- Re-export `NodeStatus`.
   See [PR 4645].
 
 [PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
