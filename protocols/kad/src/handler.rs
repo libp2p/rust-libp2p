@@ -1224,14 +1224,14 @@ mod tests {
 
             match current {
                 None => {
-                    assert_eq!(new.reported, false);
+                    assert!(!new.reported);
                     assert_eq!(new.supported, now_supported);
                 }
                 Some(current) => {
                     if current.supported == now_supported {
-                        assert_eq!(new.reported, true);
+                        assert!(new.reported);
                     } else {
-                        assert_eq!(new.reported, false);
+                        assert!(!new.reported);
                     }
 
                     assert_eq!(new.supported, now_supported);
