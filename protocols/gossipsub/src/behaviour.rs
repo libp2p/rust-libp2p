@@ -3305,6 +3305,7 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3318,6 +3319,7 @@ where
         ))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
