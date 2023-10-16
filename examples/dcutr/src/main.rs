@@ -157,7 +157,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     ..
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);
-                    swarm.add_external_address(observed_addr);
                     learned_observed_addr = true;
                 }
                 event => panic!("{event:?}"),
