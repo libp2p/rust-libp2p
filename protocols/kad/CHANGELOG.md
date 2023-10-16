@@ -1,3 +1,9 @@
+## 0.45.0 - unreleased
+- Remove deprecated `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4659]
+
+[PR 4659]: https://github.com/libp2p/rust-libp2p/pull/4659
+
 ## 0.44.6 - unreleased
 
 - Rename `Kademlia` symbols to follow naming convention.
