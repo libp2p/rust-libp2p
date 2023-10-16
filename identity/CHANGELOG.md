@@ -1,7 +1,7 @@
 ## 0.2.6
 
 - Make `PeerId::to_bytes` and `PeerId::to_base58` take `self` by value to follow Rust convention of `Copy` types.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4653](https://github.com/libp2p/rust-libp2p/pull/4653).
 
 ## 0.2.5
 
