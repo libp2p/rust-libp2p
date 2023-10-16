@@ -1,3 +1,10 @@
+## 0.45.2 - unreleased
+
+- Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4648].
+
+[PR 4648]: (https://github.com/libp2p/rust-libp2p/pull/4648)
+
 ## 0.45.1
 
 - Add getter function to obtain `TopicScoreParams`.

@@ -9,7 +9,7 @@ license = "MIT"
 env_logger = "0.10.0"
 futures = "0.3.28"
 libp2p = { path = "../../libp2p", features = ["noise", "ping", "tcp", "tokio", "yamux"] }
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.33.0", features = ["full"] }
 
 [lints]
 workspace = true

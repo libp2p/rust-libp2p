@@ -1,16 +1,10 @@
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::Boxed;
-use libp2p::PeerId;
-
 // Native re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::{build_transport, init_logger, sleep, swarm_builder, Instant, RedisClient};
+pub(crate) use native::{build_swarm, init_logger, sleep, Instant, RedisClient};
 
 // Wasm re-exports
 #[cfg(target_arch = "wasm32")]
-pub(crate) use wasm::{build_transport, init_logger, sleep, swarm_builder, Instant, RedisClient};
-
-type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
+pub(crate) use wasm::{build_swarm, init_logger, sleep, Instant, RedisClient};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
@@ -20,19 +14,14 @@ pub(crate) mod native {
     use env_logger::{Env, Target};
     use futures::future::BoxFuture;
     use futures::FutureExt;
-    use libp2p::core::muxing::StreamMuxerBox;
-    use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
-    use libp2p::websocket::WsConfig;
-    use libp2p::{noise, quic, tcp, tls, yamux, PeerId, Transport as _};
+    use libp2p::swarm::{NetworkBehaviour, Swarm};
+    use libp2p::{noise, tcp, tls, yamux};
     use libp2p_mplex as mplex;
     use libp2p_webrtc as webrtc;
     use redis::AsyncCommands;
 
     use crate::{Muxer, SecProtocol, Transport};
-
-    use super::BoxedTransport;
 
     pub(crate) type Instant = std::time::Instant;
 
@@ -46,128 +35,132 @@ pub(crate) mod native {
         tokio::time::sleep(duration).boxed()
     }
 
-    pub(crate) fn build_transport(
-        local_key: Keypair,
+    pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
         sec_protocol: Option<SecProtocol>,
         muxer: Option<Muxer>,
-    ) -> Result<(BoxedTransport, String)> {
-        let (transport, addr) = match (transport, sec_protocol, muxer) {
-            (Transport::QuicV1, _, _) => (
-                quic::tokio::Transport::new(quic::Config::new(&local_key))
-                    .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-                    .boxed(),
+        behaviour_constructor: impl FnOnce(&Keypair) -> B,
+    ) -> Result<(Swarm<B>, String)> {
+        let (swarm, addr) = match (transport, sec_protocol, muxer) {
+            (Transport::QuicV1, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_quic()
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/udp/0/quic-v1"),
             ),
             (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
-                tcp::tokio::Transport::new(tcp::Config::new())
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(mplex::MplexConfig::new())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_tcp(
+                        tcp::Config::default(),
+                        tls::Config::new,
+                        mplex::MplexConfig::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
             (Transport::Tcp, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
-                tcp::tokio::Transport::new(tcp::Config::new())
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(yamux::Config::default())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_tcp(
+                        tcp::Config::default(),
+                        tls::Config::new,
+                        yamux::Config::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
             (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
-                tcp::tokio::Transport::new(tcp::Config::new())
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to intialise noise")?,
-                    )
-                    .multiplex(mplex::MplexConfig::new())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_tcp(
+                        tcp::Config::default(),
+                        noise::Config::new,
+                        mplex::MplexConfig::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
             (Transport::Tcp, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
-                tcp::tokio::Transport::new(tcp::Config::new())
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to intialise noise")?,
-                    )
-                    .multiplex(yamux::Config::default())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_tcp(
+                        tcp::Config::default(),
+                        noise::Config::new,
+                        yamux::Config::default,
+                    )?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0"),
             ),
             (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Mplex)) => (
-                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(tls::Config::new(&local_key).context("failed to initialise tls")?)
-                    .multiplex(mplex::MplexConfig::new())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(tls::Config::new, mplex::MplexConfig::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
             (Transport::Ws, Some(SecProtocol::Tls), Some(Muxer::Yamux)) => (
-                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        tls::Config::new(&local_key).context("failed to intialise noise")?,
-                    )
-                    .multiplex(yamux::Config::default())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(tls::Config::new, yamux::Config::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
-                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to initialise tls")?,
-                    )
-                    .multiplex(mplex::MplexConfig::new())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(noise::Config::new, mplex::MplexConfig::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
-                WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to intialise noise")?,
-                    )
-                    .multiplex(yamux::Config::default())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_websocket(noise::Config::new, yamux::Config::default)
+                    .await?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/ws"),
             ),
-            (Transport::WebRtcDirect, _, _) => (
-                webrtc::tokio::Transport::new(
-                    local_key,
-                    webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
-                )
-                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-                .boxed(),
+            (Transport::WebRtcDirect, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_tokio()
+                    .with_other_transport(|key| {
+                        Ok(webrtc::tokio::Transport::new(
+                            key.clone(),
+                            webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
+                        ))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
-            (Transport::Webtransport, _, _) => bail!("Webtransport can only be used with wasm"),
-            (Transport::Tcp | Transport::Ws, None, _) => {
-                bail!("Missing security protocol for {transport:?}")
-            }
-            (Transport::Tcp | Transport::Ws, _, None) => {
-                bail!("Missing muxer protocol for {transport:?}")
-            }
+            (t, s, m) => bail!("Unsupported combination: {t:?} {s:?} {m:?}"),
         };
-        Ok((transport, addr))
-    }
-
-    pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
-        transport: BoxedTransport,
-        behaviour: TBehaviour,
-        peer_id: PeerId,
-    ) -> SwarmBuilder<TBehaviour> {
-        SwarmBuilder::with_tokio_executor(transport, behaviour, peer_id)
+        Ok((swarm, addr))
     }
 
     pub(crate) struct RedisClient(redis::Client);
@@ -198,15 +191,13 @@ pub(crate) mod wasm {
     use futures::future::{BoxFuture, FutureExt};
     use libp2p::core::upgrade::Version;
     use libp2p::identity::Keypair;
-    use libp2p::swarm::{NetworkBehaviour, SwarmBuilder};
-    use libp2p::{noise, yamux, PeerId, Transport as _};
+    use libp2p::swarm::{NetworkBehaviour, Swarm};
+    use libp2p::{noise, websocket_websys, webtransport_websys, yamux, Transport as _};
     use libp2p_mplex as mplex;
-    use libp2p_webrtc_websys as webrtc;
+    use libp2p_webrtc_websys as webrtc_websys;
     use std::time::Duration;
 
     use crate::{BlpopRequest, Muxer, SecProtocol, Transport};
-
-    use super::BoxedTransport;
 
     pub(crate) type Instant = instant::Instant;
 
@@ -219,68 +210,74 @@ pub(crate) mod wasm {
         futures_timer::Delay::new(duration).boxed()
     }
 
-    pub(crate) fn build_transport(
-        local_key: Keypair,
+    pub(crate) async fn build_swarm<B: NetworkBehaviour>(
         ip: &str,
         transport: Transport,
         sec_protocol: Option<SecProtocol>,
         muxer: Option<Muxer>,
-    ) -> Result<(BoxedTransport, String)> {
+        behaviour_constructor: impl FnOnce(&Keypair) -> B,
+    ) -> Result<(Swarm<B>, String)> {
         Ok(match (transport, sec_protocol, muxer) {
-            (Transport::Webtransport, _, _) => (
-                libp2p::webtransport_websys::Transport::new(
-                    libp2p::webtransport_websys::Config::new(&local_key),
-                )
-                .boxed(),
+            (Transport::Webtransport, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|local_key| {
+                        webtransport_websys::Transport::new(webtransport_websys::Config::new(
+                            &local_key,
+                        ))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/udp/0/quic/webtransport"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Mplex)) => (
-                libp2p::websocket_websys::Transport::default()
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to initialise noise")?,
-                    )
-                    .multiplex(mplex::MplexConfig::new())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|local_key| {
+                        Ok(websocket_websys::Transport::default()
+                            .upgrade(Version::V1Lazy)
+                            .authenticate(
+                                noise::Config::new(&local_key)
+                                    .context("failed to initialise noise")?,
+                            )
+                            .multiplex(mplex::MplexConfig::new()))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/wss"),
             ),
             (Transport::Ws, Some(SecProtocol::Noise), Some(Muxer::Yamux)) => (
-                libp2p::websocket_websys::Transport::default()
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(
-                        noise::Config::new(&local_key).context("failed to initialise noise")?,
-                    )
-                    .multiplex(yamux::Config::default())
-                    .timeout(Duration::from_secs(5))
-                    .boxed(),
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|local_key| {
+                        Ok(websocket_websys::Transport::default()
+                            .upgrade(Version::V1Lazy)
+                            .authenticate(
+                                noise::Config::new(&local_key)
+                                    .context("failed to initialise noise")?,
+                            )
+                            .multiplex(yamux::Config::default()))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/tcp/0/wss"),
             ),
-            (Transport::Ws, None, _) => {
-                bail!("Missing security protocol for WS")
-            }
-            (Transport::Ws, Some(SecProtocol::Tls), _) => {
-                bail!("TLS not supported in WASM")
-            }
-            (Transport::Ws, _, None) => {
-                bail!("Missing muxer protocol for WS")
-            }
-            (Transport::WebRtcDirect, _, _) => (
-                webrtc::Transport::new(webrtc::Config::new(&local_key)).boxed(),
+            (Transport::WebRtcDirect, None, None) => (
+                libp2p::SwarmBuilder::with_new_identity()
+                    .with_wasm_bindgen()
+                    .with_other_transport(|local_key| {
+                        webrtc_websys::Transport::new(webrtc_websys::Config::new(&local_key))
+                    })?
+                    .with_behaviour(behaviour_constructor)?
+                    .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
+                    .build(),
                 format!("/ip4/{ip}/udp/0/webrtc-direct"),
             ),
-            (Transport::QuicV1 | Transport::Tcp, _, _) => {
-                bail!("{transport:?} is not supported in WASM")
-            }
+            (t, s, m) => bail!("Unsupported combination: {t:?} {s:?} {m:?}"),
         })
-    }
-
-    pub(crate) fn swarm_builder<TBehaviour: NetworkBehaviour>(
-        transport: BoxedTransport,
-        behaviour: TBehaviour,
-        peer_id: PeerId,
-    ) -> SwarmBuilder<TBehaviour> {
-        SwarmBuilder::with_wasm_executor(transport, behaviour, peer_id)
     }
 
     pub(crate) struct RedisClient(String);
