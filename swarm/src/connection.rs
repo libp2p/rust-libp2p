@@ -347,6 +347,7 @@ where
             // Ask the handler whether it wants the connection (and the handler itself)
             // to be kept alive, which determines the planned shutdown, if any.
             let keep_alive = handler.connection_keep_alive();
+            #[allow(deprecated)]
             match (&mut *shutdown, keep_alive) {
                 (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
                     if *deadline != t {
@@ -1005,6 +1006,7 @@ mod tests {
         }
 
         fn connection_keep_alive(&self) -> KeepAlive {
+            #[allow(deprecated)]
             KeepAlive::Until(self.until)
         }
 
