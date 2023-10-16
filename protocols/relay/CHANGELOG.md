@@ -1,3 +1,11 @@
+## 0.16.2 - unreleased
+
+<!-- Internal changes:
+
+- Bump version of `futures-bounded`.
+
+-->
+
 ## 0.16.1
 
 - Export `RateLimiter` type.
