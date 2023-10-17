@@ -1,3 +1,10 @@
+## 0.2.1 - unreleased
+<!-- Internal changes
+
+- Deprecated `request_response::Config::set_connection_keep_alive`
+
+-->
+
 ## 0.2.0 
 
 - Raise MSRV to 1.65.

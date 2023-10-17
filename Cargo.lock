@@ -2817,7 +2817,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-perf"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2992,7 +2992,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.25.2"
+version = "0.25.3"
 dependencies = [
  "async-std",
  "async-trait",

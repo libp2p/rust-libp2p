@@ -298,6 +298,9 @@ impl Default for Config {
 
 impl Config {
     /// Sets the keep-alive timeout of idle connections.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
         self.connection_keep_alive = v;
         self

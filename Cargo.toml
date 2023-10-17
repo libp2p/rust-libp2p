@@ -91,7 +91,7 @@ libp2p-metrics = { version = "0.13.1", path = "misc/metrics" }
 libp2p-mplex = { version = "0.40.0", path = "muxers/mplex" }
 libp2p-muxer-test-harness = { path = "muxers/test-harness" }
 libp2p-noise = { version = "0.43.2", path = "transports/noise" }
-libp2p-perf = { version = "0.2.0", path = "protocols/perf" }
+libp2p-perf = { version = "0.2.1", path = "protocols/perf" }
 libp2p-ping = { version = "0.43.1", path = "protocols/ping" }
 libp2p-plaintext = { version = "0.40.1", path = "transports/plaintext" }
 libp2p-pnet = { version = "0.23.1", path = "transports/pnet" }
@@ -99,7 +99,7 @@ libp2p-quic = { version = "0.9.3", path = "transports/quic" }
 libp2p-relay = { version = "0.16.2", path = "protocols/relay" }
 libp2p-rendezvous = { version = "0.13.1", path = "protocols/rendezvous" }
 libp2p-upnp = { version = "0.1.1", path = "protocols/upnp" }
-libp2p-request-response = { version = "0.25.2", path = "protocols/request-response" }
+libp2p-request-response = { version = "0.25.3", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.43.6", path = "swarm" }
 libp2p-swarm-derive = { version = "0.33.0", path = "swarm-derive" }
