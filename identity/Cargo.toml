@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-identity"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 description = "Data structures and algorithms for identifying peers in libp2p."
 rust-version = { workspace = true }

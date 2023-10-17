@@ -111,12 +111,12 @@ impl PeerId {
     }
 
     /// Returns a raw bytes representation of this `PeerId`.
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(self) -> Vec<u8> {
         self.multihash.to_bytes()
     }
 
     /// Returns a base-58 encoded string of this `PeerId`.
-    pub fn to_base58(&self) -> String {
+    pub fn to_base58(self) -> String {
         bs58::encode(self.to_bytes()).into_string()
     }
 }
