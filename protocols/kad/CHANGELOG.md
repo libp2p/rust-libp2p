@@ -6,9 +6,12 @@
   See [PR 4639](https://github.com/libp2p/rust-libp2p/pull/4639).
 - Re-export `NodeStatus`.
   See [PR 4645].
+- Deprecate `kad::Config::set_connection_idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4675].
 
 [PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
 [PR 4645]: https://github.com/libp2p/rust-libp2p/pull/4645
+[PR 4675]: https://github.com/libp2p/rust-libp2p/pull/4675
 
 <!-- Internal changes
 
