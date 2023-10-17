@@ -83,6 +83,7 @@ where
         let p = ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
+            port_use: dial_opts.port_use,
         };
         Ok(MapFuture {
             inner: future,

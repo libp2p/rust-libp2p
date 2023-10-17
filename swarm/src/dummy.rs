@@ -7,6 +7,7 @@ use crate::{
     ConnectionDenied, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
     THandler, THandlerInEvent, THandlerOutEvent,
 };
+use libp2p_core::transport::PortUse;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
 use libp2p_core::Multiaddr;
@@ -37,6 +38,7 @@ impl NetworkBehaviour for Behaviour {
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
+        _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(ConnectionHandler)
     }

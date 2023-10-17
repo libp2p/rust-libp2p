@@ -22,6 +22,7 @@ use crate::behaviour::{self, NetworkBehaviour, PollParameters, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
@@ -103,6 +104,7 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let handler = match self {
             Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
@@ -110,12 +112,14 @@ where
                 peer,
                 addr,
                 role_override,
+                port_use,
             )?),
             Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
                 connection_id,
                 peer,
                 addr,
                 role_override,
+                port_use,
             )?),
         };
 

@@ -27,6 +27,7 @@ pub use error::ConnectionError;
 pub(crate) use error::{
     PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
 };
+use libp2p_core::transport::PortUse;
 pub use supported_protocols::SupportedProtocols;
 
 use crate::handler::{
@@ -1379,6 +1380,7 @@ enum PendingPoint {
     Dialer {
         /// Same as [`ConnectedPoint::Dialer`] `role_override`.
         role_override: Endpoint,
+        port_use: PortUse,
     },
     /// The socket comes from a listener.
     Listener {
@@ -1392,7 +1394,7 @@ enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Dialer { role_override, port_use, .. } => PendingPoint::Dialer { role_override, port_use },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,

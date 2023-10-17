@@ -32,6 +32,7 @@ use crate::{
 };
 use either::Either;
 use futures::future;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
@@ -141,6 +142,7 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(ToggleConnectionHandler { inner: None }),
@@ -152,6 +154,7 @@ where
             peer,
             addr,
             role_override,
+            port_use,
         )?;
 
         Ok(ToggleConnectionHandler {

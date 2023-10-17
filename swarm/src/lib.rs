@@ -552,6 +552,7 @@ where
             dials,
             peer_id,
             dial_opts.role_override(),
+            dial_opts.port_use(),
             dial_opts.dial_concurrency_override(),
             connection_id,
         );
@@ -694,12 +695,14 @@ where
                     ConnectedPoint::Dialer {
                         address,
                         role_override,
+                        port_use,
                     } => {
                         match self.behaviour.handle_established_outbound_connection(
                             id,
                             peer_id,
                             &address,
                             role_override,
+                            port_use,
                         ) {
                             Ok(handler) => handler,
                             Err(cause) => {

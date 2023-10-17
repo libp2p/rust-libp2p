@@ -24,6 +24,7 @@ mod listen_addresses;
 pub mod toggle;
 
 pub use external_addresses::ExternalAddresses;
+use libp2p_core::transport::PortUse;
 pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
@@ -188,6 +189,7 @@ pub trait NetworkBehaviour: 'static {
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied>;
 
     /// Informs the behaviour about an event from the [`Swarm`](crate::Swarm).

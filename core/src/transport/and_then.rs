@@ -85,6 +85,7 @@ where
                 ConnectedPoint::Dialer {
                     address: addr,
                     role_override: Endpoint::Dialer,
+                    port_use: dial_opts.port_use,
                 },
             )),
             _marker: PhantomPinned,
@@ -161,7 +162,7 @@ where
                         Poll::Ready(Err(err)) => return Poll::Ready(Err(Either::Left(err))),
                         Poll::Pending => return Poll::Pending,
                     };
-                    let (f, mut a) = self
+                    let (f, a) = self
                         .args
                         .take()
                         .expect("AndThenFuture has already finished.");
