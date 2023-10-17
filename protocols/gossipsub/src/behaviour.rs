@@ -2787,7 +2787,7 @@ where
 
                 let signature = {
                     let message = proto::Message {
-                        from: Some(author.clone().to_bytes()),
+                        from: Some(author.to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
