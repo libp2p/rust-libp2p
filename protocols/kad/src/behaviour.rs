@@ -36,6 +36,7 @@ use crate::record_priv::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
+use libp2p_core::transport::PortUse;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
@@ -2086,10 +2087,12 @@ where
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
+        port_use: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let connected_point = ConnectedPoint::Dialer {
             address: addr.clone(),
             role_override,
+            port_use,
         };
         self.connections.insert(connection_id, peer);
 
