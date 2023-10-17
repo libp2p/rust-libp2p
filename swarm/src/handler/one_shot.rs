@@ -233,6 +233,9 @@ where
 #[derive(Debug)]
 pub struct OneShotHandlerConfig {
     /// Keep-alive timeout for idle connections.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub keep_alive_timeout: Duration,
     /// Timeout for outbound substream upgrades.
     pub outbound_substream_timeout: Duration,
@@ -241,6 +244,7 @@ pub struct OneShotHandlerConfig {
 }
 
 impl Default for OneShotHandlerConfig {
+    #[allow(deprecated)]
     fn default() -> Self {
         OneShotHandlerConfig {
             keep_alive_timeout: Duration::from_secs(10),
