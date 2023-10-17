@@ -1,3 +1,10 @@
+## 0.2.1 - unreleased
+<!-- Internal changes
+
+- Remove setting of req_resp_config::set_connection_keep_alive in Behaviour
+
+-->
+
 ## 0.2.0 
 
 - Raise MSRV to 1.65.

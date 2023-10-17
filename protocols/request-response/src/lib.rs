@@ -284,25 +284,17 @@ impl fmt::Display for RequestId {
 #[derive(Debug, Clone)]
 pub struct Config {
     request_timeout: Duration,
-    connection_keep_alive: Duration,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
         }
     }
 }
 
 impl Config {
-    /// Sets the keep-alive timeout of idle connections.
-    pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
-        self.connection_keep_alive = v;
-        self
-    }
-
     /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
@@ -720,7 +712,6 @@ where
         Ok(Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
-            self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
         ))
@@ -759,7 +750,6 @@ where
         Ok(Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
-            self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
         ))
