@@ -35,5 +35,10 @@ jobs:
           context: .
           file: ./misc/server/Dockerfile
           push: ${{ ! github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }} # Only push image if we have the required permissions, i.e. not running from a fork
+          cache-from: ${{ ! github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && type=s3,mode=max,bucket=libp2p-by-tf-aws-bootstrap,region=us-east-1,prefix=buildCache,name=rust-libp2p-server }}
+          cache-to:   ${{ ! github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && type=s3,mode=max,bucket=libp2p-by-tf-aws-bootstrap,region=us-east-1,prefix=buildCache,name=rust-libp2p-server }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
