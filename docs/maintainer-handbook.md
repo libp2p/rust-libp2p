@@ -26,6 +26,14 @@ Once a PR fulfills all merge requirements (approvals, passing CI, etc), applying
 In case of a trivial code change, maintainers may choose to apply the `trivial` label.
 This will have mergify approve your PR, thus fulfilling all requirements to automatically queue a PR for merging.
 
+## Changelog entries
+
+Our CI checks that each crate which is modified gets a changelog entry.
+Whilst this is a good default safety-wise, it creates a lot of false-positives for changes that are internal and don't need a changelog entry.
+
+For PRs that in the categories `chore`, `deps`, `refactor` and `docs`, this check is disabled automatically.
+Any other PR needs to explicitly disable this check if desired by applying the `internal-change` label.
+
 ## Dependencies
 
 We version our `Cargo.lock` file for better visibility into which dependencies are required for a functional build.
