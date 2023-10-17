@@ -1,12 +1,14 @@
 ## 0.44.6 - unreleased
 
-- Rename `Kademlia` symbols to follow naming convention. 
+- Rename `Kademlia` symbols to follow naming convention.
   See [PR 4547].
-
 - Fix a bug where we didn't detect a remote peer moving into client-state.
   See [PR 4639](https://github.com/libp2p/rust-libp2p/pull/4639).
+- Re-export `NodeStatus`.
+  See [PR 4645].
 
 [PR 4547]: https://github.com/libp2p/rust-libp2p/pull/4547
+[PR 4645]: https://github.com/libp2p/rust-libp2p/pull/4645
 
 <!-- Internal changes
 
