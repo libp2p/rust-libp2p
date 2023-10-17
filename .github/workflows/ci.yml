@@ -78,7 +78,8 @@ jobs:
           !startsWith(github.event.pull_request.title, 'chore') &&
           !startsWith(github.event.pull_request.title, 'refactor') &&
           !startsWith(github.event.pull_request.title, 'deps') &&
-          !startsWith(github.event.pull_request.title, 'docs')
+          !startsWith(github.event.pull_request.title, 'docs') &&
+          !contains(github.event.pull_request.labels.*.name, 'internal-change')
         run: |
           git fetch origin master:master
           ./scripts/ensure-version-bump-and-changelog.sh
