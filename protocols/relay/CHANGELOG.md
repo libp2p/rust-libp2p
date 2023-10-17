@@ -2,7 +2,7 @@
 
 <!-- Internal changes
 
-- Allow deprecated usage of `KeepAlive::Until`
+- Remove usage of `KeepAlive::Until`
 
 -->
 

@@ -323,7 +323,7 @@ fn build_relay() -> Swarm<Relay> {
             ),
         },
         local_peer_id,
-        Config::with_async_std_executor(),
+        Config::with_async_std_executor().with_idle_connection_timeout(Duration::from_secs(10)),
     )
 }
 
