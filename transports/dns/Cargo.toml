@@ -23,6 +23,7 @@ smallvec = "1.11.1"
 
 [dev-dependencies]
 env_logger = "0.10"
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 

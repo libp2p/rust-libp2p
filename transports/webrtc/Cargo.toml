@@ -16,7 +16,7 @@ bytes = "1"
 futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "3.0"
+if-watch = "3.1"
 libp2p-core = { workspace = true }
 libp2p-noise = { workspace = true }
 libp2p-identity = { workspace = true }
@@ -39,6 +39,7 @@ pem = ["webrtc?/pem"]
 
 [dev-dependencies]
 env_logger = "0.10"
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { version = "1.33", features = ["full"] }
 quickcheck = "1.0.3"
 

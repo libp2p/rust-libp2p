@@ -788,6 +788,7 @@ mod tests {
         QuickCheck::new().tests(10).quickcheck(prop as fn(_))
     }
 
+    #[test]
     fn stalled_at_capacity() {
         fn prop(mut iter: ClosestPeersIter) {
             iter.state = State::Stalled;

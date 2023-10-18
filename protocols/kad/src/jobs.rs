@@ -87,6 +87,7 @@ struct PeriodicJob<T> {
 }
 
 impl<T> PeriodicJob<T> {
+    #[cfg(test)]
     fn is_running(&self) -> bool {
         match self.state {
             PeriodicJobState::Running(..) => true,
@@ -96,6 +97,7 @@ impl<T> PeriodicJob<T> {
 
     /// Cuts short the remaining delay, if the job is currently waiting
     /// for the delay to expire.
+    #[cfg(test)]
     fn asap(&mut self) {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             let new_deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
@@ -169,6 +171,7 @@ impl PutRecordJob {
     }
 
     /// Checks whether the job is currently running.
+    #[cfg(test)]
     pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
@@ -177,6 +180,7 @@ impl PutRecordJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
+    #[cfg(test)]
     pub(crate) fn asap(&mut self, publish: bool) {
         if publish {
             self.next_publish = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
@@ -273,6 +277,7 @@ impl AddProviderJob {
     }
 
     /// Checks whether the job is currently running.
+    #[cfg(test)]
     pub(crate) fn is_running(&self) -> bool {
         self.inner.is_running()
     }
@@ -281,6 +286,7 @@ impl AddProviderJob {
     /// for the delay to expire.
     ///
     /// The job is guaranteed to run on the next invocation of `poll`.
+    #[cfg(test)]
     pub(crate) fn asap(&mut self) {
         self.inner.asap()
     }
