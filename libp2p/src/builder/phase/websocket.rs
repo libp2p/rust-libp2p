@@ -4,13 +4,15 @@ use crate::SwarmBuilder;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::Transport;
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+#[cfg(any(
+    all(not(target_arch = "wasm32"), feature = "websocket"),
+    feature = "relay"
+))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-#[cfg(feature = "relay")]
-use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
-#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
-use libp2p_identity::PeerId;
-#[cfg(feature = "relay")]
+#[cfg(any(
+    all(not(target_arch = "wasm32"), feature = "websocket"),
+    feature = "relay"
+))]
 use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 
