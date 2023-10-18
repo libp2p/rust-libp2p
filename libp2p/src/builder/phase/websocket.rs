@@ -6,7 +6,11 @@ use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
 use libp2p_core::Transport;
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
+#[cfg(feature = "relay")]
+use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+use libp2p_identity::PeerId;
+#[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 use std::marker::PhantomData;
 
@@ -140,6 +144,45 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Webs
 }
 
 // Shortcuts
+#[cfg(feature = "relay")]
+impl<T: AuthenticatedMultiplexedTransport, Provider> SwarmBuilder<Provider, WebsocketPhase<T>> {
+    /// See [`SwarmBuilder::with_relay_client`].
+    pub fn with_relay_client<SecUpgrade, SecStream, SecError, MuxUpgrade, MuxStream, MuxError>(
+        self,
+        security_upgrade: SecUpgrade,
+        multiplexer_upgrade: MuxUpgrade,
+    ) -> Result<
+        SwarmBuilder<
+            Provider,
+            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+        >,
+        SecUpgrade::Error,
+        > where
+
+        SecStream: futures::AsyncRead + futures::AsyncWrite + Unpin + Send + 'static,
+        SecError: std::error::Error + Send + Sync + 'static,
+        SecUpgrade: IntoSecurityUpgrade<libp2p_relay::client::Connection>,
+        SecUpgrade::Upgrade: InboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>, Output = (PeerId, SecStream), Error = SecError> + Clone + Send + 'static,
+    <SecUpgrade::Upgrade as InboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <SecUpgrade::Upgrade as OutboundUpgrade<Negotiated<libp2p_relay::client::Connection>>>::Future: Send,
+    <<<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<SecUpgrade as IntoSecurityUpgrade<libp2p_relay::client::Connection>>::Upgrade as UpgradeInfo>::Info: Send,
+
+        MuxStream: libp2p_core::muxing::StreamMuxer + Send + 'static,
+        MuxStream::Substream: Send + 'static,
+        MuxStream::Error: Send + Sync + 'static,
+        MuxUpgrade: IntoMultiplexerUpgrade<SecStream>,
+        MuxUpgrade::Upgrade: InboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + OutboundUpgrade<Negotiated<SecStream>, Output = MuxStream, Error = MuxError> + Clone + Send + 'static,
+    <MuxUpgrade::Upgrade as InboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+    <MuxUpgrade::Upgrade as OutboundUpgrade<Negotiated<SecStream>>>::Future: Send,
+        MuxError: std::error::Error + Send + Sync + 'static,
+    <<<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send,
+    <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
+    {
+        self.without_websocket()
+            .with_relay_client(security_upgrade, multiplexer_upgrade)
+    }
+}
 impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, WebsocketPhase<T>> {
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
