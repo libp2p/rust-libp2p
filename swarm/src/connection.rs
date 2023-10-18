@@ -1009,26 +1009,6 @@ mod tests {
     fn compute_new_shutdown_does_not_panic() {
         let _ = env_logger::try_init();
 
-        #[derive(Clone, Debug)]
-        struct ArbitraryKeepAlive(KeepAlive);
-
-        impl Arbitrary for ArbitraryKeepAlive {
-            fn arbitrary(g: &mut Gen) -> Self {
-                let keep_alive = match g.gen_range(1u8..4) {
-                    1 => KeepAlive::Until(
-                        Instant::now()
-                            .checked_add(Duration::arbitrary(g))
-                            .unwrap_or(Instant::now()),
-                    ),
-                    2 => KeepAlive::Yes,
-                    3 => KeepAlive::No,
-                    _ => unreachable!(),
-                };
-
-                Self(keep_alive)
-            }
-        }
-
         #[derive(Debug)]
         struct ArbitraryShutdown(Shutdown);
 
@@ -1068,11 +1048,11 @@ mod tests {
         }
 
         fn prop(
-            handler_keep_alive: ArbitraryKeepAlive,
+            handler_keep_alive: KeepAlive,
             current_shutdown: ArbitraryShutdown,
             idle_timeout: Duration,
         ) {
-            compute_new_shutdown(handler_keep_alive.0, &current_shutdown.0, idle_timeout);
+            compute_new_shutdown(handler_keep_alive, &current_shutdown.0, idle_timeout);
         }
 
         QuickCheck::new().quickcheck(prop as fn(_, _, _));
