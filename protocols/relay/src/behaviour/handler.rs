@@ -29,6 +29,7 @@ use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
+use instant::Instant;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
@@ -354,8 +355,8 @@ pub struct Handler {
         >,
     >,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
+    /// The point in time when this connection started idleing.
+    idle_at: Option<Instant>,
 
     /// Future handling inbound reservation request.
     reservation_request_future: Option<ReservationRequestFuture>,
@@ -410,13 +411,13 @@ impl Handler {
             config,
             queued_events: Default::default(),
             pending_error: Default::default(),
+            idle_at: None,
             reservation_request_future: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
             active_reservation: Default::default(),
-            keep_alive: KeepAlive::Yes,
             pending_connect_requests: Default::default(),
         }
     }
@@ -615,7 +616,17 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        // Only inbound connections need to be kept alive longer than they are active.
+        if self.endpoint.is_dialer() {
+            return KeepAlive::No;
+        }
+
+        match self.idle_at {
+            Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10) => {
+                KeepAlive::No
+            }
+            _ => KeepAlive::Yes,
+        }
     }
 
     fn poll(
@@ -882,7 +893,11 @@ impl ConnectionHandler for Handler {
             && self.circuits.is_empty()
             && self.active_reservation.is_none()
         {
-            self.keep_alive = KeepAlive::No
+            if self.idle_at.is_none() {
+                self.idle_at = Some(Instant::now());
+            }
+        } else {
+            self.idle_at = None;
         }
 
         Poll::Pending
