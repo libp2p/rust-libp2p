@@ -1021,7 +1021,7 @@ mod tests {
                         // compute_new_shutdown does not touch the delay. Delay does not
                         // implement Clone. Thus use a placeholder delay.
                         Delay::new(Duration::from_secs(1)),
-                        instant.clone(),
+                        instant,
                     ),
                 };
 
