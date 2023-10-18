@@ -462,6 +462,7 @@ fn compute_new_shutdown(
     idle_timeout: Duration,
 ) -> Option<Shutdown> {
     let keep_alive = handler.connection_keep_alive();
+    #[allow(deprecated)]
     match (current_shutdown, keep_alive) {
         (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
             let now = Instant::now();
