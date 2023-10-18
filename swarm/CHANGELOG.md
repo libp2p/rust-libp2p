@@ -1,4 +1,4 @@
-## 0.43.6 - unreleased
+## 0.43.6
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.
   Most users should use `libp2p::SwarmBuilder`.
