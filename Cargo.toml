@@ -104,7 +104,7 @@ libp2p-server = { version = "0.12.3", path = "misc/server" }
 libp2p-swarm = { version = "0.43.6", path = "swarm" }
 libp2p-swarm-derive = { version = "0.33.0", path = "swarm-derive" }
 libp2p-swarm-test = { version = "0.2.0", path = "swarm-test" }
-libp2p-tcp = { version = "0.40.0", path = "transports/tcp" }
+libp2p-tcp = { version = "0.40.1", path = "transports/tcp" }
 libp2p-tls = { version = "0.2.1", path = "transports/tls" }
 libp2p-uds = { version = "0.39.0", path = "transports/uds" }
 libp2p-wasm-ext = { version = "0.40.0", path = "transports/wasm-ext" }

@@ -1,4 +1,8 @@
-## 0.40.0 
+## 0.40.1
+
+- Expose `async_io::TcpStream`.
+
+## 0.40.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
