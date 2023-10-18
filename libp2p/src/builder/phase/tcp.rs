@@ -176,7 +176,7 @@ macro_rules! impl_tcp_phase_with_websocket {
             ) -> Result<
                     SwarmBuilder<
                         $providerPascalCase,
-                        BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+                        RelayPhase<impl AuthenticatedMultiplexedTransport>,
                     >,
                     WebsocketError<SecUpgrade::Error>,
                 >
@@ -205,7 +205,6 @@ macro_rules! impl_tcp_phase_with_websocket {
                     .without_quic()
                     .without_any_other_transports()
                     .without_dns()
-                    .without_relay()
                     .with_websocket(security_upgrade, multiplexer_upgrade)
                     .await
             }

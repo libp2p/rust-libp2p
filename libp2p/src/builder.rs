@@ -42,15 +42,15 @@ mod select_security;
 ///      .with_quic()
 ///      .with_other_transport(|_key| DummyTransport::<(PeerId, StreamMuxerBox)>::new())?
 ///      .with_dns()?
-///      .with_relay_client(
-///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
-///          libp2p_yamux::Config::default,
-///      )?
 ///      .with_websocket(
 ///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
 ///          libp2p_yamux::Config::default,
 ///      )
 ///      .await?
+///      .with_relay_client(
+///          (libp2p_tls::Config::new, libp2p_noise::Config::new),
+///          libp2p_yamux::Config::default,
+///      )?
 ///      .with_behaviour(|_key, relay| MyBehaviour { relay })?
 ///      .build();
 /// #
@@ -307,10 +307,10 @@ mod tests {
             .with_quic()
             .with_dns()
             .unwrap()
-            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
-            .unwrap()
             .with_websocket(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .await
+            .unwrap()
+            .with_relay_client(libp2p_tls::Config::new, libp2p_yamux::Config::default)
             .unwrap()
             .with_bandwidth_logging();
         let _: Swarm<MyBehaviour> = builder
