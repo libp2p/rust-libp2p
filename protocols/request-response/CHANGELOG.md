@@ -1,5 +1,8 @@
 ## 0.25.2 - unreleased
 
+- Deprecate `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4029](https://github.com/libp2p/rust-libp2p/pull/4029).
+
 <!-- Internal changes
 
 - Allow deprecated usage of `KeepAlive::Until`
