@@ -495,7 +495,8 @@ impl ConnectionHandler for Handler {
             if matches!(self.reservation, Reservation::None) {
                 match self.keep_alive {
                     KeepAlive::Yes => {
-                        self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
+                        self.keep_alive =
+                            KeepAlive::Until(Instant::now() + Duration::from_secs(10));
                     }
                     KeepAlive::Until(_) => {}
                     KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
