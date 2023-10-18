@@ -345,8 +345,10 @@ where
             }
 
             // Compute new shutdown
-            if let Some(new_shutdown) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
-              *shutdown = new_shutdown;
+            if let Some(new_shutdown) =
+                compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
+            {
+                *shutdown = new_shutdown;
             }
 
             // Check if the connection (and handler) should be shut down.
@@ -444,14 +446,11 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
 }
 
 fn compute_new_shutdown(
-    handler: &impl ConnectionHandler,
+    handler_keep_alive: KeepAlive,
     current_shutdown: &Shutdown,
     idle_timeout: Duration,
 ) -> Option<Shutdown> {
-    // Ask the handler whether it wants the connection (and the handler itself)
-    // to be kept alive, which determines the planned shutdown, if any.
-    let keep_alive = handler.connection_keep_alive();
-    match (current_shutdown, keep_alive) {
+    match (current_shutdown, handler_keep_alive) {
         (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
             let now = Instant::now();
 
@@ -461,10 +460,7 @@ fn compute_new_shutdown(
                     let effective_keep_alive = max(new_duration, idle_timeout);
 
                     let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
-                    return Some(Shutdown::Later(
-                        Delay::new(safe_keep_alive),
-                        deadline,
-                    ));
+                    return Some(Shutdown::Later(Delay::new(safe_keep_alive), deadline));
                 }
             }
             None
@@ -1006,6 +1002,88 @@ mod tests {
         let duration = checked_add_fraction(start, Duration::from_secs(u64::MAX));
 
         assert!(start.checked_add(duration).is_some())
+    }
+
+    #[test]
+    fn compute_new_shutdown_does_not_panic() {
+        let _ = env_logger::try_init();
+
+        #[derive(Clone, Debug)]
+        struct ArbitraryKeepAlive(KeepAlive);
+
+        impl Arbitrary for ArbitraryKeepAlive {
+            fn arbitrary(g: &mut Gen) -> Self {
+                let keep_alive = match g.gen_range(1u8..4) {
+                    1 => KeepAlive::Until(
+                        Instant::now()
+                            .checked_add(Duration::from_secs(u64::arbitrary(g)))
+                            .unwrap_or(Instant::now()),
+                    ),
+                    2 => KeepAlive::Yes,
+                    3 => KeepAlive::No,
+                    _ => unreachable!(),
+                };
+
+                Self(keep_alive)
+            }
+        }
+
+        #[derive(Debug)]
+        struct ArbitraryShutdown(Shutdown);
+
+        impl Clone for ArbitraryShutdown {
+            fn clone(&self) -> Self {
+                let shutdown = match self.0 {
+                    Shutdown::None => Shutdown::None,
+                    Shutdown::Asap => Shutdown::Asap,
+                    Shutdown::Later(_, instant) => Shutdown::Later(
+                        // compute_new_shutdown does not touch the delay. Delay does not
+                        // implement Clone. Thus use a placeholder delay.
+                        Delay::new(Duration::from_secs(1)),
+                        instant.clone(),
+                    ),
+                };
+
+                ArbitraryShutdown(shutdown)
+            }
+        }
+
+        impl Arbitrary for ArbitraryShutdown {
+            fn arbitrary(g: &mut Gen) -> Self {
+                let shutdown = match g.gen_range(1u8..4) {
+                    1 => Shutdown::None,
+                    2 => Shutdown::Asap,
+                    3 => Shutdown::Later(
+                        Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
+                        Instant::now()
+                            .checked_add(Duration::from_secs(u64::arbitrary(g)))
+                            .unwrap_or(Instant::now()),
+                    ),
+                    _ => unreachable!(),
+                };
+
+                Self(shutdown)
+            }
+        }
+
+        #[derive(Clone, Debug)]
+        struct ArbitraryDuration(Duration);
+
+        impl Arbitrary for ArbitraryDuration {
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(Duration::from_secs(u64::arbitrary(g)))
+            }
+        }
+
+        fn prop(
+            handler_keep_alive: ArbitraryKeepAlive,
+            current_shutdown: ArbitraryShutdown,
+            idle_timeout: ArbitraryDuration,
+        ) {
+            compute_new_shutdown(handler_keep_alive.0, &current_shutdown.0, idle_timeout.0);
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_, _, _));
     }
 
     struct KeepAliveUntilConnectionHandler {
