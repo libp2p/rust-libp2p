@@ -1016,7 +1016,7 @@ mod tests {
                 let keep_alive = match g.gen_range(1u8..4) {
                     1 => KeepAlive::Until(
                         Instant::now()
-                            .checked_add(Duration::from_secs(u64::arbitrary(g)))
+                            .checked_add(Duration::arbitrary(g))
                             .unwrap_or(Instant::now()),
                     ),
                     2 => KeepAlive::Yes,
@@ -1056,7 +1056,7 @@ mod tests {
                     3 => Shutdown::Later(
                         Delay::new(Duration::from_secs(u32::arbitrary(g) as u64)),
                         Instant::now()
-                            .checked_add(Duration::from_secs(u64::arbitrary(g)))
+                            .checked_add(Duration::arbitrary(g))
                             .unwrap_or(Instant::now()),
                     ),
                     _ => unreachable!(),
@@ -1066,21 +1066,12 @@ mod tests {
             }
         }
 
-        #[derive(Clone, Debug)]
-        struct ArbitraryDuration(Duration);
-
-        impl Arbitrary for ArbitraryDuration {
-            fn arbitrary(g: &mut Gen) -> Self {
-                Self(Duration::from_secs(u64::arbitrary(g)))
-            }
-        }
-
         fn prop(
             handler_keep_alive: ArbitraryKeepAlive,
             current_shutdown: ArbitraryShutdown,
-            idle_timeout: ArbitraryDuration,
+            idle_timeout: Duration,
         ) {
-            compute_new_shutdown(handler_keep_alive.0, &current_shutdown.0, idle_timeout.0);
+            compute_new_shutdown(handler_keep_alive.0, &current_shutdown.0, idle_timeout);
         }
 
         QuickCheck::new().quickcheck(prop as fn(_, _, _));
