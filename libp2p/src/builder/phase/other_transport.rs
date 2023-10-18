@@ -74,7 +74,7 @@ impl<T: AuthenticatedMultiplexedTransport>
     pub async fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<super::provider::AsyncStd, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
         std::io::Error,
     > {
         self.without_any_other_transports().with_dns().await
@@ -87,7 +87,7 @@ impl<T: AuthenticatedMultiplexedTransport>
     pub fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
         std::io::Error,
     > {
         self.without_any_other_transports().with_dns()
@@ -105,7 +105,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     ) -> Result<
         SwarmBuilder<
             Provider,
-            WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -132,6 +132,7 @@ impl<T: AuthenticatedMultiplexedTransport, Provider>
     {
         self.without_any_other_transports()
             .without_dns()
+            .without_websocket()
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 }
@@ -149,8 +150,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     ) {
         self.without_any_other_transports()
             .without_dns()
-            .without_relay()
             .without_websocket()
+            .without_relay()
             .with_bandwidth_logging()
     }
 }
@@ -163,8 +164,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
         self.without_any_other_transports()
             .without_dns()
-            .without_relay()
             .without_websocket()
+            .without_relay()
             .without_bandwidth_logging()
             .with_behaviour(constructor)
     }
