@@ -120,7 +120,6 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Rela
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,
     ) -> Result<SwarmBuilder<Provider, SwarmPhase<T, B>>, R::Error> {
-        self.without_relay()
-            .with_behaviour(constructor)
+        self.without_relay().with_behaviour(constructor)
     }
 }

@@ -11,7 +11,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
     pub async fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::AsyncStd, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::AsyncStd,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         Ok(SwarmBuilder {
@@ -29,7 +32,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
     pub fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::Tokio,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         Ok(SwarmBuilder {

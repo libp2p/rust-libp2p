@@ -127,9 +127,7 @@ impl_websocket_builder!(
     rw_stream_sink::RwStreamSink<libp2p_websocket::BytesConnection<libp2p_tcp::tokio::TcpStream>>
 );
 
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, WebsocketPhase<T>>
-{
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, WebsocketPhase<T>> {
     pub(crate) fn without_websocket(self) -> SwarmBuilder<Provider, RelayPhase<T>> {
         SwarmBuilder {
             keypair: self.keypair,
@@ -142,9 +140,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport>
 }
 
 // Shortcuts
-impl<Provider, T: AuthenticatedMultiplexedTransport>
-    SwarmBuilder<Provider, WebsocketPhase<T>>
-{
+impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, WebsocketPhase<T>> {
     pub fn with_behaviour<B, R: TryIntoBehaviour<B>>(
         self,
         constructor: impl FnOnce(&libp2p_identity::Keypair) -> R,

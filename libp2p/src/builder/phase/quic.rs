@@ -152,7 +152,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
     pub async fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::AsyncStd, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::AsyncStd,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         self.without_quic()
@@ -166,7 +169,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
     pub fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::Tokio, WebsocketPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::Tokio,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         self.without_quic()
@@ -244,9 +250,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self,
     ) -> (
         SwarmBuilder<
-                Provider,
+            Provider,
             BehaviourPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
-            >,
+        >,
         Arc<crate::bandwidth::BandwidthSinks>,
     ) {
         self.without_quic()
