@@ -1,3 +1,14 @@
+## 0.2.7
+
+- Add `rand` feature to gate methods requiring a random number generator, enabling use in restricted environments (e.g. smartcontracts).
+  This feature is not enabled by default.
+  See [PR 4349](https://github.com/libp2p/rust-libp2p/pull/4349).
+
+## 0.2.6
+
+- Make `PeerId::to_bytes` and `PeerId::to_base58` take `self` by value to follow Rust convention of `Copy` types.
+  See [PR 4653](https://github.com/libp2p/rust-libp2p/pull/4653).
+
 ## 0.2.5
 
 - Fix usage of HKDF within `Keypair::derive_secret`.
