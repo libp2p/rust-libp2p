@@ -33,9 +33,6 @@
 //! existing nodes in the kademlia network cannot obtain the listen addresses
 //! of nodes querying them, and thus will not be able to add them to their routing table.
 
-// TODO: we allow dead_code for now because this library contains a lot of unused code that will
-//       be useful later for record store
-#![allow(dead_code)]
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod record_priv;
@@ -75,7 +72,9 @@ pub use behaviour::{
 pub use behaviour::{
     Behaviour, BucketInserts, Caching, Config, Event, ProgressStep, Quorum, StoreInserts,
 };
-pub use kbucket::{Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey};
+pub use kbucket::{
+    Distance as KBucketDistance, EntryView, KBucketRef, Key as KBucketKey, NodeStatus,
+};
 pub use protocol::ConnectionType;
 pub use query::QueryId;
 pub use record_priv::{store, Key as RecordKey, ProviderRecord, Record};
