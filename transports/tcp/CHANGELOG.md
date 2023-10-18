@@ -1,4 +1,9 @@
-## 0.40.0 
+## 0.40.1
+
+- Expose `async_io::TcpStream`.
+  See [PR 4683](https://github.com/libp2p/rust-libp2p/pull/4683).
+
+## 0.40.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
