@@ -4,14 +4,10 @@ FROM --platform=$BUILDPLATFORM rust:1.72.0 as builder
 
 ARG BUILDPLATFORM
 
-# Set the working directory
 WORKDIR /workspace
-
-# Copy the Rust project source code, including build.sh, into the image
 COPY . /workspace
-
-# Make the build.sh script executable and run it
-RUN chmod +x /workspace/build.sh && /workspace/build.sh ${BUILDPLATFORM}
+COPY /build.sh /build.sh
+RUN chmod +x /build.sh && /build.sh ${BUILDPLATFORM}
 
 FROM alpine:3
 COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punch-client
