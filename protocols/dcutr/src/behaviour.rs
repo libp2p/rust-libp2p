@@ -388,7 +388,7 @@ struct Candidates {
 impl Candidates {
     fn new(me: PeerId) -> Self {
         Self {
-            inner: LruCache::new(NonZeroUsize::new(100).expect("100 > 0")),
+            inner: LruCache::new(NonZeroUsize::new(20).expect("20 > 0")),
             me,
         }
     }
