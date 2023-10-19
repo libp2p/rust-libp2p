@@ -1,18 +1,17 @@
 # syntax=docker/dockerfile:1.5-labs
-FROM rust:1.72.0 as builder
 
-RUN rustup target add x86_64-unknown-linux-musl
-RUN --mount=type=cache,target=/var/cache/apt apt-get update && apt-get install -y musl-dev musl-tools
+FROM --platform=$BUILDPLATFORM rust:1.72.0 as builder
 
-# Run with access to the target cache to speed up builds
+ARG BUILDPLATFORM
+
+# Set the working directory
 WORKDIR /workspace
-ADD . .
-RUN --mount=type=cache,target=./target \
-    --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release --package hole-punching-tests --target x86_64-unknown-linux-musl
 
-RUN --mount=type=cache,target=./target \
-    mv ./target/x86_64-unknown-linux-musl/release/hole-punching-tests /usr/local/bin/hole-punching-tests
+# Copy the Rust project source code, including build.sh, into the image
+COPY . /workspace
+
+# Make the build.sh script executable and run it
+RUN chmod +x /workspace/build.sh && /workspace/build.sh ${BUILDPLATFORM}
 
 FROM alpine:3
 COPY --from=builder /usr/local/bin/hole-punching-tests /usr/bin/hole-punch-client
