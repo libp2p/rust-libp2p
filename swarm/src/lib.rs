@@ -103,7 +103,7 @@ pub mod derive_prelude {
     pub use crate::ToSwarm;
     pub use either::Either;
     pub use futures::prelude as futures;
-    pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::transport::{ListenerId, PortUse};
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
@@ -1982,7 +1982,7 @@ mod tests {
     use futures::future;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
-    use libp2p_core::transport::TransportEvent;
+    use libp2p_core::transport::{TransportEvent, PortUse};
     use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
     use libp2p_identity as identity;
@@ -2379,6 +2379,7 @@ mod tests {
                     ConnectedPoint::Dialer {
                         address: other_addr,
                         role_override: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
                     }
                 );
             }

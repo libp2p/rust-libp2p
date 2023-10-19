@@ -92,6 +92,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
     let endpoint = quote! { #prelude_path::Endpoint };
     let connection_denied = quote! { #prelude_path::ConnectionDenied };
+    let port_use = quote! { #prelude_path::PortUse };
 
     // Build the generics.
     let impl_generics = {
@@ -673,7 +674,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
             };
 
             let builder = quote! {
-                #field_name.handle_established_outbound_connection(connection_id, peer, addr, role_override)?
+                #field_name.handle_established_outbound_connection(connection_id, peer, addr, role_override, port_use)?
             };
 
             match out_handler {
@@ -821,6 +822,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> syn::Result<Toke
                 peer: #peer_id,
                 addr: &#multiaddr,
                 role_override: #endpoint,
+                port_use: #port_use,
             ) -> Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_outbound_connection)
             }
