@@ -129,13 +129,11 @@ impl ConnectionHandler for Handler {
                     .requested_streams
                     .pop_front()
                     .expect("opened a stream without a pending command");
-                self.outbound
-                    // TODO: can we get around the box?
-                    .push(
-                        crate::protocol::send_receive(params, protocol)
-                            .map(move |result| (id, result))
-                            .boxed(),
-                    );
+                self.outbound.push(
+                    crate::protocol::send_receive(params, protocol)
+                        .map(move |result| (id, result))
+                        .boxed(),
+                );
             }
 
             ConnectionEvent::AddressChange(_)
