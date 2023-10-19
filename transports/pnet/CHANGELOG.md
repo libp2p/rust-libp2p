@@ -1,4 +1,12 @@
-## 0.23.0 
+## 0.23.1
+
+<!-- Interal changes:
+
+- Allow new clippy lint.
+
+-->
+
+## 0.23.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

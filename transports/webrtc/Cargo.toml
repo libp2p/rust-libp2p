@@ -39,6 +39,7 @@ pem = ["webrtc?/pem"]
 
 [dev-dependencies]
 env_logger = "0.10"
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { version = "1.33", features = ["full"] }
 quickcheck = "1.0.3"
 
