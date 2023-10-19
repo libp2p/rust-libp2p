@@ -24,6 +24,8 @@ mod handler;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub use behaviour::{Behaviour, Event};
+use libp2p_swarm::StreamUpgradeError;
+use void::Void;
 
 static NEXT_RUN_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -36,4 +38,12 @@ impl RunId {
     pub(crate) fn next() -> Self {
         Self(NEXT_RUN_ID.fetch_add(1, Ordering::SeqCst))
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum RunError {
+    #[error(transparent)]
+    Upgrade(#[from] StreamUpgradeError<Void>),
+    #[error("Failed to execute perf run: {0}")]
+    Io(#[from] std::io::Error),
 }

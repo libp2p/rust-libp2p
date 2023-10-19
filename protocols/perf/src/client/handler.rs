@@ -33,12 +33,11 @@ use libp2p_swarm::{
         ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
         ListenUpgradeError,
     },
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, SubstreamProtocol,
 };
 use void::Void;
 
-use super::RunId;
+use super::{RunError, RunId};
 use crate::{RunParams, RunUpdate};
 
 #[derive(Debug)]
@@ -50,7 +49,7 @@ pub struct Command {
 #[derive(Debug)]
 pub struct Event {
     pub(crate) id: RunId,
-    pub(crate) result: Result<RunUpdate, StreamUpgradeError<Void>>,
+    pub(crate) result: Result<RunUpdate, RunError>,
 }
 
 pub struct Handler {
@@ -150,7 +149,7 @@ impl ConnectionHandler for Handler {
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::NotifyBehaviour(Event {
                         id,
-                        result: Err(error),
+                        result: Err(error.into()),
                     }));
             }
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError { info: (), error }) => {
@@ -179,10 +178,10 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some((id, result))) = self.outbound.poll_next_unpin(cx) {
+        if let Poll::Ready(Some((id, result))) = self.outbound.poll_next_unpin(cx) {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event {
                 id,
-                result: result.map_err(|e| todo!("{e:?}")),
+                result: result.map_err(Into::into),
             }));
         }
 

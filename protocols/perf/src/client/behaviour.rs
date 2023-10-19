@@ -29,20 +29,19 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamUpgradeError, THandlerInEvent,
+    NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
-use void::Void;
 
 use crate::RunParams;
 use crate::{client::handler::Handler, RunUpdate};
 
-use super::RunId;
+use super::{RunId, RunError};
 
 #[derive(Debug)]
 pub struct Event {
     pub id: RunId,
-    pub result: Result<RunUpdate, StreamUpgradeError<Void>>,
+    pub result: Result<RunUpdate, RunError>,
 }
 
 #[derive(Default)]
