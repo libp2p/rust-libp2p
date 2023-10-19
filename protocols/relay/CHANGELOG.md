@@ -1,3 +1,11 @@
+## 0.16.2
+
+<!-- Internal changes
+
+- Allow deprecated usage of `KeepAlive::Until`
+
+-->
+
 ## 0.16.1
 
 - Export `RateLimiter` type.

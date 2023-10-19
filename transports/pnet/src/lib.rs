@@ -159,6 +159,7 @@ impl fmt::Display for Fingerprint {
 
 /// Error when parsing a PreSharedKey
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // Maybe fix at some stage, not important now.
 pub enum KeyParseError {
     /// file does not have the expected structure
     InvalidKeyFile,

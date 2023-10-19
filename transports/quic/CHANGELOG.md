@@ -1,4 +1,4 @@
-## 0.9.3 - unreleased
+## 0.9.3
 
 - No longer report error when explicit closing of a QUIC endpoint succeeds.
   See [PR 4621].

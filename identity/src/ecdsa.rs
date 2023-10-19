@@ -44,6 +44,7 @@ pub struct Keypair {
 
 impl Keypair {
     /// Generate a new random ECDSA keypair.
+    #[cfg(feature = "rand")]
     pub fn generate() -> Keypair {
         Keypair::from(SecretKey::generate())
     }
@@ -265,6 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "rand")]
     fn sign_verify() {
         let pair = Keypair::generate();
         let pk = pair.public();
