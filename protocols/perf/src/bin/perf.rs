@@ -214,20 +214,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             .upgrade(upgrade::Version::V1Lazy)
             .authenticate(libp2p_tls::Config::new(&local_key)?)
             .multiplex(libp2p_yamux::Config::default());
-
-        let quic = {
-            let mut config = libp2p_quic::Config::new(&local_key);
-            config.support_draft_29 = true;
-
-            // TODO: Revert. But could potentially inform a better default.
-            //
-            // see test-plans user-data.sh for rational
-            config.max_connection_data = 200000000;
-            config.max_stream_data = 200000000;
-
-            libp2p_quic::tokio::Transport::new(config)
-        };
-
+        let quic = libp2p_quic::tokio::Transport::new(libp2p_quic::Config::new(&local_key));
         let dns = libp2p_dns::tokio::Transport::system(OrTransport::new(quic, tcp))?;
 
         dns.map(|either_output, _| match either_output {
