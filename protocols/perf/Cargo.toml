@@ -19,7 +19,7 @@ futures-timer = "3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dns = { workspace = true, features = ["tokio"] }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-quic = { workspace = true, features = ["tokio"] }
 libp2p-swarm = { workspace = true, features = ["macros", "tokio"] }
 libp2p-tcp = { workspace = true, features = ["tokio"] }
@@ -30,7 +30,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0"
 # TODO: Full needed?
-tokio = { version = "1.32.0", features = ["full"] }
+tokio = { version = "1.33.0", features = ["full"] }
 void = "1"
 
 [dev-dependencies]
@@ -43,3 +43,6 @@ libp2p-swarm-test = { path = "../../swarm-test" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

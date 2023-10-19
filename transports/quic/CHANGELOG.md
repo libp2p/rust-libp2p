@@ -1,4 +1,14 @@
-## 0.9.2 - unreleased
+## 0.9.3
+
+- No longer report error when explicit closing of a QUIC endpoint succeeds.
+  See [PR 4621].
+
+- Support QUIC stateless resets for supported `libp2p_identity::Keypair`s. See [PR 4554].
+
+[PR 4621]: https://github.com/libp2p/rust-libp2p/pull/4621
+[PR 4554]: https://github.com/libp2p/rust-libp2p/pull/4554
+
+## 0.9.2
 
 - Cut stable release.
 

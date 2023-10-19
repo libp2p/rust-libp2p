@@ -1,32 +1,21 @@
 use base64::Engine;
 use clap::Parser;
-use futures::executor::block_on;
-use futures::future::Either;
 use futures::stream::StreamExt;
 use futures_timer::Delay;
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade;
-use libp2p::dns;
-use libp2p::identify;
 use libp2p::identity;
 use libp2p::identity::PeerId;
 use libp2p::kad;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::noise;
-use libp2p::quic;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::swarm::SwarmEvent;
 use libp2p::tcp;
-use libp2p::yamux;
-use libp2p::Transport;
-use log::{debug, info};
+use libp2p::{identify, noise, yamux};
+use log::{debug, info, warn};
 use prometheus_client::metrics::info::Info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
-use std::io;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::task::Poll;
-use std::thread;
 use std::time::Duration;
 use zeroize::Zeroizing;
 
@@ -64,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = Zeroizing::new(config::Config::from_file(opt.config.as_path())?);
 
-    let (local_peer_id, local_keypair) = {
+    let local_keypair = {
         let keypair = identity::Keypair::from_protobuf_encoding(&Zeroizing::new(
             base64::engine::general_purpose::STANDARD
                 .decode(config.identity.priv_key.as_bytes())?,
@@ -77,62 +66,43 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Expect peer id derived from private key and peer id retrieved from config to match."
         );
 
-        (peer_id, keypair)
-    };
-    println!("Local peer id: {local_peer_id}");
-
-    let transport = {
-        let tcp_transport =
-            tcp::tokio::Transport::new(tcp::Config::new().port_reuse(true).nodelay(true))
-                .upgrade(upgrade::Version::V1)
-                .authenticate(noise::Config::new(&local_keypair)?)
-                .multiplex(yamux::Config::default())
-                .timeout(Duration::from_secs(20));
-
-        let quic_transport = {
-            let mut config = quic::Config::new(&local_keypair);
-            config.support_draft_29 = true;
-            quic::tokio::Transport::new(config)
-        };
-
-        dns::TokioDnsConfig::system(libp2p::core::transport::OrTransport::new(
-            quic_transport,
-            tcp_transport,
-        ))?
-        .map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-        .boxed()
+        keypair
     };
 
-    let behaviour = behaviour::Behaviour::new(
-        local_keypair.public(),
-        opt.enable_kademlia,
-        opt.enable_autonat,
-    );
-    let mut swarm = SwarmBuilder::with_tokio_executor(transport, behaviour, local_peer_id).build();
+    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_keypair)
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default().port_reuse(true).nodelay(true),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_quic()
+        .with_dns()?
+        .with_behaviour(|key| {
+            behaviour::Behaviour::new(key.public(), opt.enable_kademlia, opt.enable_autonat)
+        })?
+        .build();
 
     if config.addresses.swarm.is_empty() {
-        log::warn!("No listen addresses configured.");
+        warn!("No listen addresses configured.");
     }
     for address in &config.addresses.swarm {
         match swarm.listen_on(address.clone()) {
             Ok(_) => {}
             Err(e @ libp2p::TransportError::MultiaddrNotSupported(_)) => {
-                log::warn!("Failed to listen on {address}, continuing anyways, {e}")
+                warn!("Failed to listen on {address}, continuing anyways, {e}")
             }
             Err(e) => return Err(e.into()),
         }
     }
+
     if config.addresses.append_announce.is_empty() {
-        log::warn!("No external addresses configured.");
+        warn!("No external addresses configured.");
     }
     for address in &config.addresses.append_announce {
         swarm.add_external_address(address.clone())
     }
-    log::info!(
+    info!(
         "External addresses: {:?}",
         swarm.external_addresses().collect::<Vec<_>>()
     );
@@ -145,7 +115,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "A metric with a constant '1' value labeled by version",
         build_info,
     );
-    thread::spawn(move || block_on(http_service::metrics_server(metric_registry)));
+    tokio::spawn(async move {
+        if let Err(e) = http_service::metrics_server(metric_registry, opt.metrics_path).await {
+            log::error!("Metrics server failed: {e}");
+        }
+    });
 
     let mut bootstrap_timer = Delay::new(BOOTSTRAP_INTERVAL);
 
@@ -205,7 +179,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 // metrics.record(&e)
             }
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening on {address:?}");
+                info!("Listening on {address:?}");
             }
             _ => {}
         }

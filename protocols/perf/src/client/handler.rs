@@ -21,7 +21,6 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
-    time::{Duration, Instant},
 };
 
 use futures::{
@@ -188,13 +187,7 @@ impl ConnectionHandler for Handler {
         }
 
         if self.outbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
+            self.keep_alive = KeepAlive::No
         } else {
             self.keep_alive = KeepAlive::Yes
         }

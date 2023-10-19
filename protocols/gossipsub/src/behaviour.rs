@@ -1020,10 +1020,7 @@ where
                 "JOIN: Inserting {:?} random peers into the mesh",
                 new_peers.len()
             );
-            let mesh_peers = self
-                .mesh
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
             mesh_peers.extend(new_peers);
         }
 
@@ -1962,10 +1959,7 @@ where
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let topic_hash = &subscription.topic_hash;
-            let peer_list = self
-                .topic_peers
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let peer_list = self.topic_peers.entry(topic_hash.clone()).or_default();
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
@@ -2793,7 +2787,7 @@ where
 
                 let signature = {
                     let message = proto::Message {
-                        from: Some(author.clone().to_bytes()),
+                        from: Some(author.to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
@@ -2874,10 +2868,7 @@ where
         peer: PeerId,
         control: ControlAction,
     ) {
-        control_pool
-            .entry(peer)
-            .or_insert_with(Vec::new)
-            .push(control);
+        control_pool.entry(peer).or_default().push(control);
     }
 
     /// Takes each control action mapping and turns it into a message
@@ -3314,6 +3305,7 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3327,6 +3319,7 @@ where
         ))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,

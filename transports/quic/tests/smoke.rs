@@ -39,24 +39,6 @@ async fn async_std_smoke() {
     smoke::<quic::async_std::Provider>().await
 }
 
-#[cfg(feature = "async-std")]
-#[async_std::test]
-async fn dial_failure() {
-    let _ = env_logger::try_init();
-    let mut a = create_default_transport::<quic::async_std::Provider>().1;
-    let mut b = create_default_transport::<quic::async_std::Provider>().1;
-
-    let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    drop(a); // stop a so b can never reach it
-
-    match dial(&mut b, addr).await {
-        Ok(_) => panic!("Expected dial to fail"),
-        Err(error) => {
-            assert_eq!("Handshake with the remote timed out.", error.to_string())
-        }
-    };
-}
-
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
@@ -730,6 +712,7 @@ async fn open_outbound_streams<P: Provider + Spawn, const BUFFER_SIZE: usize>(
 }
 
 /// Helper function for driving two transports until they established a connection.
+#[allow(unknown_lints, clippy::needless_pass_by_ref_mut)] // False positive.
 async fn connect(
     listener: &mut Boxed<(PeerId, StreamMuxerBox)>,
     dialer: &mut Boxed<(PeerId, StreamMuxerBox)>,

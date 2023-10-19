@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{
-    task::{Context, Poll},
-    time::{Duration, Instant},
-};
+use std::task::{Context, Poll};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
@@ -139,13 +136,7 @@ impl ConnectionHandler for Handler {
         }
 
         if self.inbound.is_empty() {
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
-            }
+            self.keep_alive = KeepAlive::No
         } else {
             self.keep_alive = KeepAlive::Yes
         }

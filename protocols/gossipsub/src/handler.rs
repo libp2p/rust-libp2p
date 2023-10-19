@@ -444,6 +444,7 @@ impl ConnectionHandler for Handler {
                     return KeepAlive::Yes;
                 }
 
+                #[allow(deprecated)]
                 KeepAlive::Until(handler.last_io_activity + handler.idle_timeout)
             }
             Handler::Disabled(_) => KeepAlive::No,

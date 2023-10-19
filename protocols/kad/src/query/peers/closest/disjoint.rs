@@ -31,7 +31,6 @@ use std::{
 /// Wraps around a set of [`ClosestPeersIter`], enforcing a disjoint discovery
 /// path per configured parallelism according to the S/Kademlia paper.
 pub(crate) struct ClosestDisjointPeersIter {
-    config: ClosestPeersIterConfig,
     target: KeyBytes,
 
     /// The set of wrapped [`ClosestPeersIter`].
@@ -51,6 +50,7 @@ pub(crate) struct ClosestDisjointPeersIter {
 
 impl ClosestDisjointPeersIter {
     /// Creates a new iterator with a default configuration.
+    #[cfg(test)]
     pub(crate) fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
     where
         I: IntoIterator<Item = Key<PeerId>>,
@@ -88,7 +88,6 @@ impl ClosestDisjointPeersIter {
         let iters_len = iters.len();
 
         ClosestDisjointPeersIter {
-            config,
             target: target.into(),
             iters,
             iter_order: (0..iters_len)
@@ -188,10 +187,6 @@ impl ClosestDisjointPeersIter {
         }
 
         updated
-    }
-
-    pub(crate) fn is_waiting(&self, peer: &PeerId) -> bool {
-        self.iters.iter().any(|i| i.is_waiting(peer))
     }
 
     pub(crate) fn next(&mut self, now: Instant) -> PeersIterState<'_> {

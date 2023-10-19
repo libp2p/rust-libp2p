@@ -1,8 +1,12 @@
-## 0.43.1 - unreleased
+## 0.43.2
+
+- Update x25519-dalek to 2.0.0.
+
+## 0.43.1
 
 - Update dependencies.
 
-## 0.43.0 
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

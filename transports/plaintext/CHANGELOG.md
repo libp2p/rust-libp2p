@@ -1,4 +1,9 @@
-## 0.40.0 
+## 0.40.1
+
+- Rename `Plaintext2Config` to `Config` to follow naming conventions across repository.
+  See [PR 4535](https://github.com/libp2p/rust-libp2p/pull/4535).
+
+## 0.40.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

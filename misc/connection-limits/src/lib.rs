@@ -37,7 +37,7 @@ use void::Void;
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
 /// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
@@ -529,7 +529,6 @@ mod tests {
     #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
     struct Behaviour {
         limits: super::Behaviour,
-        keep_alive: libp2p_swarm::keep_alive::Behaviour,
         connection_denier: Toggle<ConnectionDenier>,
     }
 
@@ -537,14 +536,12 @@ mod tests {
         fn new(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
                 connection_denier: None.into(),
             }
         }
         fn new_with_connection_denier(limits: ConnectionLimits) -> Self {
             Self {
                 limits: super::Behaviour::new(limits),
-                keep_alive: libp2p_swarm::keep_alive::Behaviour,
                 connection_denier: Some(ConnectionDenier {}).into(),
             }
         }
