@@ -171,7 +171,6 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }

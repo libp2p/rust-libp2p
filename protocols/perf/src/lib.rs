@@ -51,7 +51,6 @@ pub struct Progressed {
 impl Display for Progressed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Progressed {
-            // TODO: A single duration for both up and down is not ideal.
             duration,
             sent,
             received,
