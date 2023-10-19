@@ -66,7 +66,6 @@ impl Default for Behaviour {
                     request_response::ProtocolSupport::Outbound,
                 )),
                 request_response::Config::default()
-                    .with_connection_keep_alive(Duration::from_secs(60 * 5))
                     .with_request_timeout(Duration::from_secs(60 * 5)),
             ),
         }

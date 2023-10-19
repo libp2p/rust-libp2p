@@ -1,4 +1,4 @@
-## 0.52.4 - unreleased
+## 0.52.4
 
 - Introduce `libp2p::websocket_websys` module behind `websocket-websys` feature flag.
   This supersedes the existing `libp2p::wasm_ext` module which is now deprecated.
@@ -8,8 +8,13 @@
   See `libp2p::SwarmBuilder` docs on how to use the new builder.
   Also see [PR 4120].
 
+- Update `libp2p-identity` version to 0.2.6.
+  Under the hood, we feature-flagged `libp2p-identity`'s `rand` dependency but it is enabled by default when using `libp2p`.
+  See [PR 4349].
+
 [PR 3679]: https://github.com/libp2p/rust-libp2p/pull/3679
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+[PR 4349]: https://github.com/libp2p/rust-libp2p/pull/4349
 
 ## 0.52.3
 
