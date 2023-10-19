@@ -616,10 +616,6 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        // Only inbound connections need to be kept alive longer than they are active.
-        if self.endpoint.is_dialer() {
-            return KeepAlive::No;
-        }
 
         match self.idle_at {
             Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10) => {
