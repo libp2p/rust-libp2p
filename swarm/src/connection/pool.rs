@@ -443,7 +443,10 @@ where
                 self.pending_connection_events_tx.clone(),
             ));
 
-        let endpoint = PendingPoint::Dialer { role_override, port_use };
+        let endpoint = PendingPoint::Dialer {
+            role_override,
+            port_use,
+        };
 
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
@@ -644,11 +647,17 @@ where
                     self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
-                        (PendingPoint::Dialer { role_override, port_use }, Some((address, errors))) => (
+                        (
+                            PendingPoint::Dialer {
+                                role_override,
+                                port_use,
+                            },
+                            Some((address, errors)),
+                        ) => (
                             ConnectedPoint::Dialer {
                                 address,
                                 role_override,
-                                port_use
+                                port_use,
                             },
                             Some(errors),
                         ),

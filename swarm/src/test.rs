@@ -457,8 +457,13 @@ where
             role_override,
             connection_id,
         ));
-        self.inner
-            .handle_established_outbound_connection(connection_id, peer, addr, role_override, port_use)
+        self.inner.handle_established_outbound_connection(
+            connection_id,
+            peer,
+            addr,
+            role_override,
+            port_use,
+        )
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {

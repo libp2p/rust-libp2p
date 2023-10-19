@@ -3,7 +3,11 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::{multiaddr::Protocol, transport::{ListenerId, PortUse}, Endpoint, Multiaddr};
+use libp2p_core::{
+    multiaddr::Protocol,
+    transport::{ListenerId, PortUse},
+    Endpoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenOpts,

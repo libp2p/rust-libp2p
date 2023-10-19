@@ -1982,7 +1982,7 @@ mod tests {
     use futures::future;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
-    use libp2p_core::transport::{TransportEvent, PortUse};
+    use libp2p_core::transport::{PortUse, TransportEvent};
     use libp2p_core::Endpoint;
     use libp2p_core::{multiaddr, transport, upgrade};
     use libp2p_identity as identity;

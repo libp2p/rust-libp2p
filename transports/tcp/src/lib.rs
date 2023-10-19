@@ -368,7 +368,9 @@ where
         match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
             Some(socket_addr) if opts.port_use == PortUse::Reuse => {
                 log::trace!("Binding dial socket to listen socket {}", socket_addr);
-                socket.bind(&socket_addr.into()).map_err(TransportError::Other)?;
+                socket
+                    .bind(&socket_addr.into())
+                    .map_err(TransportError::Other)?;
                 self.port_reuse.dialed_from_listener(addr);
             }
             _ => {}
@@ -731,8 +733,8 @@ mod tests {
         channel::{mpsc, oneshot},
         future::poll_fn,
     };
-    use libp2p_core::Transport as _;
     use libp2p_core::Endpoint;
+    use libp2p_core::Transport as _;
     use libp2p_identity::PeerId;
 
     #[test]
@@ -814,10 +816,17 @@ mod tests {
             let mut tcp = Transport::<T>::default();
 
             // Obtain a future socket through dialing
-            let mut socket = tcp.dial(addr.clone(), DialOpts {
-                endpoint: Endpoint::Dialer,
-                port_use: PortUse::Reuse,
-            }).unwrap().await.unwrap();
+            let mut socket = tcp
+                .dial(
+                    addr.clone(),
+                    DialOpts {
+                        endpoint: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    },
+                )
+                .unwrap()
+                .await
+                .unwrap();
             socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
             let mut buf = [0u8; 3];
@@ -891,10 +900,16 @@ mod tests {
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = Transport::<T>::default();
-            tcp.dial(dest_addr, DialOpts {
-                endpoint: Endpoint::Dialer,
-                port_use: PortUse::New,
-            }).unwrap().await.unwrap();
+            tcp.dial(
+                dest_addr,
+                DialOpts {
+                    endpoint: Endpoint::Dialer,
+                    port_use: PortUse::New,
+                },
+            )
+            .unwrap()
+            .await
+            .unwrap();
         }
 
         fn test(addr: Multiaddr) {
@@ -991,10 +1006,17 @@ mod tests {
                         .ok();
 
                     // Obtain a future socket through dialing
-                    let mut socket = tcp.dial(dest_addr, DialOpts {
-                        endpoint: Endpoint::Dialer,
-                        port_use: PortUse::Reuse,
-                    }).unwrap().await.unwrap();
+                    let mut socket = tcp
+                        .dial(
+                            dest_addr,
+                            DialOpts {
+                                endpoint: Endpoint::Dialer,
+                                port_use: PortUse::Reuse,
+                            },
+                        )
+                        .unwrap()
+                        .await
+                        .unwrap();
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     // socket.flush().await;
                     let mut buf = [0u8; 3];

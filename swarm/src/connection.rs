@@ -1468,7 +1468,14 @@ enum PendingPoint {
 impl From<ConnectedPoint> for PendingPoint {
     fn from(endpoint: ConnectedPoint) -> Self {
         match endpoint {
-            ConnectedPoint::Dialer { role_override, port_use, .. } => PendingPoint::Dialer { role_override, port_use },
+            ConnectedPoint::Dialer {
+                role_override,
+                port_use,
+                ..
+            } => PendingPoint::Dialer {
+                role_override,
+                port_use,
+            },
             ConnectedPoint::Listener {
                 local_addr,
                 send_back_addr,
