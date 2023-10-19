@@ -61,7 +61,7 @@ trait Abstract<O> {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
     fn poll(

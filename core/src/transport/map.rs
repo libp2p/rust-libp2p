@@ -82,7 +82,7 @@ where
         let future = self.transport.dial(addr.clone(), dial_opts)?;
         let p = ConnectedPoint::Dialer {
             address: addr,
-            role_override: Endpoint::Dialer,
+            role_override: dial_opts.endpoint,
             port_use: dial_opts.port_use,
         };
         Ok(MapFuture {

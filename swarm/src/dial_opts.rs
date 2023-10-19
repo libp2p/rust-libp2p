@@ -27,7 +27,7 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
 
-macro_rules! port_use_and_role_setter {
+macro_rules! fn_override_role {
     () => {
         /// Override role of local node on connection. I.e. execute the dial _as a
         /// listener_.
@@ -39,7 +39,11 @@ macro_rules! port_use_and_role_setter {
             self.role_override = Endpoint::Listener;
             self
         }
+    };
+}
 
+macro_rules! fn_allocate_new_port {
+    () => {
         /// Enforce the allocation of a new port.
         /// Default behaviour is best effort reuse of existing ports. If there is no existing
         /// fitting listener, a new port is allocated.
@@ -204,7 +208,8 @@ impl WithPeerId {
         }
     }
 
-    port_use_and_role_setter!();
+    fn_override_role!();
+    fn_allocate_new_port!();
 
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
@@ -246,7 +251,8 @@ impl WithPeerIdWithAddresses {
         self
     }
 
-    port_use_and_role_setter!();
+    fn_override_role!();
+    fn_allocate_new_port!();
 
     /// Override
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
@@ -292,7 +298,8 @@ pub struct WithoutPeerIdWithAddress {
 }
 
 impl WithoutPeerIdWithAddress {
-    port_use_and_role_setter!();
+    fn_override_role!();
+    fn_allocate_new_port!();
 
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {

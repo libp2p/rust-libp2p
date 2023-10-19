@@ -43,11 +43,10 @@ use futures::{
 };
 use futures_timer::Delay;
 use if_watch::IfEvent;
-use libp2p_core::transport::DialOpts;
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{DialOpts, ListenerId, PortUse, TransportError, TransportEvent},
 };
 use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
@@ -70,27 +69,17 @@ pub struct Config {
     nodelay: Option<bool>,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
-    /// Whether port reuse should be enabled.
-    enable_port_reuse: bool,
 }
 
 type Port = u16;
 
 /// The configuration for port reuse of listening sockets.
-#[derive(Debug, Clone)]
-enum PortReuse {
-    /// Port reuse is disabled, i.e. ephemeral local ports are
-    /// used for outgoing TCP connections.
-    Disabled,
-    /// Port reuse when dialing is enabled, i.e. the local
-    /// address and port that a new socket for an outgoing
-    /// connection is bound to are chosen from an existing
-    /// listening socket, if available.
-    Enabled {
-        /// The addresses and ports of the listening sockets
-        /// registered as eligible for port reuse when dialing.
-        listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
-    },
+#[derive(Debug, Clone, Default)]
+struct PortReuse {
+    /// The addresses and ports of the listening sockets
+    /// registered as eligible for port reuse when dialing
+    listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
+    dialed_as_listener: Arc<RwLock<HashSet<Multiaddr>>>,
 }
 
 impl PortReuse {
@@ -98,26 +87,21 @@ impl PortReuse {
     ///
     /// Has no effect if port reuse is disabled.
     fn register(&mut self, ip: IpAddr, port: Port) {
-        if let PortReuse::Enabled { listen_addrs } = self {
-            log::trace!("Registering for port reuse: {}:{}", ip, port);
-            listen_addrs
-                .write()
-                .expect("`register()` and `unregister()` never panic while holding the lock")
-                .insert((ip, port));
-        }
+        self.listen_addrs
+            .write()
+            .expect("`register()` and `unregister()` never panic while holding the lock")
+            .insert((ip, port));
     }
 
     /// Unregisters a socket address for port reuse.
     ///
     /// Has no effect if port reuse is disabled.
     fn unregister(&mut self, ip: IpAddr, port: Port) {
-        if let PortReuse::Enabled { listen_addrs } = self {
-            log::trace!("Unregistering for port reuse: {}:{}", ip, port);
-            listen_addrs
-                .write()
-                .expect("`register()` and `unregister()` never panic while holding the lock")
-                .remove(&(ip, port));
-        }
+        log::trace!("Unregistering for port reuse: {}:{}", ip, port);
+        self.listen_addrs
+            .write()
+            .expect("`register()` and `unregister()` never panic while holding the lock")
+            .remove(&(ip, port));
     }
 
     /// Selects a listening socket address suitable for use
@@ -130,25 +114,36 @@ impl PortReuse {
     /// Returns `None` if port reuse is disabled or no suitable
     /// listening socket address is found.
     fn local_dial_addr(&self, remote_ip: &IpAddr) -> Option<SocketAddr> {
-        if let PortReuse::Enabled { listen_addrs } = self {
-            for (ip, port) in listen_addrs
-                .read()
-                .expect("`local_dial_addr` never panic while holding the lock")
-                .iter()
-            {
-                if ip.is_ipv4() == remote_ip.is_ipv4()
-                    && ip.is_loopback() == remote_ip.is_loopback()
-                {
-                    if remote_ip.is_ipv4() {
-                        return Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), *port));
-                    } else {
-                        return Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), *port));
-                    }
+        for (ip, port) in self
+            .listen_addrs
+            .read()
+            .expect("`local_dial_addr` never panic while holding the lock")
+            .iter()
+        {
+            if ip.is_ipv4() == remote_ip.is_ipv4() && ip.is_loopback() == remote_ip.is_loopback() {
+                if remote_ip.is_ipv4() {
+                    return Some(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), *port));
+                } else {
+                    return Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), *port));
                 }
             }
         }
 
         None
+    }
+
+    fn dialed_from_listener(&self, addr: Multiaddr) {
+        self.dialed_as_listener
+            .write()
+            .expect("`dialed_as_listener` never panic while holding the lock")
+            .insert(addr);
+    }
+
+    fn already_dialed_as_listener(&self, addr: &Multiaddr) -> bool {
+        self.dialed_as_listener
+            .read()
+            .expect("`already_dialed_as_listener` never panic while holding the lock")
+            .contains(addr)
     }
 }
 
@@ -168,7 +163,6 @@ impl Config {
             ttl: None,
             nodelay: None,
             backlog: 1024,
-            enable_port_reuse: false,
         }
     }
 
@@ -187,106 +181,6 @@ impl Config {
     /// Configures the listen backlog for new listen sockets.
     pub fn listen_backlog(mut self, backlog: u32) -> Self {
         self.backlog = backlog;
-        self
-    }
-
-    /// Configures port reuse for local sockets, which implies
-    /// reuse of listening ports for outgoing connections to
-    /// enhance NAT traversal capabilities.
-    ///
-    /// Please refer to e.g. [RFC 4787](https://tools.ietf.org/html/rfc4787)
-    /// section 4 and 5 for some of the NAT terminology used here.
-    ///
-    /// There are two main use-cases for port reuse among local
-    /// sockets:
-    ///
-    ///   1. Creating multiple listening sockets for the same address
-    ///      and port to allow accepting connections on multiple threads
-    ///      without having to synchronise access to a single listen socket.
-    ///
-    ///   2. Creating outgoing connections whose local socket is bound to
-    ///      the same address and port as a listening socket. In the rare
-    ///      case of simple NATs with both endpoint-independent mapping and
-    ///      endpoint-independent filtering, this can on its own already
-    ///      permit NAT traversal by other nodes sharing the observed
-    ///      external address of the local node. For the common case of
-    ///      NATs with address-dependent or address and port-dependent
-    ///      filtering, port reuse for outgoing connections can facilitate
-    ///      further TCP hole punching techniques for NATs that perform
-    ///      endpoint-independent mapping. Port reuse cannot facilitate
-    ///      NAT traversal in the presence of "symmetric" NATs that employ
-    ///      both address/port-dependent mapping and filtering, unless
-    ///      there is some means of port prediction.
-    ///
-    /// Both use-cases are enabled when port reuse is enabled, with port reuse
-    /// for outgoing connections (`2.` above) always being implied.
-    ///
-    /// > **Note**: Due to the identification of a TCP socket by a 4-tuple
-    /// > of source IP address, source port, destination IP address and
-    /// > destination port, with port reuse enabled there can be only
-    /// > a single outgoing connection to a particular address and port
-    /// > of a peer per local listening socket address.
-    ///
-    /// [`Transport`] keeps track of the listen socket addresses as they
-    /// are reported by polling it. It is possible to listen on multiple
-    /// addresses, enabling port reuse for each, knowing exactly which listen
-    /// address is reused when dialing with a specific [`Transport`], as in the
-    /// following example:
-    ///
-    /// ```no_run
-    /// # use futures::StreamExt;
-    /// # use libp2p_core::transport::{ListenerId, TransportEvent};
-    /// # use libp2p_core::{Multiaddr, Transport};
-    /// # use std::pin::Pin;
-    /// # #[cfg(not(feature = "async-io"))]
-    /// # fn main() {}
-    /// #
-    /// #[cfg(feature = "async-io")]
-    /// #[async_std::main]
-    /// async fn main() -> std::io::Result<()> {
-    ///
-    /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
-    /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
-    ///
-    /// let mut tcp1 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp1.listen_on(ListenerId::next(), listen_addr1.clone()).expect("listener");
-    /// match tcp1.select_next_some().await {
-    ///     TransportEvent::NewAddress { listen_addr, .. } => {
-    ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
-    ///         // `stream` has `listen_addr1` as its local socket address.
-    ///     }
-    ///     _ => {}
-    /// }
-    ///
-    /// let mut tcp2 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp2.listen_on(ListenerId::next(), listen_addr2).expect("listener");
-    /// match tcp2.select_next_some().await {
-    ///     TransportEvent::NewAddress { listen_addr, .. } => {
-    ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
-    ///         // `stream` has `listen_addr2` as its local socket address.
-    ///     }
-    ///     _ => {}
-    /// }
-    /// Ok(())
-    /// }
-    /// ```
-    ///
-    /// If a wildcard listen socket address is used to listen on any interface,
-    /// there can be multiple such addresses registered for port reuse. In this
-    /// case, one is chosen whose IP protocol version and loopback status is the
-    /// same as that of the remote address. Consequently, for maximum control of
-    /// the local listening addresses and ports that are used for outgoing
-    /// connections, a new [`Transport`] should be created for each listening
-    /// socket, avoiding the use of wildcard addresses which bind a socket to
-    /// all network interfaces.
-    ///
-    /// When this option is enabled on a unix system, the socket
-    /// option `SO_REUSEPORT` is set, if available, to permit
-    /// reuse of listening ports for multiple sockets.
-    pub fn port_reuse(mut self, port_reuse: bool) -> Self {
-        self.enable_port_reuse = port_reuse;
         self
     }
 }
@@ -333,13 +227,7 @@ where
     /// - [`tokio::Transport::new`]
     /// - [`async_io::Transport::new`]
     pub fn new(config: Config) -> Self {
-        let port_reuse = if config.enable_port_reuse {
-            PortReuse::Enabled {
-                listen_addrs: Arc::new(RwLock::new(HashSet::new())),
-            }
-        } else {
-            PortReuse::Disabled
-        };
+        let port_reuse = PortReuse::default();
         Transport {
             config,
             port_reuse,
@@ -347,7 +235,7 @@ where
         }
     }
 
-    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<Socket> {
+    fn create_socket(&self, socket_addr: SocketAddr, port_use: PortUse) -> io::Result<Socket> {
         let socket = Socket::new(
             Domain::for_address(socket_addr),
             Type::STREAM,
@@ -363,8 +251,8 @@ where
             socket.set_nodelay(nodelay)?;
         }
         socket.set_reuse_address(true)?;
-        #[cfg(unix)]
-        if let PortReuse::Enabled { .. } = &self.port_reuse {
+        #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
+        if port_use == PortUse::Reuse {
             socket.set_reuse_port(true)?;
         }
         Ok(socket)
@@ -375,7 +263,7 @@ where
         id: ListenerId,
         socket_addr: SocketAddr,
     ) -> io::Result<ListenStream<T>> {
-        let socket = self.create_socket(socket_addr)?;
+        let socket = self.create_socket(socket_addr, PortUse::Reuse)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.config.backlog as _)?;
         socket.set_nonblocking(true)?;
@@ -410,13 +298,7 @@ where
     /// This transport will have port-reuse disabled.
     fn default() -> Self {
         let config = Config::default();
-        let port_reuse = if config.enable_port_reuse {
-            PortReuse::Enabled {
-                listen_addrs: Arc::new(RwLock::new(HashSet::new())),
-            }
-        } else {
-            PortReuse::Disabled
-        };
+        let port_reuse = Default::default();
         Transport {
             port_reuse,
             config,
@@ -467,7 +349,7 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        _opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
@@ -480,12 +362,16 @@ where
         log::debug!("dialing {}", socket_addr);
 
         let socket = self
-            .create_socket(socket_addr)
+            .create_socket(socket_addr, opts.port_use)
             .map_err(TransportError::Other)?;
 
-        if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
-            log::trace!("Binding dial socket to listen socket {}", addr);
-            socket.bind(&addr.into()).map_err(TransportError::Other)?;
+        match self.port_reuse.local_dial_addr(&socket_addr.ip()) {
+            Some(socket_addr) if opts.port_use == PortUse::Reuse => {
+                log::trace!("Binding dial socket to listen socket {}", socket_addr);
+                socket.bind(&socket_addr.into()).map_err(TransportError::Other)?;
+                self.port_reuse.dialed_from_listener(addr);
+            }
+            _ => {}
         }
 
         socket
@@ -529,9 +415,10 @@ where
         if !is_tcp_addr(listen) || !is_tcp_addr(observed) {
             return None;
         }
-        match &self.port_reuse {
-            PortReuse::Disabled => address_translation(listen, observed),
-            PortReuse::Enabled { .. } => Some(observed.clone()),
+        if self.port_reuse.already_dialed_as_listener(&observed) {
+            Some(observed.clone())
+        } else {
+            address_translation(listen, observed)
         }
     }
 
@@ -845,6 +732,7 @@ mod tests {
         future::poll_fn,
     };
     use libp2p_core::Transport as _;
+    use libp2p_core::Endpoint;
     use libp2p_identity::PeerId;
 
     #[test]
@@ -926,7 +814,10 @@ mod tests {
             let mut tcp = Transport::<T>::default();
 
             // Obtain a future socket through dialing
-            let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
+            let mut socket = tcp.dial(addr.clone(), DialOpts {
+                endpoint: Endpoint::Dialer,
+                port_use: PortUse::Reuse,
+            }).unwrap().await.unwrap();
             socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
 
             let mut buf = [0u8; 3];
@@ -1000,7 +891,10 @@ mod tests {
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = Transport::<T>::default();
-            tcp.dial(dest_addr).unwrap().await.unwrap();
+            tcp.dial(dest_addr, DialOpts {
+                endpoint: Endpoint::Dialer,
+                port_use: PortUse::New,
+            }).unwrap().await.unwrap();
         }
 
         fn test(addr: Multiaddr) {
@@ -1078,7 +972,7 @@ mod tests {
             port_reuse_tx: oneshot::Sender<Protocol<'_>>,
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
+            let mut tcp = Transport::<T>::new(Config::new());
             tcp.listen_on(ListenerId::next(), addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
@@ -1097,7 +991,10 @@ mod tests {
                         .ok();
 
                     // Obtain a future socket through dialing
-                    let mut socket = tcp.dial(dest_addr).unwrap().await.unwrap();
+                    let mut socket = tcp.dial(dest_addr, DialOpts {
+                        endpoint: Endpoint::Dialer,
+                        port_use: PortUse::Reuse,
+                    }).unwrap().await.unwrap();
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
                     // socket.flush().await;
                     let mut buf = [0u8; 3];
@@ -1144,9 +1041,8 @@ mod tests {
     #[test]
     fn port_reuse_listening() {
         env_logger::try_init().ok();
-
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
+            let mut tcp = Transport::<T>::new(Config::new());
             tcp.listen_on(ListenerId::next(), addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress {
@@ -1360,7 +1256,7 @@ mod tests {
                 .build()
                 .unwrap();
             rt.block_on(async {
-                test::<async_io::Tcp>();
+                test::<tokio::Tcp>();
             });
         }
     }

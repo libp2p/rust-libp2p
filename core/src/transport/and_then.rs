@@ -84,7 +84,7 @@ where
                 self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
-                    role_override: Endpoint::Dialer,
+                    role_override: dial_opts.endpoint,
                     port_use: dial_opts.port_use,
                 },
             )),
