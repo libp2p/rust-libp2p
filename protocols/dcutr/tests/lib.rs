@@ -26,7 +26,7 @@ use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt as _;
 use std::time::Duration;
 
@@ -86,13 +86,27 @@ async fn connect() {
 
     let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id));
 
-    src.wait(move |e| match e {
-        SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-            (*endpoint.get_remote_address() == dst_addr).then_some(())
-        }
-        _ => None,
-    })
-    .await;
+    let established_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::ConnectionEstablished {
+                endpoint,
+                connection_id,
+                ..
+            } => (*endpoint.get_remote_address() == dst_addr).then_some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    let reported_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(
+                dcutr::Event::DirectConnectionUpgradeSucceeded { connection_id, .. },
+            )) => Some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    assert_eq!(established_conn_id, reported_conn_id);
 }
 
 fn build_relay() -> Swarm<relay::Behaviour> {
@@ -123,40 +137,22 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::Config::default())
         .boxed();
 
-    SwarmBuilder::without_executor(
+    Swarm::new(
         transport,
         Client {
             relay: behaviour,
             dcutr: dcutr::Behaviour::new(local_peer_id),
         },
         local_peer_id,
+        Config::with_async_std_executor(),
     )
-    .build()
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "ClientEvent", prelude = "libp2p_swarm::derive_prelude")]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
     relay: relay::client::Behaviour,
     dcutr: dcutr::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(relay::client::Event),
-    Dcutr(dcutr::Event),
-}
-
-impl From<relay::client::Event> for ClientEvent {
-    fn from(event: relay::client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<dcutr::Event> for ClientEvent {
-    fn from(event: dcutr::Event) -> Self {
-        ClientEvent::Dcutr(event)
-    }
 }
 
 async fn wait_for_reservation(

@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -414,11 +414,16 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
         .boxed()
     };
 
-    Ok(
-        SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
-            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-            .build(),
-    )
+    let swarm = Swarm::new(
+        transport,
+        Default::default(),
+        local_peer_id,
+        Config::with_tokio_executor()
+            .with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .with_idle_connection_timeout(Duration::from_secs(60 * 5)),
+    );
+
+    Ok(swarm)
 }
 
 async fn connect(

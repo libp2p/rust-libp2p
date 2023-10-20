@@ -91,8 +91,8 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [Forest](https://github.com/ChainSafe/forest) - An implementation of Filecoin written in Rust.
 - [fuel-core](https://github.com/FuelLabs/fuel-core) - A Rust implementation of the Fuel protocol.
 - [HotShot](https://github.com/EspressoSystems/HotShot) - Decentralized sequencer in Rust developed by [Espresso Systems](https://www.espressosys.com/).
-- [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation
-used and maintained by [Actyx](https://www.actyx.com).
+- [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation used and maintained by [Actyx](https://www.actyx.com).
+- [Homestar](https://github.com/ipvm-wg/homestar) - An InterPlanetary Virtual Machine (IPVM) implementation used and maintained by Fission.
 - [beetle](https://github.com/n0-computer/beetle) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
