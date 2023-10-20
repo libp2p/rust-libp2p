@@ -41,7 +41,6 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
-use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
