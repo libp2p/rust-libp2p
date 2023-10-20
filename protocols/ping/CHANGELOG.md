@@ -1,4 +1,7 @@
-## 0.43.1 - unreleased
+## 0.44.0 - unreleased
+
+
+## 0.43.1
 
 - Honor ping interval in case of errors.
   Previously, we would immediately open another ping stream if the current one failed.
@@ -6,7 +9,7 @@
 
 [PR 4423]: https://github.com/libp2p/rust-libp2p/pull/4423
 
-## 0.43.0 
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

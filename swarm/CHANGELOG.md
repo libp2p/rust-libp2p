@@ -1,4 +1,31 @@
-## 0.43.4 - unreleased
+## 0.44.0 - unreleased
+
+
+## 0.43.6
+
+- Deprecate `libp2p::swarm::SwarmBuilder`.
+  Most users should use `libp2p::SwarmBuilder`.
+  In some special cases, users may need to use `Swarm::new` and `Config` instead of the new `libp2p::SwarmBuilder`.
+  See [PR 4120].
+- Make the `Debug` implementation of `StreamProtocol` more concise.
+  See [PR 4631](https://github.com/libp2p/rust-libp2p/pull/4631).
+- Fix overflow in `KeepAlive` computation that could occur panic at `Delay::new` if `SwarmBuilder::idle_connection_timeout` is configured too large.
+  See [PR 4644](https://github.com/libp2p/rust-libp2p/pull/4644).
+- Deprecate `KeepAlive::Until`.
+  Individual protocols should not keep connections alive for longer than necessary.
+  Users should use `swarm::Config::idle_connection_timeout` instead.
+  See [PR 4656](https://github.com/libp2p/rust-libp2p/pull/4656).
+- Deprecate `keep_alive_timeout` in `OneShotHandlerConfig`.
+  See [PR 4680](https://github.com/libp2p/rust-libp2p/pull/4680).
+
+[PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
+
+## 0.43.5
+
+- Fix overflow in `KeepAlive` computation that could occur if `SwarmBuilder::idle_connection_timeout` is configured with `u64::MAX`.
+  See [PR 4559](https://github.com/libp2p/rust-libp2p/pull/4559).
+
+## 0.43.4
 
 - Implement `Debug` for event structs.
   See [PR 4426].
