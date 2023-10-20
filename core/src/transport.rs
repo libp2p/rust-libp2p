@@ -58,14 +58,14 @@ pub use self::upgrade::Upgrade;
 
 static NEXT_LISTENER_ID: AtomicUsize = AtomicUsize::new(1);
 
-/// Defines the port use policy. Decides whether to reuse an existing port of a listener
-/// or to allocate a new one.
+/// The port use policy for a new connection.
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Hash)]
 pub enum PortUse {
     /// Always allocate a new port for the dial.
     New,
-    /// Best effor reusing of the port. If there is no listener present that can be used to dial,
-    /// a new port is allocated.
+    /// Best effor reusing of an existing port.
+    ///
+  	/// If there is no listener present that can be used to dial, a new port is allocated.
     #[default]
     Reuse,
 }
