@@ -775,6 +775,26 @@ impl Ord for KeepAlive {
     }
 }
 
+#[cfg(test)]
+impl quickcheck::Arbitrary for KeepAlive {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        match quickcheck::GenRange::gen_range(g, 1u8..4) {
+            1 =>
+            {
+                #[allow(deprecated)]
+                KeepAlive::Until(
+                    Instant::now()
+                        .checked_add(Duration::arbitrary(g))
+                        .unwrap_or(Instant::now()),
+                )
+            }
+            2 => KeepAlive::Yes,
+            3 => KeepAlive::No,
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// A statically declared, empty [`HashSet`] allows us to work around borrow-checker rules for
 /// [`ProtocolsAdded::from_set`]. The lifetimes don't work unless we have a [`HashSet`] with a `'static' lifetime.
 static EMPTY_HASHSET: Lazy<HashSet<StreamProtocol>> = Lazy::new(HashSet::new);

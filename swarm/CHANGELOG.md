@@ -1,8 +1,7 @@
-## 0.43.7 - unreleased
-- Default to keeping connections alive whilst there are active streams and add `Stream::no_keep_alive` to opt-out of this behaviour.
-  See [PR 4595](https://github.com/libp2p/rust-libp2p/pull/4595).
+## 0.44.0 - unreleased
 
-## 0.43.6 - unreleased
+
+## 0.43.6
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.
   Most users should use `libp2p::SwarmBuilder`.
@@ -10,6 +9,8 @@
   See [PR 4120].
 - Make the `Debug` implementation of `StreamProtocol` more concise.
   See [PR 4631](https://github.com/libp2p/rust-libp2p/pull/4631).
+- Fix overflow in `KeepAlive` computation that could occur panic at `Delay::new` if `SwarmBuilder::idle_connection_timeout` is configured too large.
+  See [PR 4644](https://github.com/libp2p/rust-libp2p/pull/4644).
 - Deprecate `KeepAlive::Until`.
   Individual protocols should not keep connections alive for longer than necessary.
   Users should use `swarm::Config::idle_connection_timeout` instead.

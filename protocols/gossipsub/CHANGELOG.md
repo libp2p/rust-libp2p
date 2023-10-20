@@ -1,4 +1,7 @@
-## 0.45.2 - unreleased
+## 0.46.0 - unreleased
+
+
+## 0.45.2
 
 - Deprecate `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
   See [PR 4648].

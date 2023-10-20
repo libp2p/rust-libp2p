@@ -5,6 +5,9 @@ edition = "2021"
 license = "MIT"
 publish = false
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 futures = "0.3.28"
 getrandom = { version = "0.2.9", features = ["js"] }
