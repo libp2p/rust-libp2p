@@ -1995,7 +1995,9 @@ where
                 }
             }
             DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
+                dial_opts::PeerCondition::Disconnected
+                | dial_opts::PeerCondition::NotDialing
+                | dial_opts::PeerCondition::DisconnectedAndNotDialing,
             ) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
