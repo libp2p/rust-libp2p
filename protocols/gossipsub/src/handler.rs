@@ -439,6 +439,7 @@ impl ConnectionHandler for Handler {
                     return KeepAlive::Yes;
                 }
 
+                #[allow(deprecated)]
                 KeepAlive::No
             }
             Handler::Disabled(_) => KeepAlive::No,

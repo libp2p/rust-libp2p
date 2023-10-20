@@ -9,6 +9,9 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 publish = false
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 clap = { version = "4.3.23", features = ["derive"] }
 zeroize = "1"
