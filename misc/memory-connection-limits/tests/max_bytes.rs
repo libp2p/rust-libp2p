@@ -61,6 +61,8 @@ fn max_bytes() {
         network
             .dial(
                 DialOpts::peer_id(target)
+                    // Always dial, even if connected or already dialing.
+                    .condition(libp2p_swarm::dial_opts::PeerCondition::Always)
                     .addresses(vec![addr.clone()])
                     .build(),
             )
@@ -70,7 +72,12 @@ fn max_bytes() {
     std::thread::sleep(Duration::from_millis(100)); // Memory stats are only updated every 100ms internally, ensure they are up-to-date when we try to exceed it.
 
     match network
-        .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+        .dial(
+            DialOpts::peer_id(target)
+                .condition(libp2p_swarm::dial_opts::PeerCondition::Always)
+                .addresses(vec![addr])
+                .build(),
+        )
         .expect_err("Unexpected dialing success.")
     {
         DialError::Denied { cause } => {
