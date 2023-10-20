@@ -1,5 +1,7 @@
 ## 0.53.0 - unreleased
 
+- Raise MSRV to 1.73.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.52.4
 
