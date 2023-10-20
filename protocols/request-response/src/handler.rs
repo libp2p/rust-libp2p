@@ -275,7 +275,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        return KeepAlive::No;
+        KeepAlive::No
     }
 
     fn poll(
