@@ -1,4 +1,7 @@
-## 0.1.1 - unreleased
+## 0.2.0 - unreleased
+
+
+## 0.1.1
 
 - Fix high CPU usage due to repeated generation of failure events.
   See [PR 4569](https://github.com/libp2p/rust-libp2p/pull/4569).

@@ -5,6 +5,9 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 async-std = { version = "1.12", features = ["attributes"] }
