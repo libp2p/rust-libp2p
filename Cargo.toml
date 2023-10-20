@@ -135,6 +135,7 @@ clippy.used_underscore_binding = "warn"
 clippy.pedantic = "allow"
 clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
+clippy.manual_let_else = "warn"
 
 [workspace.metadata.release]
 pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh'] # Nested use of shell to expand variables.
