@@ -73,9 +73,6 @@ pub struct Handler {
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
-
     /// The connected endpoint of the connection that the handler
     /// is associated with.
     endpoint: ConnectedPoint,
@@ -487,7 +484,6 @@ impl Handler {
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
-            keep_alive: KeepAlive::Yes,
             protocol_status: None,
             remote_supported_protocols: Default::default(),
             connection_id,
@@ -707,7 +703,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
+            return KeepAlive::No;
+        };
+
+        KeepAlive::Yes
     }
 
     fn poll(
@@ -757,10 +757,6 @@ impl ConnectionHandler for Handler {
                 protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
             });
         }
-
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            self.keep_alive = KeepAlive::No
-        };
 
         Poll::Pending
     }
