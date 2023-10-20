@@ -352,19 +352,19 @@ where
                 }
             }
 
+            if let Some(new_timeout) =
+                compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
+            {
+                *shutdown = new_timeout;
+            }
+
             // Check if the connection (and handler) should be shut down.
-            // As long as we're still negotiating substreams, shutdown is always postponed.
+            // As long as we're still negotiating substreams or have any active streams shutdown is always postponed.
             if negotiating_in.is_empty()
                 && negotiating_out.is_empty()
                 && requested_substreams.is_empty()
                 && Arc::strong_count(stream_counter) == 1
             {
-                if let Some(new_timeout) =
-                    compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
-                {
-                    *shutdown = new_timeout;
-                }
-
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
