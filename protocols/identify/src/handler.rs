@@ -110,7 +110,7 @@ pub enum Event {
     /// We replied to an identification request from the remote.
     Identification,
     /// We actively pushed our identification information to the remote.
-    IdentificationPushed,
+    IdentificationPushed(Info),
     /// Failed to identify the remote, or to reply to an identification request.
     IdentificationError(StreamUpgradeError<UpgradeError>),
 }
@@ -211,7 +211,7 @@ impl Handler {
                 if self
                     .active_streams
                     .try_push(
-                        protocol::send_identify(stream, info).map_ok(|_| Success::SentIdentifyPush),
+                        protocol::send_identify(stream, info).map_ok(Success::SentIdentifyPush),
                     )
                     .is_err()
                 {
@@ -348,9 +348,9 @@ impl ConnectionHandler for Handler {
                     remote_info,
                 )));
             }
-            Poll::Ready(Ok(Ok(Success::SentIdentifyPush))) => {
+            Poll::Ready(Ok(Ok(Success::SentIdentifyPush(info)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::IdentificationPushed,
+                    Event::IdentificationPushed(info),
                 ));
             }
             Poll::Ready(Ok(Ok(Success::SentIdentify))) => {
@@ -442,6 +442,6 @@ impl ConnectionHandler for Handler {
 enum Success {
     SentIdentify,
     ReceivedIdentify(Info),
-    SentIdentifyPush,
+    SentIdentifyPush(Info),
     ReceivedIdentifyPush(PushInfo),
 }
