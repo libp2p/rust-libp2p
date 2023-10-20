@@ -3,7 +3,7 @@ name = "libp2p-mplex"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.40.0"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,7 +20,7 @@ log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"
 rand = "0.8"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
@@ -28,6 +28,7 @@ async-std = { version = "1.7.0", features = ["attributes"] }
 criterion = "0.5"
 env_logger = "0.10"
 futures = "0.3"
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
 libp2p-plaintext = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
@@ -43,3 +44,6 @@ harness = false
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

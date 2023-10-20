@@ -37,7 +37,7 @@ use void::Void;
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
 /// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.

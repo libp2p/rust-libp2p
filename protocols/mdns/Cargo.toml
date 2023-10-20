@@ -2,7 +2,7 @@
 name = "libp2p-mdns"
 edition = "2021"
 rust-version = { workspace = true }
-version = "0.44.0"
+version = "0.45.0"
 description = "Implementation of the libp2p mDNS discovery method"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
@@ -14,15 +14,15 @@ categories = ["network-programming", "asynchronous"]
 async-io  = { version = "1.13.0", optional = true }
 data-encoding = "2.4.0"
 futures = "0.3.28"
-if-watch = "3.0.1"
+if-watch = "3.1.0"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
 log = "0.4.20"
 rand = "0.8.3"
-smallvec = "1.11.0"
+smallvec = "1.11.1"
 socket2 = { version = "0.5.4", features = ["all"] }
-tokio = { version = "1.32", default-features = false, features = ["net", "time"], optional = true}
+tokio = { version = "1.33", default-features = false, features = ["net", "time"], optional = true}
 trust-dns-proto = { version = "0.23.0", default-features = false, features = ["mdns"] }
 void = "1.0.2"
 
@@ -37,7 +37,7 @@ libp2p-noise = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["tokio", "async-std"] }
 libp2p-tcp = { workspace = true, features = ["tokio", "async-io"] }
 libp2p-yamux = { workspace = true }
-tokio = { version = "1.32", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio = { version = "1.33", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
 libp2p-swarm-test = { path = "../../swarm-test" }
 
 [[test]]
@@ -55,3 +55,6 @@ required-features = ["tokio"]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -22,6 +22,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::error::ConfigBuilderError;
 use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
 use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
 
@@ -186,6 +187,9 @@ impl Config {
     /// The time a connection is maintained to a peer without being in the mesh and without
     /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
     /// Default is 120 seconds.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub fn idle_timeout(&self) -> Duration {
         self.idle_timeout
     }
@@ -831,40 +835,34 @@ impl ConfigBuilder {
     }
 
     /// Constructs a [`Config`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<Config, &'static str> {
+    pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
         if self.config.protocol.max_transmit_size < 100 {
-            return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
         }
 
         if self.config.history_length < self.config.history_gossip {
-            return Err(
-                "The history_length must be greater than or equal to the history_gossip \
-                length",
-            );
+            return Err(ConfigBuilderError::HistoryLengthTooSmall);
         }
 
         if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
-            return Err("The following inequality doesn't hold \
-                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
+            return Err(ConfigBuilderError::MeshParametersInvalid);
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
-            return Err(
-                "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
-            );
+            return Err(ConfigBuilderError::MeshOutboundInvalid);
         }
 
         if self.config.unsubscribe_backoff.as_millis() == 0 {
-            return Err("The unsubscribe_backoff parameter should be positive.");
+            return Err(ConfigBuilderError::UnsubscribeBackoffIsZero);
         }
 
         if self.invalid_protocol {
-            return Err("The provided protocol is invalid, it must start with a forward-slash");
+            return Err(ConfigBuilderError::InvalidProtocol);
         }
 
         Ok(self.config.clone())

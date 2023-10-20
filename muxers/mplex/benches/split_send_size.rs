@@ -32,7 +32,7 @@ use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, T
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -166,30 +166,28 @@ fn run(
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
-    let key = identity::Keypair::generate_ed25519();
-    let local_public_key = key.public();
-
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
     libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(
+            &identity::Keypair::generate_ed25519(),
+        ))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
-    let key = identity::Keypair::generate_ed25519();
-    let local_public_key = key.public();
-
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
     transport::MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(
+            &identity::Keypair::generate_ed25519(),
+        ))
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
         .boxed()

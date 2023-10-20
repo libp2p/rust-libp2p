@@ -176,6 +176,7 @@ where
         } else {
             self.dial_queue.shrink_to_fit();
 
+            #[allow(deprecated)]
             if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
                 self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
             }
@@ -199,6 +200,7 @@ where
                 ..
             }) => {
                 // If we're shutting down the connection for inactivity, reset the timeout.
+                #[allow(deprecated)]
                 if !self.keep_alive.is_yes() {
                     self.keep_alive =
                         KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
@@ -231,6 +233,9 @@ where
 #[derive(Debug)]
 pub struct OneShotHandlerConfig {
     /// Keep-alive timeout for idle connections.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub keep_alive_timeout: Duration,
     /// Timeout for outbound substream upgrades.
     pub outbound_substream_timeout: Duration,
@@ -239,6 +244,7 @@ pub struct OneShotHandlerConfig {
 }
 
 impl Default for OneShotHandlerConfig {
+    #[allow(deprecated)]
     fn default() -> Self {
         OneShotHandlerConfig {
             keep_alive_timeout: Duration::from_secs(10),
@@ -258,6 +264,7 @@ mod tests {
     use void::Void;
 
     #[test]
+    #[allow(deprecated)]
     fn do_not_keep_idle_connection_alive() {
         let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
