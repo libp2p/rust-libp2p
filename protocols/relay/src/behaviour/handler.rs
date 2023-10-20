@@ -616,7 +616,6 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-
         match self.idle_at {
             Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10) => {
                 KeepAlive::No
