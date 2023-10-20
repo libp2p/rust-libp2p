@@ -1076,6 +1076,7 @@ fn exceed_jobs_max_queries() {
                             result: QueryResult::GetClosestPeers(Ok(r)),
                             ..
                         }) => break assert!(r.peers.is_empty()),
+                        SwarmEvent::Behaviour(Event::ModeChanged { .. }) => {}
                         SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                         _ => {}
                     }
@@ -1401,6 +1402,7 @@ fn get_providers_single() {
                     result: QueryResult::StartProviding(Ok(_)),
                     ..
                 }) => {}
+                SwarmEvent::Behaviour(Event::ModeChanged { .. }) => {}
                 SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                 _ => {}
             }
