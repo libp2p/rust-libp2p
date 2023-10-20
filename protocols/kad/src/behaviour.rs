@@ -1033,6 +1033,8 @@ where
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
+        let old_mode = self.mode;
+
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
                 log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
@@ -1067,6 +1069,13 @@ where
         };
 
         self.reconfigure_mode();
+
+        if old_mode != self.mode {
+            self.queued_events
+                .push_back(ToSwarm::GenerateEvent(Event::ModeChanged {
+                    new_mode: self.mode,
+                }));
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -2658,6 +2667,12 @@ pub enum Event {
     /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
+
+    /// This peer's mode has been updated automatically.
+    ///
+    /// This happens in response to an external
+    /// address being added or removed.
+    ModeChanged { new_mode: Mode },
 }
 
 /// Information about progress events.
