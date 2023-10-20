@@ -20,11 +20,10 @@
 
 //! libp2p is a modular peer-to-peer networking framework.
 //!
-//! To learn more about the general libp2p multi-language framework visit
-//! [libp2p.io](https://libp2p.io/).
+//! To learn more about the general libp2p multi-language framework visit <https://libp2p.io>.
 //!
 //! To get started with this libp2p implementation in Rust, please take a look
-//! at the [`tutorials`](crate::tutorials). Further examples can be found in the
+//! at the [`tutorials`]. Further examples can be found in the
 //! [examples] directory.
 //!
 //! [examples]: https://github.com/libp2p/rust-libp2p/tree/master/examples
@@ -52,10 +51,15 @@ pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
+
 #[cfg(feature = "deflate")]
 #[cfg(not(target_arch = "wasm32"))]
-#[doc(inline)]
-pub use libp2p_deflate as deflate;
+#[deprecated(
+    note = "Will be removed in the next release, see https://github.com/libp2p/rust-libp2p/issues/4522 for details."
+)]
+pub mod deflate {
+    pub use libp2p_deflate::*;
+}
 #[cfg(feature = "dns")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(target_arch = "wasm32"))]
@@ -65,7 +69,6 @@ pub use libp2p_dns as dns;
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
 #[cfg(feature = "gossipsub")]
-#[cfg(not(target_os = "unknown"))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
 #[cfg(feature = "identify")]
@@ -79,6 +82,11 @@ pub use libp2p_kad as kad;
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
+#[cfg(feature = "memory-connection-limits")]
+#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "memory-connection-limits")))]
+#[doc(inline)]
+pub use libp2p_memory_connection_limits as memory_connection_limits;
 #[cfg(feature = "metrics")]
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
@@ -96,12 +104,7 @@ pub use libp2p_plaintext as plaintext;
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "quic")]
 #[cfg(not(target_arch = "wasm32"))]
-#[deprecated(
-    note = "`quic` is only in alpha status. Please depend on `libp2p-quic` directly and don't ues the `quic` feature of `libp2p`."
-)]
-pub mod quic {
-    pub use libp2p_quic::*;
-}
+pub use libp2p_quic as quic;
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -128,26 +131,34 @@ pub use libp2p_tls as tls;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
-#[cfg(feature = "wasm-ext")]
-#[doc(inline)]
-pub use libp2p_wasm_ext as wasm_ext;
-#[cfg(feature = "webrtc")]
-#[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
+#[cfg(feature = "upnp")]
 #[cfg(not(target_arch = "wasm32"))]
+#[doc(inline)]
+pub use libp2p_upnp as upnp;
+#[cfg(feature = "wasm-ext")]
 #[deprecated(
-    note = "`webrtc` is only in alpha status. Please depend on `libp2p-webrtc` directly and don't ues the `webrtc` feature of `libp2p`."
+    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websocket-websys`."
 )]
-pub mod webrtc {
-    pub use libp2p_webrtc::*;
+pub mod wasm_ext {
+    #[doc(inline)]
+    pub use libp2p_wasm_ext::*;
 }
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
+#[cfg(feature = "websocket-websys")]
+#[doc(inline)]
+pub use libp2p_websocket_websys as websocket_websys;
+#[cfg(feature = "webtransport-websys")]
+#[cfg_attr(docsrs, doc(cfg(feature = "webtransport-websys")))]
+#[doc(inline)]
+pub use libp2p_webtransport_websys as webtransport_websys;
 #[cfg(feature = "yamux")]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
+mod builder;
 mod transport_ext;
 
 pub mod bandwidth;
@@ -155,6 +166,7 @@ pub mod bandwidth;
 #[cfg(doc)]
 pub mod tutorials;
 
+pub use self::builder::SwarmBuilder;
 pub use self::core::{
     transport::TransportError,
     upgrade::{InboundUpgrade, OutboundUpgrade},
@@ -178,36 +190,26 @@ pub use libp2p_swarm::{Stream, StreamProtocol};
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(
-        all(feature = "tcp-async-io", feature = "dns-async-std"),
-        all(feature = "tcp", feature = "dns", feature = "async-std")
-    ),
+    feature = "tcp",
+    feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
+    feature = "async-std",
 ))]
-#[cfg_attr(
-    all(
-        any(feature = "tcp-async-io", feature = "dns-async-std"),
-        not(feature = "async-std")
-    ),
-    deprecated(
-        since = "0.49.0",
-        note = "The `tcp-async-io` and `dns-async-std` features are deprecated. Use the new `tcp` and `dns` features together with the `async-std` feature."
-    )
-)]
 pub async fn development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::DnsConfig::system(tcp::async_io::Transport::new(
+        let dns_tcp = dns::async_std::Transport::system(tcp::async_io::Transport::new(
             tcp::Config::new().nodelay(true),
         ))
         .await?;
         let ws_dns_tcp = websocket::WsConfig::new(
-            dns::DnsConfig::system(tcp::async_io::Transport::new(
+            dns::async_std::Transport::system(tcp::async_io::Transport::new(
                 tcp::Config::new().nodelay(true),
             ))
             .await?,
@@ -234,34 +236,24 @@ pub async fn development_transport(
 ///
 /// > **Note**: This `Transport` is not suitable for production usage, as its implementation
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
+#[deprecated(note = "Use `libp2p::SwarmBuilder` instead.")]
 #[cfg(all(
     not(target_arch = "wasm32"),
-    any(
-        all(feature = "tcp-tokio", feature = "dns-tokio"),
-        all(feature = "tcp", feature = "dns", feature = "tokio")
-    ),
+    feature = "tcp",
+    feature = "dns",
     feature = "websocket",
     feature = "noise",
-    feature = "yamux"
+    feature = "yamux",
+    feature = "tokio",
 ))]
-#[cfg_attr(
-    all(
-        any(feature = "tcp-tokio", feature = "dns-tokio"),
-        not(feature = "tokio")
-    ),
-    deprecated(
-        since = "0.49.0",
-        note = "The `tcp-tokio` and `dns-tokio` features are deprecated. Use the new `tcp` and `dns` feature together with the `tokio` feature."
-    )
-)]
 pub fn tokio_development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::TokioDnsConfig::system(tcp::tokio::Transport::new(
+        let dns_tcp = dns::tokio::Transport::system(tcp::tokio::Transport::new(
             tcp::Config::new().nodelay(true),
         ))?;
-        let ws_dns_tcp = websocket::WsConfig::new(dns::TokioDnsConfig::system(
+        let ws_dns_tcp = websocket::WsConfig::new(dns::tokio::Transport::system(
             tcp::tokio::Transport::new(tcp::Config::new().nodelay(true)),
         )?);
         dns_tcp.or_transport(ws_dns_tcp)

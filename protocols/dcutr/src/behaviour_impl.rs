@@ -55,9 +55,11 @@ pub enum Event {
     },
     DirectConnectionUpgradeSucceeded {
         remote_peer_id: PeerId,
+        connection_id: ConnectionId,
     },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
+        connection_id: ConnectionId,
         error: Error,
     },
 }
@@ -103,9 +105,9 @@ impl Behaviour {
     fn observed_addresses(&self) -> Vec<Multiaddr> {
         self.external_addresses
             .iter()
-            .cloned()
             .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
-            .map(|a| a.with(Protocol::P2p(self.local_peer_id.into())))
+            .cloned()
+            .map(|a| a.with(Protocol::P2p(self.local_peer_id)))
             .collect()
     }
 
@@ -151,6 +153,7 @@ impl Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(
                 Event::DirectConnectionUpgradeFailed {
                     remote_peer_id: peer_id,
+                    connection_id: failed_direct_connection,
                     error: Error::Dial,
                 },
             )]);
@@ -263,6 +266,7 @@ impl NetworkBehaviour for Behaviour {
             self.queued_events.extend([ToSwarm::GenerateEvent(
                 Event::DirectConnectionUpgradeSucceeded {
                     remote_peer_id: peer,
+                    connection_id,
                 },
             )]);
         }
@@ -300,6 +304,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        connection_id,
                         error: Error::Handler(error),
                     },
                 ));
@@ -320,6 +325,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events.push_back(ToSwarm::GenerateEvent(
                     Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        connection_id: relayed_connection_id,
                         error: Error::Handler(error),
                     },
                 ));

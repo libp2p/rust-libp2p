@@ -3,7 +3,7 @@ name = "libp2p-ping"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Ping protocol for libp2p"
-version = "0.43.0"
+version = "0.44.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,14 +11,14 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-either = "1.8.0"
+either = "1.9.0"
 futures = "0.3.28"
 futures-timer = "3.0.2"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 libp2p-identity = { workspace = true }
-log = "0.4.18"
+log = "0.4.20"
 rand = "0.8"
 void = "1.0"
 
@@ -26,7 +26,7 @@ void = "1.0"
 async-std = "1.6.2"
 env_logger = "0.10.0"
 libp2p-swarm = { workspace = true, features = ["macros"] }
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 quickcheck = { workspace = true }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
@@ -35,3 +35,6 @@ quickcheck = { workspace = true }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

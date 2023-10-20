@@ -24,7 +24,6 @@ use crate::handler::{
     SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use instant::Instant;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
@@ -177,7 +176,7 @@ where
             self.dial_queue.shrink_to_fit();
 
             if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+                self.keep_alive = KeepAlive::No;
             }
         }
 
@@ -198,12 +197,6 @@ where
                 protocol: out,
                 ..
             }) => {
-                // If we're shutting down the connection for inactivity, reset the timeout.
-                if !self.keep_alive.is_yes() {
-                    self.keep_alive =
-                        KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
-                }
-
                 self.events_out.push(out.into());
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
@@ -230,8 +223,6 @@ where
 /// Configuration parameters for the `OneShotHandler`
 #[derive(Debug)]
 pub struct OneShotHandlerConfig {
-    /// Keep-alive timeout for idle connections.
-    pub keep_alive_timeout: Duration,
     /// Timeout for outbound substream upgrades.
     pub outbound_substream_timeout: Duration,
     /// Maximum number of concurrent outbound substreams being opened.
@@ -239,9 +230,9 @@ pub struct OneShotHandlerConfig {
 }
 
 impl Default for OneShotHandlerConfig {
+    #[allow(deprecated)]
     fn default() -> Self {
         OneShotHandlerConfig {
-            keep_alive_timeout: Duration::from_secs(10),
             outbound_substream_timeout: Duration::from_secs(10),
             max_dial_negotiated: 8,
         }
@@ -258,6 +249,7 @@ mod tests {
     use void::Void;
 
     #[test]
+    #[allow(deprecated)]
     fn do_not_keep_idle_connection_alive() {
         let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
@@ -270,9 +262,6 @@ mod tests {
             }
         }));
 
-        assert!(matches!(
-            handler.connection_keep_alive(),
-            KeepAlive::Until(_)
-        ));
+        assert!(matches!(handler.connection_keep_alive(), KeepAlive::No));
     }
 }

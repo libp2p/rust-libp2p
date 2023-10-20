@@ -1,6 +1,6 @@
 use libp2p_core::multiaddr::Protocol;
 use libp2p_identify as identify;
-use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
+use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use std::iter;
 
@@ -9,7 +9,7 @@ async fn periodic_identify() {
     let _ = env_logger::try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(
+        identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -17,7 +17,7 @@ async fn periodic_identify() {
     let swarm1_peer_id = *swarm1.local_peer_id();
 
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(
+        identify::Behaviour::new(
             identify::Config::new("c".to_string(), identity.public())
                 .with_agent_version("d".to_string()),
         )
@@ -33,20 +33,20 @@ async fn periodic_identify() {
 
     match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
         (
-            [BehaviourEvent::Identify(Received { info: s1_info, .. }), BehaviourEvent::Identify(Sent { .. })],
-            [BehaviourEvent::Identify(Received { info: s2_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+            [Received { info: s1_info, .. }, Sent { .. }],
+            [Received { info: s2_info, .. }, Sent { .. }],
         )
         | (
-            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s1_info, .. })],
-            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s2_info, .. })],
+            [Sent { .. }, Received { info: s1_info, .. }],
+            [Sent { .. }, Received { info: s2_info, .. }],
         )
         | (
-            [BehaviourEvent::Identify(Received { info: s1_info, .. }), BehaviourEvent::Identify(Sent { .. })],
-            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s2_info, .. })],
+            [Received { info: s1_info, .. }, Sent { .. }],
+            [Sent { .. }, Received { info: s2_info, .. }],
         )
         | (
-            [BehaviourEvent::Identify(Sent { .. }), BehaviourEvent::Identify(Received { info: s1_info, .. })],
-            [BehaviourEvent::Identify(Received { info: s2_info, .. }), BehaviourEvent::Identify(Sent { .. })],
+            [Sent { .. }, Received { info: s1_info, .. }],
+            [Received { info: s2_info, .. }, Sent { .. }],
         ) => {
             assert_eq!(s1_info.public_key.to_peer_id(), swarm2_peer_id);
             assert_eq!(s1_info.protocol_version, "c");
@@ -56,7 +56,7 @@ async fn periodic_identify() {
                 s1_info.observed_addr,
                 swarm1_memory_listen
                     .clone()
-                    .with(Protocol::P2p(swarm1_peer_id.into()))
+                    .with(Protocol::P2p(swarm1_peer_id))
             );
             assert!(s1_info.listen_addrs.contains(&swarm2_tcp_listen_addr));
             assert!(s1_info.listen_addrs.contains(&swarm2_memory_listen));
@@ -83,10 +83,10 @@ async fn identify_push() {
     let _ = env_logger::try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(
+        identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -96,33 +96,25 @@ async fn identify_push() {
     swarm2.connect(&mut swarm1).await;
 
     // First, let the periodic identify do its thing.
-    match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-        (
-            [BehaviourEvent::Identify(e1), BehaviourEvent::Identify(e2)],
-            [BehaviourEvent::Identify(e3), BehaviourEvent::Identify(e4)],
-        ) => {
-            use identify::Event::{Received, Sent};
+    let ([e1, e2], [e3, e4]) = libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await;
 
-            // These can be received in any order, hence assert them here instead of the pattern above.
-            assert!(matches!(e1, Received { .. } | Sent { .. }));
-            assert!(matches!(e2, Received { .. } | Sent { .. }));
-            assert!(matches!(e3, Received { .. } | Sent { .. }));
-            assert!(matches!(e4, Received { .. } | Sent { .. }));
-        }
-        other => panic!("Unexpected events: {other:?}"),
-    };
+    {
+        use identify::Event::{Received, Sent};
+
+        // These can be received in any order, hence assert them here.
+        assert!(matches!(e1, Received { .. } | Sent { .. }));
+        assert!(matches!(e2, Received { .. } | Sent { .. }));
+        assert!(matches!(e3, Received { .. } | Sent { .. }));
+        assert!(matches!(e4, Received { .. } | Sent { .. }));
+    }
 
     // Second, actively push.
     swarm2
         .behaviour_mut()
-        .identify
         .push(iter::once(*swarm1.local_peer_id()));
 
     let swarm1_received_info = match libp2p_swarm_test::drive(&mut swarm1, &mut swarm2).await {
-        (
-            [BehaviourEvent::Identify(identify::Event::Received { info, .. })],
-            [BehaviourEvent::Identify(identify::Event::Pushed { .. })],
-        ) => info,
+        ([identify::Event::Received { info, .. }], [identify::Event::Pushed { .. }]) => info,
         other => panic!("Unexpected events: {other:?}"),
     };
 
@@ -141,10 +133,10 @@ async fn discover_peer_after_disconnect() {
     let _ = env_logger::try_init();
 
     let mut swarm1 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
+        identify::Behaviour::new(identify::Config::new("a".to_string(), identity.public()))
     });
     let mut swarm2 = Swarm::new_ephemeral(|identity| {
-        Behaviour::new(
+        identify::Behaviour::new(
             identify::Config::new("a".to_string(), identity.public())
                 .with_agent_version("b".to_string()),
         )
@@ -161,7 +153,7 @@ async fn discover_peer_after_disconnect() {
         .wait(|event| {
             matches!(
                 event,
-                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received { .. }))
+                SwarmEvent::Behaviour(identify::Event::Received { .. })
             )
             .then_some(())
         })
@@ -185,24 +177,4 @@ async fn discover_peer_after_disconnect() {
         .await;
 
     assert_eq!(connected_peer, swarm1_peer_id);
-}
-
-/// Combined behaviour to keep the connection alive after the periodic identify.
-///
-/// The identify implementation sets `keep_alive` to `No` once it has done its thing.
-/// This can result in unexpected connection closures if one peer is faster than the other.
-#[derive(libp2p_swarm::NetworkBehaviour)]
-#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
-struct Behaviour {
-    identify: identify::Behaviour,
-    keep_alive: keep_alive::Behaviour,
-}
-
-impl Behaviour {
-    fn new(config: identify::Config) -> Self {
-        Self {
-            identify: identify::Behaviour::new(config),
-            keep_alive: keep_alive::Behaviour,
-        }
-    }
 }

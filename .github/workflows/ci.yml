@@ -12,6 +12,7 @@ concurrency:
 
 env:
   SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2 # Fail cache download after 2 minutes.
+  RUSTFLAGS: '-Dwarnings' # Never tolerate warnings.
 
 jobs:
   test:
@@ -31,13 +32,15 @@ jobs:
     env:
       CRATE: ${{ matrix.crate }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           shared-key: stable-cache
           save-if: false
@@ -48,21 +51,8 @@ jobs:
       - name: Check if we compile without any features activated
         run: cargo build --package "$CRATE" --no-default-features
 
-      - run: cargo clean
-
-      - name: Check if crate has been released
-        id: check-released
-        run: |
-          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/"$CRATE" --silent --write-out "%{http_code}" --output /dev/null)
-          echo "code=${RESPONSE_CODE}"
-          echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
-
-      - uses: ./.github/actions/cargo-semver-checks
-        if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
-        with:
-          crate: env.CRATE
-
       - name: Enforce no dependency on meta crate
+        if: env.CRATE != 'libp2p-server'
         run: |
           cargo metadata --format-version=1 --no-deps | \
           jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .dependencies | all(.name != "libp2p")'
@@ -76,11 +66,55 @@ jobs:
         run: |
           PACKAGE_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -e -r '.packages[] | select(.name == "'"$CRATE"'") | .version')
           SPECIFIED_VERSION=$(tomlq "workspace.dependencies.$CRATE.version" --file ./Cargo.toml)
-          
+
           echo "Package version: $PACKAGE_VERSION";
           echo "Specified version: $SPECIFIED_VERSION";
 
           test "$PACKAGE_VERSION" = "$SPECIFIED_VERSION"
+
+      - name: Ensure manifest and CHANGELOG are properly updated
+        if: >
+          github.event_name == 'pull_request' &&
+          !startsWith(github.event.pull_request.title, 'chore') &&
+          !startsWith(github.event.pull_request.title, 'refactor') &&
+          !startsWith(github.event.pull_request.title, 'deps') &&
+          !startsWith(github.event.pull_request.title, 'docs') &&
+          !contains(github.event.pull_request.labels.*.name, 'internal-change')
+        run: |
+          git fetch origin master:master
+          ./scripts/ensure-version-bump-and-changelog.sh
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+
+  wasm_tests:
+    name: Run all WASM tests
+    runs-on: ubuntu-latest
+    env:
+      CHROMEDRIVER_VERSION: '114.0.5735.90'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - uses: taiki-e/cache-cargo-install-action@v1
+        with:
+          tool: wasm-pack@0.12.0
+
+      - name: Install Google Chrome
+        run: |
+          curl -o /tmp/google-chrome-stable_amd64.deb https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_${CHROMEDRIVER_VERSION}-1_amd64.deb
+          sudo dpkg -i /tmp/google-chrome-stable_amd64.deb
+
+      - name: Install chromedriver
+        uses: nanasess/setup-chromedriver@v2
+        with:
+          chromedriver-version: ${{ env.CHROMEDRIVER_VERSION }}
+
+      - name: Run all tests
+        run: ./wasm-tests/run-all.sh
 
   cross:
     name: Compile on ${{ matrix.target }}
@@ -99,15 +133,15 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           target: ${{ matrix.target }}
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -118,7 +152,7 @@ jobs:
     name: Compile with MSRV
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Extract MSRV from workspace manifest
         shell: bash
@@ -130,9 +164,9 @@ jobs:
         with:
           toolchain: ${{ env.MSRV }}
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -147,13 +181,13 @@ jobs:
           - features: "mdns tcp dns tokio"
           - features: "mdns tcp dns async-std"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -164,13 +198,13 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
@@ -183,53 +217,56 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          1.70.0, # current stable
-          beta
+          # 1.72.0, # current stable
+          # beta,
+          nightly-2023-09-10
         ]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Run cargo clippy
-        run: cargo custom-clippy # cargo alias to allow reuse of config locally
+      - run: cargo clippy --all-targets --all-features
 
   ipfs-integration-test:
     name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
-      - name: Run ipfs-kad example
-        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run
+      - name: Run ipfs-kad example - get peers
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- get-peers
+
+      - name: Run ipfs-kad example - put PK record
+        run: cd ./examples/ipfs-kad/ && RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run -- put-pk-record
 
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
         with:
           shared-key: stable-cache
           save-if: false
@@ -242,16 +279,24 @@ jobs:
             cargo check --manifest-path "$toml";
           done
 
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.24.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+        shell: bash
+      - uses: obi1kenobi/cargo-semver-checks-action@e275dda72e250d4df5b564e969e1348d67fefa52 # v2
+
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - name: Check formatting
         run: cargo fmt -- --check
@@ -259,11 +304,11 @@ jobs:
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: r7kamura/rust-problem-matchers@d58b70c4a13c4866d96436315da451d8106f8f08 #v1.3.0
+      - uses: r7kamura/rust-problem-matchers@2c2f1016021a7455a6b5b4bbae31145f3b3cd83a #v1.4.0
 
       - name: Ensure `full` feature contains all features
         run: |
@@ -282,7 +327,9 @@ jobs:
     outputs:
       members: ${{ steps.cargo-metadata.outputs.members }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
 
       - id: cargo-metadata
         run: |
@@ -293,9 +340,9 @@ jobs:
     name: Check for changes in proto files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
 
       - run: cargo install --version 0.10.0 pb-rs --locked
 
@@ -320,6 +367,14 @@ jobs:
     name: Ensure that `Cargo.lock` is up-to-date
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@988c164c3d0e93c4dbab36aaf5bbeb77425b2894 # v2.4.0
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43 # v2.7.0
       - run: cargo metadata --locked --format-version=1 > /dev/null
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        command: check advisories bans licenses sources

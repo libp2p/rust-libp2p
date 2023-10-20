@@ -1,4 +1,22 @@
-## 0.43.0 - unreleased
+## 0.44.0 - unreleased
+
+- Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
+  See [PR 4527](https://github.com/libp2p/rust-libp2p/pull/4527)
+
+## 0.43.1
+
+- Handle partial push messages.
+  Previously, push messages with partial information were ignored.
+  See [PR 4495].
+
+[PR 4495]: https://github.com/libp2p/rust-libp2p/pull/4495
+
+## 0.43.0
+
+- Observed addresses (aka. external address candidates) of the local node, reported by a remote node via `libp2p-identify`, are no longer automatically considered confirmed external addresses, in other words they are no longer trusted by default.
+  Instead users need to confirm the reported observed address either manually, or by using `libp2p-autonat`.
+  In trusted environments users can simply extract observed addresses from a `libp2p-identify::Event::Received { info: libp2p_identify::Info { observed_addr }}` and confirm them via `Swarm::add_external_address`.
+  See [PR 3954] and [PR 4052].
 
 - Remove deprecated `Identify` prefixed symbols. See [PR 3698].
 - Raise MSRV to 1.65.
@@ -17,7 +35,9 @@
 [PR 3698]: https://github.com/libp2p/rust-libp2p/pull/3698
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3876]: https://github.com/libp2p/rust-libp2p/pull/3876
+[PR 3954]: https://github.com/libp2p/rust-libp2p/pull/3954
 [PR 3980]: https://github.com/libp2p/rust-libp2p/pull/3980
+[PR 4052]: https://github.com/libp2p/rust-libp2p/pull/4052
 
 ## 0.42.2
 

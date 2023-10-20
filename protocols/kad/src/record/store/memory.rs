@@ -221,7 +221,7 @@ mod tests {
     use quickcheck::*;
     use rand::Rng;
 
-    fn random_multihash() -> Multihash {
+    fn random_multihash() -> Multihash<64> {
         Multihash::wrap(SHA_256_MH, &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
 

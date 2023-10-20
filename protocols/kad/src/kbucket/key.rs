@@ -93,8 +93,8 @@ impl<T> From<Key<T>> for KeyBytes {
     }
 }
 
-impl From<Multihash> for Key<Multihash> {
-    fn from(m: Multihash) -> Self {
+impl<const S: usize> From<Multihash<S>> for Key<Multihash<S>> {
+    fn from(m: Multihash<S>) -> Self {
         let bytes = KeyBytes(Sha256::digest(m.to_bytes()));
         Key { preimage: m, bytes }
     }
@@ -205,8 +205,8 @@ mod tests {
         }
     }
 
-    impl Arbitrary for Key<Multihash> {
-        fn arbitrary(g: &mut Gen) -> Key<Multihash> {
+    impl Arbitrary for Key<Multihash<64>> {
+        fn arbitrary(g: &mut Gen) -> Key<Multihash<64>> {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
             Key::from(Multihash::wrap(SHA_256_MH, &hash).unwrap())
         }

@@ -5,9 +5,15 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
-async-std = { version = "1.12", features = ["attributes"] }
-clap = { version = "4.3.1", features = ["derive"] }
+tokio = { version = "1.33", features = ["full"] }
+clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
+libp2p = { path = "../../libp2p", features = ["tokio", "tcp", "noise", "yamux", "autonat", "identify", "macros"] }
+
+[lints]
+workspace = true

@@ -22,6 +22,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::error::ConfigBuilderError;
 use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
 use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
 
@@ -74,7 +75,6 @@ pub struct Config {
     heartbeat_interval: Duration,
     fanout_ttl: Duration,
     check_explicit_peers_ticks: u64,
-    idle_timeout: Duration,
     duplicate_cache_time: Duration,
     validate_messages: bool,
     message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
@@ -181,13 +181,6 @@ impl Config {
     /// least 100 bytes. Default is 65536 bytes.
     pub fn max_transmit_size(&self) -> usize {
         self.protocol.max_transmit_size
-    }
-
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&self) -> Duration {
-        self.idle_timeout
     }
 
     /// Duplicates are prevented by storing message id's of known messages in an LRU time cache.
@@ -406,7 +399,6 @@ impl Default for ConfigBuilder {
                 heartbeat_interval: Duration::from_secs(1),
                 fanout_ttl: Duration::from_secs(60),
                 check_explicit_peers_ticks: 300,
-                idle_timeout: Duration::from_secs(120),
                 duplicate_cache_time: Duration::from_secs(60),
                 validate_messages: false,
                 message_id_fn: Arc::new(|message| {
@@ -598,14 +590,6 @@ impl ConfigBuilder {
     /// The maximum byte size for each gossip (default is 2048 bytes).
     pub fn max_transmit_size(&mut self, max_transmit_size: usize) -> &mut Self {
         self.config.protocol.max_transmit_size = max_transmit_size;
-        self
-    }
-
-    /// The time a connection is maintained to a peer without being in the mesh and without
-    /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
-    /// Default is 120 seconds.
-    pub fn idle_timeout(&mut self, idle_timeout: Duration) -> &mut Self {
-        self.config.idle_timeout = idle_timeout;
         self
     }
 
@@ -831,40 +815,34 @@ impl ConfigBuilder {
     }
 
     /// Constructs a [`Config`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<Config, &'static str> {
+    pub fn build(&self) -> Result<Config, ConfigBuilderError> {
         // check all constraints on config
 
         if self.config.protocol.max_transmit_size < 100 {
-            return Err("The maximum transmission size must be greater than 100 to permit basic control messages");
+            return Err(ConfigBuilderError::MaxTransmissionSizeTooSmall);
         }
 
         if self.config.history_length < self.config.history_gossip {
-            return Err(
-                "The history_length must be greater than or equal to the history_gossip \
-                length",
-            );
+            return Err(ConfigBuilderError::HistoryLengthTooSmall);
         }
 
         if !(self.config.mesh_outbound_min <= self.config.mesh_n_low
             && self.config.mesh_n_low <= self.config.mesh_n
             && self.config.mesh_n <= self.config.mesh_n_high)
         {
-            return Err("The following inequality doesn't hold \
-                mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high");
+            return Err(ConfigBuilderError::MeshParametersInvalid);
         }
 
         if self.config.mesh_outbound_min * 2 > self.config.mesh_n {
-            return Err(
-                "The following inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2",
-            );
+            return Err(ConfigBuilderError::MeshOutboundInvalid);
         }
 
         if self.config.unsubscribe_backoff.as_millis() == 0 {
-            return Err("The unsubscribe_backoff parameter should be positive.");
+            return Err(ConfigBuilderError::UnsubscribeBackoffIsZero);
         }
 
         if self.invalid_protocol {
-            return Err("The provided protocol is invalid, it must start with a forward-slash");
+            return Err(ConfigBuilderError::InvalidProtocol);
         }
 
         Ok(self.config.clone())
@@ -886,7 +864,6 @@ impl std::fmt::Debug for Config {
         let _ = builder.field("heartbeat_initial_delay", &self.heartbeat_initial_delay);
         let _ = builder.field("heartbeat_interval", &self.heartbeat_interval);
         let _ = builder.field("fanout_ttl", &self.fanout_ttl);
-        let _ = builder.field("idle_timeout", &self.idle_timeout);
         let _ = builder.field("duplicate_cache_time", &self.duplicate_cache_time);
         let _ = builder.field("validate_messages", &self.validate_messages);
         let _ = builder.field("allow_self_origin", &self.allow_self_origin);

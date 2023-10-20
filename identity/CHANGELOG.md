@@ -1,4 +1,49 @@
-## 0.2.0 - unreleased
+## 0.2.7
+
+- Add `rand` feature to gate methods requiring a random number generator, enabling use in restricted environments (e.g. smartcontracts).
+  This feature is not enabled by default.
+  See [PR 4349](https://github.com/libp2p/rust-libp2p/pull/4349).
+
+## 0.2.6
+
+- Make `PeerId::to_bytes` and `PeerId::to_base58` take `self` by value to follow Rust convention of `Copy` types.
+  See [PR 4653](https://github.com/libp2p/rust-libp2p/pull/4653).
+
+## 0.2.5
+
+- Fix usage of HKDF within `Keypair::derive_secret`.
+  See [PR 4554](https://github.com/libp2p/rust-libp2p/pull/4554).
+
+## 0.2.4
+
+- Implement `Keypair::derive_secret`, to deterministically derive a new secret from the embedded secret key.
+  See [PR 4554].
+
+[PR 4554]: https://github.com/libp2p/rust-libp2p/pull/4554
+
+## 0.2.3
+
+- Fix [RUSTSEC-2022-0093] by updating `ed25519-dalek` to `2.0`.
+  See [PR 4337]
+
+[RUSTSEC-2022-0093]: https://rustsec.org/advisories/RUSTSEC-2022-0093
+[PR 4337]: https://github.com/libp2p/rust-libp2p/pull/4337
+
+## 0.2.2
+
+- Implement `from_protobuf_encoding` for RSA `Keypair`.
+  See [PR 4193].
+
+[PR 4193]: https://github.com/libp2p/rust-libp2p/pull/4193
+
+## 0.2.1
+
+- Expose `KeyType` for `PublicKey` and `Keypair`.
+  See [PR 4107].
+
+[PR 4107]: https://github.com/libp2p/rust-libp2p/pull/4107
+
+## 0.2.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
@@ -13,6 +58,14 @@
 
 - Remove deprecated items. See [PR 3928].
 
+- Remove `PeerId::try_from_multiaddr`.
+  `multiaddr::Protocol::P2p` is now type-safe and contains a `PeerId` directly, rendering this function obsolete.
+  See [PR 3656].
+
+- Remove `PeerId::is_public_key` because it is unused and can be implemented externally.
+  See [PR 3656].
+
+[PR 3656]: https://github.com/libp2p/rust-libp2p/pull/3656
 [PR 3850]: https://github.com/libp2p/rust-libp2p/pull/3850
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
 [PR 3863]: https://github.com/libp2p/rust-libp2p/pull/3863

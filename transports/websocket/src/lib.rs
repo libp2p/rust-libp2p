@@ -74,7 +74,7 @@ use std::{
 /// # #[async_std::main]
 /// # async fn main() {
 ///
-/// let mut transport = websocket::WsConfig::new(dns::DnsConfig::system(
+/// let mut transport = websocket::WsConfig::new(dns::async_std::Transport::system(
 ///     tcp::async_io::Transport::new(tcp::Config::default()),
 /// ).await.unwrap());
 ///
@@ -338,7 +338,7 @@ mod tests {
 
         let outbound = new_ws_config()
             .boxed()
-            .dial(addr.with(Protocol::P2p(PeerId::random().into())))
+            .dial(addr.with(Protocol::P2p(PeerId::random())))
             .unwrap();
 
         let (a, b) = futures::join!(inbound, outbound);

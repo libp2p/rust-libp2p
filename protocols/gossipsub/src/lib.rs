@@ -48,7 +48,7 @@
 //! encoded) by setting the `hash_topics` configuration parameter to true.
 //!
 //! - **Sequence Numbers** - A message on the gossipsub network is identified by the source
-//! [`libp2p_core::PeerId`] and a nonce (sequence number) of the message. The sequence numbers in
+//! [`PeerId`](libp2p_identity::PeerId) and a nonce (sequence number) of the message. The sequence numbers in
 //! this implementation are sent as raw bytes across the wire. They are 64-bit big-endian unsigned
 //! integers. When messages are signed, they are monotonically increasing integers starting from a
 //! random value and wrapping around u64::MAX. When messages are unsigned, they are chosen at random.
@@ -83,7 +83,7 @@
 //!
 //! The [`Behaviour`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
 //! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
-//! [`libp2p_core::PeerId`] and [`Config`].
+//! [`PeerId`](libp2p_identity::PeerId) and [`Config`].
 //!
 //! [`Behaviour`]: struct.Behaviour.html
 
@@ -158,7 +158,7 @@ mod types;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error::{PublishError, SubscriptionError, ValidationError};
+pub use self::error::{ConfigBuilderError, PublishError, SubscriptionError, ValidationError};
 pub use self::metrics::Config as MetricsConfig;
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,

@@ -1,12 +1,27 @@
-## 0.43.0 - unreleased
+## 0.44.0 - unreleased
+
+
+## 0.43.2
+
+- Update x25519-dalek to 2.0.0.
+
+## 0.43.1
+
+- Update dependencies.
+
+## 0.43.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].
 
 - Remove deprecated APIs. See [PR 3511].
 
+- Add `Config::with_webtransport_certhashes`. See [PR 3991].
+  This can be used by WebTransport implementers to send (responder) or verify (initiator) certhashes.
+
 [PR 3511]: https://github.com/libp2p/rust-libp2p/pull/3511
 [PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3715
+[PR 3715]: https://github.com/libp2p/rust-libp2p/pull/3991
 
 ## 0.42.2
 

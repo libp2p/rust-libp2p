@@ -21,26 +21,15 @@
 #![doc = include_str!("../README.md")]
 
 use clap::Parser;
-use futures::{
-    executor::{block_on, ThreadPool},
-    future::FutureExt,
-    stream::StreamExt,
-};
+use futures::{executor::block_on, future::FutureExt, stream::StreamExt};
 use libp2p::{
-    core::{
-        multiaddr::{Multiaddr, Protocol},
-        transport::{OrTransport, Transport},
-        upgrade,
-    },
-    dcutr,
-    dns::DnsConfig,
-    identify, identity, noise, ping, relay,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    core::multiaddr::{Multiaddr, Protocol},
+    dcutr, identify, identity, noise, ping, relay,
+    swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, PeerId,
 };
 use log::info;
 use std::error::Error;
-use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 #[derive(Debug, Parser)]
@@ -80,33 +69,13 @@ impl FromStr for Mode {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opts = Opts::parse();
 
-    let local_key = generate_ed25519(opts.secret_key_seed);
-    let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
-
-    let (relay_transport, client) = relay::client::new(local_peer_id);
-
-    let transport = OrTransport::new(
-        relay_transport,
-        block_on(DnsConfig::system(tcp::async_io::Transport::new(
-            tcp::Config::default().port_reuse(true),
-        )))
-        .unwrap(),
-    )
-    .upgrade(upgrade::Version::V1Lazy)
-    .authenticate(
-        noise::Config::new(&local_key).expect("Signing libp2p-noise static DH keypair failed."),
-    )
-    .multiplex(yamux::Config::default())
-    .boxed();
-
     #[derive(NetworkBehaviour)]
-    #[behaviour(to_swarm = "Event")]
     struct Behaviour {
         relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,
@@ -114,61 +83,33 @@ fn main() -> Result<(), Box<dyn Error>> {
         dcutr: dcutr::Behaviour,
     }
 
-    #[derive(Debug)]
-    #[allow(clippy::large_enum_variant)]
-    enum Event {
-        Ping(ping::Event),
-        Identify(identify::Event),
-        Relay(relay::client::Event),
-        Dcutr(dcutr::Event),
-    }
-
-    impl From<ping::Event> for Event {
-        fn from(e: ping::Event) -> Self {
-            Event::Ping(e)
-        }
-    }
-
-    impl From<identify::Event> for Event {
-        fn from(e: identify::Event) -> Self {
-            Event::Identify(e)
-        }
-    }
-
-    impl From<relay::client::Event> for Event {
-        fn from(e: relay::client::Event) -> Self {
-            Event::Relay(e)
-        }
-    }
-
-    impl From<dcutr::Event> for Event {
-        fn from(e: dcutr::Event) -> Self {
-            Event::Dcutr(e)
-        }
-    }
-
-    let behaviour = Behaviour {
-        relay_client: client,
-        ping: ping::Behaviour::new(ping::Config::new()),
-        identify: identify::Behaviour::new(identify::Config::new(
-            "/TODO/0.0.1".to_string(),
-            local_key.public(),
-        )),
-        dcutr: dcutr::Behaviour::new(local_peer_id),
-    };
-
-    let mut swarm = match ThreadPool::new() {
-        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
-        Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
-    }
-    .build();
+    let mut swarm =
+        libp2p::SwarmBuilder::with_existing_identity(generate_ed25519(opts.secret_key_seed))
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default().port_reuse(true).nodelay(true),
+                noise::Config::new,
+                yamux::Config::default,
+            )?
+            .with_quic()
+            .with_dns()?
+            .with_relay_client(noise::Config::new, yamux::Config::default)?
+            .with_behaviour(|keypair, relay_behaviour| Behaviour {
+                relay_client: relay_behaviour,
+                ping: ping::Behaviour::new(ping::Config::new()),
+                identify: identify::Behaviour::new(identify::Config::new(
+                    "/TODO/0.0.1".to_string(),
+                    keypair.public(),
+                )),
+                dcutr: dcutr::Behaviour::new(keypair.public().to_peer_id()),
+            })?
+            .build();
 
     swarm
-        .listen_on(
-            Multiaddr::empty()
-                .with("0.0.0.0".parse::<Ipv4Addr>().unwrap().into())
-                .with(Protocol::Tcp(0)),
-        )
+        .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+        .unwrap();
+    swarm
+        .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
 
     // Wait to listen on all interfaces.
@@ -204,16 +145,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { .. } => {}
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
-                SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Sent {
+                    ..
+                })) => {
                     info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
-                SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify::Event::Received {
                     info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);
+                    swarm.add_external_address(observed_addr);
                     learned_observed_addr = true;
                 }
                 event => panic!("{event:?}"),
@@ -231,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .dial(
                     opts.relay_address
                         .with(Protocol::P2pCircuit)
-                        .with(Protocol::P2p(opts.remote_peer_id.unwrap().into())),
+                        .with(Protocol::P2p(opts.remote_peer_id.unwrap())),
                 )
                 .unwrap();
         }
@@ -248,22 +192,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
                 }
-                SwarmEvent::Behaviour(Event::Relay(
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(
                     relay::client::Event::ReservationReqAccepted { .. },
                 )) => {
                     assert!(opts.mode == Mode::Listen);
                     info!("Relay accepted our reservation request.");
                 }
-                SwarmEvent::Behaviour(Event::Relay(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::RelayClient(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Dcutr(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Identify(event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(event)) => {
                     info!("{:?}", event)
                 }
-                SwarmEvent::Behaviour(Event::Ping(_)) => {}
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(_)) => {}
                 SwarmEvent::ConnectionEstablished {
                     peer_id, endpoint, ..
                 } => {

@@ -31,12 +31,22 @@ pub const HOP_PROTOCOL_NAME: StreamProtocol =
 pub const STOP_PROTOCOL_NAME: StreamProtocol =
     StreamProtocol::new("/libp2p/circuit/relay/0.2.0/stop");
 
-const MAX_MESSAGE_SIZE: usize = 4096;
+pub(crate) const MAX_MESSAGE_SIZE: usize = 4096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limit {
     duration: Option<Duration>,
     data_in_bytes: Option<u64>,
+}
+
+impl Limit {
+    pub fn duration(&self) -> Option<Duration> {
+        self.duration
+    }
+
+    pub fn data_in_bytes(&self) -> Option<u64> {
+        self.data_in_bytes
+    }
 }
 
 impl From<proto::Limit> for Limit {

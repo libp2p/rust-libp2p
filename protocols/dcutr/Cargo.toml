@@ -3,7 +3,7 @@ name = "libp2p-dcutr"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Direct connection upgrade through relay"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-either = "1.6.0"
+either = "1.9.0"
 futures = "0.3.28"
 futures-timer = "3.0"
 instant = "0.1.12"
@@ -27,7 +27,7 @@ void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-clap = { version = "4.3.1", features = ["derive"] }
+clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 libp2p-dns = { workspace = true, features = ["async-std"] }
 libp2p-identify = { workspace = true }
@@ -36,7 +36,7 @@ libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-relay = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros"] }
-libp2p-swarm-test = { workspace = true }
+libp2p-swarm-test = { path = "../../swarm-test" }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
 libp2p-yamux = { workspace = true }
 rand = "0.8"
@@ -47,3 +47,6 @@ rand = "0.8"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

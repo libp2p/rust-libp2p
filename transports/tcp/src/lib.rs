@@ -346,13 +346,12 @@ where
         }
     }
 
-    fn create_socket(&self, socket_addr: &SocketAddr) -> io::Result<Socket> {
-        let domain = if socket_addr.is_ipv4() {
-            Domain::IPV4
-        } else {
-            Domain::IPV6
-        };
-        let socket = Socket::new(domain, Type::STREAM, Some(socket2::Protocol::TCP))?;
+    fn create_socket(&self, socket_addr: SocketAddr) -> io::Result<Socket> {
+        let socket = Socket::new(
+            Domain::for_address(socket_addr),
+            Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        )?;
         if socket_addr.is_ipv6() {
             socket.set_only_v6(true)?;
         }
@@ -375,7 +374,7 @@ where
         id: ListenerId,
         socket_addr: SocketAddr,
     ) -> io::Result<ListenStream<T>> {
-        let socket = self.create_socket(&socket_addr)?;
+        let socket = self.create_socket(socket_addr)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.config.backlog as _)?;
         socket.set_nonblocking(true)?;
@@ -476,7 +475,7 @@ where
         log::debug!("dialing {}", socket_addr);
 
         let socket = self
-            .create_socket(&socket_addr)
+            .create_socket(socket_addr)
             .map_err(TransportError::Other)?;
 
         if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
@@ -1280,7 +1279,7 @@ mod tests {
         let tcp_observed_addr = Multiaddr::empty()
             .with(Protocol::Ip4(observed_ip))
             .with(Protocol::Tcp(1))
-            .with(Protocol::P2p(PeerId::random().into()));
+            .with(Protocol::P2p(PeerId::random()));
 
         let translated = transport
             .address_translation(&tcp_listen_addr, &tcp_observed_addr)
@@ -1327,6 +1326,44 @@ mod tests {
                 .build()
                 .unwrap();
             assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
+        }
+    }
+
+    #[test]
+    fn test_listens_ipv4_ipv6_separately() {
+        fn test<T: Provider>() {
+            let port = {
+                let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+                listener.local_addr().unwrap().port()
+            };
+            let mut tcp = Transport::<T>::default().boxed();
+            let listener_id = ListenerId::next();
+            tcp.listen_on(
+                listener_id,
+                format!("/ip4/0.0.0.0/tcp/{port}").parse().unwrap(),
+            )
+            .unwrap();
+            tcp.listen_on(
+                ListenerId::next(),
+                format!("/ip6/::/tcp/{port}").parse().unwrap(),
+            )
+            .unwrap();
+        }
+        #[cfg(feature = "async-io")]
+        {
+            async_std::task::block_on(async {
+                test::<async_io::Tcp>();
+            })
+        }
+        #[cfg(feature = "tokio")]
+        {
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                test::<async_io::Tcp>();
+            });
         }
     }
 }

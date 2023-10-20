@@ -40,7 +40,7 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
-use parity_send_wrapper::SendWrapper;
+use send_wrapper::SendWrapper;
 use std::{collections::VecDeque, error, fmt, io, mem, pin::Pin, task::Context, task::Poll};
 use wasm_bindgen::{prelude::*, JsCast};
 use wasm_bindgen_futures::JsFuture;

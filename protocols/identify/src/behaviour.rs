@@ -301,9 +301,9 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
             }
-            handler::Event::IdentificationPushed => {
+            handler::Event::IdentificationPushed(info) => {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
             }
             handler::Event::IdentificationError(error) => {
                 self.events
@@ -431,6 +431,9 @@ pub enum Event {
     Pushed {
         /// The peer that the information has been sent to.
         peer_id: PeerId,
+        /// The full Info struct we pushed to the remote peer. Clients must
+        /// do some diff'ing to know what has changed since the last push.
+        info: Info,
     },
     /// Error while attempting to identify the remote.
     Error {
@@ -446,7 +449,7 @@ pub enum Event {
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
     if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {
-        return multi_addr_peer_id == *peer_id.as_ref();
+        return multi_addr_peer_id == *peer_id;
     }
     true
 }
@@ -504,8 +507,8 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(multiaddr::Protocol::P2p(peer_id.into()));
-        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id.into()));
+        addr.push(multiaddr::Protocol::P2p(peer_id));
+        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));
         assert!(!multiaddr_matches_peer_id(

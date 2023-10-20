@@ -1,4 +1,11 @@
-## 0.10.0 - unreleased
+## 0.11.0 - unreleased
+
+- Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
+  See [PR 4558].
+
+[PR 4558]: https://github.com/libp2p/rust-libp2p/pull/4558
+
+## 0.10.0 
 
 - Raise MSRV to 1.65.
   See [PR 3715].

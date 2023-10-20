@@ -31,7 +31,7 @@ use libp2p_core::{
 };
 use libp2p_identity::PeerId;
 use libp2p_perf::{Run, RunDuration, RunParams};
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -198,25 +198,22 @@ async fn custom(server_address: Multiaddr, params: RunParams) -> Result<()> {
     info!("start benchmark: custom");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, connection_established) =
-        connect(&mut swarm, server_address.clone()).await?;
+    let start = Instant::now();
 
-    let RunDuration { upload, download } = perf(&mut swarm, server_peer_id, params).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
+
+    perf(&mut swarm, server_peer_id, params).await?;
 
     #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct CustomResult {
-        connection_established_seconds: f64,
-        upload_seconds: f64,
-        download_seconds: f64,
+        latency: f64,
     }
 
     println!(
         "{}",
         serde_json::to_string(&CustomResult {
-            connection_established_seconds: connection_established.as_secs_f64(),
-            upload_seconds: upload.as_secs_f64(),
-            download_seconds: download.as_secs_f64(),
+            latency: start.elapsed().as_secs_f64(),
         })
         .unwrap()
     );
@@ -228,7 +225,7 @@ async fn latency(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: round-trip-time latency");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let mut rounds = 0;
     let start = Instant::now();
@@ -275,7 +272,7 @@ async fn throughput(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection single channel throughput");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let params = RunParams {
         to_send: 10 * 1024 * 1024,
@@ -291,7 +288,7 @@ async fn requests_per_second(server_address: Multiaddr) -> Result<()> {
     info!("start benchmark: single connection parallel requests per second");
     let mut swarm = swarm().await?;
 
-    let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+    let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
     let num = 1_000;
     let to_send = 1;
@@ -356,7 +353,7 @@ async fn sequential_connections_per_second(server_address: Multiaddr) -> Result<
 
         let start = Instant::now();
 
-        let (server_peer_id, _) = connect(&mut swarm, server_address.clone()).await?;
+        let server_peer_id = connect(&mut swarm, server_address.clone()).await?;
 
         latency_connection_establishment.push(start.elapsed().as_secs_f64());
 
@@ -408,7 +405,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
             libp2p_quic::tokio::Transport::new(config)
         };
 
-        let dns = libp2p_dns::TokioDnsConfig::system(OrTransport::new(quic, tcp))?;
+        let dns = libp2p_dns::tokio::Transport::system(OrTransport::new(quic, tcp))?;
 
         dns.map(|either_output, _| match either_output {
             Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
@@ -417,28 +414,31 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
         .boxed()
     };
 
-    Ok(
-        SwarmBuilder::with_tokio_executor(transport, Default::default(), local_peer_id)
-            .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-            .build(),
-    )
+    let swarm = Swarm::new(
+        transport,
+        Default::default(),
+        local_peer_id,
+        Config::with_tokio_executor()
+            .with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+            .with_idle_connection_timeout(Duration::from_secs(60 * 5)),
+    );
+
+    Ok(swarm)
 }
 
 async fn connect(
     swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
     server_address: Multiaddr,
-) -> Result<(PeerId, Duration)> {
+) -> Result<PeerId> {
     let start = Instant::now();
     swarm.dial(server_address.clone()).unwrap();
 
-    let server_peer_id = loop {
-        match swarm.next().await.unwrap() {
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
-            SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-                bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
-            }
-            e => panic!("{e:?}"),
+    let server_peer_id = match swarm.next().await.unwrap() {
+        SwarmEvent::ConnectionEstablished { peer_id, .. } => peer_id,
+        SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+            bail!("Outgoing connection error to {:?}: {:?}", peer_id, error);
         }
+        e => panic!("{e:?}"),
     };
 
     let duration = start.elapsed();
@@ -446,7 +446,7 @@ async fn connect(
 
     info!("established connection in {duration_seconds:.4} s");
 
-    Ok((server_peer_id, duration))
+    Ok(server_peer_id)
 }
 
 async fn perf(

@@ -1,4 +1,14 @@
-## 0.13.0 - unreleased
+## 0.14.0 - unreleased
+
+
+## 0.13.1
+
+- Enable gossipsub related data-type fields when compiling for wasm.
+  See [PR 4217].
+
+[PR 4217]: https://github.com/libp2p/rust-libp2p/pull/4217
+
+## 0.13.0
 
 - Previously `libp2p-metrics::identify` would increase a counter / gauge / histogram on each
   received identify information. These metrics are misleading, as e.g. they depend on the identify

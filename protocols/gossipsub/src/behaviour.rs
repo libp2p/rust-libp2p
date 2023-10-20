@@ -930,6 +930,11 @@ where
         }
     }
 
+    /// Returns a scoring parameters for a topic if existent.
+    pub fn get_topic_params<H: Hasher>(&self, topic: &Topic<H>) -> Option<&TopicScoreParams> {
+        self.peer_score.as_ref()?.0.get_topic_params(&topic.hash())
+    }
+
     /// Sets the application specific score for a peer. Returns true if scoring is active and
     /// the peer is connected or if the score of the peer is not yet expired, false otherwise.
     pub fn set_application_score(&mut self, peer_id: &PeerId, new_score: f64) -> bool {
@@ -1015,10 +1020,7 @@ where
                 "JOIN: Inserting {:?} random peers into the mesh",
                 new_peers.len()
             );
-            let mesh_peers = self
-                .mesh
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let mesh_peers = self.mesh.entry(topic_hash.clone()).or_default();
             mesh_peers.extend(new_peers);
         }
 
@@ -1957,10 +1959,7 @@ where
         for subscription in filtered_topics {
             // get the peers from the mapping, or insert empty lists if the topic doesn't exist
             let topic_hash = &subscription.topic_hash;
-            let peer_list = self
-                .topic_peers
-                .entry(topic_hash.clone())
-                .or_insert_with(Default::default);
+            let peer_list = self.topic_peers.entry(topic_hash.clone()).or_default();
 
             match subscription.action {
                 SubscriptionAction::Subscribe => {
@@ -2788,7 +2787,7 @@ where
 
                 let signature = {
                     let message = proto::Message {
-                        from: Some(author.clone().to_bytes()),
+                        from: Some(author.to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
@@ -2869,10 +2868,7 @@ where
         peer: PeerId,
         control: ControlAction,
     ) {
-        control_pool
-            .entry(peer)
-            .or_insert_with(Vec::new)
-            .push(control);
+        control_pool.entry(peer).or_default().push(control);
     }
 
     /// Takes each control action mapping and turns it into a message
@@ -3309,6 +3305,7 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3316,12 +3313,10 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3329,10 +3324,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
     fn on_connection_handler_event(

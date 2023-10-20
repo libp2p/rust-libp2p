@@ -30,11 +30,10 @@ use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p_core::upgrade;
 use libp2p_identity as identity;
 use libp2p_identity::PeerId;
-use libp2p_identity::PublicKey;
 use libp2p_ping as ping;
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use libp2p_relay as relay;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -51,7 +50,7 @@ fn reservation() {
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
@@ -64,9 +63,7 @@ fn reservation() {
     // Wait for initial reservation.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr
-            .clone()
-            .with(Protocol::P2p(client_peer_id.into())),
+        client_addr.clone().with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -74,7 +71,7 @@ fn reservation() {
     // Wait for renewal.
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         true, // Renewal.
     ));
@@ -96,11 +93,9 @@ fn new_reservation_to_same_relay_replaces_old() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
-    let client_addr_with_peer_id = client_addr
-        .clone()
-        .with(Protocol::P2p(client_peer_id.into()));
+    let client_addr_with_peer_id = client_addr.clone().with(Protocol::P2p(client_peer_id));
 
     let old_listener = client.listen_on(client_addr.clone()).unwrap();
 
@@ -189,9 +184,9 @@ fn connect() {
     let mut dst = build_client();
     let dst_peer_id = *dst.local_peer_id();
     let dst_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(dst_peer_id.into()));
+        .with(Protocol::P2p(dst_peer_id));
 
     dst.listen_on(dst_addr.clone()).unwrap();
 
@@ -242,8 +237,13 @@ async fn connection_established_to(
                 if peer == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == other => break,
             SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                let peer_id_from_addr =
-                    PeerId::try_from_multiaddr(&send_back_addr).expect("to have /p2p");
+                let peer_id_from_addr = send_back_addr
+                    .iter()
+                    .find_map(|protocol| match protocol {
+                        Protocol::P2p(peer_id) => Some(peer_id),
+                        _ => None,
+                    })
+                    .expect("to have /p2p");
 
                 assert_eq!(peer_id_from_addr, other)
             }
@@ -263,9 +263,9 @@ fn handle_dial_failure() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit)
-        .with(Protocol::P2p(client_peer_id.into()));
+        .with(Protocol::P2p(client_peer_id));
 
     client.listen_on(client_addr).unwrap();
     assert!(!pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
@@ -286,7 +286,7 @@ fn reuse_connection() {
 
     let client_addr = relay_addr
         .clone()
-        .with(Protocol::P2p(relay_peer_id.into()))
+        .with(Protocol::P2p(relay_peer_id))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
@@ -298,7 +298,7 @@ fn reuse_connection() {
 
     pool.run_until(wait_for_reservation(
         &mut client,
-        client_addr.with(Protocol::P2p(client_peer_id.into())),
+        client_addr.with(Protocol::P2p(client_peer_id)),
         relay_peer_id,
         false, // No renewal.
     ));
@@ -306,12 +306,11 @@ fn reuse_connection() {
 
 fn build_relay() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
-    let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
+    let transport = upgrade_transport(MemoryTransport::default().boxed(), &local_key);
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -324,42 +323,41 @@ fn build_relay() -> Swarm<Relay> {
             ),
         },
         local_peer_id,
+        Config::with_async_std_executor(),
     )
-    .build()
 }
 
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    let local_peer_id = local_key.public().to_peer_id();
 
     let (relay_transport, behaviour) = relay::client::new(local_peer_id);
     let transport = upgrade_transport(
         OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        local_public_key,
+        &local_key,
     );
 
-    SwarmBuilder::with_async_std_executor(
+    Swarm::new(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),
             relay: behaviour,
         },
         local_peer_id,
+        Config::with_async_std_executor(),
     )
-    .build()
 }
 
 fn upgrade_transport<StreamSink>(
     transport: Boxed<StreamSink>,
-    local_public_key: PublicKey,
+    identity: &identity::Keypair,
 ) -> Boxed<(PeerId, StreamMuxerBox)>
 where
     StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
+        .authenticate(plaintext::Config::new(identity))
         .multiplex(libp2p_yamux::Config::default())
         .boxed()
 }

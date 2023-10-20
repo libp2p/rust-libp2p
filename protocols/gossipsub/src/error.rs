@@ -20,7 +20,7 @@
 
 //! Error types that can result from gossipsub.
 
-use libp2p_core::identity::error::SigningError;
+use libp2p_identity::SigningError;
 
 /// Error associated with publishing a gossipsub message.
 #[derive(Debug)]
@@ -118,5 +118,39 @@ impl std::error::Error for ValidationError {}
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
+    }
+}
+
+/// Error associated with Config building.
+#[derive(Debug)]
+pub enum ConfigBuilderError {
+    /// Maximum transmission size is too small.
+    MaxTransmissionSizeTooSmall,
+    /// Histroy length less than history gossip length.
+    HistoryLengthTooSmall,
+    /// The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high
+    MeshParametersInvalid,
+    /// The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2
+    MeshOutboundInvalid,
+    /// unsubscribe_backoff is zero
+    UnsubscribeBackoffIsZero,
+    /// Invalid protocol
+    InvalidProtocol,
+}
+
+impl std::error::Error for ConfigBuilderError {}
+
+impl std::fmt::Display for ConfigBuilderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::MaxTransmissionSizeTooSmall => {
+                write!(f, "Maximum transmission size is too small")
+            }
+            Self::HistoryLengthTooSmall => write!(f, "Histroy length less than history gossip length"),
+            Self::MeshParametersInvalid => write!(f, "The ineauality doesn't hold mesh_outbound_min <= mesh_n_low <= mesh_n <= mesh_n_high"),
+            Self::MeshOutboundInvalid => write!(f, "The inequality doesn't hold mesh_outbound_min <= self.config.mesh_n / 2"),
+            Self::UnsubscribeBackoffIsZero => write!(f, "unsubscribe_backoff is zero"),
+            Self::InvalidProtocol => write!(f, "Invalid protocol"),
+        }
     }
 }

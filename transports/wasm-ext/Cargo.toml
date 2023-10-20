@@ -12,18 +12,21 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.28"
-js-sys = "0.3.63"
+js-sys = "0.3.64"
 libp2p-core = { workspace = true }
-parity-send-wrapper = "0.1.0"
-wasm-bindgen = "0.2.86"
-wasm-bindgen-futures = "0.4.36"
+send_wrapper = "0.6.0"
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4.37"
 
 [features]
 websocket = []
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
