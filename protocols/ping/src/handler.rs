@@ -295,9 +295,10 @@ impl ConnectionHandler for Handler {
                         self.outbound = Some(OutboundState::Ping(ping));
                         break;
                     }
-                    Poll::Ready(Ok((stream, rtt))) => {
+                    Poll::Ready(Ok((mut stream, rtt))) => {
                         log::debug!("latency to {} is {}ms", self.peer, rtt.as_millis());
 
+                        stream.no_keep_alive();
                         self.failures = 0;
                         self.interval.reset(self.config.interval);
                         self.outbound = Some(OutboundState::Idle(stream));
@@ -308,12 +309,14 @@ impl ConnectionHandler for Handler {
                         self.pending_errors.push_front(e);
                     }
                 },
-                Some(OutboundState::Idle(stream)) => match self.interval.poll_unpin(cx) {
+                Some(OutboundState::Idle(mut stream)) => match self.interval.poll_unpin(cx) {
                     Poll::Pending => {
+                        stream.no_keep_alive();
                         self.outbound = Some(OutboundState::Idle(stream));
                         break;
                     }
                     Poll::Ready(()) => {
+                        stream.no_keep_alive();
                         self.outbound = Some(OutboundState::Ping(
                             send_ping(stream, self.config.timeout).boxed(),
                         ));
