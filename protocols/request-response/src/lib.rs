@@ -90,7 +90,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    fmt,
+    fmt, io,
     sync::{atomic::AtomicU64, Arc},
     task::{Context, Poll},
     time::Duration,
@@ -165,7 +165,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
 
 /// Possible failures occurring in the context of sending
 /// an outbound request and receiving the response.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
@@ -181,6 +181,8 @@ pub enum OutboundFailure {
     ConnectionClosed,
     /// The remote supports none of the requested protocols.
     UnsupportedProtocols,
+    /// An IO failure happened on an outbound stream.
+    Io(io::Error),
 }
 
 impl fmt::Display for OutboundFailure {
@@ -194,6 +196,7 @@ impl fmt::Display for OutboundFailure {
             OutboundFailure::UnsupportedProtocols => {
                 write!(f, "The remote supports none of the requested protocols")
             }
+            OutboundFailure::Io(e) => write!(f, "IO error on outbound stream: {e}"),
         }
     }
 }
@@ -202,7 +205,7 @@ impl std::error::Error for OutboundFailure {}
 
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
     /// incoming request or before a response is sent, e.g. if
@@ -218,6 +221,8 @@ pub enum InboundFailure {
     /// due to the [`ResponseChannel`] being dropped instead of
     /// being passed to [`Behaviour::send_response`].
     ResponseOmission,
+    /// An IO failure happened on an inbound stream.
+    Io(io::Error),
 }
 
 impl fmt::Display for InboundFailure {
@@ -237,6 +242,7 @@ impl fmt::Display for InboundFailure {
                 f,
                 "The response channel was dropped without sending a response to the remote"
             ),
+            InboundFailure::Io(e) => write!(f, "IO error on inbound stream: {e}"),
         }
     }
 }
@@ -906,6 +912,28 @@ where
                         request_id,
                         error: OutboundFailure::UnsupportedProtocols,
                     }));
+            }
+            handler::Event::OutboundStreamFailed { request_id, error } => {
+                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                debug_assert!(removed, "Expect request_id to be pending upon failure");
+
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::OutboundFailure {
+                        peer,
+                        request_id,
+                        error: OutboundFailure::Io(error),
+                    }))
+            }
+            handler::Event::InboundStreamFailed { request_id, error } => {
+                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
+                debug_assert!(removed, "Expect request_id to be pending upon failure");
+
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
+                        peer,
+                        request_id,
+                        error: InboundFailure::Io(error),
+                    }))
             }
         }
     }

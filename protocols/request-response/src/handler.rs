@@ -273,6 +273,14 @@ where
     OutboundTimeout(RequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
     OutboundUnsupportedProtocols(RequestId),
+    OutboundStreamFailed {
+        request_id: RequestId,
+        error: io::Error,
+    },
+    InboundStreamFailed {
+        request_id: RequestId,
+        error: io::Error,
+    },
 }
 
 impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
@@ -308,6 +316,16 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
             Event::OutboundUnsupportedProtocols(request_id) => f
                 .debug_tuple("Event::OutboundUnsupportedProtocols")
                 .field(request_id)
+                .finish(),
+            Event::OutboundStreamFailed { request_id, error } => f
+                .debug_struct("Event::OutboundStreamFailed")
+                .field("request_id", &request_id)
+                .field("error", &error)
+                .finish(),
+            Event::InboundStreamFailed { request_id, error } => f
+                .debug_struct("Event::InboundStreamFailed")
+                .field("request_id", &request_id)
+                .field("error", &error)
                 .finish(),
         }
     }

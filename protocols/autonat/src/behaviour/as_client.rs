@@ -39,7 +39,7 @@ use std::{
 };
 
 /// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeError {
     /// Probe was aborted because no server is known, or all servers
     /// are throttled through [`Config::throttle_server_period`].
@@ -53,7 +53,7 @@ pub enum OutboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum OutboundProbeEvent {
     /// A dial-back request was sent to a remote peer.
     Request {

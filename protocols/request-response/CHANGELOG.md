@@ -5,6 +5,8 @@
 - Allow at most 100 concurrent inbound + outbound streams per instance of `request_response::Behaviour`.
   This limit is configurable via `Config::with_max_concurrent_streams`.
   See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+- Report IO failures on inbound and outbound streams.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
 
 ## 0.25.2
 

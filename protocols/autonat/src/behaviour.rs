@@ -133,7 +133,7 @@ impl ProbeId {
 }
 
 /// Event produced by [`Behaviour`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Event {
     /// Event on an inbound probe.
     InboundProbe(InboundProbeEvent),
