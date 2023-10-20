@@ -21,7 +21,6 @@
   See [PR 4680](https://github.com/libp2p/rust-libp2p/pull/4680).
 
 [PR 4120]: https://github.com/libp2p/rust-libp2p/pull/4120
-[PR 4677]: https://github.com/libp2p/rust-libp2p/pull/4677
 
 ## 0.43.5
 
