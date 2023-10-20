@@ -3,6 +3,10 @@
 - Remove `handler` field from `ConnectionClosed`.
   If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
   See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
+- Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
+  This is the new default.
+  A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
+  See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 - Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
 
