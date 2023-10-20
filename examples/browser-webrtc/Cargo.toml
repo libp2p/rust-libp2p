@@ -9,6 +9,9 @@ repository = "https://github.com/libp2p/rust-libp2p"
 rust-version = { workspace = true }
 version = "0.1.0"
 
+[package.metadata.release]
+release = false
+
 [lib]
 crate-type = ["cdylib"]
 
