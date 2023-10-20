@@ -359,7 +359,9 @@ where
                 && requested_substreams.is_empty()
                 && Arc::strong_count(stream_counter) == 1
             {
-                if let Some(new_timeout) = compute_new_shutdown(handler, shutdown, *idle_timeout) {
+                if let Some(new_timeout) =
+                    compute_new_shutdown(handler.connection_keep_alive(), shutdown, *idle_timeout)
+                {
                     *shutdown = new_timeout;
                 }
 
