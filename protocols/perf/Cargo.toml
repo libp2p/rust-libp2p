@@ -19,7 +19,7 @@ futures = "0.3.28"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
 libp2p-dns = { workspace = true, features = ["tokio"] }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-tls = { workspace = true }
 libp2p-quic = { workspace = true, features = ["tokio"] }
 libp2p-request-response = { workspace = true }

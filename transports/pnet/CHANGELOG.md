@@ -1,4 +1,4 @@
-## 0.23.1 - unreleased
+## 0.23.1
 
 <!-- Interal changes:
 
@@ -6,7 +6,7 @@
 
 -->
 
-## 0.23.0 
+## 0.23.0
 
 - Raise MSRV to 1.65.
   See [PR 3715].

@@ -230,6 +230,7 @@ pub struct OneShotHandlerConfig {
 }
 
 impl Default for OneShotHandlerConfig {
+    #[allow(deprecated)]
     fn default() -> Self {
         OneShotHandlerConfig {
             outbound_substream_timeout: Duration::from_secs(10),

@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition = "2021"
 rust-version = { workspace = true }
 description = "TCP/IP transport protocol for libp2p"
-version = "0.40.0"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -28,6 +28,7 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio = { version = "1.33.0", default-features = false, features = ["full"] }
 env_logger = "0.10.0"
 

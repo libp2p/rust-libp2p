@@ -5,11 +5,14 @@ edition = "2021"
 license = "MIT"
 publish = false
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 futures = "0.3.28"
 getrandom = { version = "0.2.9", features = ["js"] }
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-noise = { workspace = true }
 libp2p-webtransport-websys = { workspace = true }
 multiaddr = { workspace = true }

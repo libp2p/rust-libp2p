@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Gossipsub protocol for libp2p"
-version = "0.45.2"
+version = "0.46.0"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -26,7 +26,7 @@ getrandom = "0.2.9"
 hex_fmt = "0.3.0"
 instant = "0.1.12"
 libp2p-core = { workspace = true }
-libp2p-identity = { workspace = true }
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-swarm = { workspace = true }
 log = "0.4.20"
 quick-protobuf = "0.8"

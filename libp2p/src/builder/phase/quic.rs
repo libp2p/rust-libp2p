@@ -82,7 +82,7 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     ) -> Result<
         SwarmBuilder<
             Provider,
-            super::websocket::WebsocketPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
+            BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, libp2p_relay::client::Behaviour>,
         >,
         SecUpgrade::Error,
         > where
@@ -108,6 +108,9 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
     <<MuxUpgrade as IntoMultiplexerUpgrade<SecStream>>::Upgrade as UpgradeInfo>::Info: Send,
     {
         self.without_quic()
+            .without_any_other_transports()
+            .without_dns()
+            .without_websocket()
             .with_relay_client(security_upgrade, multiplexer_upgrade)
     }
 
@@ -139,8 +142,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
-            .without_relay()
             .without_websocket()
+            .without_relay()
             .with_behaviour(constructor)
     }
 }
@@ -149,7 +152,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::AsyncSt
     pub async fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::AsyncStd, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::AsyncStd,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         self.without_quic()
@@ -163,7 +169,10 @@ impl<T: AuthenticatedMultiplexedTransport> SwarmBuilder<super::provider::Tokio, 
     pub fn with_dns(
         self,
     ) -> Result<
-        SwarmBuilder<super::provider::Tokio, RelayPhase<impl AuthenticatedMultiplexedTransport>>,
+        SwarmBuilder<
+            super::provider::Tokio,
+            WebsocketPhase<impl AuthenticatedMultiplexedTransport>,
+        >,
         std::io::Error,
     > {
         self.without_quic()
@@ -190,7 +199,7 @@ macro_rules! impl_quic_phase_with_websocket {
             ) -> Result<
                     SwarmBuilder<
                         $providerPascalCase,
-                        BandwidthLoggingPhase<impl AuthenticatedMultiplexedTransport, NoRelayBehaviour>,
+                        RelayPhase<impl AuthenticatedMultiplexedTransport>,
                     >,
                     super::websocket::WebsocketError<SecUpgrade::Error>,
                 >
@@ -218,7 +227,6 @@ macro_rules! impl_quic_phase_with_websocket {
                 self.without_quic()
                     .without_any_other_transports()
                     .without_dns()
-                    .without_relay()
                     .with_websocket(security_upgrade, multiplexer_upgrade)
                     .await
             }
@@ -250,8 +258,8 @@ impl<Provider, T: AuthenticatedMultiplexedTransport> SwarmBuilder<Provider, Quic
         self.without_quic()
             .without_any_other_transports()
             .without_dns()
-            .without_relay()
             .without_websocket()
+            .without_relay()
             .with_bandwidth_logging()
     }
 }
