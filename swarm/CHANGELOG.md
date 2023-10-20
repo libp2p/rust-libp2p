@@ -1,5 +1,7 @@
 ## 0.44.0 - unreleased
 
+- Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
+  See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
 
 ## 0.43.6
 
