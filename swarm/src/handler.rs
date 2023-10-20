@@ -728,6 +728,9 @@ where
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeepAlive {
     /// If nothing new happens, the connection should be closed at the given `Instant`.
+    #[deprecated(
+        note = "Use `swarm::Config::with_idle_connection_timeout` instead. See <https://github.com/libp2p/rust-libp2p/issues/3844> for details."
+    )]
     Until(Instant),
     /// Keep the connection alive.
     Yes,
@@ -748,6 +751,7 @@ impl PartialOrd for KeepAlive {
     }
 }
 
+#[allow(deprecated)]
 impl Ord for KeepAlive {
     fn cmp(&self, other: &KeepAlive) -> Ordering {
         use self::KeepAlive::*;
@@ -757,6 +761,26 @@ impl Ord for KeepAlive {
             (No, _) | (_, Yes) => Ordering::Less,
             (_, No) | (Yes, _) => Ordering::Greater,
             (Until(t1), Until(t2)) => t1.cmp(t2),
+        }
+    }
+}
+
+#[cfg(test)]
+impl quickcheck::Arbitrary for KeepAlive {
+    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
+        match quickcheck::GenRange::gen_range(g, 1u8..4) {
+            1 =>
+            {
+                #[allow(deprecated)]
+                KeepAlive::Until(
+                    Instant::now()
+                        .checked_add(Duration::arbitrary(g))
+                        .unwrap_or(Instant::now()),
+                )
+            }
+            2 => KeepAlive::Yes,
+            3 => KeepAlive::No,
+            _ => unreachable!(),
         }
     }
 }

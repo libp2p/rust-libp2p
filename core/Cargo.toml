@@ -3,7 +3,7 @@ name = "libp2p-core"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Core traits and structs of libp2p"
-version = "0.40.1"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -39,7 +39,7 @@ libp2p-mplex = { path = "../muxers/mplex" }                    # Using `path` he
 libp2p-noise = { path = "../transports/noise" }                # Using `path` here because this is a cyclic dev-dependency which otherwise breaks releasing.
 multihash = { workspace = true, features = ["arb"] }
 quickcheck = { workspace = true }
-libp2p-identity = { workspace = true, features = ["ed25519"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 
 [features]
 serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
