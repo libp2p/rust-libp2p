@@ -2067,6 +2067,7 @@ where
             local_addr: local_addr.clone(),
             send_back_addr: remote_addr.clone(),
         };
+
         let mut handler = Handler::new(
             self.protocol_config.clone(),
             connected_point,
@@ -2090,6 +2091,7 @@ where
             address: addr.clone(),
             role_override,
         };
+
         let mut handler = Handler::new(
             self.protocol_config.clone(),
             connected_point,
