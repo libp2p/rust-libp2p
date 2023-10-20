@@ -1,5 +1,7 @@
 ## 0.44.0 - unreleased
 
+- Migrate to `{In,Out}boundConnectionUpgrade` traits.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.43.2
 

@@ -1,5 +1,7 @@
 ## 0.41.0 - unreleased
 
+- Remove blanket-impl of `{In,Out}boundUpgrade` for `{In,Out}boundConnectionUpgrade`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.40.1
 
