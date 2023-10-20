@@ -6,6 +6,8 @@
   See [PR 4503](https://github.com/libp2p/rust-libp2p/pull/4503).
 - Make previously "deprecated" `record` module private.
   See [PR 4035](https://github.com/libp2p/rust-libp2p/pull/4035).
+- Expose hashed bytes of KBucketKey.
+  See [PR 4698](https://github.com/libp2p/rust-libp2p/pull/4698).
 
 ## 0.44.6
 
