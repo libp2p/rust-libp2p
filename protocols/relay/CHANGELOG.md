@@ -1,14 +1,6 @@
 ## 0.17.0 - unreleased
 
-
 ## 0.16.2
-
-<!-- Internal changes
-
-- Allow deprecated usage of `KeepAlive::Until`
-- Bump version of `futures-bounded`
-
--->
 
 ## 0.16.1
 
