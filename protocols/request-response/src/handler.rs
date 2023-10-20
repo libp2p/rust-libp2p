@@ -80,7 +80,14 @@ where
 
     inbound_request_id: Arc<AtomicU64>,
 
-    worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
+    worker_streams:
+        futures_bounded::FuturesMap<(RequestId, Direction), Result<Event<TCodec>, io::Error>>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Direction {
+    Inbound,
+    Outbound,
 }
 
 impl<TCodec> Handler<TCodec>
@@ -153,7 +160,7 @@ where
 
         if self
             .worker_streams
-            .try_push(request_id, recv.boxed())
+            .try_push((request_id, Direction::Inbound), recv.boxed())
             .is_err()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
@@ -193,7 +200,7 @@ where
 
         if self
             .worker_streams
-            .try_push(request_id, send.boxed())
+            .try_push((request_id, Direction::Outbound), send.boxed())
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
@@ -384,13 +391,31 @@ where
         loop {
             match self.worker_streams.poll_unpin(cx) {
                 Poll::Ready((_, Ok(Ok(event)))) => {
-                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event))
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
-                Poll::Ready((id, Ok(Err(e)))) => {
+                Poll::Ready(((id, direction), Ok(Err(e)))) => {
                     log::debug!("Stream for request {id} failed: {e}");
+
+                    let event = match direction {
+                        Direction::Inbound => Event::InboundStreamFailed {
+                            request_id: id,
+                            error: e,
+                        },
+                        Direction::Outbound => Event::OutboundStreamFailed {
+                            request_id: id,
+                            error: e,
+                        },
+                    };
+
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
-                Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
+                Poll::Ready(((id, direction), Err(futures_bounded::Timeout { .. }))) => {
                     log::debug!("Stream for request {id} timed out");
+
+                    if direction == Direction::Outbound {
+                        let event = Event::OutboundTimeout(id);
+                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                    }
                 }
                 Poll::Pending => break,
             }
