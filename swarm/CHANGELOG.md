@@ -3,7 +3,7 @@
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
   This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
-  See [PR 4225].
+  See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 
 ## 0.43.6
 
@@ -40,7 +40,6 @@
 - Introduce `SwarmBuilder::idle_conncetion_timeout` and deprecate `keep_alive::Behaviour` as a result.
   See [PR 4161].
 
-[PR 4225]: https://github.com/libp2p/rust-libp2p/pull/4225
 [PR 4426]: https://github.com/libp2p/rust-libp2p/pull/4426
 [PR 4409]: https://github.com/libp2p/rust-libp2p/pull/4409
 [PR 4161]: https://github.com/libp2p/rust-libp2p/pull/4161
