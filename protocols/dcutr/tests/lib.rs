@@ -91,13 +91,27 @@ async fn connect() {
 
     let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id));
 
-    src.wait(move |e| match e {
-        SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-            (*endpoint.get_remote_address() == dst_addr).then_some(())
-        }
-        _ => None,
-    })
-    .await;
+    let established_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::ConnectionEstablished {
+                endpoint,
+                connection_id,
+                ..
+            } => (*endpoint.get_remote_address() == dst_addr).then_some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    let reported_conn_id = src
+        .wait(move |e| match e {
+            SwarmEvent::Behaviour(ClientEvent::Dcutr(
+                dcutr::Event::DirectConnectionUpgradeSucceeded { connection_id, .. },
+            )) => Some(connection_id),
+            _ => None,
+        })
+        .await;
+
+    assert_eq!(established_conn_id, reported_conn_id);
 }
 
 fn build_relay() -> Swarm<Relay> {

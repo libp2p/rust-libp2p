@@ -1,4 +1,9 @@
-## 0.10.1 - unreleased
+## 0.11.0 - unreleased
+
+- Add `ConnectionId` to `Event::DirectConnectionUpgradeSucceeded` and `Event::DirectConnectionUpgradeFailed`.
+  See [PR 4558].
+
+[PR 4558]: https://github.com/libp2p/rust-libp2p/pull/4558
 
 - Exchange address _candidates_ instead of external addresses in `CONNECT`.
   If hole-punching wasn't working properly for you until now, this might be the reason why.
