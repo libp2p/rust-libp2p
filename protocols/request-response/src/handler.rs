@@ -28,7 +28,6 @@ use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
 use futures::{channel::oneshot, prelude::*};
-use instant::Instant;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
@@ -58,12 +57,6 @@ where
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The request/response message codec.
     codec: TCodec,
-    /// The keep-alive timeout of idle connections. A connection is considered
-    /// idle if there are no outbound substreams.
-    keep_alive_timeout: Duration,
-    /// The timeout for inbound and outbound substreams (i.e. request
-    /// and response processing).
-    substream_timeout: Duration,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
     /// Queue of events to emit in `poll()`.
@@ -97,7 +90,6 @@ where
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
         codec: TCodec,
-        keep_alive_timeout: Duration,
         substream_timeout: Duration,
         inbound_request_id: Arc<AtomicU64>,
         max_concurrent_streams: usize,
@@ -107,8 +99,6 @@ where
             inbound_protocols,
             codec,
             keep_alive: KeepAlive::Yes,
-            keep_alive_timeout,
-            substream_timeout,
             pending_outbound: VecDeque::new(),
             requested_outbound: Default::default(),
             inbound_receiver,
@@ -422,13 +412,11 @@ where
             self.pending_outbound.shrink_to_fit();
         }
 
-        #[allow(deprecated)]
         if self.worker_streams.is_empty() && self.keep_alive.is_yes() {
-            // No new inbound or outbound requests. However, we may just have
-            // started the latest inbound or outbound upgrade(s), so make sure
-            // the keep-alive timeout is preceded by the substream timeout.
-            let until = Instant::now() + self.substream_timeout + self.keep_alive_timeout;
-            self.keep_alive = KeepAlive::Until(until);
+            // No new inbound or outbound requests. We already check
+            // there is no active streams exist in swarm connection,
+            // so we can set keep-alive to no directly.
+            self.keep_alive = KeepAlive::No;
         }
 
         Poll::Pending

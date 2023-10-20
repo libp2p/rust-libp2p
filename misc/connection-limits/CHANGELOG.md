@@ -1,3 +1,6 @@
+## 0.3.0 - unreleased
+
+
 ## 0.2.1
 
 - Do not count a connection as established when it is denied by another sibling `NetworkBehaviour`.
