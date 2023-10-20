@@ -5,11 +5,17 @@ edition = "2021"
 publish = false
 license = "MIT"
 
+[package.metadata.release]
+release = false
+
 [dependencies]
 async-std = { version = "1.12", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.10.0"
 futures = "0.3.28"
-libp2p = { path = "../../libp2p", features = ["async-std", "identify", "macros", "noise", "ping", "rendezvous", "tcp", "tokio", "yamux"] }
+libp2p = { path = "../../libp2p", features = [ "async-std", "identify", "macros", "noise", "ping", "rendezvous", "tcp", "tokio", "yamux"] }
 log = "0.4"
-tokio = { version = "1.32", features = [ "rt-multi-thread", "macros", "time" ] }
+tokio = { version = "1.33", features = ["rt-multi-thread", "macros", "time"] }
+
+[lints]
+workspace = true

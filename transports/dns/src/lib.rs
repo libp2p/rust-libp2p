@@ -21,17 +21,17 @@
 //! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
 //! [`Transport`] for libp2p.
 //!
-//! This crate provides the type [`GenDnsConfig`] with its instantiations
-//! [`DnsConfig`] and `TokioDnsConfig` for use with `async-std` and `tokio`,
+//! This crate provides the type [`async_std::Transport`] and [`tokio::Transport`]
+//! for use with `async-std` and `tokio`,
 //! respectively.
 //!
-//! A [`GenDnsConfig`] is an address-rewriting [`Transport`] wrapper around
+//! A [`Transport`] is an address-rewriting [`libp2p_core::Transport`] wrapper around
 //! an inner `Transport`. The composed transport behaves like the inner
-//! transport, except that [`Transport::dial`] resolves `/dns/...`, `/dns4/...`,
+//! transport, except that [`libp2p_core::Transport::dial`] resolves `/dns/...`, `/dns4/...`,
 //! `/dns6/...` and `/dnsaddr/...` components of the given `Multiaddr` through
 //! a DNS, replacing them with the resolved protocols (typically TCP/IP).
 //!
-//! The `async-std` feature and hence the `DnsConfig` are
+//! The `async-std` feature and hence the [`async_std::Transport`] are
 //! enabled by default. Tokio users can furthermore opt-in
 //! to the `tokio-dns-over-rustls` and `tokio-dns-over-https-rustls`
 //! features. For more information about these features, please
@@ -49,7 +49,7 @@
 //!      problematic on platforms like Android, where there's a lot of
 //!      complexity hidden behind the system APIs.
 //! If the implementation requires different characteristics, one should
-//! consider providing their own implementation of [`GenDnsConfig`] or use
+//! consider providing their own implementation of [`Transport`] or use
 //! platform specific APIs to extract the host's DNS configuration (if possible)
 //! and provide a custom [`ResolverConfig`].
 //!
@@ -58,14 +58,87 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
-use async_std_resolver::AsyncStdResolver;
+pub mod async_std {
+    use async_std_resolver::AsyncStdResolver;
+    use parking_lot::Mutex;
+    use std::{io, sync::Arc};
+    use trust_dns_resolver::{
+        config::{ResolverConfig, ResolverOpts},
+        system_conf,
+    };
+
+    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
+    /// using `async-std` for all async I/O.
+    pub type Transport<T> = crate::Transport<T, AsyncStdResolver>;
+
+    impl<T> Transport<T> {
+        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
+        pub async fn system(inner: T) -> Result<Transport<T>, io::Error> {
+            let (cfg, opts) = system_conf::read_system_conf()?;
+            Self::custom(inner, cfg, opts).await
+        }
+
+        /// Creates a [`Transport`] with a custom resolver configuration and options.
+        pub async fn custom(
+            inner: T,
+            cfg: ResolverConfig,
+            opts: ResolverOpts,
+        ) -> Result<Transport<T>, io::Error> {
+            Ok(Transport {
+                inner: Arc::new(Mutex::new(inner)),
+                resolver: async_std_resolver::resolver(cfg, opts).await,
+            })
+        }
+    }
+}
+
+#[cfg(feature = "async-std")]
+#[deprecated(note = "Use `async_std::Transport` instead.")]
+pub type DnsConfig<T> = async_std::Transport<T>;
+
+#[cfg(feature = "tokio")]
+pub mod tokio {
+    use parking_lot::Mutex;
+    use std::sync::Arc;
+    use trust_dns_resolver::{system_conf, TokioAsyncResolver};
+
+    /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
+    /// using `tokio` for all async I/O.
+    pub type Transport<T> = crate::Transport<T, TokioAsyncResolver>;
+
+    impl<T> Transport<T> {
+        /// Creates a new [`Transport`] from the OS's DNS configuration and defaults.
+        pub fn system(inner: T) -> Result<crate::Transport<T, TokioAsyncResolver>, std::io::Error> {
+            let (cfg, opts) = system_conf::read_system_conf()?;
+            Self::custom(inner, cfg, opts)
+        }
+
+        /// Creates a [`Transport`] with a custom resolver configuration
+        /// and options.
+        pub fn custom(
+            inner: T,
+            cfg: trust_dns_resolver::config::ResolverConfig,
+            opts: trust_dns_resolver::config::ResolverOpts,
+        ) -> Result<crate::Transport<T, TokioAsyncResolver>, std::io::Error> {
+            // TODO: Make infallible in next breaking release. Or deprecation?
+            Ok(Transport {
+                inner: Arc::new(Mutex::new(inner)),
+                resolver: TokioAsyncResolver::tokio(cfg, opts),
+            })
+        }
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[deprecated(note = "Use `tokio::Transport` instead.")]
+pub type TokioDnsConfig<T> = tokio::Transport<T>;
+
 use async_trait::async_trait;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
     connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    Transport,
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -80,10 +153,6 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-#[cfg(any(feature = "async-std", feature = "tokio"))]
-use trust_dns_resolver::system_conf;
-#[cfg(feature = "tokio")]
-use trust_dns_resolver::TokioAsyncResolver;
 
 pub use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 pub use trust_dns_resolver::error::{ResolveError, ResolveErrorKind};
@@ -110,80 +179,28 @@ const MAX_DNS_LOOKUPS: usize = 32;
 /// result of a single `/dnsaddr` lookup.
 const MAX_TXT_RECORDS: usize = 16;
 
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-/// using `async-std` for all async I/O.
-#[cfg(feature = "async-std")]
-pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdResolver>;
-
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
-/// using `tokio` for all async I/O.
-#[cfg(feature = "tokio")]
-pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioAsyncResolver>;
-
-/// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
+/// A [`Transport`] for performing DNS lookups when dialing `Multiaddr`esses.
+/// You shouldn't need to use this type directly. Use [`tokio::Transport`] or [`async_std::Transport`] instead.
 #[derive(Debug)]
-pub struct GenDnsConfig<T, R> {
+pub struct Transport<T, R> {
     /// The underlying transport.
     inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: R,
 }
 
-#[cfg(feature = "async-std")]
-impl<T> DnsConfig<T>
+#[deprecated(note = "Use `async_std::Transport` or `tokio::Transport` instead.")]
+pub type GenDnsConfig<T, R> = Transport<T, R>;
+
+impl<T, R> libp2p_core::Transport for Transport<T, R>
 where
-    T: Send,
-{
-    /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
-    pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
-        let (cfg, opts) = system_conf::read_system_conf()?;
-        Ok(Self::custom(inner, cfg, opts).await)
-    }
-
-    /// Creates a [`DnsConfig`] with a custom resolver configuration and options.
-    pub async fn custom(inner: T, cfg: ResolverConfig, opts: ResolverOpts) -> DnsConfig<T> {
-        DnsConfig {
-            inner: Arc::new(Mutex::new(inner)),
-            resolver: async_std_resolver::resolver(cfg, opts).await,
-        }
-    }
-}
-
-#[cfg(feature = "tokio")]
-impl<T> TokioDnsConfig<T>
-where
-    T: Send,
-{
-    /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
-    pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {
-        let (cfg, opts) = system_conf::read_system_conf()?;
-        Self::custom(inner, cfg, opts)
-    }
-
-    /// Creates a [`TokioDnsConfig`] with a custom resolver configuration
-    /// and options.
-    pub fn custom(
-        inner: T,
-        cfg: ResolverConfig,
-        opts: ResolverOpts,
-    ) -> Result<TokioDnsConfig<T>, io::Error> {
-        // TODO: Make infallible in next breaking release. Or deprecation?
-        Ok(TokioDnsConfig {
-            inner: Arc::new(Mutex::new(inner)),
-            resolver: TokioAsyncResolver::tokio(cfg, opts),
-        })
-    }
-}
-
-impl<T, R> Transport for GenDnsConfig<T, R>
-where
-    T: Transport + Send + Unpin + 'static,
+    T: libp2p_core::Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     R: Clone + Send + Sync + Resolver + 'static,
 {
     type Output = T::Output;
-    type Error = DnsErr<T::Error>;
+    type Error = Error<T::Error>;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
@@ -198,7 +215,7 @@ where
         self.inner
             .lock()
             .listen_on(id, addr)
-            .map_err(|e| e.map(DnsErr::Transport))
+            .map_err(|e| e.map(Error::Transport))
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -225,17 +242,17 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let mut inner = self.inner.lock();
-        Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
+        libp2p_core::Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
             event
-                .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
-                .map_err(DnsErr::Transport)
+                .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(Error::Transport))
+                .map_err(Error::Transport)
         })
     }
 }
 
-impl<T, R> GenDnsConfig<T, R>
+impl<T, R> Transport<T, R>
 where
-    T: Transport + Send + Unpin + 'static,
+    T: libp2p_core::Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     R: Clone + Send + Sync + Resolver + 'static,
@@ -244,7 +261,10 @@ where
         &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
-    ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+    ) -> Result<
+        <Self as libp2p_core::Transport>::Dial,
+        TransportError<<Self as libp2p_core::Transport>::Error>,
+    > {
         let resolver = self.resolver.clone();
         let inner = self.inner.clone();
 
@@ -274,7 +294,7 @@ where
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
-                        last_err = Some(DnsErr::TooManyLookups);
+                        last_err = Some(Error::TooManyLookups);
                         // There may still be fully resolved addresses in `unresolved`,
                         // so keep going until `unresolved` is empty.
                         continue;
@@ -339,12 +359,12 @@ where
                             // actually accepted, i.e. for which it produced
                             // a dialing future.
                             dial_attempts += 1;
-                            out.await.map_err(DnsErr::Transport)
+                            out.await.map_err(Error::Transport)
                         }
                         Err(TransportError::MultiaddrNotSupported(a)) => {
-                            Err(DnsErr::MultiaddrNotSupported(a))
+                            Err(Error::MultiaddrNotSupported(a))
                         }
-                        Err(TransportError::Other(err)) => Err(DnsErr::Transport(err)),
+                        Err(TransportError::Other(err)) => Err(Error::Transport(err)),
                     };
 
                     match result {
@@ -372,7 +392,7 @@ where
             // for the given address to begin with (i.e. DNS lookups succeeded but
             // produced no records relevant for the given `addr`).
             Err(last_err.unwrap_or_else(|| {
-                DnsErr::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
+                Error::ResolveError(ResolveErrorKind::Message("No matching records found.").into())
             }))
         }
         .boxed()
@@ -380,10 +400,10 @@ where
     }
 }
 
-/// The possible errors of a [`GenDnsConfig`] wrapped transport.
+/// The possible errors of a [`Transport`] wrapped transport.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum DnsErr<TErr> {
+pub enum Error<TErr> {
     /// The underlying transport encountered an error.
     Transport(TErr),
     /// DNS resolution failed.
@@ -399,30 +419,33 @@ pub enum DnsErr<TErr> {
     TooManyLookups,
 }
 
-impl<TErr> fmt::Display for DnsErr<TErr>
+#[deprecated(note = "Use `Error` instead.")]
+pub type DnsErr<TErr> = Error<TErr>;
+
+impl<TErr> fmt::Display for Error<TErr>
 where
     TErr: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DnsErr::Transport(err) => write!(f, "{err}"),
-            DnsErr::ResolveError(err) => write!(f, "{err}"),
-            DnsErr::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
-            DnsErr::TooManyLookups => write!(f, "Too many DNS lookups"),
+            Error::Transport(err) => write!(f, "{err}"),
+            Error::ResolveError(err) => write!(f, "{err}"),
+            Error::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
+            Error::TooManyLookups => write!(f, "Too many DNS lookups"),
         }
     }
 }
 
-impl<TErr> error::Error for DnsErr<TErr>
+impl<TErr> error::Error for Error<TErr>
 where
     TErr: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            DnsErr::Transport(err) => Some(err),
-            DnsErr::ResolveError(err) => Some(err),
-            DnsErr::MultiaddrNotSupported(_) => None,
-            DnsErr::TooManyLookups => None,
+            Error::Transport(err) => Some(err),
+            Error::ResolveError(err) => Some(err),
+            Error::MultiaddrNotSupported(_) => None,
+            Error::TooManyLookups => None,
         }
     }
 }
@@ -448,7 +471,7 @@ enum Resolved<'a> {
 fn resolve<'a, E: 'a + Send, R: Resolver>(
     proto: &Protocol<'a>,
     resolver: &'a R,
-) -> BoxFuture<'a, Result<Resolved<'a>, DnsErr<E>>> {
+) -> BoxFuture<'a, Result<Resolved<'a>, Error<E>>> {
     match proto {
         Protocol::Dns(ref name) => resolver
             .lookup_ip(name.clone().into_owned())
@@ -470,7 +493,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(one)))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dns4(ref name) => resolver
@@ -494,7 +517,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(Ipv4Addr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dns6(ref name) => resolver
@@ -518,7 +541,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         Ok(Resolved::One(Protocol::from(Ipv6Addr::from(one))))
                     }
                 }
-                Err(e) => Err(DnsErr::ResolveError(e)),
+                Err(e) => Err(Error::ResolveError(e)),
             })
             .boxed(),
         Protocol::Dnsaddr(ref name) => {
@@ -543,7 +566,7 @@ fn resolve<'a, E: 'a + Send, R: Resolver>(
                         }
                         Ok(Resolved::Addrs(addrs))
                     }
-                    Err(e) => Err(DnsErr::ResolveError(e)),
+                    Err(e) => Err(Error::ResolveError(e)),
                 })
                 .boxed()
         }
@@ -659,7 +682,7 @@ mod tests {
             }
         }
 
-        async fn run<T, R>(mut transport: GenDnsConfig<T, R>)
+        async fn run<T, R>(mut transport: super::Transport<T, R>)
         where
             T: Transport + Clone + Send + Unpin + 'static,
             T::Error: Send,
@@ -714,7 +737,7 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(DnsErr::ResolveError(_)) => {}
+                Err(Error::ResolveError(_)) => {}
                 Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
@@ -725,7 +748,7 @@ mod tests {
                 .unwrap()
                 .await
             {
-                Err(DnsErr::ResolveError(e)) => match e.kind() {
+                Err(Error::ResolveError(e)) => match e.kind() {
                     ResolveErrorKind::NoRecordsFound { .. } => {}
                     _ => panic!("Unexpected DNS error: {e:?}"),
                 },
@@ -741,7 +764,7 @@ mod tests {
             let config = ResolverConfig::quad9();
             let opts = ResolverOpts::default();
             async_std_crate::task::block_on(
-                DnsConfig::custom(CustomTransport, config, opts).then(run),
+                async_std::Transport::custom(CustomTransport, config, opts).then(run),
             );
         }
 
@@ -756,8 +779,9 @@ mod tests {
                 .enable_time()
                 .build()
                 .unwrap();
+
             rt.block_on(run(
-                TokioDnsConfig::custom(CustomTransport, config, opts).unwrap()
+                tokio::Transport::custom(CustomTransport, config, opts).unwrap()
             ));
         }
     }

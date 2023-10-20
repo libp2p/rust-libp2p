@@ -135,20 +135,6 @@ where
         }
     }
 
-    /// Returns the key of the entry.
-    ///
-    /// Returns `None` if the `Key` used to construct this `Entry` is not a valid
-    /// key for an entry in a bucket, which is the case for the `local_key` of
-    /// the `KBucketsTable` referring to the local node.
-    pub(crate) fn key(&self) -> Option<&TKey> {
-        match self {
-            Entry::Present(entry, _) => Some(entry.key()),
-            Entry::Pending(entry, _) => Some(entry.key()),
-            Entry::Absent(entry) => Some(entry.key()),
-            Entry::SelfEntry => None,
-        }
-    }
-
     /// Returns the value associated with the entry.
     ///
     /// Returns `None` if the entry is absent from any bucket or refers to the
@@ -173,11 +159,6 @@ where
 {
     fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         PresentEntry(EntryRef { bucket, key })
-    }
-
-    /// Returns the key of the entry.
-    pub(crate) fn key(&self) -> &TKey {
-        self.0.key
     }
 
     /// Returns the value associated with the key.
@@ -218,11 +199,6 @@ where
         PendingEntry(EntryRef { bucket, key })
     }
 
-    /// Returns the key of the entry.
-    pub(crate) fn key(&self) -> &TKey {
-        self.0.key
-    }
-
     /// Returns the value associated with the key.
     pub(crate) fn value(&mut self) -> &mut TVal {
         self.0
@@ -260,11 +236,6 @@ where
 {
     fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
         AbsentEntry(EntryRef { bucket, key })
-    }
-
-    /// Returns the key of the entry.
-    pub(crate) fn key(&self) -> &TKey {
-        self.0.key
     }
 
     /// Attempts to insert the entry into a bucket.

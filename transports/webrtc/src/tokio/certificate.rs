@@ -97,24 +97,18 @@ enum Kind {
     InvalidPEM(#[from] webrtc::Error),
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "pem"))]
 mod test {
-    #[cfg(feature = "pem")]
-    use anyhow::Result;
+    use super::*;
+    use rand::thread_rng;
 
-    #[cfg(feature = "pem")]
     #[test]
-    fn test_certificate_serialize_pem_and_from_pem() -> Result<()> {
-        use super::*;
-        use rand::thread_rng;
-
+    fn test_certificate_serialize_pem_and_from_pem() {
         let cert = Certificate::generate(&mut thread_rng()).unwrap();
 
         let pem = cert.serialize_pem();
-        let loaded_cert = Certificate::from_pem(&pem)?;
+        let loaded_cert = Certificate::from_pem(&pem).unwrap();
 
-        assert_eq!(loaded_cert, cert);
-
-        Ok(())
+        assert_eq!(loaded_cert, cert)
     }
 }

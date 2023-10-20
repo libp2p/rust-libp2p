@@ -20,7 +20,7 @@
 
 //! The Kademlia connection protocol upgrade and associated message types.
 //!
-//! The connection protocol upgrade is provided by [`KademliaProtocolConfig`], with the
+//! The connection protocol upgrade is provided by [`ProtocolConfig`], with the
 //! request and response types [`KadRequestMsg`] and [`KadResponseMsg`], respectively.
 //! The upgrade's output is a `Sink + Stream` of messages. The `Stream` component is used
 //! to poll the underlying transport for incoming messages, and the `Sink` component
@@ -28,19 +28,17 @@
 
 use crate::proto;
 use crate::record_priv::{self, Record};
-use asynchronous_codec::Framed;
+use asynchronous_codec::{Decoder, Encoder, Framed};
 use bytes::BytesMut;
-use codec::UviBytes;
 use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
-use quick_protobuf::{BytesReader, Writer};
+use std::marker::PhantomData;
 use std::{convert::TryFrom, time::Duration};
 use std::{io, iter};
-use unsigned_varint::codec;
 
 /// The protocol name used for negotiating with multistream-select.
 pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs/kad/1.0.0");
@@ -48,7 +46,7 @@ pub(crate) const DEFAULT_PROTO_NAME: StreamProtocol = StreamProtocol::new("/ipfs
 pub(crate) const DEFAULT_MAX_PACKET_SIZE: usize = 16 * 1024;
 /// Status of our connection to a node reported by the Kademlia protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub enum KadConnectionType {
+pub enum ConnectionType {
     /// Sender hasn't tried to connect to peer.
     NotConnected = 0,
     /// Sender is currently connected to peer.
@@ -59,26 +57,26 @@ pub enum KadConnectionType {
     CannotConnect = 3,
 }
 
-impl From<proto::ConnectionType> for KadConnectionType {
-    fn from(raw: proto::ConnectionType) -> KadConnectionType {
+impl From<proto::ConnectionType> for ConnectionType {
+    fn from(raw: proto::ConnectionType) -> ConnectionType {
         use proto::ConnectionType::*;
         match raw {
-            NOT_CONNECTED => KadConnectionType::NotConnected,
-            CONNECTED => KadConnectionType::Connected,
-            CAN_CONNECT => KadConnectionType::CanConnect,
-            CANNOT_CONNECT => KadConnectionType::CannotConnect,
+            NOT_CONNECTED => ConnectionType::NotConnected,
+            CONNECTED => ConnectionType::Connected,
+            CAN_CONNECT => ConnectionType::CanConnect,
+            CANNOT_CONNECT => ConnectionType::CannotConnect,
         }
     }
 }
 
-impl From<KadConnectionType> for proto::ConnectionType {
-    fn from(val: KadConnectionType) -> Self {
+impl From<ConnectionType> for proto::ConnectionType {
+    fn from(val: ConnectionType) -> Self {
         use proto::ConnectionType::*;
         match val {
-            KadConnectionType::NotConnected => NOT_CONNECTED,
-            KadConnectionType::Connected => CONNECTED,
-            KadConnectionType::CanConnect => CAN_CONNECT,
-            KadConnectionType::CannotConnect => CANNOT_CONNECT,
+            ConnectionType::NotConnected => NOT_CONNECTED,
+            ConnectionType::Connected => CONNECTED,
+            ConnectionType::CanConnect => CAN_CONNECT,
+            ConnectionType::CannotConnect => CANNOT_CONNECT,
         }
     }
 }
@@ -91,7 +89,7 @@ pub struct KadPeer {
     /// The multiaddresses that the sender think can be used in order to reach the peer.
     pub multiaddrs: Vec<Multiaddr>,
     /// How the sender is connected to that remote.
-    pub connection_ty: KadConnectionType,
+    pub connection_ty: ConnectionType,
 }
 
 // Builds a `KadPeer` from a corresponding protobuf message.
@@ -137,13 +135,13 @@ impl From<KadPeer> for proto::Peer {
 //       only one request, then we can change the output of the `InboundUpgrade` and
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
-pub struct KademliaProtocolConfig {
+pub struct ProtocolConfig {
     protocol_names: Vec<StreamProtocol>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
-impl KademliaProtocolConfig {
+impl ProtocolConfig {
     /// Returns the configured protocol name.
     pub fn protocol_names(&self) -> &[StreamProtocol] {
         &self.protocol_names
@@ -161,16 +159,16 @@ impl KademliaProtocolConfig {
     }
 }
 
-impl Default for KademliaProtocolConfig {
+impl Default for ProtocolConfig {
     fn default() -> Self {
-        KademliaProtocolConfig {
+        ProtocolConfig {
             protocol_names: iter::once(DEFAULT_PROTO_NAME).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
 }
 
-impl UpgradeInfo for KademliaProtocolConfig {
+impl UpgradeInfo for ProtocolConfig {
     type Info = StreamProtocol;
     type InfoIter = std::vec::IntoIter<Self::Info>;
 
@@ -179,7 +177,43 @@ impl UpgradeInfo for KademliaProtocolConfig {
     }
 }
 
-impl<C> InboundUpgrade<C> for KademliaProtocolConfig
+/// Codec for Kademlia inbound and outbound message framing.
+pub struct Codec<A, B> {
+    codec: quick_protobuf_codec::Codec<proto::Message>,
+    __phantom: PhantomData<(A, B)>,
+}
+impl<A, B> Codec<A, B> {
+    fn new(max_packet_size: usize) -> Self {
+        Codec {
+            codec: quick_protobuf_codec::Codec::new(max_packet_size),
+            __phantom: PhantomData,
+        }
+    }
+}
+
+impl<A: Into<proto::Message>, B> Encoder for Codec<A, B> {
+    type Error = io::Error;
+    type Item = A;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(self.codec.encode(item.into(), dst)?)
+    }
+}
+impl<A, B: TryFrom<proto::Message, Error = io::Error>> Decoder for Codec<A, B> {
+    type Error = io::Error;
+    type Item = B;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        self.codec.decode(src)?.map(B::try_from).transpose()
+    }
+}
+
+/// Sink of responses and stream of requests.
+pub(crate) type KadInStreamSink<S> = Framed<S, Codec<KadResponseMsg, KadRequestMsg>>;
+/// Sink of requests and stream of responses.
+pub(crate) type KadOutStreamSink<S> = Framed<S, Codec<KadRequestMsg, KadResponseMsg>>;
+
+impl<C> InboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -188,36 +222,13 @@ where
     type Error = io::Error;
 
     fn upgrade_inbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        use quick_protobuf::{MessageRead, MessageWrite};
+        let codec = Codec::new(self.max_packet_size);
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(self.max_packet_size);
-
-        future::ok(
-            Framed::new(incoming, codec)
-                .err_into()
-                .with::<_, _, fn(_) -> _, _>(|response| {
-                    let proto_struct = resp_msg_to_proto(response);
-                    let mut buf = Vec::with_capacity(proto_struct.get_size());
-                    let mut writer = Writer::new(&mut buf);
-                    proto_struct
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
-                    future::ready(Ok(io::Cursor::new(buf)))
-                })
-                .and_then::<_, fn(_) -> _>(|bytes| {
-                    let mut reader = BytesReader::from_bytes(&bytes);
-                    let request = match proto::Message::from_reader(&mut reader, &bytes) {
-                        Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into())),
-                    };
-                    future::ready(proto_to_req_msg(request))
-                }),
-        )
+        future::ok(Framed::new(incoming, codec))
     }
 }
 
-impl<C> OutboundUpgrade<C> for KademliaProtocolConfig
+impl<C> OutboundUpgrade<C> for ProtocolConfig
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
@@ -226,50 +237,11 @@ where
     type Error = io::Error;
 
     fn upgrade_outbound(self, incoming: C, _: Self::Info) -> Self::Future {
-        use quick_protobuf::{MessageRead, MessageWrite};
+        let codec = Codec::new(self.max_packet_size);
 
-        let mut codec = UviBytes::default();
-        codec.set_max_len(self.max_packet_size);
-
-        future::ok(
-            Framed::new(incoming, codec)
-                .err_into()
-                .with::<_, _, fn(_) -> _, _>(|request| {
-                    let proto_struct = req_msg_to_proto(request);
-                    let mut buf = Vec::with_capacity(proto_struct.get_size());
-                    let mut writer = Writer::new(&mut buf);
-                    proto_struct
-                        .write_message(&mut writer)
-                        .expect("Encoding to succeed");
-                    future::ready(Ok(io::Cursor::new(buf)))
-                })
-                .and_then::<_, fn(_) -> _>(|bytes| {
-                    let mut reader = BytesReader::from_bytes(&bytes);
-                    let response = match proto::Message::from_reader(&mut reader, &bytes) {
-                        Ok(r) => r,
-                        Err(err) => return future::ready(Err(err.into())),
-                    };
-                    future::ready(proto_to_resp_msg(response))
-                }),
-        )
+        future::ok(Framed::new(incoming, codec))
     }
 }
-
-/// Sink of responses and stream of requests.
-pub(crate) type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
-/// Sink of requests and stream of responses.
-pub(crate) type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
-pub(crate) type KadStreamSink<S, A, B> = stream::AndThen<
-    sink::With<
-        stream::ErrInto<Framed<S, UviBytes<io::Cursor<Vec<u8>>>>, io::Error>,
-        io::Cursor<Vec<u8>>,
-        A,
-        future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
-        fn(A) -> future::Ready<Result<io::Cursor<Vec<u8>>, io::Error>>,
-    >,
-    future::Ready<Result<B, io::Error>>,
-    fn(BytesMut) -> future::Ready<Result<B, io::Error>>,
->;
 
 /// Request that we can send to a peer or that we received from a peer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,6 +316,31 @@ pub enum KadResponseMsg {
         /// Value of the record.
         value: Vec<u8>,
     },
+}
+
+impl From<KadRequestMsg> for proto::Message {
+    fn from(kad_msg: KadRequestMsg) -> Self {
+        req_msg_to_proto(kad_msg)
+    }
+}
+impl From<KadResponseMsg> for proto::Message {
+    fn from(kad_msg: KadResponseMsg) -> Self {
+        resp_msg_to_proto(kad_msg)
+    }
+}
+impl TryFrom<proto::Message> for KadRequestMsg {
+    type Error = io::Error;
+
+    fn try_from(message: proto::Message) -> Result<Self, Self::Error> {
+        proto_to_req_msg(message)
+    }
+}
+impl TryFrom<proto::Message> for KadResponseMsg {
+    type Error = io::Error;
+
+    fn try_from(message: proto::Message) -> Result<Self, Self::Error> {
+        proto_to_resp_msg(message)
+    }
 }
 
 /// Converts a `KadRequestMsg` into the corresponding protobuf message for sending.
@@ -627,7 +624,7 @@ mod tests {
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
     use multihash::{encode, Hash};
-    use protocol::{KadConnectionType, KadPeer, KademliaProtocolConfig};
+    use protocol::{ConnectionType, KadPeer, ProtocolConfig};
     use std::sync::mpsc;
     use std::thread;
 
@@ -644,7 +641,7 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
         });
         test_one(KadMsg::GetProvidersReq {
@@ -654,12 +651,12 @@ mod tests {
             closer_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/100.101.102.103/tcp/20105".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             }],
             provider_peers: vec![KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/200.201.202.203/tcp/1999".parse().unwrap()],
-                connection_ty: KadConnectionType::NotConnected,
+                connection_ty: ConnectionType::NotConnected,
             }],
         });
         test_one(KadMsg::AddProvider {
@@ -667,7 +664,7 @@ mod tests {
             provider_peer: KadPeer {
                 node_id: PeerId::random(),
                 multiaddrs: vec!["/ip4/9.1.2.3/udp/23".parse().unwrap()],
-                connection_ty: KadConnectionType::Connected,
+                connection_ty: ConnectionType::Connected,
             },
         });
         // TODO: all messages
@@ -677,7 +674,7 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
                 let (listener, addr) = transport
                     .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -697,7 +694,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpTransport::default().with_upgrade(ProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())
