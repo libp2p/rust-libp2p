@@ -748,7 +748,6 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.config.connection_keep_alive,
             self.next_inbound_id.clone(),
         );
 
