@@ -1,5 +1,7 @@
 ## 0.45.0 - unreleased
 
+- Don't perform IO in `Behaviour::poll`.
+  See [PR 4623](https://github.com/libp2p/rust-libp2p/pull/4623).
 
 ## 0.44.0 
 
