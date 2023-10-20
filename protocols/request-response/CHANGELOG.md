@@ -1,3 +1,9 @@
+## 0.26.0 - unreleased
+
+- Allow at most 100 concurrent inbound + outbound streams per instance of `request_response::Behaviour`.
+  This limit is configurable via `Config::with_max_concurrent_streams`.
+  See [PR 3914](https://github.com/libp2p/rust-libp2p/pull/3914).
+
 ## 0.25.2
 
 - Deprecate `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.
@@ -14,12 +20,7 @@
 - Replace unmaintained `serde_cbor` dependency with `cbor4ii`.
   See [PR 4187].
 
-- Allow at most 100 concurrent inbound + outbound streams.
-  This limit is configurable via `Config::with_max_concurrent_streams`.
-  See [PR 3914].
-
 [PR 4187]: https://github.com/libp2p/rust-libp2p/pull/4187
-[PR 3914]: https://github.com/libp2p/rust-libp2p/pull/3914
 
 ## 0.25.0
 
