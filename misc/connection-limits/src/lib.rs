@@ -373,7 +373,8 @@ impl NetworkBehaviour for Behaviour {
 mod tests {
     use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
+        ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
@@ -397,6 +398,8 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
+                        // Dial always, even if already dialing or connected.
+                        .condition(PeerCondition::Always)
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -404,7 +407,12 @@ mod tests {
         }
 
         match network
-            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+            .dial(
+                DialOpts::peer_id(target)
+                    .condition(PeerCondition::Always)
+                    .addresses(vec![addr])
+                    .build(),
+            )
             .expect_err("Unexpected dialing success.")
         {
             DialError::Denied { cause } => {
