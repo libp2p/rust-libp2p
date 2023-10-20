@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[cfg(feature = "rand")]
 use rand::Rng;
 use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
@@ -101,6 +102,7 @@ impl PeerId {
     /// Generates a random peer ID from a cryptographically secure PRNG.
     ///
     /// This is useful for randomly walking on a DHT, or for testing purposes.
+    #[cfg(feature = "rand")]
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
@@ -247,7 +249,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(feature = "ed25519")]
+    #[cfg(all(feature = "ed25519", feature = "rand"))]
     fn peer_id_into_bytes_then_from_bytes() {
         let peer_id = crate::Keypair::generate_ed25519().public().to_peer_id();
         let second = PeerId::from_bytes(&peer_id.to_bytes()).unwrap();
@@ -255,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "ed25519")]
+    #[cfg(all(feature = "ed25519", feature = "rand"))]
     fn peer_id_to_base58_then_back() {
         let peer_id = crate::Keypair::generate_ed25519().public().to_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
@@ -263,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "rand")]
     fn random_peer_id_is_valid() {
         for _ in 0..5000 {
             let peer_id = PeerId::random();

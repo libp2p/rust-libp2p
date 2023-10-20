@@ -3,7 +3,7 @@ name = "libp2p-memory-connection-limits"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Memory usage based connection limits for libp2p."
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]

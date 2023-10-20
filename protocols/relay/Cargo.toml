@@ -3,7 +3,7 @@ name = "libp2p-relay"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Communications relaying for libp2p"
-version = "0.16.2"
+version = "0.17.0"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -31,6 +31,7 @@ void = "1"
 
 [dev-dependencies]
 env_logger = "0.10.0"
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-ping = { workspace = true }
 libp2p-plaintext = { workspace = true }
 libp2p-swarm = { workspace = true, features = ["macros", "async-std"] }

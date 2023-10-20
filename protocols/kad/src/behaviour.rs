@@ -44,9 +44,9 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
