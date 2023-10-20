@@ -1,3 +1,8 @@
+## 0.44.0 - unreleased
+
+- Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
+  See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
+
 ## 0.43.6
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.
