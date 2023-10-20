@@ -139,4 +139,4 @@ clippy.type_complexity = "allow"
 clippy.unnecessary_wraps = "warn"
 
 [workspace.metadata.release]
-pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh']
+pre-release-hook = ["/bin/sh", '-c', '/bin/sh $WORKSPACE_ROOT/scripts/add-changelog-header.sh'] # Nested use of shell to expand variables.
