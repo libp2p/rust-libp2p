@@ -1,13 +1,6 @@
 ## 0.17.0 - unreleased
 
-
 ## 0.16.2
-
-<!-- Internal changes
-
-- Remove usage of `KeepAlive::Until`
-
--->
 
 ## 0.16.1
 
