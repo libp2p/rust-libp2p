@@ -1,6 +1,6 @@
 ## 0.41.0 - unreleased
 
-- Make DnsConfig::custom constructor infallible.
+- Make `tokio::Transport::custom` and `async_std::Transport::custom` constructors infallible.
   See [PR 4464].
 
 [PR 4464]: https://github.com/libp2p/rust-libp2p/pull/4464
