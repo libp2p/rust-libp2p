@@ -437,8 +437,19 @@ where
     /// by [`NetworkBehaviour::handle_pending_outbound_connection`].
     ///
     /// Addresses added in this way are only removed by `remove_address`.
-    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) {
-        self.addresses.entry(*peer).or_default().push(address);
+    ///
+    /// Returns true if the address was added, false otherwise (i.e. if the
+    /// address is already in the list).
+    pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> bool {
+        let addrs = self.addresses.entry(*peer).or_default();
+
+        // Add only if address is not already in the list.
+        if addrs.iter().all(|a| *a != address) {
+            addrs.push(address);
+            true
+        } else {
+            false
+        }
     }
 
     /// Removes an address of a peer previously added via `add_address`.
