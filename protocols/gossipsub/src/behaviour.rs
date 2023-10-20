@@ -2747,7 +2747,7 @@ where
 
                 let signature = {
                     let message = proto::Message {
-                        from: Some(author.clone().to_bytes()),
+                        from: Some(author.to_bytes()),
                         data: Some(data.clone()),
                         seqno: Some(sequence_number.to_be_bytes().to_vec()),
                         topic: topic.clone().into_string(),
@@ -3265,6 +3265,7 @@ where
     type ConnectionHandler = Handler;
     type ToSwarm = Event;
 
+    #[allow(deprecated)]
     fn handle_established_inbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3272,12 +3273,10 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
+    #[allow(deprecated)]
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -3285,10 +3284,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.protocol_config(),
-            self.config.idle_timeout(),
-        ))
+        Ok(Handler::new(self.config.protocol_config()))
     }
 
     fn on_connection_handler_event(

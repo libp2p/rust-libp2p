@@ -3,7 +3,7 @@ name = "libp2p-dns"
 edition = "2021"
 rust-version = { workspace = true }
 description = "DNS transport implementation for libp2p"
-version = "0.40.1"
+version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -23,6 +23,7 @@ smallvec = "1.11.1"
 
 [dev-dependencies]
 env_logger = "0.10"
+libp2p-identity = { workspace = true, features = ["rand"] }
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 
@@ -41,3 +42,6 @@ tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustl
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

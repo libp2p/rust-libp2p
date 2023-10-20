@@ -3,7 +3,7 @@ name = "libp2p-upnp"
 edition = "2021"
 rust-version = "1.60.0"
 description = "UPnP support for libp2p transports"
-version = "0.1.1"
+version = "0.2.0"
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
@@ -18,7 +18,17 @@ libp2p-core = { workspace = true }
 libp2p-swarm = { workspace = true }
 log = "0.4.19"
 void = "1.0.2"
-tokio = { version = "1.29", default-features = false, features = ["rt"], optional = true }
+tokio = { version = "1.33", default-features = false, features = ["rt"], optional = true }
 
 [features]
 tokio = ["igd-next/aio_tokio", "dep:tokio"]
+
+[lints]
+workspace = true
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

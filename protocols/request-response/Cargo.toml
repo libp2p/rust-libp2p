@@ -3,7 +3,7 @@ name = "libp2p-request-response"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Generic Request/Response Protocols"
-version = "0.25.1"
+version = "0.26.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -46,3 +46,6 @@ serde = { version = "1.0", features = ["derive"]}
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

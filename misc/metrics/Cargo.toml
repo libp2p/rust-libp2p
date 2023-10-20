@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Metrics for libp2p"
-version = "0.13.1"
+version = "0.14.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -32,9 +32,15 @@ libp2p-swarm = { workspace = true }
 once_cell = "1.18.0"
 prometheus-client = { version = "0.21.2"}
 
+[dev-dependencies]
+libp2p-identity = { workspace = true, features = ["rand"] }
+
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
 rustc-args = ["--cfg", "docsrs"]
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

@@ -37,7 +37,7 @@ use void::Void;
 /// If a connection is denied due to a limit, either a [`SwarmEvent::IncomingConnectionError`](libp2p_swarm::SwarmEvent::IncomingConnectionError)
 /// or [`SwarmEvent::OutgoingConnectionError`](libp2p_swarm::SwarmEvent::OutgoingConnectionError) will be emitted.
 /// The [`ListenError::Denied`](libp2p_swarm::ListenError::Denied) and respectively the [`DialError::Denied`](libp2p_swarm::DialError::Denied) variant
-/// contain a [`ConnectionDenied`](libp2p_swarm::ConnectionDenied) type that can be downcast to [`Exceeded`] error if (and only if) **this**
+/// contain a [`ConnectionDenied`] type that can be downcast to [`Exceeded`] error if (and only if) **this**
 /// behaviour denied the connection.
 ///
 /// If you employ multiple [`NetworkBehaviour`]s that manage connections, it may also be a different error.
@@ -377,7 +377,8 @@ impl NetworkBehaviour for Behaviour {
 mod tests {
     use super::*;
     use libp2p_swarm::{
-        behaviour::toggle::Toggle, dial_opts::DialOpts, DialError, ListenError, Swarm, SwarmEvent,
+        behaviour::toggle::Toggle, dial_opts::DialOpts, dial_opts::PeerCondition, DialError,
+        ListenError, Swarm, SwarmEvent,
     };
     use libp2p_swarm_test::SwarmExt;
     use quickcheck::*;
@@ -401,6 +402,8 @@ mod tests {
             network
                 .dial(
                     DialOpts::peer_id(target)
+                        // Dial always, even if already dialing or connected.
+                        .condition(PeerCondition::Always)
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
@@ -408,7 +411,12 @@ mod tests {
         }
 
         match network
-            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+            .dial(
+                DialOpts::peer_id(target)
+                    .condition(PeerCondition::Always)
+                    .addresses(vec![addr])
+                    .build(),
+            )
             .expect_err("Unexpected dialing success.")
         {
             DialError::Denied { cause } => {

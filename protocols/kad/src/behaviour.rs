@@ -43,9 +43,9 @@ use libp2p_swarm::behaviour::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
-    NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NotifyHandler, PollParameters, StreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -372,6 +372,9 @@ impl Config {
     }
 
     /// Sets the amount of time to keep connections alive when they're idle.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
         self.connection_idle_timeout = duration;
         self
@@ -1903,29 +1906,8 @@ where
             self.address_failed(peer_id, addr);
         }
 
-        // When a connection is established, we don't know yet whether the
-        // remote supports the configured protocol name. Only once a connection
-        // handler reports [`HandlerEvent::ProtocolConfirmed`] do we
-        // update the local routing table.
-
         // Peer's first connection.
         if other_established == 0 {
-            // Queue events for sending pending RPCs to the connected peer.
-            // There can be only one pending RPC for a particular peer and query per definition.
-            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-                q.inner
-                    .pending_rpcs
-                    .iter()
-                    .position(|(p, _)| p == &peer_id)
-                    .map(|p| q.inner.pending_rpcs.remove(p))
-            }) {
-                self.queued_events.push_back(ToSwarm::NotifyHandler {
-                    peer_id,
-                    event,
-                    handler: NotifyHandler::Any,
-                });
-            }
-
             self.connected_peers.insert(peer_id);
         }
     }
@@ -2013,7 +1995,9 @@ where
                 }
             }
             DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
+                dial_opts::PeerCondition::Disconnected
+                | dial_opts::PeerCondition::NotDialing
+                | dial_opts::PeerCondition::DisconnectedAndNotDialing,
             ) => {
                 // We might (still) be connected, or about to be connected, thus do not report the
                 // failure to the queries.
@@ -2043,6 +2027,27 @@ where
             self.connected_peers.remove(&peer_id);
         }
     }
+
+    /// Preloads a new [`Handler`] with requests that are waiting to be sent to the newly connected peer.
+    fn preload_new_handler(
+        &mut self,
+        handler: &mut Handler,
+        connection_id: ConnectionId,
+        peer: PeerId,
+    ) {
+        self.connections.insert(connection_id, peer);
+        // Queue events for sending pending RPCs to the connected peer.
+        // There can be only one pending RPC for a particular peer and query per definition.
+        for (_peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+            q.inner
+                .pending_rpcs
+                .iter()
+                .position(|(p, _)| p == &peer)
+                .map(|p| q.inner.pending_rpcs.remove(p))
+        }) {
+            handler.on_behaviour_event(event)
+        }
+    }
 }
 
 /// Exponentially decrease the given duration (base 2).
@@ -2068,16 +2073,17 @@ where
             local_addr: local_addr.clone(),
             send_back_addr: remote_addr.clone(),
         };
-        self.connections.insert(connection_id, peer);
-
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
             connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_established_outbound_connection(
@@ -2091,16 +2097,17 @@ where
             address: addr.clone(),
             role_override,
         };
-        self.connections.insert(connection_id, peer);
-
-        Ok(Handler::new(
+        let mut handler = Handler::new(
             self.protocol_config.clone(),
             self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
             connection_id,
-        ))
+        );
+        self.preload_new_handler(&mut handler, connection_id, peer);
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
