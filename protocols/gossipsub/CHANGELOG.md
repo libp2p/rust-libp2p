@@ -1,5 +1,7 @@
 ## 0.46.0 - unreleased
 
+- Remove deprecated `gossipsub::Config::idle_timeout` in favor of `SwarmBuilder::idle_connection_timeout`.
+  See [PR 4642](https://github.com/libp2p/rust-libp2p/pull/4642).
 - Return typed error from config builder.
   See [PR 4445].
 

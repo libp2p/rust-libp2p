@@ -4,6 +4,8 @@
   This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.
   See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
+- Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
+  See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
 
 ## 0.43.6
 
