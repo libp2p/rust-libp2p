@@ -21,10 +21,10 @@
 #![doc = include_str!("../../README.md")]
 
 use clap::Parser;
-use futures::prelude::*;
+use futures::StreamExt;
 use libp2p::core::multiaddr::Protocol;
-use libp2p::core::{upgrade::Version, Multiaddr, Transport};
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::core::Multiaddr;
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{autonat, identify, identity, noise, tcp, yamux, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
@@ -43,25 +43,22 @@ struct Opt {
     server_peer_id: PeerId,
 }
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Opt::parse();
 
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
+    let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )?
+        .with_behaviour(|key| Behaviour::new(key.public()))?
+        .build();
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1Lazy)
-        .authenticate(noise::Config::new(&local_key)?)
-        .multiplex(yamux::Config::default())
-        .boxed();
-
-    let behaviour = Behaviour::new(local_key.public());
-
-    let mut swarm =
-        SwarmBuilder::with_async_std_executor(transport, behaviour, local_peer_id).build();
     swarm.listen_on(
         Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))

@@ -187,6 +187,9 @@ impl Config {
     /// The time a connection is maintained to a peer without being in the mesh and without
     /// send/receiving a message from. Connections that idle beyond this timeout are disconnected.
     /// Default is 120 seconds.
+    #[deprecated(
+        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
+    )]
     pub fn idle_timeout(&self) -> Duration {
         self.idle_timeout
     }

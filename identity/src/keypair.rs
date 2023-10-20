@@ -102,7 +102,7 @@ enum KeyPairInner {
 
 impl Keypair {
     /// Generate a new Ed25519 keypair.
-    #[cfg(feature = "ed25519")]
+    #[cfg(all(feature = "ed25519", feature = "rand"))]
     pub fn generate_ed25519() -> Keypair {
         Keypair {
             keypair: KeyPairInner::Ed25519(ed25519::Keypair::generate()),
@@ -110,7 +110,7 @@ impl Keypair {
     }
 
     /// Generate a new Secp256k1 keypair.
-    #[cfg(feature = "secp256k1")]
+    #[cfg(all(feature = "secp256k1", feature = "rand"))]
     pub fn generate_secp256k1() -> Keypair {
         Keypair {
             keypair: KeyPairInner::Secp256k1(secp256k1::Keypair::generate()),
@@ -118,7 +118,7 @@ impl Keypair {
     }
 
     /// Generate a new ECDSA keypair.
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "ecdsa", feature = "rand"))]
     pub fn generate_ecdsa() -> Keypair {
         Keypair {
             keypair: KeyPairInner::Ecdsa(ecdsa::Keypair::generate()),
@@ -340,6 +340,68 @@ impl Keypair {
             KeyPairInner::Secp256k1(_) => KeyType::Secp256k1,
             #[cfg(feature = "ecdsa")]
             KeyPairInner::Ecdsa(_) => KeyType::Ecdsa,
+        }
+    }
+
+    /// Deterministically derive a new secret from this [`Keypair`], taking into account the provided domain.
+    ///
+    /// This works for all key types except RSA where it returns `None`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # fn main() {
+    /// # use libp2p_identity as identity;
+    /// let key = identity::Keypair::generate_ed25519();
+    ///
+    /// let new_key = key.derive_secret(b"my encryption key").expect("can derive secret for ed25519");
+    /// # }
+    /// ```
+    ///
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
+    pub fn derive_secret(&self, domain: &[u8]) -> Option<[u8; 32]> {
+        let mut okm = [0u8; 32];
+        hkdf::Hkdf::<sha2::Sha256>::new(None, &self.secret()?)
+            .expand(domain, &mut okm)
+            .expect("okm.len() == 32");
+
+        Some(okm)
+    }
+
+    // We build docs with all features so this doesn't need to have any docs.
+    #[cfg(not(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    )))]
+    pub fn derive_secret(&self, _: &[u8]) -> Option<[u8; 32]> {
+        None
+    }
+
+    /// Return the secret key of the [`Keypair`].
+    #[allow(dead_code)]
+    pub(crate) fn secret(&self) -> Option<[u8; 32]> {
+        match self.keypair {
+            #[cfg(feature = "ed25519")]
+            KeyPairInner::Ed25519(ref inner) => Some(inner.secret().to_bytes()),
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+            KeyPairInner::Rsa(_) => None,
+            #[cfg(feature = "secp256k1")]
+            KeyPairInner::Secp256k1(ref inner) => Some(inner.secret().to_bytes()),
+            #[cfg(feature = "ecdsa")]
+            KeyPairInner::Ecdsa(ref inner) => Some(
+                inner
+                    .secret()
+                    .to_bytes()
+                    .try_into()
+                    .expect("Ecdsa's private key should be 32 bytes"),
+            ),
         }
     }
 }
@@ -863,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "ed25519")]
+    #[cfg(all(feature = "ed25519", feature = "rand"))]
     fn test_publickey_from_ed25519_public_key() {
         let pubkey = Keypair::generate_ed25519().public();
         let ed25519_pubkey = pubkey
@@ -878,7 +940,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "secp256k1")]
+    #[cfg(all(feature = "secp256k1", feature = "rand"))]
     fn test_publickey_from_secp256k1_public_key() {
         let pubkey = Keypair::generate_secp256k1().public();
         let secp256k1_pubkey = pubkey
@@ -892,7 +954,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "ecdsa", feature = "rand"))]
     fn test_publickey_from_ecdsa_public_key() {
         let pubkey = Keypair::generate_ecdsa().public();
         let ecdsa_pubkey = pubkey.clone().try_into_ecdsa().expect("A ecdsa keypair");
@@ -900,5 +962,12 @@ mod tests {
 
         assert_eq!(converted_pubkey, pubkey);
         assert_eq!(converted_pubkey.key_type(), KeyType::Ecdsa)
+    }
+
+    #[test]
+    #[cfg(feature = "ecdsa")]
+    fn test_secret_from_ecdsa_private_key() {
+        let keypair = Keypair::generate_ecdsa();
+        assert!(keypair.derive_secret(b"domain separator!").is_some())
     }
 }

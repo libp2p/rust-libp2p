@@ -125,3 +125,63 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
     fn upgrade_outbound(self, socket: C, info: Self::Info) -> Self::Future;
 }
+
+/// Possible upgrade on an inbound connection
+pub trait InboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+/// Possible upgrade on an outbound connection
+pub trait OutboundConnectionUpgrade<T>: UpgradeInfo {
+    /// Output after the upgrade has been successfully negotiated and the handshake performed.
+    type Output;
+    /// Possible error during the handshake.
+    type Error;
+    /// Future that performs the handshake with the remote.
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
+
+    /// After we have determined that the remote supports one of the protocols we support, this
+    /// method is called to start the handshake.
+    ///
+    /// The `info` is the identifier of the protocol, as produced by `protocol_info`.
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future;
+}
+
+// Blanket implementation for InboundConnectionUpgrade based on InboundUpgrade for backwards compatibility
+impl<U, T> InboundConnectionUpgrade<T> for U
+where
+    U: InboundUpgrade<T>,
+{
+    type Output = <U as InboundUpgrade<T>>::Output;
+    type Error = <U as InboundUpgrade<T>>::Error;
+    type Future = <U as InboundUpgrade<T>>::Future;
+
+    fn upgrade_inbound(self, socket: T, info: Self::Info) -> Self::Future {
+        self.upgrade_inbound(socket, info)
+    }
+}
+
+// Blanket implementation for OutboundConnectionUpgrade based on OutboundUpgrade for backwards compatibility
+impl<U, T> OutboundConnectionUpgrade<T> for U
+where
+    U: OutboundUpgrade<T>,
+{
+    type Output = <U as OutboundUpgrade<T>>::Output;
+    type Error = <U as OutboundUpgrade<T>>::Error;
+    type Future = <U as OutboundUpgrade<T>>::Future;
+
+    fn upgrade_outbound(self, socket: T, info: Self::Info) -> Self::Future {
+        self.upgrade_outbound(socket, info)
+    }
+}

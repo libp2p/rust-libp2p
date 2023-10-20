@@ -25,10 +25,10 @@ use libp2p_core::{
     multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr, Transport,
 };
 use libp2p_identity::{Keypair, PeerId};
-use libp2p_plaintext::PlainText2Config;
+use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
 use libp2p_swarm::{
-    dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent, THandlerErr,
+    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
 };
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
@@ -41,8 +41,8 @@ pub trait SwarmExt {
 
     /// Create a new [`Swarm`] with an ephemeral identity.
     ///
-    /// The swarm will use a [`MemoryTransport`] together with [`PlainText2Config`] authentication layer and
-    /// yamux as the multiplexer. However, these details should not be relied upon by the test
+    /// The swarm will use a [`MemoryTransport`] together with a [`plaintext::Config`] authentication layer and
+    /// [`yamux::Config`] as the multiplexer. However, these details should not be relied upon by the test
     /// and may change at any time.
     fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
     where
@@ -211,14 +211,18 @@ where
         let transport = MemoryTransport::default()
             .or_transport(libp2p_tcp::async_io::Transport::default())
             .upgrade(Version::V1)
-            .authenticate(PlainText2Config {
-                local_public_key: identity.public(),
-            })
+            .authenticate(plaintext::Config::new(&identity))
             .multiplex(yamux::Config::default())
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        SwarmBuilder::without_executor(transport, behaviour_fn(identity), peer_id).build()
+        Swarm::new(
+            transport,
+            behaviour_fn(identity),
+            peer_id,
+            swarm::Config::with_async_std_executor()
+                .with_idle_connection_timeout(Duration::from_secs(5)), // Some tests need connections to be kept alive beyond what the individual behaviour configures.,
+        )
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
