@@ -303,9 +303,9 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(ToSwarm::GenerateEvent(Event::Sent { peer_id }));
             }
-            handler::Event::IdentificationPushed => {
+            handler::Event::IdentificationPushed(info) => {
                 self.events
-                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id }));
+                    .push_back(ToSwarm::GenerateEvent(Event::Pushed { peer_id, info }));
             }
             handler::Event::IdentificationError(error) => {
                 self.events
@@ -433,6 +433,9 @@ pub enum Event {
     Pushed {
         /// The peer that the information has been sent to.
         peer_id: PeerId,
+        /// The full Info struct we pushed to the remote peer. Clients must
+        /// do some diff'ing to know what has changed since the last push.
+        info: Info,
     },
     /// Error while attempting to identify the remote.
     Error {

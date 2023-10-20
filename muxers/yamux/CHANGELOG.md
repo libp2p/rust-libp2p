@@ -1,3 +1,6 @@
+## 0.45.0 - unreleased
+
+
 ## 0.44.1
 
 - Update to `yamux` `v0.12` which brings performance improvements and introduces an ACK backlog of 256 inbound streams.

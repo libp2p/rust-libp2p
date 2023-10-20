@@ -27,7 +27,6 @@ use crate::QueryId;
 use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
-use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint};
 use libp2p_identity::PeerId;
 use libp2p_swarm::handler::{
@@ -40,9 +39,7 @@ use libp2p_swarm::{
 use log::trace;
 use std::collections::VecDeque;
 use std::task::Waker;
-use std::{
-    error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
-};
+use std::{error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
 const MAX_NUM_SUBSTREAMS: usize = 32;
 
@@ -60,9 +57,6 @@ pub struct Handler {
     /// In client mode, we don't accept inbound substreams.
     mode: Mode,
 
-    /// Time after which we close an idle connection.
-    idle_timeout: Duration,
-
     /// Next unique ID of a connection.
     next_connec_unique_id: UniqueConnecId,
 
@@ -78,9 +72,6 @@ pub struct Handler {
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState>,
-
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
 
     /// The connected endpoint of the connection that the handler
     /// is associated with.
@@ -465,7 +456,6 @@ struct UniqueConnecId(u64);
 impl Handler {
     pub fn new(
         protocol_config: ProtocolConfig,
-        idle_timeout: Duration,
         endpoint: ConnectedPoint,
         remote_peer_id: PeerId,
         mode: Mode,
@@ -484,13 +474,9 @@ impl Handler {
             }
         }
 
-        #[allow(deprecated)]
-        let keep_alive = KeepAlive::Until(Instant::now() + idle_timeout);
-
         Handler {
             protocol_config,
             mode,
-            idle_timeout,
             endpoint,
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
@@ -498,7 +484,6 @@ impl Handler {
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_messages: Default::default(),
-            keep_alive,
             protocol_status: None,
             remote_supported_protocols: Default::default(),
             connection_id,
@@ -718,7 +703,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
+            return KeepAlive::No;
+        };
+
+        KeepAlive::Yes
     }
 
     fn poll(
@@ -768,20 +757,6 @@ impl ConnectionHandler for Handler {
                 protocol: SubstreamProtocol::new(self.protocol_config.clone(), ()),
             });
         }
-
-        let no_streams = self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty();
-
-        self.keep_alive = {
-            #[allow(deprecated)]
-            match (no_streams, self.keep_alive) {
-                // No open streams. Preserve the existing idle timeout.
-                (true, k @ KeepAlive::Until(_)) => k,
-                // No open streams. Set idle timeout.
-                (true, _) => KeepAlive::Until(Instant::now() + self.idle_timeout),
-                // Keep alive for open streams.
-                (false, _) => KeepAlive::Yes,
-            }
-        };
 
         Poll::Pending
     }

@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = { workspace = true }
 description = "Peer-to-peer networking library"
-version = "0.52.4"
+version = "0.53.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -45,8 +45,6 @@ full = [
     "tokio",
     "uds",
     "wasm-bindgen",
-    "wasm-ext",
-    "wasm-ext-websocket",
     "websocket-websys",
     "websocket",
     "webtransport-websys",
@@ -87,8 +85,6 @@ tls = ["dep:libp2p-tls"]
 tokio = [ "libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-upnp?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = [ "futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "libp2p-swarm/wasm-bindgen", "libp2p-gossipsub?/wasm-bindgen",]
-wasm-ext = ["dep:libp2p-wasm-ext"]
-wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket-websys = ["dep:libp2p-websocket-websys"]
 websocket = ["dep:libp2p-websocket"]
 webtransport-websys = ["dep:libp2p-webtransport-websys"]
@@ -124,7 +120,6 @@ libp2p-relay = { workspace = true, optional = true }
 libp2p-rendezvous = { workspace = true, optional = true }
 libp2p-request-response = { workspace = true, optional = true }
 libp2p-swarm = { workspace = true }
-libp2p-wasm-ext = { workspace = true, optional = true }
 libp2p-websocket-websys = { workspace = true, optional = true }
 libp2p-webtransport-websys = { workspace = true, optional = true }
 libp2p-yamux = { workspace = true, optional = true }
