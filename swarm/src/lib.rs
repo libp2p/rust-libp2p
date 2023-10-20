@@ -143,7 +143,7 @@ use libp2p_core::{
     connection::ConnectedPoint,
     multiaddr,
     muxing::StreamMuxerBox,
-    transport::{self, DialOpts as TransportDialOpts, ListenerId, TransportError, TransportEvent},
+    transport::{self, ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
 use libp2p_identity::PeerId;
@@ -527,14 +527,13 @@ where
             .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
-                    let transport_dial_opts = {
-                        let transport_port_use = dial_opts.port_use();
-                        TransportDialOpts {
+                    let dial = self.transport.dial(
+                        address.clone(),
+                        transport::DialOpts {
                             endpoint: dial_opts.role_override(),
-                            port_use: transport_port_use,
-                        }
-                    };
-                    let dial = self.transport.dial(address.clone(), transport_dial_opts);
+                            port_use: dial_opts.port_use(),
+                        },
+                    );
                     match dial {
                         Ok(fut) => fut
                             .map(|r| (address, r.map_err(TransportError::Other)))

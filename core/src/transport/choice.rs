@@ -96,14 +96,14 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         trace!(
             "Attempting to dial {} using {}",
             addr,
             std::any::type_name::<A>()
         );
-        let addr = match self.0.dial(addr, dial_opts) {
+        let addr = match self.0.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 debug!(
@@ -123,7 +123,7 @@ where
             addr,
             std::any::type_name::<A>()
         );
-        let addr = match self.1.dial(addr, dial_opts) {
+        let addr = match self.1.dial(addr, opts) {
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => {
                 debug!(

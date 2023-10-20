@@ -24,7 +24,6 @@ mod listen_addresses;
 pub mod toggle;
 
 pub use external_addresses::ExternalAddresses;
-use libp2p_core::transport::PortUse;
 pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
@@ -34,7 +33,10 @@ use crate::{
     ConnectionDenied, ConnectionHandler, DialError, ListenError, THandler, THandlerInEvent,
     THandlerOutEvent,
 };
-use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr};
+use libp2p_core::{
+    transport::{ListenerId, PortUse},
+    ConnectedPoint, Endpoint, Multiaddr,
+};
 use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 

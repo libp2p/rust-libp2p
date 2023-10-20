@@ -92,9 +92,9 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Dial<O>, TransportError<io::Error>> {
-        let fut = Transport::dial(self, addr, dial_opts)
+        let fut = Transport::dial(self, addr, opts)
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
         Ok(Box::pin(fut) as Dial<_>)
@@ -146,9 +146,9 @@ impl<O> Transport for Boxed<O> {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.inner.dial(addr, dial_opts)
+        self.inner.dial(addr, opts)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {

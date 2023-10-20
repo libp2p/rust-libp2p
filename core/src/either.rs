@@ -176,16 +176,16 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            Either::Left(a) => match a.dial(addr, dial_opts) {
+            Either::Left(a) => match a.dial(addr, opts) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
-            Either::Right(b) => match b.dial(addr, dial_opts) {
+            Either::Right(b) => match b.dial(addr, opts) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),

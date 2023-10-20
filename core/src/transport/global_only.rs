@@ -292,7 +292,7 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         match addr.iter().next() {
             Some(Protocol::Ip4(a)) => {
@@ -300,14 +300,14 @@ impl<T: crate::Transport + Unpin> crate::Transport for Transport<T> {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial(addr, dial_opts)
+                self.inner.dial(addr, opts)
             }
             Some(Protocol::Ip6(a)) => {
                 if !ipv6_global::is_global(a) {
                     debug!("Not dialing non global IP address {:?}.", a);
                     return Err(TransportError::MultiaddrNotSupported(addr));
                 }
-                self.inner.dial(addr, dial_opts)
+                self.inner.dial(addr, opts)
             }
             _ => {
                 debug!("Not dialing unsupported Multiaddress {:?}.", addr);

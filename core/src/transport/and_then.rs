@@ -20,7 +20,7 @@
 
 use crate::transport::DialOpts;
 use crate::{
-    connection::{ConnectedPoint, Endpoint},
+    connection::ConnectedPoint,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
 use either::Either;
@@ -72,11 +72,11 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
-            .dial(addr.clone(), dial_opts)
+            .dial(addr.clone(), opts)
             .map_err(|err| err.map(Either::Left))?;
         let future = AndThenFuture {
             inner: Either::Left(Box::pin(dialed_fut)),
@@ -84,8 +84,8 @@ where
                 self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
-                    role_override: dial_opts.endpoint,
-                    port_use: dial_opts.port_use,
+                    role_override: opts.endpoint,
+                    port_use: opts.port_use,
                 },
             )),
             _marker: PhantomPinned,

@@ -65,7 +65,7 @@ pub enum PortUse {
     New,
     /// Best effor reusing of an existing port.
     ///
-  	/// If there is no listener present that can be used to dial, a new port is allocated.
+    /// If there is no listener present that can be used to dial, a new port is allocated.
     #[default]
     Reuse,
 }

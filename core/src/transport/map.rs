@@ -20,7 +20,7 @@
 
 use crate::transport::DialOpts;
 use crate::{
-    connection::{ConnectedPoint, Endpoint},
+    connection::ConnectedPoint,
     transport::{Transport, TransportError, TransportEvent},
 };
 use futures::prelude::*;
@@ -77,13 +77,13 @@ where
     fn dial(
         &mut self,
         addr: Multiaddr,
-        dial_opts: DialOpts,
+        opts: DialOpts,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial(addr.clone(), dial_opts)?;
+        let future = self.transport.dial(addr.clone(), opts)?;
         let p = ConnectedPoint::Dialer {
             address: addr,
-            role_override: dial_opts.endpoint,
-            port_use: dial_opts.port_use,
+            role_override: opts.endpoint,
+            port_use: opts.port_use,
         };
         Ok(MapFuture {
             inner: future,

@@ -1,5 +1,3 @@
-// Copyright 2020 Parity Technologies (UK) Ltd.
-//
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
 // to deal in the Software without restriction, including without limitation
@@ -24,10 +22,9 @@ use crate::{
 };
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {
     /// The socket comes from a dialer.
-    #[default]
     Dialer,
     /// The socket comes from a listener.
     Listener,
@@ -86,6 +83,10 @@ pub enum ConnectedPoint {
         role_override: Endpoint,
         /// Whether the port for the outgoing connection was reused from a listener
         /// or a new port was allocated. This is useful for address translation.
+        ///
+        /// The port use is implemented on a best-effort basis. It is not guaranteed
+        /// that [`PortUse::Reuse`] actually reused a port. A good example is the case
+        /// where there is no listener available to reuse a port from.
         port_use: PortUse,
     },
     /// We received the node.
