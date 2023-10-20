@@ -2,6 +2,8 @@
 
 - Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
   See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
+- Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
+  See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
 
 ## 0.43.6
 
