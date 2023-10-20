@@ -1,3 +1,10 @@
+## 0.44.0 - unreleased
+
+
+## 0.43.2
+
+- Update x25519-dalek to 2.0.0.
+
 ## 0.43.1
 
 - Update dependencies.

@@ -1,3 +1,6 @@
+## 0.40.0 - unreleased
+
+
 ## 0.39.0 
 
 - Raise MSRV to 1.65.
