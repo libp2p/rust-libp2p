@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.9.3"
+version = "0.10.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
 rust-version = { workspace = true }
@@ -41,6 +41,7 @@ rustc-args = ["--cfg", "docsrs"]
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
 env_logger = "0.10.0"
+libp2p-identity = { workspace = true, features = ["rand"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 libp2p-noise = { workspace = true }
 libp2p-tcp = { workspace = true, features = ["async-io"] }
