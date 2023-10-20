@@ -355,8 +355,8 @@ pub struct Handler {
         >,
     >,
 
-    /// Until when to keep the connection alive.
-    keep_alive: KeepAlive,
+    /// The point in time when this connection started idleing.
+    idle_at: Option<Instant>,
 
     /// Future handling inbound reservation request.
     reservation_request_future: Option<ReservationRequestFuture>,
@@ -411,13 +411,13 @@ impl Handler {
             config,
             queued_events: Default::default(),
             pending_error: Default::default(),
+            idle_at: None,
             reservation_request_future: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
             active_reservation: Default::default(),
-            keep_alive: KeepAlive::Yes,
             pending_connect_requests: Default::default(),
         }
     }
@@ -616,7 +616,12 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        match self.idle_at {
+            Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10) => {
+                KeepAlive::No
+            }
+            _ => KeepAlive::Yes,
+        }
     }
 
     fn poll(
@@ -877,16 +882,11 @@ impl ConnectionHandler for Handler {
 
         // Check keep alive status.
         if self.active_reservation.is_none() {
-            #[allow(deprecated)]
-            match self.keep_alive {
-                KeepAlive::Yes => {
-                    self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10));
-                }
-                KeepAlive::Until(_) => {}
-                KeepAlive::No => panic!("Handler never sets KeepAlive::No."),
+            if self.idle_at.is_none() {
+                self.idle_at = Some(Instant::now());
             }
         } else {
-            self.keep_alive = KeepAlive::Yes;
+            self.idle_at = None;
         }
 
         Poll::Pending
