@@ -5,7 +5,7 @@ use std::sync::Arc;
 use libp2p_core::upgrade::{InboundConnectionUpgrade, OutboundConnectionUpgrade};
 use libp2p_core::Transport;
 #[cfg(feature = "relay")]
-use libp2p_core::{InboundUpgrade, Negotiated, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::{Negotiated, UpgradeInfo};
 #[cfg(feature = "relay")]
 use libp2p_identity::PeerId;
 
