@@ -206,6 +206,10 @@ where
 mod tests {
     use super::*;
     use crate::listener_select_proto;
+    use async_std::future::timeout;
+    use async_std::net::{TcpListener, TcpStream};
+    use log::info;
+    use quickcheck::{Arbitrary, Gen, GenRange};
     use std::time::Duration;
 
     #[test]
@@ -256,106 +260,77 @@ mod tests {
     /// Tests the expected behaviour of failed negotiations.
     #[test]
     fn negotiation_failed() {
-        let _ = env_logger::try_init();
-
-        async fn run(
-            Test {
-                version,
-                listen_protos,
-                dial_protos,
-                dial_payload,
-            }: Test,
+        fn prop(
+            version: Version,
+            DialerProtos(dial_protos): DialerProtos,
+            ListenerProtos(listen_protos): ListenerProtos,
+            DialPayload(dial_payload): DialPayload,
         ) {
-            let (client_connection, server_connection) = futures_ringbuf::Endpoint::pair(100, 100);
+            let _ = env_logger::try_init();
 
-            let server = async_std::task::spawn(async move {
-                let io = match listener_select_proto(server_connection, listen_protos).await {
-                    Ok((_, io)) => io,
-                    Err(NegotiationError::Failed) => return,
-                    Err(NegotiationError::ProtocolError(e)) => {
-                        panic!("Unexpected protocol error {e}")
+            async_std::task::block_on(async move {
+                let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+                let addr = listener.local_addr().unwrap();
+
+                let server = async_std::task::spawn(async move {
+                    let server_connection = listener.accept().await.unwrap().0;
+
+                    let io = match timeout(
+                        Duration::from_secs(2),
+                        listener_select_proto(server_connection, listen_protos),
+                    )
+                    .await
+                    .unwrap()
+                    {
+                        Ok((_, io)) => io,
+                        Err(NegotiationError::Failed) => return,
+                        Err(NegotiationError::ProtocolError(e)) => {
+                            panic!("Unexpected protocol error {e}")
+                        }
+                    };
+                    match io.complete().await {
+                        Err(NegotiationError::Failed) => {}
+                        _ => panic!(),
                     }
-                };
-                match io.complete().await {
-                    Err(NegotiationError::Failed) => {}
-                    _ => panic!(),
-                }
-            });
+                });
 
-            let client = async_std::task::spawn(async move {
-                let mut io =
-                    match dialer_select_proto(client_connection, dial_protos, version).await {
+                let client = async_std::task::spawn(async move {
+                    let client_connection = TcpStream::connect(addr).await.unwrap();
+
+                    let mut io = match timeout(
+                        Duration::from_secs(2),
+                        dialer_select_proto(client_connection, dial_protos, version),
+                    )
+                    .await
+                    .unwrap()
+                    {
                         Err(NegotiationError::Failed) => return,
                         Ok((_, io)) => io,
                         Err(_) => panic!(),
                     };
-                // The dialer may write a payload that is even sent before it
-                // got confirmation of the last proposed protocol, when `V1Lazy`
-                // is used.
-                io.write_all(&dial_payload).await.unwrap();
-                match io.complete().await {
-                    Err(NegotiationError::Failed) => {}
-                    _ => panic!(),
-                }
+                    // The dialer may write a payload that is even sent before it
+                    // got confirmation of the last proposed protocol, when `V1Lazy`
+                    // is used.
+
+                    info!("Writing early data");
+
+                    io.write_all(&dial_payload).await.unwrap();
+                    match io.complete().await {
+                        Err(NegotiationError::Failed) => {}
+                        _ => panic!(),
+                    }
+                });
+
+                server.await;
+                client.await;
+
+                info!("---------------------------------------")
             });
-
-            server.await;
-            client.await;
         }
 
-        /// Parameters for a single test run.
-        #[derive(Clone)]
-        struct Test {
-            version: Version,
-            listen_protos: Vec<&'static str>,
-            dial_protos: Vec<&'static str>,
-            dial_payload: Vec<u8>,
-        }
-
-        // Disjunct combinations of listen and dial protocols to test.
-        //
-        // The choices here cover the main distinction between a single
-        // and multiple protocols.
-        let protos = vec![
-            (vec!["/proto1"], vec!["/proto2"]),
-            (vec!["/proto1", "/proto2"], vec!["/proto3", "/proto4"]),
-        ];
-
-        // The payloads that the dialer sends after "successful" negotiation,
-        // which may be sent even before the dialer got protocol confirmation
-        // when `V1Lazy` is used.
-        //
-        // The choices here cover the specific situations that can arise with
-        // `V1Lazy` and which must nevertheless behave identically to `V1` w.r.t.
-        // the outcome of the negotiation.
-        let payloads = vec![
-            // No payload, in which case all versions should behave identically
-            // in any case, i.e. the baseline test.
-            vec![],
-            // With this payload and `V1Lazy`, the listener interprets the first
-            // `1` as a message length and encounters an invalid message (the
-            // second `1`). The listener is nevertheless expected to fail
-            // negotiation normally, just like with `V1`.
-            vec![1, 1],
-            // With this payload and `V1Lazy`, the listener interprets the first
-            // `42` as a message length and encounters unexpected EOF trying to
-            // read a message of that length. The listener is nevertheless expected
-            // to fail negotiation normally, just like with `V1`
-            vec![42, 1],
-        ];
-
-        for (listen_protos, dial_protos) in protos {
-            for dial_payload in payloads.clone() {
-                for &version in &[Version::V1, Version::V1Lazy] {
-                    async_std::task::block_on(run(Test {
-                        version,
-                        listen_protos: listen_protos.clone(),
-                        dial_protos: dial_protos.clone(),
-                        dial_payload: dial_payload.clone(),
-                    }))
-                }
-            }
-        }
+        quickcheck::QuickCheck::new()
+            .tests(1000)
+            .quickcheck(prop as fn(_, _, _, _));
     }
 
     #[async_std::test]
@@ -379,5 +354,44 @@ mod tests {
         async_std::future::timeout(Duration::from_secs(10), client)
             .await
             .unwrap();
+    }
+
+    #[derive(Clone, Debug)]
+    struct DialerProtos(Vec<&'static str>);
+
+    impl Arbitrary for DialerProtos {
+        fn arbitrary(g: &mut Gen) -> Self {
+            if bool::arbitrary(g) {
+                DialerProtos(vec!["/proto1"])
+            } else {
+                DialerProtos(vec!["/proto1", "/proto2"])
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct ListenerProtos(Vec<&'static str>);
+
+    impl Arbitrary for ListenerProtos {
+        fn arbitrary(g: &mut Gen) -> Self {
+            if bool::arbitrary(g) {
+                ListenerProtos(vec!["/proto3"])
+            } else {
+                ListenerProtos(vec!["/proto3", "/proto4"])
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct DialPayload(Vec<u8>);
+
+    impl Arbitrary for DialPayload {
+        fn arbitrary(g: &mut Gen) -> Self {
+            DialPayload(
+                (0..g.gen_range(0..2u8))
+                    .map(|_| g.gen_range(1..255)) // We can generate 0 as that will produce a different error.
+                    .collect(),
+            )
+        }
     }
 }
