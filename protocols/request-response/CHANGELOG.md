@@ -1,3 +1,6 @@
+## 0.26.0 - unreleased
+
+
 ## 0.25.2
 
 - Deprecate `request_response::Config::set_connection_keep_alive` in favor of `SwarmBuilder::idle_connection_timeout`.

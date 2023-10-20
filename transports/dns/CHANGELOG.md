@@ -1,3 +1,6 @@
+## 0.41.0 - unreleased
+
+
 ## 0.40.1
 
 - Remove `Dns` prefix from types like `TokioDnsConfig` and `DnsConfig` in favor of modules that describe the different variants.
