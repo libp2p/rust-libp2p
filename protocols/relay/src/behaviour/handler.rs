@@ -876,11 +876,7 @@ impl ConnectionHandler for Handler {
         {}
 
         // Check keep alive status.
-        if self.reservation_request_future.is_none()
-            && self.circuit_accept_futures.is_empty()
-            && self.circuit_deny_futures.is_empty()
-            && self.circuits.is_empty()
-        {
+        if self.active_reservation.is_none() {
             #[allow(deprecated)]
             match self.keep_alive {
                 KeepAlive::Yes => {
