@@ -20,7 +20,9 @@
 
 use futures::prelude::*;
 use libp2p_core::transport::{ListenerId, MemoryTransport, Transport};
-use libp2p_core::upgrade::{self, InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::{
+    self, InboundConnectionUpgrade, OutboundConnectionUpgrade, UpgradeInfo,
+};
 use libp2p_identity as identity;
 use libp2p_mplex::MplexConfig;
 use libp2p_noise as noise;
@@ -40,7 +42,7 @@ impl UpgradeInfo for HelloUpgrade {
     }
 }
 
-impl<C> InboundUpgrade<C> for HelloUpgrade
+impl<C> InboundConnectionUpgrade<C> for HelloUpgrade
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
@@ -58,7 +60,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for HelloUpgrade
+impl<C> OutboundConnectionUpgrade<C> for HelloUpgrade
 where
     C: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
