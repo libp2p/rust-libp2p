@@ -413,6 +413,8 @@ impl<T> Drop for Chan<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{transport::PortUse, Endpoint};
+
     use super::*;
 
     #[test]
@@ -497,7 +499,13 @@ mod tests {
     fn port_not_in_use() {
         let mut transport = MemoryTransport::default();
         assert!(transport
-            .dial("/memory/810172461024613".parse().unwrap())
+            .dial(
+                "/memory/810172461024613".parse().unwrap(),
+                DialOpts {
+                    endpoint: Endpoint::Dialer,
+                    port_use: PortUse::New
+                }
+            )
             .is_err());
         transport
             .listen_on(
@@ -506,7 +514,13 @@ mod tests {
             )
             .unwrap();
         assert!(transport
-            .dial("/memory/810172461024613".parse().unwrap())
+            .dial(
+                "/memory/810172461024613".parse().unwrap(),
+                DialOpts {
+                    endpoint: Endpoint::Dialer,
+                    port_use: PortUse::New
+                }
+            )
             .is_ok());
     }
 
@@ -573,7 +587,17 @@ mod tests {
 
         let mut t2 = MemoryTransport::default();
         let dialer = async move {
-            let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
+            let mut socket = t2
+                .dial(
+                    cloned_t1_addr,
+                    DialOpts {
+                        endpoint: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
+                .unwrap()
+                .await
+                .unwrap();
             socket.write_all(&msg).await.unwrap();
         };
 
@@ -609,7 +633,13 @@ mod tests {
 
         let dialer = async move {
             MemoryTransport::default()
-                .dial(listener_addr_cloned)
+                .dial(
+                    listener_addr_cloned,
+                    DialOpts {
+                        endpoint: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
                 .unwrap()
                 .await
                 .unwrap();
@@ -660,7 +690,13 @@ mod tests {
 
         let dialer = async move {
             let chan = MemoryTransport::default()
-                .dial(listener_addr_cloned)
+                .dial(
+                    listener_addr_cloned,
+                    DialOpts {
+                        endpoint: Endpoint::Dialer,
+                        port_use: PortUse::New,
+                    },
+                )
                 .unwrap()
                 .await
                 .unwrap();

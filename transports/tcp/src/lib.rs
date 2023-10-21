@@ -79,7 +79,8 @@ struct PortReuse {
     /// The addresses and ports of the listening sockets
     /// registered as eligible for port reuse when dialing
     listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
-    dialed_as_listener: Arc<RwLock<HashSet<Multiaddr>>>,
+    /// Contains a hashset of all multiaddr that where dialed from a reused port.
+    addr_dialed_from_reuse_port: Arc<RwLock<HashSet<Multiaddr>>>,
 }
 
 impl PortReuse {
@@ -132,15 +133,15 @@ impl PortReuse {
         None
     }
 
-    fn dialed_from_listener(&self, addr: Multiaddr) {
-        self.dialed_as_listener
+    fn dialed_from_reuse_port(&self, addr: Multiaddr) {
+        self.addr_dialed_from_reuse_port
             .write()
             .expect("`dialed_as_listener` never panic while holding the lock")
             .insert(addr);
     }
 
-    fn already_dialed_as_listener(&self, addr: &Multiaddr) -> bool {
-        self.dialed_as_listener
+    fn was_dialed_from_reuse_port(&self, addr: &Multiaddr) -> bool {
+        self.addr_dialed_from_reuse_port
             .read()
             .expect("`already_dialed_as_listener` never panic while holding the lock")
             .contains(addr)
@@ -181,6 +182,31 @@ impl Config {
     /// Configures the listen backlog for new listen sockets.
     pub fn listen_backlog(mut self, backlog: u32) -> Self {
         self.backlog = backlog;
+        self
+    }
+
+    /// Configures port reuse for local sockets, which implies
+    /// reuse of listening ports for outgoing connections to
+    /// enhance NAT traversal capabilities.
+    ///
+    /// # Deprecation Notice
+    ///
+    /// The new implementation works on a per-connaction basis, defined by the behaviour. This
+    /// removes the necessaity to configure the transport for port reuse, instead the behaviour
+    /// requiring this behaviour can decide wether to use port reuse or not.
+    ///
+    /// The API to configure port reuse is part of [`Transport`] and the option can be found in
+    /// [`libp2p_core::transport::DialOpts`].
+    ///
+    /// If [`PortUse::Reuse`] is enabled, the transport will try to reuse the local port of the
+    /// listener. If that's not possible, i.e. there is no listener or the transport doesn't allow
+    /// a direct control over ports, a new port (or the default behaviour) is used. If port reuse
+    /// is enabled for a connection, this option will be treated on a best-effor basis.
+    #[deprecated(
+        since = "0.42.0",
+        note = "This option does nothing now, since the port reuse policy is now decided on a per-connection basis by the behaviour. The function will be removed in a future release."
+    )]
+    pub fn port_reuse(self, _port_reuse: bool) -> Self {
         self
     }
 }
@@ -227,10 +253,8 @@ where
     /// - [`tokio::Transport::new`]
     /// - [`async_io::Transport::new`]
     pub fn new(config: Config) -> Self {
-        let port_reuse = PortReuse::default();
         Transport {
             config,
-            port_reuse,
             ..Default::default()
         }
     }
@@ -297,11 +321,9 @@ where
     ///
     /// This transport will have port-reuse disabled.
     fn default() -> Self {
-        let config = Config::default();
-        let port_reuse = Default::default();
         Transport {
-            port_reuse,
-            config,
+            port_reuse: PortReuse::default(),
+            config: Config::default(),
             listeners: SelectAll::new(),
             pending_events: VecDeque::new(),
         }
@@ -371,7 +393,7 @@ where
                 socket
                     .bind(&socket_addr.into())
                     .map_err(TransportError::Other)?;
-                self.port_reuse.dialed_from_listener(addr);
+                self.port_reuse.dialed_from_reuse_port(addr);
             }
             _ => {}
         }
@@ -417,11 +439,11 @@ where
         if !is_tcp_addr(listen) || !is_tcp_addr(observed) {
             return None;
         }
-        if self.port_reuse.already_dialed_as_listener(&observed) {
-            Some(observed.clone())
-        } else {
-            address_translation(listen, observed)
+        if self.port_reuse.was_dialed_from_reuse_port(observed) {
+            return Some(observed.clone());
         }
+
+        address_translation(listen, observed)
     }
 
     /// Poll all listeners.
