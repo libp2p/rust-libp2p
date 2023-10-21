@@ -2390,7 +2390,6 @@ dependencies = [
  "libp2p-tls",
  "libp2p-uds",
  "libp2p-upnp",
- "libp2p-wasm-ext",
  "libp2p-websocket",
  "libp2p-websocket-websys",
  "libp2p-webtransport-websys",
@@ -3161,18 +3160,6 @@ dependencies = [
  "log",
  "tokio",
  "void",
-]
-
-[[package]]
-name = "libp2p-wasm-ext"
-version = "0.40.0"
-dependencies = [
- "futures",
- "js-sys",
- "libp2p-core",
- "send_wrapper 0.6.0",
- "wasm-bindgen",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
