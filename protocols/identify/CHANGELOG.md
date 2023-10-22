@@ -1,5 +1,7 @@
 ## 0.44.0 - unreleased
 
+- Add `Info` to the `libp2p-identify::Event::Pushed` to report pushed info.
+  See [PR 4527](https://github.com/libp2p/rust-libp2p/pull/4527)
 
 ## 0.43.1
 
