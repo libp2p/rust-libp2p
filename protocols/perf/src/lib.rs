@@ -37,20 +37,20 @@ pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunUpdate {
-    Progressed(Progressed),
-    Finished(Finished),
+    Intermediate(Intermediate),
+    Final(Final),
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Progressed {
+pub struct Intermediate {
     pub duration: Duration,
     pub sent: usize,
     pub received: usize,
 }
 
-impl Display for Progressed {
+impl Display for Intermediate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Progressed {
+        let Intermediate {
             duration,
             sent,
             received,
@@ -69,7 +69,7 @@ impl Display for Progressed {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Finished {
+pub struct Final {
     pub duration: RunDuration,
 }
 

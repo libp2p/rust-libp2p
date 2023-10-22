@@ -27,7 +27,7 @@ use futures::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, SinkExt, Stream, StreamExt,
 };
 
-use crate::{Finished, Progressed, Run, RunDuration, RunParams, RunUpdate};
+use crate::{Final, Intermediate, Run, RunDuration, RunParams, RunUpdate};
 
 const BUF: [u8; 1024] = [0; 1024];
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
@@ -43,9 +43,9 @@ pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     let inner = send_receive_inner(params, stream, sender).fuse();
 
     futures::stream::select(
-        receiver.map(|progressed| Ok(RunUpdate::Progressed(progressed))),
+        receiver.map(|progressed| Ok(RunUpdate::Intermediate(progressed))),
         inner
-            .map(|finished| finished.map(RunUpdate::Finished))
+            .map(|finished| finished.map(RunUpdate::Final))
             .into_stream(),
     )
 }
@@ -53,8 +53,8 @@ pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     params: RunParams,
     mut stream: S,
-    mut progress: futures::channel::mpsc::Sender<crate::Progressed>,
-) -> Result<Finished, std::io::Error> {
+    mut progress: futures::channel::mpsc::Sender<crate::Intermediate>,
+) -> Result<Final, std::io::Error> {
     let mut delay = Delay::new(REPORT_INTERVAL);
 
     let RunParams {
@@ -81,7 +81,7 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                 Either::Left((_, _)) => {
                     delay.reset(REPORT_INTERVAL);
                     progress
-                        .send(Progressed {
+                        .send(Intermediate {
                             duration: intermittant_start.elapsed(),
                             sent: sent - intermittent_sent,
                             received: 0,
@@ -101,7 +101,7 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
             Either::Left((_, _)) => {
                 delay.reset(REPORT_INTERVAL);
                 progress
-                    .send(Progressed {
+                    .send(Intermediate {
                         duration: intermittant_start.elapsed(),
                         sent: sent - intermittent_sent,
                         received: 0,
@@ -127,7 +127,7 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
                 Either::Left((_, _)) => {
                     delay.reset(REPORT_INTERVAL);
                     progress
-                        .send(Progressed {
+                        .send(Intermediate {
                             duration: intermittant_start.elapsed(),
                             sent: sent - intermittent_sent,
                             received: received - intermittend_received,
@@ -145,7 +145,7 @@ async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 
     let read_done = Instant::now();
 
-    Ok(Finished {
+    Ok(Final {
         duration: RunDuration {
             upload: write_done.duration_since(write_start),
             download: read_done.duration_since(write_done),

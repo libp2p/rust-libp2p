@@ -41,14 +41,12 @@ pub struct Event {
 
 pub struct Handler {
     inbound: FuturesUnordered<BoxFuture<'static, Result<Run, std::io::Error>>>,
-    keep_alive: KeepAlive,
 }
 
 impl Handler {
     pub fn new() -> Self {
         Self {
             inbound: Default::default(),
-            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -110,7 +108,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.inbound.is_empty() {
+            KeepAlive::No
+        } else {
+            KeepAlive::Yes
+        }
     }
 
     fn poll(
@@ -133,12 +135,6 @@ impl ConnectionHandler for Handler {
                     error!("{e:?}")
                 }
             }
-        }
-
-        if self.inbound.is_empty() {
-            self.keep_alive = KeepAlive::No
-        } else {
-            self.keep_alive = KeepAlive::Yes
         }
 
         Poll::Pending

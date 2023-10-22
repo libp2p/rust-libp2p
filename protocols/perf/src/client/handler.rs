@@ -37,7 +37,7 @@ use libp2p_swarm::{
 };
 use void::Void;
 
-use super::{RunError, RunId};
+use crate::client::{RunError, RunId};
 use crate::{RunParams, RunUpdate};
 
 #[derive(Debug)]
@@ -66,8 +66,6 @@ pub struct Handler {
     requested_streams: VecDeque<Command>,
 
     outbound: SelectAll<BoxStream<'static, (RunId, Result<crate::RunUpdate, std::io::Error>)>>,
-
-    keep_alive: KeepAlive,
 }
 
 impl Handler {
@@ -76,7 +74,6 @@ impl Handler {
             queued_events: Default::default(),
             requested_streams: Default::default(),
             outbound: Default::default(),
-            keep_alive: KeepAlive::Yes,
         }
     }
 }
@@ -157,7 +154,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        if self.outbound.is_empty() {
+            KeepAlive::No
+        } else {
+            KeepAlive::Yes
+        }
     }
 
     fn poll(
@@ -180,12 +181,6 @@ impl ConnectionHandler for Handler {
                 id,
                 result: result.map_err(Into::into),
             }));
-        }
-
-        if self.outbound.is_empty() {
-            self.keep_alive = KeepAlive::No
-        } else {
-            self.keep_alive = KeepAlive::Yes
         }
 
         Poll::Pending

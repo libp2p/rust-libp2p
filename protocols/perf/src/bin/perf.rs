@@ -29,8 +29,8 @@ use libp2p_core::{
     Transport as _,
 };
 use libp2p_identity::PeerId;
-use libp2p_perf::server::Event;
-use libp2p_perf::{Finished, Progressed, Run, RunParams, RunUpdate};
+use libp2p_perf::{client, server};
+use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate};
 use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -135,7 +135,7 @@ async fn server(server_address: SocketAddr) -> Result<()> {
                     info!("Established connection to {:?} via {:?}", peer_id, endpoint);
                 }
                 SwarmEvent::ConnectionClosed { .. } => {}
-                SwarmEvent::Behaviour(Event { .. }) => {
+                SwarmEvent::Behaviour(server::Event { .. }) => {
                     info!("Finished run",)
                 }
                 e => panic!("{e:?}"),
@@ -237,7 +237,7 @@ async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
 }
 
 async fn connect(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<client::Behaviour>,
     server_address: Multiaddr,
 ) -> Result<PeerId> {
     let start = Instant::now();
@@ -260,7 +260,7 @@ async fn connect(
 }
 
 async fn perf(
-    swarm: &mut Swarm<libp2p_perf::client::Behaviour>,
+    swarm: &mut Swarm<client::Behaviour>,
     server_peer_id: PeerId,
     params: RunParams,
 ) -> Result<Run> {
@@ -268,13 +268,13 @@ async fn perf(
 
     let duration = loop {
         match swarm.next().await.unwrap() {
-            SwarmEvent::Behaviour(libp2p_perf::client::Event {
+            SwarmEvent::Behaviour(client::Event {
                 id: _,
-                result: Ok(RunUpdate::Progressed(progressed)),
+                result: Ok(RunUpdate::Intermediate(progressed)),
             }) => {
                 info!("{progressed}");
 
-                let Progressed {
+                let Intermediate {
                     duration,
                     sent,
                     received,
@@ -291,9 +291,9 @@ async fn perf(
                     .unwrap()
                 );
             }
-            SwarmEvent::Behaviour(libp2p_perf::client::Event {
+            SwarmEvent::Behaviour(client::Event {
                 id: _,
-                result: Ok(RunUpdate::Finished(Finished { duration })),
+                result: Ok(RunUpdate::Final(Final { duration })),
             }) => break duration,
             e => panic!("{e:?}"),
         };
