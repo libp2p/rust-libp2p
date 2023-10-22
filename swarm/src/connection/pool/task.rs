@@ -189,19 +189,17 @@ pub(crate) async fn new_for_established_connection<THandler>(
                     command_receiver.close();
                     let (remaining_events, closing_muxer) = connection.close();
 
-                    let (_, muxer_close_error) = future::join(
-                        events.send_all(&mut remaining_events.map(|event| {
+                    let _ = events
+                        .send_all(&mut remaining_events.map(|event| {
                             Ok(EstablishedConnectionEvent::Notify {
                                 id: connection_id,
                                 event,
                                 peer_id,
                             })
-                        })),
-                        closing_muxer,
-                    )
-                    .await;
+                        }))
+                        .await;
 
-                    let error = muxer_close_error.err().map(ConnectionError::IO);
+                    let error = closing_muxer.await.err().map(ConnectionError::IO);
 
                     let _ = events
                         .send(EstablishedConnectionEvent::Closed {
