@@ -32,7 +32,6 @@ use crate::{
 };
 use futures::{
     channel::{mpsc, oneshot},
-    future,
     future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
