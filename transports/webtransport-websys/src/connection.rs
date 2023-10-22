@@ -1,6 +1,7 @@
 use futures::FutureExt;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use libp2p_core::{OutboundUpgrade, UpgradeInfo};
+use libp2p_core::upgrade::OutboundConnectionUpgrade;
+use libp2p_core::UpgradeInfo;
 use libp2p_identity::{Keypair, PeerId};
 use multihash::Multihash;
 use send_wrapper::SendWrapper;

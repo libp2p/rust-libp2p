@@ -58,6 +58,7 @@ async fn main() -> Result<()> {
             let store = kad::store::MemoryStore::new(key.public().to_peer_id());
             kad::Behaviour::with_config(key.public().to_peer_id(), store, cfg)
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(5)))
         .build();
 
     // Add the bootnodes to the local routing table. `libp2p-dns` built
