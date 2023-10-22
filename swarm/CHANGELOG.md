@@ -6,6 +6,8 @@
   See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 - Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
+- Add `ConnectionHandler::connection_keep_alive` default implementation that returns `KeepAlive::No`.
+  See [PR 4703](https://github.com/libp2p/rust-libp2p/pull/4703).
 
 ## 0.43.6
 
