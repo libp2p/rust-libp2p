@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
-use libp2p_core::{Endpoint, Multiaddr};
+use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
@@ -485,6 +485,7 @@ fn custom_out_event_no_type_parameters() {
             _: PeerId,
             _: &Multiaddr,
             _: Endpoint,
+            _: PortUse,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Ok(dummy::ConnectionHandler)
         }
