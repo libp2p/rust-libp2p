@@ -257,10 +257,6 @@ impl ConnectionHandler for Handler {
             return KeepAlive::Yes;
         }
 
-        if self.inbound_connect.is_some() {
-            return KeepAlive::Yes;
-        }
-
         if self.attempts < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
             return KeepAlive::Yes;
         }
