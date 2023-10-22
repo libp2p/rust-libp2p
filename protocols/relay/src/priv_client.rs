@@ -302,7 +302,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
@@ -332,7 +332,7 @@ impl NetworkBehaviour for Behaviour {
                 match self
                     .directly_connected_peers
                     .get(&relay_peer_id)
-                    .and_then(|cs| cs.get(0))
+                    .and_then(|cs| cs.first())
                 {
                     Some(connection_id) => ToSwarm::NotifyHandler {
                         peer_id: relay_peer_id,
