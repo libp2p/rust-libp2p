@@ -52,7 +52,6 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
@@ -898,68 +897,6 @@ mod tests {
         ));
     }
 
-    // #[tokio::test]
-    // async fn idle_timeout_with_keep_alive_until_greater_than_idle_timeout() {
-    //     let idle_timeout = Duration::from_millis(100);
-
-    //     let mut connection = Connection::new(
-    //         StreamMuxerBox::new(PendingStreamMuxer),
-    //         KeepAliveUntilConnectionHandler {
-    //             until: Instant::now() + idle_timeout * 2,
-    //         },
-    //         None,
-    //         0,
-    //         idle_timeout,
-    //     );
-
-    //     assert!(connection.poll_noop_waker().is_pending());
-
-    //     tokio::time::sleep(idle_timeout).await;
-
-    //     assert!(
-    //         connection.poll_noop_waker().is_pending(),
-    //         "`KeepAlive::Until` is greater than idle-timeout, continue sleeping"
-    //     );
-
-    //     tokio::time::sleep(idle_timeout).await;
-
-    //     assert!(matches!(
-    //         connection.poll_noop_waker(),
-    //         Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-    //     ));
-    // }
-
-    // #[tokio::test]
-    // async fn idle_timeout_with_keep_alive_until_less_than_idle_timeout() {
-    //     let idle_timeout = Duration::from_millis(100);
-
-    //     let mut connection = Connection::new(
-    //         StreamMuxerBox::new(PendingStreamMuxer),
-    //         KeepAliveUntilConnectionHandler {
-    //             until: Instant::now() + idle_timeout / 2,
-    //         },
-    //         None,
-    //         0,
-    //         idle_timeout,
-    //     );
-
-    //     assert!(connection.poll_noop_waker().is_pending());
-
-    //     tokio::time::sleep(idle_timeout / 2).await;
-
-    //     assert!(
-    //         connection.poll_noop_waker().is_pending(),
-    //         "`KeepAlive::Until` is less than idle-timeout, honor idle-timeout"
-    //     );
-
-    //     tokio::time::sleep(idle_timeout / 2).await;
-
-    //     assert!(matches!(
-    //         connection.poll_noop_waker(),
-    //         Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-    //     ));
-    // }
-
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
         let _ = env_logger::try_init();
@@ -1022,57 +959,6 @@ mod tests {
 
         QuickCheck::new().quickcheck(prop as fn(_, _, _));
     }
-
-    // struct KeepAliveUntilConnectionHandler {
-    //     until: Instant,
-    // }
-
-    // impl ConnectionHandler for KeepAliveUntilConnectionHandler {
-    //     type FromBehaviour = Void;
-    //     type ToBehaviour = Void;
-    //     type Error = Void;
-    //     type InboundProtocol = DeniedUpgrade;
-    //     type OutboundProtocol = DeniedUpgrade;
-    //     type InboundOpenInfo = ();
-    //     type OutboundOpenInfo = Void;
-
-    //     fn listen_protocol(
-    //         &self,
-    //     ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-    //         SubstreamProtocol::new(DeniedUpgrade, ())
-    //     }
-
-    //     fn connection_keep_alive(&self) -> KeepAlive {
-    //         KeepAlive::Until(self.until)
-    //     }
-
-    //     fn poll(
-    //         &mut self,
-    //         _: &mut Context<'_>,
-    //     ) -> Poll<
-    //         ConnectionHandlerEvent<
-    //             Self::OutboundProtocol,
-    //             Self::OutboundOpenInfo,
-    //             Self::ToBehaviour,
-    //             Self::Error,
-    //         >,
-    //     > {
-    //         Poll::Pending
-    //     }
-
-    //     fn on_behaviour_event(&mut self, _: Self::FromBehaviour) {}
-
-    //     fn on_connection_event(
-    //         &mut self,
-    //         _: ConnectionEvent<
-    //             Self::InboundProtocol,
-    //             Self::OutboundProtocol,
-    //             Self::InboundOpenInfo,
-    //             Self::OutboundOpenInfo,
-    //         >,
-    //     ) {
-    //     }
-    // }
 
     struct DummyStreamMuxer {
         counter: Arc<()>,
