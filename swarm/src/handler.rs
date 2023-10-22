@@ -143,7 +143,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
     /// > connection may be closed for reasons outside of the control
     /// > of the handler.
-    fn connection_keep_alive(&self) -> KeepAlive;
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::No
+    }
 
     /// Should behave like `Stream::poll()`.
     fn poll(
