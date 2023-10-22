@@ -1413,7 +1413,7 @@ fn test_explicit_peer_reconnects() {
         .gs_config(config)
         .create_network();
 
-    let peer = others.get(0).unwrap();
+    let peer = others.first().unwrap();
 
     //add peer as explicit peer
     gs.add_explicit_peer(peer);
@@ -1464,7 +1464,7 @@ fn test_handle_graft_explicit_peer() {
         .explicit(1)
         .create_network();
 
-    let peer = peers.get(0).unwrap();
+    let peer = peers.first().unwrap();
 
     gs.handle_graft(peer, topic_hashes.clone());
 
