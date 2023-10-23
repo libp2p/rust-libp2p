@@ -34,6 +34,8 @@ mod protocol;
 pub mod server;
 
 pub const PROTOCOL_NAME: StreamProtocol = StreamProtocol::new("/perf/1.0.0");
+const RUN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const MAX_PARALLEL_RUNS_PER_CONNECTION: usize = 1_000;
 
 #[derive(Debug, Clone, Copy)]
 pub enum RunUpdate {

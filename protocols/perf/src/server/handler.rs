@@ -20,7 +20,7 @@
 
 use std::task::{Context, Poll};
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::FutureExt;
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{
@@ -40,13 +40,13 @@ pub struct Event {
 }
 
 pub struct Handler {
-    inbound: FuturesUnordered<BoxFuture<'static, Result<Run, std::io::Error>>>,
+    inbound: futures_bounded::FuturesSet<Result<Run, std::io::Error>>,
 }
 
 impl Handler {
     pub fn new() -> Self {
         Self {
-            inbound: Default::default(),
+            inbound: futures_bounded::FuturesSet::new(crate::RUN_TIMEOUT, crate::MAX_PARALLEL_RUNS_PER_CONNECTION),
         }
     }
 }
@@ -88,8 +88,13 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info: _,
             }) => {
-                self.inbound
-                    .push(crate::protocol::receive_send(protocol).boxed());
+                if self
+                    .inbound
+                    .try_push(crate::protocol::receive_send(protocol).boxed())
+                    .is_err()
+                {
+                    log::warn!("Dropping inbound stream because we are at capacity");
+                }
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
                 void::unreachable(info)
@@ -127,15 +132,19 @@ impl ConnectionHandler for Handler {
         >,
     > {
         loop {
-            match self.inbound.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok(stats))) => {
+            match self.inbound.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(stats))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
                 }
-                Poll::Ready(Some(Err(e))) => {
+                Poll::Ready(Ok(Err(e))) => {
                     error!("{e:?}");
                     continue;
                 }
-                Poll::Ready(None) | Poll::Pending => {}
+                Poll::Ready(Err(e @ futures_bounded::Timeout { .. })) => {
+                    error!("inbound perf request timed out: {e}");
+                    continue;
+                }
+                Poll::Pending => {}
             }
 
             return Poll::Pending;

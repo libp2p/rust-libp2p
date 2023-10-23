@@ -15,6 +15,7 @@ anyhow = "1"
 clap = { version = "4.3.23", features = ["derive"] }
 env_logger = "0.10.0"
 futures = "0.3.28"
+futures-bounded = { workspace = true }
 futures-timer = "3.0"
 instant = "0.1.12"
 libp2p = { workspace = true, features = ["tokio", "tcp", "quic", "tls", "yamux", "dns"] }
