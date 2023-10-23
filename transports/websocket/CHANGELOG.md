@@ -1,6 +1,5 @@
 ## 0.43.0 - unreleased
 
-- Bump `rcgen` to `0.11.0`.
 
 ## 0.42.1
 

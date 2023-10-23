@@ -2,7 +2,6 @@
 
 - Migrate to `{In,Out}boundConnectionUpgrade` traits.
   See [PR 4695](https://github.com/libp2p/rust-libp2p/pull/4695).
-- Bump `rcgen` to `0.11.0`.
 
 ## 0.2.1
 
