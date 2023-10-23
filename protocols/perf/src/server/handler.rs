@@ -126,17 +126,19 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        while let Poll::Ready(Some(result)) = self.inbound.poll_next_unpin(cx) {
-            match result {
-                Ok(stats) => {
+        loop {
+            match self.inbound.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(stats))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event { stats }))
                 }
-                Err(e) => {
-                    error!("{e:?}")
+                Poll::Ready(Some(Err(e))) => {
+                    error!("{e:?}");
+                    continue;
                 }
+                Poll::Ready(None) | Poll::Pending => {}
             }
-        }
 
-        Poll::Pending
+            return Poll::Pending;
+        }
     }
 }
