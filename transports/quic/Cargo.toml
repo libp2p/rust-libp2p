@@ -22,7 +22,7 @@ parking_lot = "0.12.0"
 quinn = { version = "0.10.2", default-features = false, features = ["tls-rustls", "futures-io"] }
 rand = "0.8.5"
 rustls = { version = "0.21.7", default-features = false }
-thiserror = "1.0.49"
+thiserror = "1.0.50"
 tokio = { version = "1.33.0", default-features = false, features = ["net", "rt", "time"], optional = true }
 socket2 = "0.5.5"
 ring = "0.16.20"
