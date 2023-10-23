@@ -564,7 +564,7 @@ where
     /// Remove pending outbound response for the given peer and connection.
     ///
     /// Returns `true` if the provided connection to the given peer is still
-    /// alive and the [`RequestId`] was previously present and is now removed.
+    /// alive and the [`OutboundRequestId`] was previously present and is now removed.
     /// Returns `false` otherwise.
     fn remove_pending_outbound_response(
         &mut self,
@@ -580,7 +580,7 @@ where
     /// Remove pending inbound response for the given peer and connection.
     ///
     /// Returns `true` if the provided connection to the given peer is still
-    /// alive and the [`RequestId`] was previously present and is now removed.
+    /// alive and the [`InboundRequestId`] was previously present and is now removed.
     /// Returns `false` otherwise.
     fn remove_pending_inbound_response(
         &mut self,
