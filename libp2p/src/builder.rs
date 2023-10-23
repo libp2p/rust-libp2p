@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 mod phase;
+mod select_muxer;
 mod select_security;
 
 /// Build a [`Swarm`](libp2p_swarm::Swarm) by combining an identity, a set of

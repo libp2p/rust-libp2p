@@ -96,9 +96,6 @@ pub struct Behaviour<TStore> {
     /// The TTL of provider records.
     provider_record_ttl: Option<Duration>,
 
-    /// How long to keep connections alive when they're idle.
-    connection_idle_timeout: Duration,
-
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<ToSwarm<Event, HandlerIn>>,
 
@@ -182,7 +179,6 @@ pub struct Config {
     record_filtering: StoreInserts,
     provider_record_ttl: Option<Duration>,
     provider_publication_interval: Option<Duration>,
-    connection_idle_timeout: Duration,
     kbucket_inserts: BucketInserts,
     caching: Caching,
 }
@@ -199,7 +195,6 @@ impl Default for Config {
             record_filtering: StoreInserts::Unfiltered,
             provider_publication_interval: Some(Duration::from_secs(12 * 60 * 60)),
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
-            connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: BucketInserts::OnConnected,
             caching: Caching::Enabled { max_peers: 1 },
         }
@@ -371,15 +366,6 @@ impl Config {
         self
     }
 
-    /// Sets the amount of time to keep connections alive when they're idle.
-    #[deprecated(
-        note = "Set a global idle connection timeout via `SwarmBuilder::idle_connection_timeout` instead."
-    )]
-    pub fn set_connection_idle_timeout(&mut self, duration: Duration) -> &mut Self {
-        self.connection_idle_timeout = duration;
-        self
-    }
-
     /// Modifies the maximum allowed size of individual Kademlia packets.
     ///
     /// It might be necessary to increase this value if trying to put large
@@ -456,7 +442,6 @@ where
             put_record_job,
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
-            connection_idle_timeout: config.connection_idle_timeout,
             external_addresses: Default::default(),
             local_peer_id: id,
             connections: Default::default(),
@@ -1048,6 +1033,8 @@ where
     }
 
     fn determine_mode_from_external_addresses(&mut self) {
+        let old_mode = self.mode;
+
         self.mode = match (self.external_addresses.as_slice(), self.mode) {
             ([], Mode::Server) => {
                 log::debug!("Switching to client-mode because we no longer have any confirmed external addresses");
@@ -1082,6 +1069,13 @@ where
         };
 
         self.reconfigure_mode();
+
+        if old_mode != self.mode {
+            self.queued_events
+                .push_back(ToSwarm::GenerateEvent(Event::ModeChanged {
+                    new_mode: self.mode,
+                }));
+        }
     }
 
     /// Processes discovered peers from a successful request in an iterative `Query`.
@@ -2073,9 +2067,9 @@ where
             local_addr: local_addr.clone(),
             send_back_addr: remote_addr.clone(),
         };
+
         let mut handler = Handler::new(
             self.protocol_config.clone(),
-            self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
@@ -2097,9 +2091,9 @@ where
             address: addr.clone(),
             role_override,
         };
+
         let mut handler = Handler::new(
             self.protocol_config.clone(),
-            self.connection_idle_timeout,
             connected_point,
             peer,
             self.mode,
@@ -2673,6 +2667,12 @@ pub enum Event {
     /// See [`Behaviour::kbucket`] for insight into the contents of
     /// the k-bucket of `peer`.
     PendingRoutablePeer { peer: PeerId, address: Multiaddr },
+
+    /// This peer's mode has been updated automatically.
+    ///
+    /// This happens in response to an external
+    /// address being added or removed.
+    ModeChanged { new_mode: Mode },
 }
 
 /// Information about progress events.

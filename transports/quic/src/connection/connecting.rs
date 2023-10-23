@@ -58,7 +58,7 @@ impl Connecting {
         let certificates: Box<Vec<rustls::Certificate>> =
             identity.downcast().expect("we rely on rustls feature; qed");
         let end_entity = certificates
-            .get(0)
+            .first()
             .expect("there should be exactly one certificate; qed");
         let p2p_cert = libp2p_tls::certificate::parse(end_entity)
             .expect("the certificate was validated during TLS handshake; qed");
