@@ -29,14 +29,13 @@ use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent,
-    THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::RunParams;
 use crate::{client::handler::Handler, RunUpdate};
 
-use super::{RunId, RunError};
+use super::{RunError, RunId};
 
 #[derive(Debug)]
 pub struct Event {
@@ -57,9 +56,9 @@ impl Behaviour {
         Self::default()
     }
 
-    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<RunId, PerfError> {
+    pub fn perf(&mut self, server: PeerId, params: RunParams) -> Result<RunId, NotConnected> {
         if !self.connected.contains(&server) {
-            return Err(PerfError::NotConnected);
+            return Err(NotConnected {});
         }
 
         let id = RunId::next();
@@ -75,9 +74,12 @@ impl Behaviour {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum PerfError {
-    #[error("Not connected to peer")]
-    NotConnected,
+pub struct NotConnected();
+
+impl std::fmt::Display for NotConnected {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "not connected to peer")
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
