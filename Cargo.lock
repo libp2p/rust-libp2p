@@ -2825,6 +2825,7 @@ dependencies = [
  "futures",
  "futures-timer",
  "instant",
+ "libp2p",
  "libp2p-core",
  "libp2p-dns",
  "libp2p-identity",

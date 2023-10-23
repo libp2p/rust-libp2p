@@ -22,16 +22,14 @@ use std::{net::SocketAddr, str::FromStr};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use futures::{future::Either, StreamExt};
+use futures::StreamExt;
 use instant::{Duration, Instant};
-use libp2p_core::{
-    multiaddr::Protocol, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr,
-    Transport as _,
-};
-use libp2p_identity::PeerId;
+use libp2p::core::{multiaddr::Protocol, upgrade, Multiaddr};
+use libp2p::identity::PeerId;
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::SwarmBuilder;
 use libp2p_perf::{client, server};
 use libp2p_perf::{Final, Intermediate, Run, RunParams, RunUpdate};
-use libp2p_swarm::{Config, NetworkBehaviour, Swarm, SwarmEvent};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 
@@ -206,32 +204,21 @@ struct BenchmarkResult {
 }
 
 async fn swarm<B: NetworkBehaviour + Default>() -> Result<Swarm<B>> {
-    let local_key = libp2p_identity::Keypair::generate_ed25519();
-    let local_peer_id = PeerId::from(local_key.public());
-
-    let transport = {
-        let tcp = libp2p_tcp::tokio::Transport::new(libp2p_tcp::Config::default().nodelay(true))
-            .upgrade(upgrade::Version::V1Lazy)
-            .authenticate(libp2p_tls::Config::new(&local_key)?)
-            .multiplex(libp2p_yamux::Config::default());
-        let quic = libp2p_quic::tokio::Transport::new(libp2p_quic::Config::new(&local_key));
-        let dns = libp2p_dns::tokio::Transport::system(OrTransport::new(quic, tcp))?;
-
-        dns.map(|either_output, _| match either_output {
-            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+    let swarm = SwarmBuilder::with_new_identity()
+        .with_tokio()
+        .with_tcp(
+            libp2p_tcp::Config::default().nodelay(true),
+            libp2p_tls::Config::new,
+            libp2p_yamux::Config::default,
+        )?
+        .with_quic()
+        .with_dns()?
+        .with_behaviour(|_| B::default())?
+        .with_swarm_config(|cfg| {
+            cfg.with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
+                .with_idle_connection_timeout(Duration::from_secs(60 * 5))
         })
-        .boxed()
-    };
-
-    let swarm = Swarm::new(
-        transport,
-        Default::default(),
-        local_peer_id,
-        Config::with_tokio_executor()
-            .with_substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
-            .with_idle_connection_timeout(Duration::from_secs(60 * 5)),
-    );
+        .build();
 
     Ok(swarm)
 }
