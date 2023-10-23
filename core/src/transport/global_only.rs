@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::DialOpts;
 use crate::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{ListenerId, TransportError, TransportEvent, DialOpts},
 };
 use log::debug;
 use std::{

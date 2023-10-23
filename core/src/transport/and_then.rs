@@ -18,10 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::DialOpts;
 use crate::{
     connection::ConnectedPoint,
-    transport::{ListenerId, Transport, TransportError, TransportEvent},
+    transport::{ListenerId, Transport, TransportError, TransportEvent, DialOpts},
 };
 use either::Either;
 use futures::prelude::*;
@@ -84,7 +83,7 @@ where
                 self.fun.clone(),
                 ConnectedPoint::Dialer {
                     address: addr,
-                    role_override: opts.endpoint,
+                    role_override: opts.role,
                     port_use: opts.port_use,
                 },
             )),

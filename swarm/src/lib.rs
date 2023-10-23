@@ -530,7 +530,7 @@ where
                     let dial = self.transport.dial(
                         address.clone(),
                         transport::DialOpts {
-                            endpoint: dial_opts.role_override(),
+                            role: dial_opts.role_override(),
                             port_use: dial_opts.port_use(),
                         },
                     );

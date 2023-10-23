@@ -842,7 +842,7 @@ mod tests {
                 .dial(
                     addr.clone(),
                     DialOpts {
-                        endpoint: Endpoint::Dialer,
+                        role: Endpoint::Dialer,
                         port_use: PortUse::Reuse,
                     },
                 )
@@ -925,7 +925,7 @@ mod tests {
             tcp.dial(
                 dest_addr,
                 DialOpts {
-                    endpoint: Endpoint::Dialer,
+                    role: Endpoint::Dialer,
                     port_use: PortUse::New,
                 },
             )
@@ -1032,7 +1032,7 @@ mod tests {
                         .dial(
                             dest_addr,
                             DialOpts {
-                                endpoint: Endpoint::Dialer,
+                                role: Endpoint::Dialer,
                                 port_use: PortUse::Reuse,
                             },
                         )

@@ -126,7 +126,7 @@ fn upgrade_pipeline() {
             .dial(
                 listen_addr2,
                 DialOpts {
-                    endpoint: Endpoint::Dialer,
+                    role: Endpoint::Dialer,
                     port_use: PortUse::New,
                 },
             )

@@ -502,7 +502,7 @@ mod tests {
             .dial(
                 "/memory/810172461024613".parse().unwrap(),
                 DialOpts {
-                    endpoint: Endpoint::Dialer,
+                    role: Endpoint::Dialer,
                     port_use: PortUse::New
                 }
             )
@@ -517,7 +517,7 @@ mod tests {
             .dial(
                 "/memory/810172461024613".parse().unwrap(),
                 DialOpts {
-                    endpoint: Endpoint::Dialer,
+                    role: Endpoint::Dialer,
                     port_use: PortUse::New
                 }
             )
@@ -591,7 +591,7 @@ mod tests {
                 .dial(
                     cloned_t1_addr,
                     DialOpts {
-                        endpoint: Endpoint::Dialer,
+                        role: Endpoint::Dialer,
                         port_use: PortUse::New,
                     },
                 )
@@ -636,7 +636,7 @@ mod tests {
                 .dial(
                     listener_addr_cloned,
                     DialOpts {
-                        endpoint: Endpoint::Dialer,
+                        role: Endpoint::Dialer,
                         port_use: PortUse::New,
                     },
                 )
@@ -693,7 +693,7 @@ mod tests {
                 .dial(
                     listener_addr_cloned,
                     DialOpts {
-                        endpoint: Endpoint::Dialer,
+                        role: Endpoint::Dialer,
                         port_use: PortUse::New,
                     },
                 )

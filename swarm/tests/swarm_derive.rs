@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
-use libp2p_core::{Endpoint, Multiaddr, transport::PortUse};
+use libp2p_core::{transport::PortUse, Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
