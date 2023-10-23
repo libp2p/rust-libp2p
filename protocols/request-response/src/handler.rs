@@ -24,7 +24,7 @@ pub use protocol::ProtocolSupport;
 
 use crate::codec::Codec;
 use crate::handler::protocol::Protocol;
-use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
+use crate::{InboundRequestId, OutboundRequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use futures::channel::mpsc;
 use futures::{channel::oneshot, prelude::*};
@@ -67,27 +67,26 @@ where
     requested_outbound: VecDeque<OutboundMessage<TCodec>>,
     /// A channel for receiving inbound requests.
     inbound_receiver: mpsc::Receiver<(
-        RequestId,
+        InboundRequestId,
         TCodec::Request,
         oneshot::Sender<TCodec::Response>,
     )>,
     /// The [`mpsc::Sender`] for the above receiver. Cloned for each inbound request.
     inbound_sender: mpsc::Sender<(
-        RequestId,
+        InboundRequestId,
         TCodec::Request,
         oneshot::Sender<TCodec::Response>,
     )>,
 
     inbound_request_id: Arc<AtomicU64>,
 
-    worker_streams:
-        futures_bounded::FuturesMap<(RequestId, Direction), Result<Event<TCodec>, io::Error>>,
+    worker_streams: futures_bounded::FuturesMap<RequestId, Result<Event<TCodec>, io::Error>>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Direction {
-    Inbound,
-    Outbound,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum RequestId {
+    Inbound(InboundRequestId),
+    Outbound(OutboundRequestId),
 }
 
 impl<TCodec> Handler<TCodec>
@@ -130,7 +129,7 @@ where
         >,
     ) {
         let mut codec = self.codec.clone();
-        let request_id = RequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
+        let request_id = InboundRequestId(self.inbound_request_id.fetch_add(1, Ordering::Relaxed));
         let mut sender = self.inbound_sender.clone();
 
         let recv = async move {
@@ -160,7 +159,7 @@ where
 
         if self
             .worker_streams
-            .try_push((request_id, Direction::Inbound), recv.boxed())
+            .try_push(RequestId::Inbound(request_id), recv.boxed())
             .is_ok()
         {
             self.pending_events
@@ -203,7 +202,7 @@ where
 
         if self
             .worker_streams
-            .try_push((request_id, Direction::Outbound), send.boxed())
+            .try_push(RequestId::Outbound(request_id), send.boxed())
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
@@ -263,34 +262,34 @@ where
     TCodec: Codec,
 {
     /// A request is going to be received.
-    IncomingRequest { request_id: RequestId },
+    IncomingRequest { request_id: InboundRequestId },
     /// A request has been received.
     Request {
-        request_id: RequestId,
+        request_id: InboundRequestId,
         request: TCodec::Request,
         sender: oneshot::Sender<TCodec::Response>,
     },
     /// A response has been received.
     Response {
-        request_id: RequestId,
+        request_id: OutboundRequestId,
         response: TCodec::Response,
     },
     /// A response to an inbound request has been sent.
-    ResponseSent(RequestId),
+    ResponseSent(InboundRequestId),
     /// A response to an inbound request was omitted as a result
     /// of dropping the response `sender` of an inbound `Request`.
-    ResponseOmission(RequestId),
+    ResponseOmission(InboundRequestId),
     /// An outbound request timed out while sending the request
     /// or waiting for the response.
-    OutboundTimeout(RequestId),
+    OutboundTimeout(OutboundRequestId),
     /// An outbound request failed to negotiate a mutually supported protocol.
-    OutboundUnsupportedProtocols(RequestId),
+    OutboundUnsupportedProtocols(OutboundRequestId),
     OutboundStreamFailed {
-        request_id: RequestId,
+        request_id: OutboundRequestId,
         error: io::Error,
     },
     InboundStreamFailed {
-        request_id: RequestId,
+        request_id: InboundRequestId,
         error: io::Error,
     },
 }
@@ -348,7 +347,7 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
 }
 
 pub struct OutboundMessage<TCodec: Codec> {
-    pub(crate) request_id: RequestId,
+    pub(crate) request_id: OutboundRequestId,
     pub(crate) request: TCodec::Request,
     pub(crate) protocols: SmallVec<[TCodec::Protocol; 2]>,
 }
@@ -414,15 +413,15 @@ where
                 Poll::Ready((_, Ok(Ok(event)))) => {
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
-                Poll::Ready(((id, direction), Ok(Err(e)))) => {
-                    log::debug!("Stream for request {id} failed: {e}");
+                Poll::Ready((id, Ok(Err(e)))) => {
+                    log::debug!("Stream for request {id:?} failed: {e}");
 
-                    let event = match direction {
-                        Direction::Inbound => Event::InboundStreamFailed {
+                    let event = match id {
+                        RequestId::Inbound(id) => Event::InboundStreamFailed {
                             request_id: id,
                             error: e,
                         },
-                        Direction::Outbound => Event::OutboundStreamFailed {
+                        RequestId::Outbound(id) => Event::OutboundStreamFailed {
                             request_id: id,
                             error: e,
                         },
@@ -433,12 +432,17 @@ where
                     // should be forwarded to the upper layer.
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
-                Poll::Ready(((id, direction), Err(futures_bounded::Timeout { .. }))) => {
-                    log::debug!("Stream for request {id} timed out");
+                Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
+                    log::debug!("Stream for request {id:?} timed out");
 
-                    if direction == Direction::Outbound {
-                        let event = Event::OutboundTimeout(id);
-                        return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                    match id {
+                        RequestId::Inbound(_id) => {
+                            // TODO
+                        }
+                        RequestId::Outbound(id) => {
+                            let event = Event::OutboundTimeout(id);
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                        }
                     }
                 }
                 Poll::Pending => break,

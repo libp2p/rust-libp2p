@@ -102,7 +102,7 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
     /// A request message.
     Request {
         /// The ID of this request.
-        request_id: RequestId,
+        request_id: InboundRequestId,
         /// The request message.
         request: TRequest,
         /// The channel waiting for the response.
@@ -117,7 +117,7 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The ID of the request that produced this response.
         ///
         /// See [`Behaviour::send_request`].
-        request_id: RequestId,
+        request_id: OutboundRequestId,
         /// The response message.
         response: TResponse,
     },
@@ -138,7 +138,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The peer to whom the request was sent.
         peer: PeerId,
         /// The (local) ID of the failed request.
-        request_id: RequestId,
+        request_id: OutboundRequestId,
         /// The error that occurred.
         error: OutboundFailure,
     },
@@ -147,7 +147,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The peer from whom the request was received.
         peer: PeerId,
         /// The ID of the failed inbound request.
-        request_id: RequestId,
+        request_id: InboundRequestId,
         /// The error that occurred.
         error: InboundFailure,
     },
@@ -159,7 +159,7 @@ pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The peer to whom the response was sent.
         peer: PeerId,
         /// The ID of the inbound request whose response was sent.
-        request_id: RequestId,
+        request_id: InboundRequestId,
     },
 }
 
@@ -270,17 +270,27 @@ impl<TResponse> ResponseChannel<TResponse> {
     }
 }
 
-/// The ID of an inbound or outbound request.
+/// The ID of an inbound request.
 ///
-/// Note: [`RequestId`]'s uniqueness is only guaranteed between two
-/// inbound and likewise between two outbound requests. There is no
-/// uniqueness guarantee in a set of both inbound and outbound
-/// [`RequestId`]s nor in a set of inbound or outbound requests
-/// originating from different [`Behaviour`]'s.
+/// Note: [`InboundRequestId`]'s uniqueness is only guaranteed between
+/// two inbound requests of the same originating [`Behaviour`].
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct RequestId(u64);
+pub struct InboundRequestId(u64);
 
-impl fmt::Display for RequestId {
+impl fmt::Display for InboundRequestId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// The ID of an outbound request.
+///
+/// Note: [`OutboundRequestId`]'s uniqueness is only guaranteed between
+/// two outbound requests of the same originating [`Behaviour`].
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct OutboundRequestId(u64);
+
+impl fmt::Display for OutboundRequestId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -333,9 +343,9 @@ where
     /// The supported outbound protocols.
     outbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
     /// The next (local) request ID.
-    next_request_id: RequestId,
+    next_outbound_request_id: OutboundRequestId,
     /// The next (inbound) request ID.
-    next_inbound_id: Arc<AtomicU64>,
+    next_inbound_request_id: Arc<AtomicU64>,
     /// The protocol configuration.
     config: Config,
     /// The protocol codec for reading and writing requests and responses.
@@ -389,8 +399,8 @@ where
         Behaviour {
             inbound_protocols,
             outbound_protocols,
-            next_request_id: RequestId(1),
-            next_inbound_id: Arc::new(AtomicU64::new(1)),
+            next_outbound_request_id: OutboundRequestId(1),
+            next_inbound_request_id: Arc::new(AtomicU64::new(1)),
             config: cfg,
             codec,
             pending_events: VecDeque::new(),
@@ -412,8 +422,8 @@ where
     /// > address discovery, or known addresses of peers must be
     /// > managed via [`Behaviour::add_address`] and
     /// > [`Behaviour::remove_address`].
-    pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> RequestId {
-        let request_id = self.next_request_id();
+    pub fn send_request(&mut self, peer: &PeerId, request: TCodec::Request) -> OutboundRequestId {
+        let request_id = self.next_outbound_request_id();
         let request = OutboundMessage {
             request_id,
             request,
@@ -485,7 +495,7 @@ where
     /// Checks whether an outbound request to the peer with the provided
     /// [`PeerId`] initiated by [`Behaviour::send_request`] is still
     /// pending, i.e. waiting for a response.
-    pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+    pub fn is_pending_outbound(&self, peer: &PeerId, request_id: &OutboundRequestId) -> bool {
         // Check if request is already sent on established connection.
         let est_conn = self
             .connected
@@ -508,7 +518,7 @@ where
     /// Checks whether an inbound request from the peer with the provided
     /// [`PeerId`] is still pending, i.e. waiting for a response by the local
     /// node through [`Behaviour::send_response`].
-    pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &RequestId) -> bool {
+    pub fn is_pending_inbound(&self, peer: &PeerId, request_id: &InboundRequestId) -> bool {
         self.connected
             .get(peer)
             .map(|cs| {
@@ -518,10 +528,10 @@ where
             .unwrap_or(false)
     }
 
-    /// Returns the next request ID.
-    fn next_request_id(&mut self) -> RequestId {
-        let request_id = self.next_request_id;
-        self.next_request_id.0 += 1;
+    /// Returns the next outbound request ID.
+    fn next_outbound_request_id(&mut self) -> OutboundRequestId {
+        let request_id = self.next_outbound_request_id;
+        self.next_outbound_request_id.0 += 1;
         request_id
     }
 
@@ -560,7 +570,7 @@ where
         &mut self,
         peer: &PeerId,
         connection: ConnectionId,
-        request: RequestId,
+        request: OutboundRequestId,
     ) -> bool {
         self.get_connection_mut(peer, connection)
             .map(|c| c.pending_outbound_responses.remove(&request))
@@ -576,7 +586,7 @@ where
         &mut self,
         peer: &PeerId,
         connection: ConnectionId,
-        request: RequestId,
+        request: InboundRequestId,
     ) -> bool {
         self.get_connection_mut(peer, connection)
             .map(|c| c.pending_inbound_responses.remove(&request))
@@ -726,7 +736,7 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.next_inbound_id.clone(),
+            self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
         );
 
@@ -769,7 +779,7 @@ where
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.request_timeout,
-            self.next_inbound_id.clone(),
+            self.next_inbound_request_id.clone(),
             self.config.max_concurrent_streams,
         );
 
@@ -958,10 +968,10 @@ struct Connection {
     /// Pending outbound responses where corresponding inbound requests have
     /// been received on this connection and emitted via `poll` but have not yet
     /// been answered.
-    pending_outbound_responses: HashSet<RequestId>,
+    pending_outbound_responses: HashSet<OutboundRequestId>,
     /// Pending inbound responses for previously sent requests on this
     /// connection.
-    pending_inbound_responses: HashSet<RequestId>,
+    pending_inbound_responses: HashSet<InboundRequestId>,
 }
 
 impl Connection {
