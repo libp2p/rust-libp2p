@@ -70,13 +70,13 @@ pub enum PortUse {
     Reuse,
 }
 
-/// Options to customize the behaviour during dialing. Through it one can specify:
-/// - The role of the endpoint (dialer or listener).
-/// - The port use policy.
+/// Options to customize the behaviour during dialing.
 #[derive(Debug, Copy, Clone)]
 pub struct DialOpts {
-    /// The endpoint establishing a new connection. This option removes the necessity for the
-    /// `dial_as_listener` API.
+    /// The endpoint establishing a new connection.
+    ///
+    /// When attempting a hole-punch, both parties simultaneously "dial" each other but one party has to be the "listener" on the final connection.
+    /// This option specifies the role of this node in the final connection.
     pub endpoint: Endpoint,
     /// The port use policy for a new connection.
     pub port_use: PortUse,
