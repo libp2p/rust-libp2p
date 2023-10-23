@@ -1,5 +1,6 @@
 ## 0.43.0 - unreleased
 
+- Removes dependency on the archived `quicksink` by inlining it as a module.
 
 ## 0.42.1
 

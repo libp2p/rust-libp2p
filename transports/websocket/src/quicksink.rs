@@ -8,37 +8,36 @@
 //
 // Forked into rust-libp2p and further distributed under the MIT license.
 
-//! Create a [`Sink`] implementation from an initial value and a closure
-//! returning a [`Future`].
-//!
-//! This is very similar to how `futures::stream::unfold` creates a `Stream`
-//! implementation from a seed value and a future-returning closure.
-//!
-//! # Examples
-//!
-//! ```no_run
-//! use async_std::io;
-//! use futures::prelude::*;
-//! use quicksink::Action;
-//!
-//! quicksink::make_sink(io::stdout(), |mut stdout, action| async move {
-//!     match action {
-//!         Action::Send(x) => stdout.write_all(x).await?,
-//!         Action::Flush => stdout.flush().await?,
-//!         Action::Close => stdout.close().await?
-//!     }
-//!     Ok::<_, io::Error>(stdout)
-//! });
-//! ```
-//!
-//! # Panics
-//!
-//! - If any of the [`Sink`] methods produce an error, the sink transitions
-//! to a failure state and none of its methods must be called afterwards or
-//! else a panic will occur.
-//! - If [`Sink::poll_close`] has been called, no other sink method must be
-//! called afterwards or else a panic will be caused.
-//!
+// Create a [`Sink`] implementation from an initial value and a closure
+// returning a [`Future`].
+//
+// This is very similar to how `futures::stream::unfold` creates a `Stream`
+// implementation from a seed value and a future-returning closure.
+//
+// # Examples
+//
+// ```no_run
+// use async_std::io;
+// use futures::prelude::*;
+// use crate::quicksink::Action;
+//
+// crate::quicksink::make_sink(io::stdout(), |mut stdout, action| async move {
+//     match action {
+//         Action::Send(x) => stdout.write_all(x).await?,
+//         Action::Flush => stdout.flush().await?,
+//         Action::Close => stdout.close().await?
+//     }
+//     Ok::<_, io::Error>(stdout)
+// });
+// ```
+//
+// # Panics
+//
+// - If any of the [`Sink`] methods produce an error, the sink transitions
+// to a failure state and none of its methods must be called afterwards or
+// else a panic will occur.
+// - If [`Sink::poll_close`] has been called, no other sink method must be
+// called afterwards or else a panic will be caused.
 
 use futures::{ready, sink::Sink};
 use pin_project_lite::pin_project;
@@ -293,7 +292,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{make_sink, Action};
+    use crate::quicksink::{make_sink, Action};
     use async_std::{io, task};
     use futures::{channel::mpsc, prelude::*, stream};
 
@@ -317,6 +316,7 @@ mod tests {
     #[test]
     fn replay() {
         task::block_on(async {
+            #[allow(clippy::disallowed_methods)]
             let (tx, rx) = mpsc::unbounded();
 
             let sink = make_sink(tx, |mut tx, action| async move {
