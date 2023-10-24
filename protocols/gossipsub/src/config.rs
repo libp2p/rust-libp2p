@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use crate::error::ConfigBuilderError;
 use crate::protocol::{ProtocolConfig, ProtocolId, FLOODSUB_PROTOCOL};
-use crate::types::{FastMessageId, Message, MessageId, PeerKind, RawMessage};
+use crate::types::{Message, MessageId, PeerKind};
 
 use libp2p_identity::PeerId;
 use libp2p_swarm::StreamProtocol;
@@ -78,7 +78,6 @@ pub struct Config {
     duplicate_cache_time: Duration,
     validate_messages: bool,
     message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
-    fast_message_id_fn: Option<Arc<dyn Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -216,20 +215,6 @@ impl Config {
     /// the message id.
     pub fn message_id(&self, message: &Message) -> MessageId {
         (self.message_id_fn)(message)
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawMessage`] to
-    /// [`Message`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`RawMessage`] as input and outputs a String to be
-    /// interpreted as the fast message id. Default is None.
-    pub fn fast_message_id(&self, message: &RawMessage) -> Option<FastMessageId> {
-        self.fast_message_id_fn
-            .as_ref()
-            .map(|fast_message_id_fn| fast_message_id_fn(message))
     }
 
     /// By default, gossipsub will reject messages that are sent to us that have the same message
@@ -415,7 +400,6 @@ impl Default for ConfigBuilder {
                         .push_str(&message.sequence_number.unwrap_or_default().to_string());
                     MessageId::from(source_string)
                 }),
-                fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
                 prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
@@ -631,22 +615,6 @@ impl ConfigBuilder {
         F: Fn(&Message) -> MessageId + Send + Sync + 'static,
     {
         self.config.message_id_fn = Arc::new(id_fn);
-        self
-    }
-
-    /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawMessage`] to
-    /// [`Message`] for duplicates. Two semantically different messages must always
-    /// have different fast message ids, but it is allowed that two semantically identical messages
-    /// have different fast message ids as long as the message_id_fn produces the same id for them.
-    ///
-    /// The function takes a [`Message`] as input and outputs a String to be interpreted
-    /// as the fast message id. Default is None.
-    pub fn fast_message_id_fn<F>(&mut self, fast_id_fn: F) -> &mut Self
-    where
-        F: Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static,
-    {
-        self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
     }
 
