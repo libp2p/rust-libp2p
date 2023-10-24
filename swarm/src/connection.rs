@@ -267,6 +267,7 @@ where
                 Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
+                #[allow(deprecated)]
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
                     return Poll::Ready(Err(ConnectionError::Handler(err)));
                 }

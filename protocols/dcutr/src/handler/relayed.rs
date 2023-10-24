@@ -282,6 +282,7 @@ impl ConnectionHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
+            #[allow(deprecated)]
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
@@ -298,7 +299,9 @@ impl ConnectionHandler for Handler {
                         Event::InboundConnectNegotiated(addresses),
                     ));
                 }
-                Err(e) => {
+                Err(e) =>
+                {
+                    #[allow(deprecated)]
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                         Either::Left(e),
                     )))

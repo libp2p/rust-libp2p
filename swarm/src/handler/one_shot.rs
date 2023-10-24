@@ -153,6 +153,7 @@ where
         >,
     > {
         if let Some(err) = self.pending_error.take() {
+            #[allow(deprecated)]
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 

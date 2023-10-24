@@ -80,6 +80,7 @@ where
             ConnectionHandlerEvent::NotifyBehaviour(ev) => {
                 ConnectionHandlerEvent::NotifyBehaviour((self.map)(ev))
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }

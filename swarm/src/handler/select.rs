@@ -230,6 +230,7 @@ where
             Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(event)));
             }
+            #[allow(deprecated)]
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
             }
@@ -252,6 +253,7 @@ where
                     event,
                 )));
             }
+            #[allow(deprecated)]
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
             }

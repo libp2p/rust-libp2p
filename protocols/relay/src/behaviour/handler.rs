@@ -633,6 +633,7 @@ impl ConnectionHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
+            #[allow(deprecated)]
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
@@ -712,14 +713,17 @@ impl ConnectionHandler for Handler {
                 ));
             }
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                #[allow(deprecated)]
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
             }
             Poll::Ready(Ok(Either::Left(Err(e)))) => {
+                #[allow(deprecated)]
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                     Either::Left(e),
                 )));
             }
             Poll::Ready(Ok(Either::Right(Err(e)))) => {
+                #[allow(deprecated)]
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                     Either::Right(e),
                 )));
