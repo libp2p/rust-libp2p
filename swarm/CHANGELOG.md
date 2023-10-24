@@ -1,3 +1,9 @@
+## 0.43.7
+
+- Deprecate `ConnectionHandlerEvent::Close`.
+  See [issue 3591](https://github.com/libp2p/rust-libp2p/issues/3591) for details.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.43.6
 
 - Deprecate `libp2p::swarm::SwarmBuilder`.
