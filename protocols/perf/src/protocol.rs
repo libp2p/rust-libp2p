@@ -53,7 +53,7 @@ pub(crate) fn send_receive<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 async fn send_receive_inner<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     params: RunParams,
     mut stream: S,
-    mut progress: futures::channel::mpsc::Sender<crate::Intermediate>,
+    mut progress: futures::channel::mpsc::Sender<Intermediate>,
 ) -> Result<Final, std::io::Error> {
     let mut delay = Delay::new(REPORT_INTERVAL);
 
