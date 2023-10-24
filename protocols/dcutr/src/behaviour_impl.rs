@@ -296,14 +296,6 @@ impl NetworkBehaviour for Behaviour {
                     },
                 )]);
             }
-            Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
-                self.queued_events.push_back(ToSwarm::GenerateEvent(
-                    Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: event_source,
-                        error: Error::Handler(error),
-                    },
-                ));
-            }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
                 let opts = DialOpts::peer_id(event_source)
                     .addresses(remote_addrs)
