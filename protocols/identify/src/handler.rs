@@ -33,7 +33,7 @@ use libp2p_swarm::handler::{
     ProtocolSupport,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamProtocol, StreamUpgradeError,
+    ConnectionHandler, ConnectionHandlerEvent, StreamProtocol, StreamUpgradeError,
     SubstreamProtocol, SupportedProtocols,
 };
 use log::{warn, Level};
@@ -314,8 +314,8 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     fn poll(

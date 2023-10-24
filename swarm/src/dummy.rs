@@ -4,8 +4,8 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError, SubstreamProtocol,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, StreamUpgradeError, SubstreamProtocol, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::Endpoint;
@@ -98,8 +98,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         void::unreachable(event)
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     fn poll(

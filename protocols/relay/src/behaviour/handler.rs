@@ -37,7 +37,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionId, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -611,12 +611,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         match self.idle_at {
             Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10) => {
-                KeepAlive::No
+                false
             }
-            _ => KeepAlive::Yes,
+            _ => true,
         }
     }
 

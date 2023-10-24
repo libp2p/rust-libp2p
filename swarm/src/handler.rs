@@ -62,7 +62,7 @@ use std::collections::hash_map::RandomState;
 use std::collections::hash_set::{Difference, Intersection};
 use std::collections::HashSet;
 use std::iter::Peekable;
-use std::{cmp::Ordering, error, fmt, io, task::Context, task::Poll, time::Duration};
+use std::{error, fmt, io, task::Context, task::Poll, time::Duration};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -128,18 +128,12 @@ pub trait ConnectionHandler: Send + 'static {
     /// each invocation of [`ConnectionHandler::poll`] to determine if the connection
     /// and the associated [`ConnectionHandler`]s should be kept alive.
     ///
-    /// Returning [`KeepAlive::No`] indicates that the connection should be
-    /// closed and this handler destroyed immediately.
-    ///
-    /// Returning [`KeepAlive::Yes`] indicates that the connection should
-    /// be kept alive until the next call to this method.
-    ///
     /// > **Note**: The connection is always closed and the handler destroyed
     /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
     /// > connection may be closed for reasons outside of the control
     /// > of the handler.
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     /// Should behave like `Stream::poll()`.
@@ -176,7 +170,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// Creates a new [`ConnectionHandler`] that selects either this handler or
     /// `other` by delegating methods calls appropriately.
     ///
-    /// > **Note**: The largest `KeepAlive` returned by the two handlers takes precedence,
+    /// > **Note**: The smallest value returned by the two handlers takes precedence,
     /// > i.e. is returned from [`ConnectionHandler::connection_keep_alive`] by the returned
     /// > handler.
     fn select<TProto2>(self, other: TProto2) -> ConnectionHandlerSelect<Self, TProto2>
@@ -540,8 +534,7 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// connection, in other words it will close the connection for all
     /// [`ConnectionHandler`]s. To signal that one has no more need for the
     /// connection, while allowing other [`ConnectionHandler`]s to continue using
-    /// the connection, return [`KeepAlive::No`] in
-    /// [`ConnectionHandler::connection_keep_alive`].
+    /// the connection, return false in [`ConnectionHandler::connection_keep_alive`].
     Close(TErr),
     /// We learned something about the protocols supported by the remote.
     ReportRemoteProtocols(ProtocolSupport),
@@ -718,51 +711,6 @@ where
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
-    }
-}
-
-/// How long the connection should be kept alive.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum KeepAlive {
-    /// Keep the connection alive.
-    Yes,
-    /// Close the connection as soon as possible.
-    No,
-}
-
-impl KeepAlive {
-    /// Returns true for `Yes`, false otherwise.
-    pub fn is_yes(&self) -> bool {
-        matches!(*self, KeepAlive::Yes)
-    }
-}
-
-impl PartialOrd for KeepAlive {
-    fn partial_cmp(&self, other: &KeepAlive) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for KeepAlive {
-    fn cmp(&self, other: &KeepAlive) -> Ordering {
-        use self::KeepAlive::*;
-
-        match (self, other) {
-            (No, No) | (Yes, Yes) => Ordering::Equal,
-            (Yes, No) => Ordering::Less,
-            (No, Yes) => Ordering::Greater,
-        }
-    }
-}
-
-#[cfg(test)]
-impl quickcheck::Arbitrary for KeepAlive {
-    fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        match quickcheck::GenRange::gen_range(g, 1u8..3) {
-            1 => KeepAlive::Yes,
-            2 => KeepAlive::No,
-            _ => unreachable!(),
-        }
     }
 }
 

@@ -36,8 +36,7 @@ use crate::handler::{
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
-    ConnectionHandlerEvent, KeepAlive, Stream, StreamProtocol, StreamUpgradeError,
-    SubstreamProtocol,
+    ConnectionHandlerEvent, Stream, StreamProtocol, StreamUpgradeError, SubstreamProtocol,
 };
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
@@ -63,7 +62,7 @@ use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
-///  Counter of the number of active streams on a connection
+/// Counter for the number of active streams on a connection.
 type ActiveStreamCounter = Arc<()>;
 
 /// Connection identifier.
@@ -160,7 +159,6 @@ where
     local_supported_protocols: HashSet<StreamProtocol>,
     remote_supported_protocols: HashSet<StreamProtocol>,
     idle_timeout: Duration,
-    /// The counter of active streams
     stream_counter: ActiveStreamCounter,
 }
 
@@ -458,14 +456,14 @@ fn gather_supported_protocols(handler: &impl ConnectionHandler) -> HashSet<Strea
 }
 
 fn compute_new_shutdown(
-    handler_keep_alive: KeepAlive,
+    handler_keep_alive: bool,
     current_shutdown: &Shutdown,
     idle_timeout: Duration,
 ) -> Option<Shutdown> {
     match (current_shutdown, handler_keep_alive) {
-        (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_, _), KeepAlive::No) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
-        (_, KeepAlive::No) => {
+        (_, false) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
+        (Shutdown::Later(_, _), false) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
+        (_, false) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
 
@@ -474,7 +472,7 @@ fn compute_new_shutdown(
                 now + safe_keep_alive,
             ))
         }
-        (_, KeepAlive::Yes) => Some(Shutdown::None),
+        (_, true) => Some(Shutdown::None),
     }
 }
 
@@ -965,7 +963,7 @@ mod tests {
         }
 
         fn prop(
-            handler_keep_alive: KeepAlive,
+            handler_keep_alive: bool,
             current_shutdown: ArbitraryShutdown,
             idle_timeout: Duration,
         ) {
@@ -1173,8 +1171,8 @@ mod tests {
             void::unreachable(event)
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Yes
+        fn connection_keep_alive(&self) -> bool {
+            true
         }
 
         fn poll(
@@ -1250,8 +1248,8 @@ mod tests {
             void::unreachable(event)
         }
 
-        fn connection_keep_alive(&self) -> KeepAlive {
-            KeepAlive::Yes
+        fn connection_keep_alive(&self) -> bool {
+            true
         }
 
         fn poll(

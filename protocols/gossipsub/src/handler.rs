@@ -30,8 +30,7 @@ use instant::Instant;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
-    SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
 use libp2p_swarm::Stream;
 use smallvec::SmallVec;
@@ -424,16 +423,10 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
+    fn connection_keep_alive(&self) -> bool {
         match self {
-            Handler::Enabled(handler) => {
-                if handler.in_mesh {
-                    return KeepAlive::Yes;
-                }
-
-                KeepAlive::No
-            }
-            Handler::Disabled(_) => KeepAlive::No,
+            Handler::Enabled(h) if h.in_mesh => true,
+            _ => false,
         }
     }
 

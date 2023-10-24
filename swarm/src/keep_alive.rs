@@ -2,7 +2,7 @@ use crate::behaviour::{FromSwarm, NetworkBehaviour, PollParameters, ToSwarm};
 use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    KeepAlive, SubstreamProtocol,
+    SubstreamProtocol,
 };
 use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use libp2p_core::upgrade::DeniedUpgrade;
@@ -101,8 +101,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         void::unreachable(v)
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::Yes
+    fn connection_keep_alive(&self) -> bool {
+        true
     }
 
     fn poll(

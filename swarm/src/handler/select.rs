@@ -20,8 +20,8 @@
 
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, KeepAlive,
-    ListenUpgradeError, OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, ListenUpgradeError,
+    OutboundUpgradeSend, StreamUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -208,8 +208,8 @@ where
         }
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        cmp::max(
+    fn connection_keep_alive(&self) -> bool {
+        cmp::min(
             self.proto1.connection_keep_alive(),
             self.proto2.connection_keep_alive(),
         )

@@ -20,8 +20,7 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
-    SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use smallvec::SmallVec;
@@ -132,8 +131,8 @@ where
         self.send_request(event);
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     fn poll(
@@ -251,6 +250,6 @@ mod tests {
             }
         }));
 
-        assert!(matches!(handler.connection_keep_alive(), KeepAlive::No));
+        assert!(matches!(handler.connection_keep_alive(), false));
     }
 }

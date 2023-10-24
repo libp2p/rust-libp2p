@@ -32,7 +32,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError,
 };
 use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, StreamUpgradeError},
+    handler::{ConnectionHandler, ConnectionHandlerEvent, StreamUpgradeError},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -274,8 +274,8 @@ where
         self.outbound.push_back(request);
     }
 
-    fn connection_keep_alive(&self) -> KeepAlive {
-        KeepAlive::No
+    fn connection_keep_alive(&self) -> bool {
+        false
     }
 
     fn poll(
