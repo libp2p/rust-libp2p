@@ -23,8 +23,8 @@ use std::task::{Context, Poll};
 use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    dummy, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use void::Void;
 
@@ -118,11 +118,7 @@ impl<const MEM_PENDING: usize, const MEM_ESTABLISHED: usize> NetworkBehaviour
         void::unreachable(event)
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 }
