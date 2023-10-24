@@ -431,14 +431,6 @@ impl ConnectionHandler for Handler {
                     return KeepAlive::Yes;
                 }
 
-                if let Some(
-                    OutboundSubstreamState::PendingSend(_, _)
-                    | OutboundSubstreamState::PendingFlush(_),
-                ) = handler.outbound_substream
-                {
-                    return KeepAlive::Yes;
-                }
-
                 KeepAlive::No
             }
             Handler::Disabled(_) => KeepAlive::No,

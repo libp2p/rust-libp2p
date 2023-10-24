@@ -315,10 +315,6 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if !self.active_streams.is_empty() {
-            return KeepAlive::Yes;
-        }
-
         KeepAlive::No
     }
 

@@ -59,8 +59,6 @@ where
     /// The timeout for inbound and outbound substreams (i.e. request
     /// and response processing).
     substream_timeout: Duration,
-    /// The current connection keep-alive.
-    keep_alive: KeepAlive,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -94,7 +92,6 @@ where
         Self {
             inbound_protocols,
             codec,
-            keep_alive: KeepAlive::Yes,
             substream_timeout,
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
@@ -274,12 +271,11 @@ where
     }
 
     fn on_behaviour_event(&mut self, request: Self::FromBehaviour) {
-        self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        KeepAlive::No
     }
 
     fn poll(
@@ -300,7 +296,6 @@ where
             match result {
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
-                    self.keep_alive = KeepAlive::Yes;
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Request {
                         request_id: id,
                         request: rq,
@@ -328,13 +323,6 @@ where
 
         if self.outbound.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
             self.outbound.shrink_to_fit();
-        }
-
-        if self.inbound.is_empty() && self.keep_alive.is_yes() {
-            // No new inbound or outbound requests. We already check
-            // there is no active streams exist in swarm connection,
-            // so we can set keep-alive to no directly.
-            self.keep_alive = KeepAlive::No;
         }
 
         Poll::Pending

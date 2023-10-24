@@ -703,11 +703,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
-            return KeepAlive::No;
-        };
-
-        KeepAlive::Yes
+        KeepAlive::No
     }
 
     fn poll(

@@ -43,8 +43,6 @@ where
     dial_queue: SmallVec<[TOutbound; 4]>,
     /// Current number of concurrent outbound substreams being opened.
     dial_negotiated: u32,
-    /// Value to return from `connection_keep_alive`.
-    keep_alive: KeepAlive,
     /// The configuration container for the handler
     config: OneShotHandlerConfig,
 }
@@ -64,7 +62,6 @@ where
             events_out: SmallVec::new(),
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
-            keep_alive: KeepAlive::Yes,
             config,
         }
     }
@@ -92,7 +89,6 @@ where
 
     /// Opens an outbound substream with `upgrade`.
     pub fn send_request(&mut self, upgrade: TOutbound) {
-        self.keep_alive = KeepAlive::Yes;
         self.dial_queue.push(upgrade);
     }
 }
@@ -137,7 +133,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        KeepAlive::No
     }
 
     fn poll(
@@ -174,10 +170,6 @@ where
             }
         } else {
             self.dial_queue.shrink_to_fit();
-
-            if self.dial_negotiated == 0 && self.keep_alive.is_yes() {
-                self.keep_alive = KeepAlive::No;
-            }
         }
 
         Poll::Pending
@@ -209,7 +201,6 @@ where
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 if self.pending_error.is_none() {
                     log::debug!("DialUpgradeError: {error}");
-                    self.keep_alive = KeepAlive::No;
                 }
             }
             ConnectionEvent::AddressChange(_)

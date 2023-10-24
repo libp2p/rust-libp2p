@@ -324,22 +324,6 @@ impl ConnectionHandler for Handler {
             return KeepAlive::Yes;
         }
 
-        if !self.alive_lend_out_substreams.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.circuit_deny_futs.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.open_circuit_futs.is_empty() {
-            return KeepAlive::Yes;
-        }
-
-        if !self.outbound_circuits.is_empty() {
-            return KeepAlive::Yes;
-        }
-
         KeepAlive::No
     }
 
