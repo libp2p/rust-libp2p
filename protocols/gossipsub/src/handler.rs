@@ -424,10 +424,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        match self {
-            Handler::Enabled(h) if h.in_mesh => true,
-            _ => false,
-        }
+        matches!(self, Handler::Enabled(h) if h.in_mesh)
     }
 
     fn poll(
