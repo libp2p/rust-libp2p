@@ -5,7 +5,7 @@
   - `libp2p::relay::outbound::stop::FatalUpgradeError` has been removed.
   - `libp2p::relay::outbound::stop::{Error, ProtocolViolation}` have been introduced.
 
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4718](https://github.com/libp2p/rust-libp2p/pull/4718).
 
 ## 0.16.2
 
