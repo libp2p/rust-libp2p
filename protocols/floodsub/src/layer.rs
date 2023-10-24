@@ -31,8 +31,7 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
-    NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent,
-    ToSwarm,
+    NotifyHandler, OneShotHandler, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use log::warn;
 use smallvec::SmallVec;
