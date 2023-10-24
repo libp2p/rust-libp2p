@@ -721,6 +721,7 @@ impl ConnectionHandler for Handler {
         self.keep_alive
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

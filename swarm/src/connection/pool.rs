@@ -225,6 +225,7 @@ impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
+#[allow(deprecated)]
 pub(crate) enum PoolEvent<THandler: ConnectionHandler> {
     /// A new connection has been established.
     ConnectionEstablished {

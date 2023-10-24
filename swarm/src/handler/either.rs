@@ -80,6 +80,7 @@ where
 {
     type FromBehaviour = Either<L::FromBehaviour, R::FromBehaviour>;
     type ToBehaviour = Either<L::ToBehaviour, R::ToBehaviour>;
+    #[allow(deprecated)]
     type Error = Either<L::Error, R::Error>;
     type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
@@ -115,6 +116,7 @@ where
         }
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

@@ -104,6 +104,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
+    #[deprecated(
+        note = "Will be removed together with `ConnectionHandlerEvent::Close`. See <https://github.com/libp2p/rust-libp2p/issues/3591> for details."
+    )]
     type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
@@ -146,6 +149,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

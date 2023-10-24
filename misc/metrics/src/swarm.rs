@@ -325,6 +325,7 @@ impl<E> From<&libp2p_swarm::ConnectionError<E>> for ConnectionError {
         match value {
             libp2p_swarm::ConnectionError::IO(_) => ConnectionError::Io,
             libp2p_swarm::ConnectionError::KeepAliveTimeout => ConnectionError::KeepAliveTimeout,
+            #[allow(deprecated)]
             libp2p_swarm::ConnectionError::Handler(_) => ConnectionError::Handler,
         }
     }

@@ -105,6 +105,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         KeepAlive::Yes
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         _: &mut Context<'_>,

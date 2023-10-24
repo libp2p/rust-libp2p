@@ -269,6 +269,7 @@ where
 {
     type FromBehaviour = TInner::FromBehaviour;
     type ToBehaviour = TInner::ToBehaviour;
+    #[allow(deprecated)]
     type Error = TInner::Error;
     type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
@@ -300,6 +301,7 @@ where
             .unwrap_or(KeepAlive::No)
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

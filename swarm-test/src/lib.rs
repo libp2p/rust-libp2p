@@ -27,9 +27,9 @@ use libp2p_core::{
 use libp2p_identity::{Keypair, PeerId};
 use libp2p_plaintext as plaintext;
 use libp2p_swarm::dial_opts::PeerCondition;
-use libp2p_swarm::{
-    self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
-};
+#[allow(deprecated)]
+use libp2p_swarm::THandlerErr;
+use libp2p_swarm::{self as swarm, dial_opts::DialOpts, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -63,6 +63,7 @@ pub trait SwarmExt {
     async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId;
 
     /// Wait for specified condition to return `Some`.
+    #[allow(deprecated)]
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
         P: Fn(
@@ -78,6 +79,7 @@ pub trait SwarmExt {
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
     /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
+    #[allow(deprecated)]
     async fn next_swarm_event(
         &mut self,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>>;
@@ -121,6 +123,7 @@ pub trait SwarmExt {
 /// This can "starve" the other swarm which for example may wait for another message to be sent on a connection.
 ///
 /// Using [`drive`] instead of [`futures::future::join`] ensures that a [`Swarm`] continues to be polled, even after it emitted its events.
+#[allow(deprecated)]
 pub async fn drive<
     TBehaviour1,
     const NUM_EVENTS_SWARM_1: usize,
@@ -279,6 +282,7 @@ where
         .await
     }
 
+    #[allow(deprecated)]
     async fn wait<E, P>(&mut self, predicate: P) -> E
     where
         P: Fn(SwarmEvent<<B as NetworkBehaviour>::ToSwarm, THandlerErr<B>>) -> Option<E>,
@@ -341,6 +345,7 @@ where
         (memory_multiaddr, tcp_multiaddr)
     }
 
+    #[allow(deprecated)]
     async fn next_swarm_event(
         &mut self,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::ToSwarm, THandlerErr<Self::NB>> {

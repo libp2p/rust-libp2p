@@ -141,6 +141,7 @@ where
         self.keep_alive
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         _: &mut Context<'_>,

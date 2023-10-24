@@ -69,6 +69,7 @@ pub struct Handler {
         >,
     >,
     /// Queue of events to return when polled.
+    #[allow(deprecated)]
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Self as ConnectionHandler>::OutboundProtocol,
@@ -268,6 +269,7 @@ impl ConnectionHandler for Handler {
         KeepAlive::No
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

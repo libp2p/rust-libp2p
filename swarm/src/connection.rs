@@ -221,6 +221,7 @@ where
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
+    #[allow(deprecated)]
     pub(crate) fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -430,6 +431,7 @@ where
     }
 
     #[cfg(test)]
+    #[allow(deprecated)]
     fn poll_noop_waker(
         &mut self,
     ) -> Poll<Result<Event<THandler::ToBehaviour>, ConnectionError<THandler::Error>>> {
@@ -1083,6 +1085,7 @@ mod tests {
             KeepAlive::Until(self.until)
         }
 
+        #[allow(deprecated)]
         fn poll(
             &mut self,
             _: &mut Context<'_>,
@@ -1313,6 +1316,7 @@ mod tests {
             KeepAlive::Yes
         }
 
+        #[allow(deprecated)]
         fn poll(
             &mut self,
             _: &mut Context<'_>,
@@ -1390,6 +1394,7 @@ mod tests {
             KeepAlive::Yes
         }
 
+        #[allow(deprecated)]
         fn poll(
             &mut self,
             _: &mut Context<'_>,
