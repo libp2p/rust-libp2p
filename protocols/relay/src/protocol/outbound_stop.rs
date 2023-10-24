@@ -33,20 +33,6 @@ use crate::protocol::MAX_MESSAGE_SIZE;
 use crate::{proto, STOP_PROTOCOL_NAME};
 
 #[derive(Debug, Error)]
-pub(crate) enum UpgradeError {
-    #[error("Circuit failed")]
-    CircuitFailed(#[from] CircuitFailedReason),
-    #[error("Fatal")]
-    Fatal(#[from] FatalUpgradeError),
-}
-
-impl From<quick_protobuf_codec::Error> for UpgradeError {
-    fn from(error: quick_protobuf_codec::Error) -> Self {
-        Self::Fatal(error.into())
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum CircuitFailedReason {
     #[error("Remote reported resource limit exceeded.")]
     ResourceLimitExceeded,
