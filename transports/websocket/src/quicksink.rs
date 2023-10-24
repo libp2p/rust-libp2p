@@ -316,8 +316,7 @@ mod tests {
     #[test]
     fn replay() {
         task::block_on(async {
-            #[allow(clippy::disallowed_methods)]
-            let (tx, rx) = mpsc::unbounded();
+            let (tx, rx) = mpsc::channel(5);
 
             let sink = make_sink(tx, |mut tx, action| async move {
                 tx.send(action.clone()).await?;
