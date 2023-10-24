@@ -926,6 +926,20 @@ where
                         error: OutboundFailure::Io(error),
                     }))
             }
+            handler::Event::InboundTimeout(request_id) => {
+                let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
+                debug_assert!(
+                    removed,
+                    "Expect request_id to be pending before request times out."
+                );
+
+                self.pending_events
+                    .push_back(ToSwarm::GenerateEvent(Event::InboundFailure {
+                        peer,
+                        request_id,
+                        error: InboundFailure::Timeout,
+                    }));
+            }
             handler::Event::InboundStreamFailed { request_id, error } => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, request_id);
                 debug_assert!(removed, "Expect request_id to be pending upon failure");

@@ -288,6 +288,9 @@ where
         request_id: OutboundRequestId,
         error: io::Error,
     },
+    /// An inbound request timed out while waiting for the request
+    /// or sending the response.
+    InboundTimeout(InboundRequestId),
     InboundStreamFailed {
         request_id: InboundRequestId,
         error: io::Error,
@@ -336,6 +339,10 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 .debug_struct("Event::OutboundStreamFailed")
                 .field("request_id", &request_id)
                 .field("error", &error)
+                .finish(),
+            Event::InboundTimeout(request_id) => f
+                .debug_tuple("Event::InboundTimeout")
+                .field(request_id)
                 .finish(),
             Event::InboundStreamFailed { request_id, error } => f
                 .debug_struct("Event::InboundStreamFailed")
@@ -414,17 +421,21 @@ where
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
                 Poll::Ready((id, Ok(Err(e)))) => {
-                    log::debug!("Stream for request {id:?} failed: {e}");
-
                     let event = match id {
-                        RequestId::Inbound(id) => Event::InboundStreamFailed {
-                            request_id: id,
-                            error: e,
-                        },
-                        RequestId::Outbound(id) => Event::OutboundStreamFailed {
-                            request_id: id,
-                            error: e,
-                        },
+                        RequestId::Inbound(id) => {
+                            log::debug!("Stream for inbound request {id} failed: {e}");
+                            Event::InboundStreamFailed {
+                                request_id: id,
+                                error: e,
+                            }
+                        }
+                        RequestId::Outbound(id) => {
+                            log::debug!("Stream for outbound request {id} failed: {e}");
+                            Event::OutboundStreamFailed {
+                                request_id: id,
+                                error: e,
+                            }
+                        }
                     };
 
                     // TODO: How should we handle errors produced after ConnectionClose event?
@@ -433,17 +444,18 @@ where
                     return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
                 Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
-                    log::debug!("Stream for request {id:?} timed out");
-
-                    match id {
-                        RequestId::Inbound(_id) => {
-                            // TODO
+                    let event = match id {
+                        RequestId::Inbound(id) => {
+                            log::debug!("Stream for inbound request {id} timed out");
+                            Event::InboundTimeout(id)
                         }
                         RequestId::Outbound(id) => {
-                            let event = Event::OutboundTimeout(id);
-                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+                            log::debug!("Stream for outbound request {id} timed out");
+                            Event::OutboundTimeout(id)
                         }
-                    }
+                    };
+
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
                 }
                 Poll::Pending => break,
             }
