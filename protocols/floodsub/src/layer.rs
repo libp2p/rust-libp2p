@@ -30,8 +30,8 @@ use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
-    OneShotHandler, PollParameters, StreamUpgradeError, THandler, THandlerInEvent,
+    dial_opts::DialOpts, CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour,
+    NotifyHandler, OneShotHandler, PollParameters, StreamUpgradeError, THandler, THandlerInEvent,
     THandlerOutEvent, ToSwarm,
 };
 use log::warn;
@@ -355,7 +355,7 @@ impl NetworkBehaviour for Floodsub {
     fn on_connection_handler_event(
         &mut self,
         propagation_source: PeerId,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         // We ignore successful sends or timeouts.
@@ -364,6 +364,10 @@ impl NetworkBehaviour for Floodsub {
             Ok(InnerMessage::Sent) => return,
             Err(e) => {
                 log::debug!("Failed to send floodsub message: {e}");
+                self.events.push_back(ToSwarm::CloseConnection {
+                    peer_id: propagation_source,
+                    connection: CloseConnection::One(connection_id),
+                });
                 return;
             }
         };
