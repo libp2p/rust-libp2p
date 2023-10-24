@@ -30,7 +30,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    ConnectionId, DialError, PollParameters, ToSwarm,
+    ConnectionId, DialError, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -95,7 +95,6 @@ pub(crate) struct AsServer<'a> {
 impl<'a> HandleInnerEvent for AsServer<'a> {
     fn handle_event(
         &mut self,
-        _params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
         match event {
