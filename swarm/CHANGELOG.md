@@ -2,7 +2,7 @@
 
 - Deprecate `ConnectionHandlerEvent::Close`.
   See [issue 3591](https://github.com/libp2p/rust-libp2p/issues/3591) for details.
-  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+  See [PR 4714](https://github.com/libp2p/rust-libp2p/pull/4714).
 
 ## 0.43.6
 
