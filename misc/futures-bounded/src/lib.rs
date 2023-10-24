@@ -35,7 +35,7 @@ impl fmt::Display for Timeout {
 pub enum PushError<T> {
     /// The length of the set is equal to the capacity
     BeyondCapacity(T),
-    /// The set already contained an item with this key.
+    /// The map already contained an item with this key.
     ///
     /// The old item is returned.
     Replaced(T),

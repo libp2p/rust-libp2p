@@ -263,7 +263,7 @@ mod tests {
     }
 
     // Each stream emits 1 item with delay, `Task` only has a capacity of 1, meaning they must be processed in sequence.
-    // We stop after NUM_STREAMS tasks, meaning the overall execution must at least take DELAY * NUM_FUTURES.
+    // We stop after NUM_STREAMS tasks, meaning the overall execution must at least take DELAY * NUM_STREAMS.
     #[tokio::test]
     async fn backpressure() {
         const DELAY: Duration = Duration::from_millis(100);

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use crate::{PushError, StreamMap, Timeout};
 
-/// Represents a list of [Stream]s.
+/// Represents a set of [Stream]s.
 ///
 /// Each stream must finish within the specified time and the list never outgrows its capacity.
 pub struct StreamSet<O> {
