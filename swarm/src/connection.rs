@@ -52,7 +52,6 @@ use libp2p_core::upgrade;
 use libp2p_core::upgrade::{NegotiationError, ProtocolError};
 use libp2p_core::Endpoint;
 use libp2p_identity::PeerId;
-use std::cmp::max;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::future::Future;
@@ -463,44 +462,9 @@ fn compute_new_shutdown(
     current_shutdown: &Shutdown,
     idle_timeout: Duration,
 ) -> Option<Shutdown> {
-    #[allow(deprecated)]
     match (current_shutdown, handler_keep_alive) {
-        (Shutdown::Later(_, deadline), KeepAlive::Until(t)) => {
-            let now = Instant::now();
-
-            if *deadline != t {
-                let deadline = t;
-                if let Some(new_duration) = deadline.checked_duration_since(Instant::now()) {
-                    let effective_keep_alive = max(new_duration, idle_timeout);
-
-                    let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
-                    return Some(Shutdown::Later(Delay::new(safe_keep_alive), deadline));
-                }
-            }
-            None
-        }
-        (_, KeepAlive::Until(earliest_shutdown)) => {
-            let now = Instant::now();
-
-            if let Some(requested) = earliest_shutdown.checked_duration_since(now) {
-                let effective_keep_alive = max(requested, idle_timeout);
-
-                let safe_keep_alive = checked_add_fraction(now, effective_keep_alive);
-
-                // Important: We store the _original_ `Instant` given by the `ConnectionHandler` in the `Later` instance to ensure we can compare it in the above branch.
-                // This is quite subtle but will hopefully become simpler soon once `KeepAlive::Until` is fully deprecated. See <https://github.com/libp2p/rust-libp2p/issues/3844>/
-                return Some(Shutdown::Later(
-                    Delay::new(safe_keep_alive),
-                    earliest_shutdown,
-                ));
-            }
-            None
-        }
         (_, KeepAlive::No) if idle_timeout == Duration::ZERO => Some(Shutdown::Asap),
-        (Shutdown::Later(_, _), KeepAlive::No) => {
-            // Do nothing, i.e. let the shutdown timer continue to tick.
-            None
-        }
+        (Shutdown::Later(_, _), KeepAlive::No) => None, // Do nothing, i.e. let the shutdown timer continue to tick.
         (_, KeepAlive::No) => {
             let now = Instant::now();
             let safe_keep_alive = checked_add_fraction(now, idle_timeout);
@@ -948,68 +912,6 @@ mod tests {
         ));
     }
 
-    #[tokio::test]
-    async fn idle_timeout_with_keep_alive_until_greater_than_idle_timeout() {
-        let idle_timeout = Duration::from_millis(100);
-
-        let mut connection = Connection::new(
-            StreamMuxerBox::new(PendingStreamMuxer),
-            KeepAliveUntilConnectionHandler {
-                until: Instant::now() + idle_timeout * 2,
-            },
-            None,
-            0,
-            idle_timeout,
-        );
-
-        assert!(connection.poll_noop_waker().is_pending());
-
-        tokio::time::sleep(idle_timeout).await;
-
-        assert!(
-            connection.poll_noop_waker().is_pending(),
-            "`KeepAlive::Until` is greater than idle-timeout, continue sleeping"
-        );
-
-        tokio::time::sleep(idle_timeout).await;
-
-        assert!(matches!(
-            connection.poll_noop_waker(),
-            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-        ));
-    }
-
-    #[tokio::test]
-    async fn idle_timeout_with_keep_alive_until_less_than_idle_timeout() {
-        let idle_timeout = Duration::from_millis(100);
-
-        let mut connection = Connection::new(
-            StreamMuxerBox::new(PendingStreamMuxer),
-            KeepAliveUntilConnectionHandler {
-                until: Instant::now() + idle_timeout / 2,
-            },
-            None,
-            0,
-            idle_timeout,
-        );
-
-        assert!(connection.poll_noop_waker().is_pending());
-
-        tokio::time::sleep(idle_timeout / 2).await;
-
-        assert!(
-            connection.poll_noop_waker().is_pending(),
-            "`KeepAlive::Until` is less than idle-timeout, honor idle-timeout"
-        );
-
-        tokio::time::sleep(idle_timeout / 2).await;
-
-        assert!(matches!(
-            connection.poll_noop_waker(),
-            Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
-        ));
-    }
-
     #[test]
     fn checked_add_fraction_can_add_u64_max() {
         let _ = env_logger::try_init();
@@ -1071,58 +973,6 @@ mod tests {
         }
 
         QuickCheck::new().quickcheck(prop as fn(_, _, _));
-    }
-
-    struct KeepAliveUntilConnectionHandler {
-        until: Instant,
-    }
-
-    impl ConnectionHandler for KeepAliveUntilConnectionHandler {
-        type FromBehaviour = Void;
-        type ToBehaviour = Void;
-        type Error = Void;
-        type InboundProtocol = DeniedUpgrade;
-        type OutboundProtocol = DeniedUpgrade;
-        type InboundOpenInfo = ();
-        type OutboundOpenInfo = Void;
-
-        fn listen_protocol(
-            &self,
-        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-            SubstreamProtocol::new(DeniedUpgrade, ())
-        }
-
-        fn connection_keep_alive(&self) -> KeepAlive {
-            #[allow(deprecated)]
-            KeepAlive::Until(self.until)
-        }
-
-        fn poll(
-            &mut self,
-            _: &mut Context<'_>,
-        ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::ToBehaviour,
-                Self::Error,
-            >,
-        > {
-            Poll::Pending
-        }
-
-        fn on_behaviour_event(&mut self, _: Self::FromBehaviour) {}
-
-        fn on_connection_event(
-            &mut self,
-            _: ConnectionEvent<
-                Self::InboundProtocol,
-                Self::OutboundProtocol,
-                Self::InboundOpenInfo,
-                Self::OutboundOpenInfo,
-            >,
-        ) {
-        }
     }
 
     struct DummyStreamMuxer {

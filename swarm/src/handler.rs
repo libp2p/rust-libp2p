@@ -55,7 +55,6 @@ pub use select::ConnectionHandlerSelect;
 
 use crate::StreamProtocol;
 use ::either::Either;
-use instant::Instant;
 use libp2p_core::Multiaddr;
 use once_cell::sync::Lazy;
 use smallvec::SmallVec;
@@ -125,35 +124,23 @@ pub trait ConnectionHandler: Send + 'static {
 
     /// Returns until when the connection should be kept alive.
     ///
-    /// `Swarm` checks if there are still active streams on this connection after
-    /// each invocation of [`ConnectionHandler::poll`]. If no, this method will
-    /// be called by the `Swarm` to determine if the connection and the associated
-    /// [`ConnectionHandler`]s should be kept alive as far as this handler is
-    /// concerned and if so, for how long.
+    /// This method is an optional implementation and can be called by the `Swarm` after
+    /// each invocation of [`ConnectionHandler::poll`] to determine if the connection
+    /// and the associated [`ConnectionHandler`]s should be kept alive.
     ///
     /// Returning [`KeepAlive::No`] indicates that the connection should be
     /// closed and this handler destroyed immediately.
     ///
-    /// Returning [`KeepAlive::Until`] indicates that the connection may be closed
-    /// and this handler destroyed after the specified `Instant`.
-    ///
     /// Returning [`KeepAlive::Yes`] indicates that the connection should
     /// be kept alive until the next call to this method.
     ///
-    /// By default, connections are considered active and thus kept-alive whilst:
-    ///
-    /// - There are streams currently being upgraded, see [`InboundUpgrade`](libp2p_core::upgrade::InboundUpgrade) and [`OutboundUpgrade`](libp2p_core::upgrade::OutboundUpgrade).
-    /// - There are still active streams, i.e. instances of [`Stream`](crate::stream::Stream) where the user did not call [Stream::no_keep_alive](crate::stream::Stream::no_keep_alive).
-    /// - The ConnectionHandler returns Poll::Ready.
-    ///
-    /// Only once none of these conditions are true do we invoke this function to determine,
-    /// whether the connection should be kept alive even further.
-    /// Note that for most protocols, this is not necessary as it represents a completely idle
-    /// connection with no active and no pending streams.
-    ///
-    /// If you'd like to delay the shutdown of idle connections, consider configuring
-    /// [SwarmBuilder::idle_connection_timeout](crate::SwarmBuilder) in your applications.
-    fn connection_keep_alive(&self) -> KeepAlive;
+    /// > **Note**: The connection is always closed and the handler destroyed
+    /// > when [`ConnectionHandler::poll`] returns an error. Furthermore, the
+    /// > connection may be closed for reasons outside of the control
+    /// > of the handler.
+    fn connection_keep_alive(&self) -> KeepAlive {
+        KeepAlive::No
+    }
 
     /// Should behave like `Stream::poll()`.
     fn poll(
@@ -737,11 +724,6 @@ where
 /// How long the connection should be kept alive.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum KeepAlive {
-    /// If nothing new happens, the connection should be closed at the given `Instant`.
-    #[deprecated(
-        note = "Use `swarm::Config::with_idle_connection_timeout` instead. See <https://github.com/libp2p/rust-libp2p/issues/3844> for details."
-    )]
-    Until(Instant),
     /// Keep the connection alive.
     Yes,
     /// Close the connection as soon as possible.
@@ -761,16 +743,14 @@ impl PartialOrd for KeepAlive {
     }
 }
 
-#[allow(deprecated)]
 impl Ord for KeepAlive {
     fn cmp(&self, other: &KeepAlive) -> Ordering {
         use self::KeepAlive::*;
 
         match (self, other) {
             (No, No) | (Yes, Yes) => Ordering::Equal,
-            (No, _) | (_, Yes) => Ordering::Less,
-            (_, No) | (Yes, _) => Ordering::Greater,
-            (Until(t1), Until(t2)) => t1.cmp(t2),
+            (Yes, No) => Ordering::Less,
+            (No, Yes) => Ordering::Greater,
         }
     }
 }
@@ -778,18 +758,9 @@ impl Ord for KeepAlive {
 #[cfg(test)]
 impl quickcheck::Arbitrary for KeepAlive {
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        match quickcheck::GenRange::gen_range(g, 1u8..4) {
-            1 =>
-            {
-                #[allow(deprecated)]
-                KeepAlive::Until(
-                    Instant::now()
-                        .checked_add(Duration::arbitrary(g))
-                        .unwrap_or(Instant::now()),
-                )
-            }
-            2 => KeepAlive::Yes,
-            3 => KeepAlive::No,
+        match quickcheck::GenRange::gen_range(g, 1u8..3) {
+            1 => KeepAlive::Yes,
+            2 => KeepAlive::No,
             _ => unreachable!(),
         }
     }

@@ -221,7 +221,6 @@ pub struct OneShotHandlerConfig {
 }
 
 impl Default for OneShotHandlerConfig {
-    #[allow(deprecated)]
     fn default() -> Self {
         OneShotHandlerConfig {
             outbound_substream_timeout: Duration::from_secs(10),
@@ -240,7 +239,6 @@ mod tests {
     use void::Void;
 
     #[test]
-    #[allow(deprecated)]
     fn do_not_keep_idle_connection_alive() {
         let mut handler: OneShotHandler<_, DeniedUpgrade, Void> = OneShotHandler::new(
             SubstreamProtocol::new(DeniedUpgrade {}, ()),
