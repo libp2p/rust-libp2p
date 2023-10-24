@@ -41,9 +41,9 @@ use libp2p_swarm::{
     StreamUpgradeError, SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
-use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use std::{fmt, io};
 
 const MAX_CONCURRENT_STREAMS_PER_CONNECTION: usize = 10;
 const STREAM_TIMEOUT: Duration = Duration::from_secs(60);
@@ -206,7 +206,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         status: proto::Status,
-        error: StreamUpgradeError<outbound_stop::CircuitFailedReason>,
+        error: outbound_stop::CircuitFailedReason,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -348,10 +348,6 @@ pub struct Handler {
         >,
     >,
 
-    /// A pending fatal error that results in the connection being closed.
-    pending_error:
-        Option<StreamUpgradeError<Either<inbound_hop::Error, outbound_stop::FatalUpgradeError>>>,
-
     /// The point in time when this connection started idleing.
     idle_at: Option<Instant>,
 
@@ -408,7 +404,6 @@ impl Handler {
             endpoint,
             config,
             queued_events: Default::default(),
-            pending_error: Default::default(),
             idle_at: None,
             reservation_request_future: Default::default(),
             circuit_accept_futures: Default::default(),
@@ -466,21 +461,14 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        let (non_fatal_error, status) = match error {
-            StreamUpgradeError::Timeout => (
-                StreamUpgradeError::Timeout,
-                proto::Status::CONNECTION_FAILED,
-            ),
+        let error = match error {
+            StreamUpgradeError::Timeout => {
+                outbound_stop::CircuitFailedReason::Io(io::ErrorKind::TimedOut.into())
+            }
             StreamUpgradeError::NegotiationFailed => {
-                // The remote has previously done a reservation. Doing a reservation but not
-                // supporting the stop protocol is pointless, thus disconnecting.
-                self.pending_error = Some(StreamUpgradeError::NegotiationFailed);
-                return;
+                outbound_stop::CircuitFailedReason::Unsupported
             }
-            StreamUpgradeError::Io(e) => {
-                self.pending_error = Some(StreamUpgradeError::Io(e));
-                return;
-            }
+            StreamUpgradeError::Io(e) => outbound_stop::CircuitFailedReason::Io(e),
             StreamUpgradeError::Apply(v) => void::unreachable(v),
         };
 
@@ -496,8 +484,8 @@ impl Handler {
                     src_peer_id: stop_command.src_peer_id,
                     src_connection_id: stop_command.src_connection_id,
                     inbound_circuit_req: stop_command.inbound_circuit_req,
-                    status,
-                    error: non_fatal_error,
+                    status: proto::Status::CONNECTION_FAILED,
+                    error,
                 },
             ));
     }
@@ -513,7 +501,7 @@ type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<Either<inbound_hop::Error, outbound_stop::FatalUpgradeError>>;
+    type Error = void::Void;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;
@@ -633,12 +621,6 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        // Check for a pending (fatal) error.
-        if let Some(err) = self.pending_error.take() {
-            // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
         // Return queued events.
         if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
@@ -671,33 +653,37 @@ impl ConnectionHandler for Handler {
         }
 
         // Process inbound protocol workers
-        match self.inbound_workers.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Either::Left(inbound_reservation_req)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::ReservationReqReceived {
-                        inbound_reservation_req,
-                        endpoint: self.endpoint.clone(),
-                        renewed: self.active_reservation.is_some(),
-                    },
-                ));
+        loop {
+            match self.inbound_workers.poll_unpin(cx) {
+                Poll::Ready(Ok(Ok(Either::Left(inbound_reservation_req)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::ReservationReqReceived {
+                            inbound_reservation_req,
+                            endpoint: self.endpoint.clone(),
+                            renewed: self.active_reservation.is_some(),
+                        },
+                    ));
+                }
+                Poll::Ready(Ok(Ok(Either::Right(inbound_circuit_req)))) => {
+                    return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                        Event::CircuitReqReceived {
+                            inbound_circuit_req,
+                            endpoint: self.endpoint.clone(),
+                        },
+                    ));
+                }
+                Poll::Ready(Err(e)) => {
+                    log::debug!("Inbound stream operation timed out: {e}");
+                    continue;
+                }
+                Poll::Ready(Ok(Err(e))) => {
+                    log::debug!("Inbound stream operation failed: {e}");
+                    continue;
+                }
+                Poll::Pending => {
+                    break;
+                }
             }
-            Poll::Ready(Ok(Ok(Either::Right(inbound_circuit_req)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::CircuitReqReceived {
-                        inbound_circuit_req,
-                        endpoint: self.endpoint.clone(),
-                    },
-                ));
-            }
-            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
-            }
-            Poll::Ready(Ok(Err(e))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                    Either::Left(e),
-                )));
-            }
-            Poll::Pending => {}
         }
 
         // Process outbound protocol workers
@@ -739,13 +725,56 @@ impl ConnectionHandler for Handler {
                     },
                 ));
             }
-            Poll::Ready((_, Err(futures_bounded::Timeout { .. }))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            Poll::Ready((id, Err(futures_bounded::Timeout { .. }))) => {
+                let connect = self
+                    .active_connect_requests
+                    .remove(&id)
+                    .expect("must have pending connect");
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectNegotiationFailed {
+                        circuit_id: connect.circuit_id,
+                        src_peer_id: connect.src_peer_id,
+                        src_connection_id: connect.src_connection_id,
+                        inbound_circuit_req: connect.inbound_circuit_req,
+                        status: proto::Status::CONNECTION_FAILED, // Best fit?
+                        error: outbound_stop::CircuitFailedReason::Io(
+                            io::ErrorKind::TimedOut.into(),
+                        ),
+                    },
+                ));
             }
-            Poll::Ready((_, Ok(Err(e)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                    Either::Right(e),
-                )));
+            Poll::Ready((id, Ok(Err(e)))) => {
+                let connect = self
+                    .active_connect_requests
+                    .remove(&id)
+                    .expect("must have pending connect");
+
+                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
+                    Event::OutboundConnectNegotiationFailed {
+                        circuit_id: connect.circuit_id,
+                        src_peer_id: connect.src_peer_id,
+                        src_connection_id: connect.src_connection_id,
+                        inbound_circuit_req: connect.inbound_circuit_req,
+                        status: match e {
+                            outbound_stop::FatalUpgradeError::StreamClosed => {
+                                proto::Status::CONNECTION_FAILED
+                            }
+                            _ => proto::Status::MALFORMED_MESSAGE,
+                        },
+                        error: match e {
+                            outbound_stop::FatalUpgradeError::StreamClosed => {
+                                outbound_stop::CircuitFailedReason::Io(
+                                    io::ErrorKind::ConnectionReset.into(),
+                                )
+                            }
+                            e => outbound_stop::CircuitFailedReason::Io(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                e,
+                            )),
+                        },
+                    },
+                ));
             }
             Poll::Pending => {}
         }

@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::io;
 use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
@@ -26,10 +27,10 @@ use futures::prelude::*;
 use thiserror::Error;
 
 use libp2p_identity::PeerId;
-use libp2p_swarm::{Stream, StreamUpgradeError};
+use libp2p_swarm::Stream;
 
-use crate::proto;
 use crate::protocol::MAX_MESSAGE_SIZE;
+use crate::{proto, STOP_PROTOCOL_NAME};
 
 #[derive(Debug, Error)]
 pub(crate) enum UpgradeError {
@@ -51,6 +52,10 @@ pub enum CircuitFailedReason {
     ResourceLimitExceeded,
     #[error("Remote reported permission denied.")]
     PermissionDenied,
+    #[error("Remote does not support the `{STOP_PROTOCOL_NAME}` protocol")]
+    Unsupported,
+    #[error("IO error")]
+    Io(#[source] io::Error),
 }
 
 #[derive(Debug, Error)]
@@ -125,13 +130,13 @@ pub(crate) async fn connect(
         Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
             return Ok(Err(CircuitFailed {
                 status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
-                error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
+                error: CircuitFailedReason::ResourceLimitExceeded,
             }))
         }
         Some(proto::Status::PERMISSION_DENIED) => {
             return Ok(Err(CircuitFailed {
                 status: proto::Status::PERMISSION_DENIED,
-                error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
+                error: CircuitFailedReason::PermissionDenied,
             }))
         }
         Some(s) => return Err(FatalUpgradeError::UnexpectedStatus(s)),
@@ -162,5 +167,5 @@ pub(crate) struct Circuit {
 
 pub(crate) struct CircuitFailed {
     pub(crate) status: proto::Status,
-    pub(crate) error: StreamUpgradeError<CircuitFailedReason>,
+    pub(crate) error: CircuitFailedReason, // TODO: Remove this.
 }
