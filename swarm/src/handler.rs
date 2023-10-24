@@ -177,10 +177,6 @@ pub trait ConnectionHandler: Send + 'static {
 
     /// Creates a new [`ConnectionHandler`] that selects either this handler or
     /// `other` by delegating methods calls appropriately.
-    ///
-    /// > **Note**: The largest value returned by the two handlers takes precedence,
-    /// > i.e. is returned from [`ConnectionHandler::connection_keep_alive`] by the returned
-    /// > handler.
     fn select<TProto2>(self, other: TProto2) -> ConnectionHandlerSelect<Self, TProto2>
     where
         Self: Sized,
