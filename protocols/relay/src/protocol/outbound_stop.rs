@@ -33,7 +33,7 @@ use crate::protocol::MAX_MESSAGE_SIZE;
 use crate::{proto, STOP_PROTOCOL_NAME};
 
 #[derive(Debug, Error)]
-pub enum CircuitFailedReason {
+pub enum Error {
     #[error("Remote reported resource limit exceeded.")]
     ResourceLimitExceeded,
     #[error("Remote reported permission denied.")]
@@ -42,14 +42,30 @@ pub enum CircuitFailedReason {
     Unsupported,
     #[error("IO error")]
     Io(#[source] io::Error),
+    #[error("Protocol error")]
+    Protocol(#[from] ProtocolViolation),
 }
 
+impl Error {
+    pub(crate) fn to_status(&self) -> proto::Status {
+        match self {
+            Error::ResourceLimitExceeded => proto::Status::RESOURCE_LIMIT_EXCEEDED,
+            Error::PermissionDenied => proto::Status::PERMISSION_DENIED,
+            Error::Unsupported => proto::Status::CONNECTION_FAILED,
+            Error::Io(_) => proto::Status::CONNECTION_FAILED,
+            Error::Protocol(
+                ProtocolViolation::UnexpectedStatus(_) | ProtocolViolation::UnexpectedTypeConnect,
+            ) => proto::Status::UNEXPECTED_MESSAGE,
+            Error::Protocol(_) => proto::Status::MALFORMED_MESSAGE,
+        }
+    }
+}
+
+/// Depicts all forms of protocol violations.
 #[derive(Debug, Error)]
-pub enum FatalUpgradeError {
+pub enum ProtocolViolation {
     #[error(transparent)]
     Codec(#[from] quick_protobuf_codec::Error),
-    #[error("Stream closed")]
-    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Failed to parse response type field.")]
@@ -62,13 +78,19 @@ pub enum FatalUpgradeError {
     UnexpectedStatus(proto::Status),
 }
 
+impl From<quick_protobuf_codec::Error> for Error {
+    fn from(e: quick_protobuf_codec::Error) -> Self {
+        Error::Protocol(ProtocolViolation::Codec(e))
+    }
+}
+
 /// Attempts to _connect_ to a peer via the given stream.
 pub(crate) async fn connect(
     io: Stream,
     src_peer_id: PeerId,
     max_duration: Duration,
     max_bytes: u64,
-) -> Result<Result<Circuit, CircuitFailed>, FatalUpgradeError> {
+) -> Result<Circuit, Error> {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
         peer: Some(proto::Peer {
@@ -89,44 +111,31 @@ pub(crate) async fn connect(
 
     let mut substream = Framed::new(io, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
-    if substream.send(msg).await.is_err() {
-        return Err(FatalUpgradeError::StreamClosed);
-    }
-
-    let res = substream.next().await;
-
-    if let None | Some(Err(_)) = res {
-        return Err(FatalUpgradeError::StreamClosed);
-    }
+    substream.send(msg).await?;
 
     let proto::StopMessage {
         type_pb,
         peer: _,
         limit: _,
         status,
-    } = res.unwrap().expect("should be ok");
+    } = substream
+        .next()
+        .await
+        .ok_or(Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
     match type_pb {
-        proto::StopMessageType::CONNECT => return Err(FatalUpgradeError::UnexpectedTypeConnect),
+        proto::StopMessageType::CONNECT => {
+            return Err(Error::Protocol(ProtocolViolation::UnexpectedTypeConnect))
+        }
         proto::StopMessageType::STATUS => {}
     }
 
     match status {
         Some(proto::Status::OK) => {}
-        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
-            return Ok(Err(CircuitFailed {
-                status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
-                error: CircuitFailedReason::ResourceLimitExceeded,
-            }))
-        }
-        Some(proto::Status::PERMISSION_DENIED) => {
-            return Ok(Err(CircuitFailed {
-                status: proto::Status::PERMISSION_DENIED,
-                error: CircuitFailedReason::PermissionDenied,
-            }))
-        }
-        Some(s) => return Err(FatalUpgradeError::UnexpectedStatus(s)),
-        None => return Err(FatalUpgradeError::MissingStatusField),
+        Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => return Err(Error::ResourceLimitExceeded),
+        Some(proto::Status::PERMISSION_DENIED) => return Err(Error::PermissionDenied),
+        Some(s) => return Err(Error::Protocol(ProtocolViolation::UnexpectedStatus(s))),
+        None => return Err(Error::Protocol(ProtocolViolation::MissingStatusField)),
     }
 
     let FramedParts {
@@ -140,18 +149,13 @@ pub(crate) async fn connect(
         "Expect a flushed Framed to have an empty write buffer."
     );
 
-    Ok(Ok(Circuit {
+    Ok(Circuit {
         dst_stream: io,
         dst_pending_data: read_buffer.freeze(),
-    }))
+    })
 }
 
 pub(crate) struct Circuit {
     pub(crate) dst_stream: Stream,
     pub(crate) dst_pending_data: Bytes,
-}
-
-pub(crate) struct CircuitFailed {
-    pub(crate) status: proto::Status,
-    pub(crate) error: CircuitFailedReason, // TODO: Remove this.
 }

@@ -202,7 +202,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: outbound_stop::CircuitFailedReason,
+        error: outbound_stop::Error,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {

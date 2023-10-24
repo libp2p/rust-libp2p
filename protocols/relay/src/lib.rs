@@ -58,7 +58,7 @@ pub mod outbound {
         pub use crate::protocol::outbound_hop::FatalUpgradeError;
     }
     pub mod stop {
-        pub use crate::protocol::outbound_stop::FatalUpgradeError;
+        pub use crate::protocol::outbound_stop::{Error, ProtocolViolation};
     }
 }
 

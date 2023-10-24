@@ -206,7 +206,7 @@ pub enum Event {
         src_connection_id: ConnectionId,
         inbound_circuit_req: inbound_hop::CircuitReq,
         status: proto::Status,
-        error: outbound_stop::CircuitFailedReason,
+        error: outbound_stop::Error,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -383,10 +383,7 @@ pub struct Handler {
     >,
     outbound_workers: futures_bounded::FuturesMap<
         CircuitId,
-        Result<
-            Result<outbound_stop::Circuit, outbound_stop::CircuitFailed>,
-            outbound_stop::FatalUpgradeError,
-        >,
+        Result<outbound_stop::Circuit, outbound_stop::Error>,
     >,
 }
 
@@ -462,13 +459,9 @@ impl Handler {
         >,
     ) {
         let error = match error {
-            StreamUpgradeError::Timeout => {
-                outbound_stop::CircuitFailedReason::Io(io::ErrorKind::TimedOut.into())
-            }
-            StreamUpgradeError::NegotiationFailed => {
-                outbound_stop::CircuitFailedReason::Unsupported
-            }
-            StreamUpgradeError::Io(e) => outbound_stop::CircuitFailedReason::Io(e),
+            StreamUpgradeError::Timeout => outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
+            StreamUpgradeError::NegotiationFailed => outbound_stop::Error::Unsupported,
+            StreamUpgradeError::Io(e) => outbound_stop::Error::Io(e),
             StreamUpgradeError::Apply(v) => void::unreachable(v),
         };
 
@@ -688,7 +681,7 @@ impl ConnectionHandler for Handler {
 
         // Process outbound protocol workers
         match self.outbound_workers.poll_unpin(cx) {
-            Poll::Ready((id, Ok(Ok(Ok(circuit))))) => {
+            Poll::Ready((id, Ok(Ok(circuit)))) => {
                 let connect = self
                     .active_connect_requests
                     .remove(&id)
@@ -708,7 +701,7 @@ impl ConnectionHandler for Handler {
                     },
                 ));
             }
-            Poll::Ready((id, Ok(Ok(Err(circuit_failed))))) => {
+            Poll::Ready((id, Ok(Err(error)))) => {
                 let connect = self
                     .active_connect_requests
                     .remove(&id)
@@ -720,8 +713,8 @@ impl ConnectionHandler for Handler {
                         src_peer_id: connect.src_peer_id,
                         src_connection_id: connect.src_connection_id,
                         inbound_circuit_req: connect.inbound_circuit_req,
-                        status: circuit_failed.status,
-                        error: circuit_failed.error,
+                        status: error.to_status(),
+                        error,
                     },
                 ));
             }
@@ -738,41 +731,7 @@ impl ConnectionHandler for Handler {
                         src_connection_id: connect.src_connection_id,
                         inbound_circuit_req: connect.inbound_circuit_req,
                         status: proto::Status::CONNECTION_FAILED, // Best fit?
-                        error: outbound_stop::CircuitFailedReason::Io(
-                            io::ErrorKind::TimedOut.into(),
-                        ),
-                    },
-                ));
-            }
-            Poll::Ready((id, Ok(Err(e)))) => {
-                let connect = self
-                    .active_connect_requests
-                    .remove(&id)
-                    .expect("must have pending connect");
-
-                return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
-                    Event::OutboundConnectNegotiationFailed {
-                        circuit_id: connect.circuit_id,
-                        src_peer_id: connect.src_peer_id,
-                        src_connection_id: connect.src_connection_id,
-                        inbound_circuit_req: connect.inbound_circuit_req,
-                        status: match e {
-                            outbound_stop::FatalUpgradeError::StreamClosed => {
-                                proto::Status::CONNECTION_FAILED
-                            }
-                            _ => proto::Status::MALFORMED_MESSAGE,
-                        },
-                        error: match e {
-                            outbound_stop::FatalUpgradeError::StreamClosed => {
-                                outbound_stop::CircuitFailedReason::Io(
-                                    io::ErrorKind::ConnectionReset.into(),
-                                )
-                            }
-                            e => outbound_stop::CircuitFailedReason::Io(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                e,
-                            )),
-                        },
+                        error: outbound_stop::Error::Io(io::ErrorKind::TimedOut.into()),
                     },
                 ));
             }
