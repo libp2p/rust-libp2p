@@ -3,6 +3,8 @@
 - Remove `handler` field from `ConnectionClosed`.
   If you need to transfer state from a `ConnectionHandler` to its `NetworkBehaviour` when a connection closes, use `ConnectionHandler::poll_close`.
   See [PR 4076](https://github.com/libp2p/rust-libp2p/pull/4076).
+- Remove deprecated `PollParameters` from `NetworkBehaviour::poll` function.
+  See [PR 4490](https://github.com/libp2p/rust-libp2p/pull/4490).
 - Add `PeerCondition::DisconnectedAndNotDialing` variant, combining pre-existing conditions.
   This is the new default.
   A new dialing attempt is iniated _only if_ the peer is both considered disconnected and there is currently no ongoing dialing attempt.

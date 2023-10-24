@@ -42,8 +42,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 
 use crate::backoff::BackoffStorage;
@@ -3416,7 +3416,6 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -3516,7 +3515,7 @@ fn peer_removed_from_mesh(
         .get(&peer_id)
         .expect("To be connected to peer.")
         .connections
-        .get(0)
+        .first()
         .expect("There should be at least one connection to a peer.");
 
     if let Some(topics) = known_topics {

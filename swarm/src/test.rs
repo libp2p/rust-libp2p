@@ -23,8 +23,8 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddrCandidate, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, Endpoint};
 use libp2p_identity::PeerId;
@@ -110,11 +110,7 @@ where
         Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
@@ -557,10 +553,9 @@ where
 
     fn poll(
         &mut self,
-        cx: &mut Context,
-        args: &mut impl PollParameters,
+        cx: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         self.poll += 1;
-        self.inner.poll(cx, args)
+        self.inner.poll(cx)
     }
 }

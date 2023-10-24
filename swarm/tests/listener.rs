@@ -7,8 +7,8 @@ use libp2p_core::{multiaddr::Protocol, transport::ListenerId, Endpoint, Multiadd
 use libp2p_identity::PeerId;
 use libp2p_swarm::{
     derive_prelude::NewListener, dummy, ConnectionDenied, ConnectionId, FromSwarm, ListenOpts,
-    ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, PollParameters, Swarm,
-    SwarmEvent, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    ListenerClosed, ListenerError, NetworkBehaviour, NewListenAddr, Swarm, SwarmEvent, THandler,
+    THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use libp2p_swarm_test::SwarmExt;
@@ -129,11 +129,7 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
+    fn poll(&mut self, _: &mut Context<'_>) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

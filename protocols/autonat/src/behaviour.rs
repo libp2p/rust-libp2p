@@ -40,7 +40,7 @@ use libp2p_swarm::{
         ExternalAddrExpired, FromSwarm,
     },
     ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour, NewExternalAddrCandidate,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -433,13 +433,16 @@ impl NetworkBehaviour for Behaviour {
         <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type ToSwarm = Event;
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
         loop {
             if let Some(event) = self.pending_actions.pop_front() {
                 return Poll::Ready(event);
             }
 
-            match self.inner.poll(cx, params) {
+            match self.inner.poll(cx) {
                 Poll::Ready(ToSwarm::GenerateEvent(event)) => {
                     let actions = match event {
                         request_response::Event::Message {
@@ -447,14 +450,14 @@ impl NetworkBehaviour for Behaviour {
                             ..
                         }
                         | request_response::Event::OutboundFailure { .. } => {
-                            self.as_client().handle_event(params, event)
+                            self.as_client().handle_event(event)
                         }
                         request_response::Event::Message {
                             message: request_response::Message::Request { .. },
                             ..
                         }
                         | request_response::Event::InboundFailure { .. } => {
-                            self.as_server().handle_event(params, event)
+                            self.as_server().handle_event(event)
                         }
                         request_response::Event::ResponseSent { .. } => VecDeque::new(),
                     };
@@ -607,7 +610,6 @@ type Action = ToSwarm<<Behaviour as NetworkBehaviour>::ToSwarm, THandlerInEvent<
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
-        params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action>;
 }

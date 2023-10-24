@@ -30,7 +30,7 @@ use libp2p_identity::PeerId;
 use libp2p_request_response as request_response;
 use libp2p_swarm::{
     derive_prelude::ConnectionEstablished, ConnectionClosed, ConnectionId, FromSwarm,
-    NetworkBehaviour, PollParameters, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    NetworkBehaviour, THandlerInEvent, THandlerOutEvent, ToSwarm,
 };
 
 use crate::{protocol::Response, RunDuration, RunParams};
@@ -198,9 +198,8 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        self.request_response.poll(cx, params).map(|to_swarm| {
+        self.request_response.poll(cx).map(|to_swarm| {
             to_swarm.map_out(|m| match m {
                 request_response::Event::Message {
                     peer: _,

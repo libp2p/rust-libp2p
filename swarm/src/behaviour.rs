@@ -209,28 +209,8 @@ pub trait NetworkBehaviour: 'static {
     ///
     /// This API mimics the API of the `Stream` trait. The method may register the current task in
     /// order to wake it up at a later point in time.
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
-}
-
-/// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
-pub trait PollParameters {
-    /// Iterator returned by [`supported_protocols`](PollParameters::supported_protocols).
-    type SupportedProtocolsIter: ExactSizeIterator<Item = Vec<u8>>;
-
-    /// Returns the list of protocol the behaviour supports when a remote negotiates a protocol on
-    /// an inbound substream.
-    ///
-    /// The iterator's elements are the ASCII names as reported on the wire.
-    ///
-    /// Note that the list is computed once at initialization and never refreshed.
-    #[deprecated(
-        note = "Use `libp2p_swarm::SupportedProtocols` in your `ConnectionHandler` instead."
-    )]
-    fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
+    fn poll(&mut self, cx: &mut Context<'_>)
+        -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>>;
 }
 
 /// A command issued from a [`NetworkBehaviour`] for the [`Swarm`].
