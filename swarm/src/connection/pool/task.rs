@@ -66,6 +66,7 @@ pub(crate) enum PendingConnectionEvent {
 }
 
 #[derive(Debug)]
+#[allow(deprecated)]
 pub(crate) enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     /// A node we are connected to has changed its address.
     AddressChange {

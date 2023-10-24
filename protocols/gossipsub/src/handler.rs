@@ -218,6 +218,7 @@ impl EnabledHandler {
         self.outbound_substream = Some(OutboundSubstreamState::WaitingOutput(substream));
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -451,6 +452,7 @@ impl ConnectionHandler for Handler {
         }
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

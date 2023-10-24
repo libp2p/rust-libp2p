@@ -47,6 +47,7 @@ where
 {
     type FromBehaviour = TConnectionHandler::FromBehaviour;
     type ToBehaviour = TNewOut;
+    #[allow(deprecated)]
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
@@ -65,6 +66,7 @@ where
         self.inner.connection_keep_alive()
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -80,6 +82,7 @@ where
             ConnectionHandlerEvent::NotifyBehaviour(ev) => {
                 ConnectionHandlerEvent::NotifyBehaviour((self.map)(ev))
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(err) => ConnectionHandlerEvent::Close(err),
             ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
                 ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }

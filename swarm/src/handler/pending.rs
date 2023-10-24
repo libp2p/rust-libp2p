@@ -60,6 +60,7 @@ impl ConnectionHandler for PendingConnectionHandler {
         KeepAlive::No
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         _: &mut Context<'_>,

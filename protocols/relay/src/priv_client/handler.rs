@@ -126,6 +126,7 @@ pub struct Handler {
     keep_alive: KeepAlive,
 
     /// Queue of events to return when polled.
+    #[allow(deprecated)]
     queued_events: VecDeque<
         ConnectionHandlerEvent<
             <Handler as ConnectionHandler>::OutboundProtocol,
@@ -331,6 +332,7 @@ impl ConnectionHandler for Handler {
         self.keep_alive
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -345,6 +347,7 @@ impl ConnectionHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
+            #[allow(deprecated)]
             return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
@@ -389,12 +392,15 @@ impl ConnectionHandler for Handler {
                         },
                     ));
                 }
-                Poll::Ready(Ok(Err(e))) => {
+                Poll::Ready(Ok(Err(e))) =>
+                {
+                    #[allow(deprecated)]
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                         Either::Right(e),
                     )))
                 }
                 Poll::Ready(Err(Timeout { .. })) => {
+                    #[allow(deprecated)]
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
                 }
                 Poll::Pending => break,
@@ -410,6 +416,7 @@ impl ConnectionHandler for Handler {
             let res = match worker_res {
                 Ok(r) => r,
                 Err(Timeout { .. }) => {
+                    #[allow(deprecated)]
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
                 }
             };
@@ -442,6 +449,7 @@ impl ConnectionHandler for Handler {
                     }
                 },
                 Err(e) => {
+                    #[allow(deprecated)]
                     return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                         Either::Left(e),
                     )));

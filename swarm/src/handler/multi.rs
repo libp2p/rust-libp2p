@@ -112,6 +112,7 @@ where
 {
     type FromBehaviour = (K, <H as ConnectionHandler>::FromBehaviour);
     type ToBehaviour = (K, <H as ConnectionHandler>::ToBehaviour);
+    #[allow(deprecated)]
     type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
@@ -238,6 +239,7 @@ where
             .unwrap_or(KeepAlive::No)
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

@@ -104,6 +104,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// A type representing message(s) a [`ConnectionHandler`] can send to a [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) via [`ConnectionHandlerEvent::NotifyBehaviour`].
     type ToBehaviour: fmt::Debug + Send + 'static;
     /// The type of errors returned by [`ConnectionHandler::poll`].
+    #[deprecated(
+        note = "Will be removed together with `ConnectionHandlerEvent::Close`. See <https://github.com/libp2p/rust-libp2p/issues/3591> for details."
+    )]
     type Error: error::Error + fmt::Debug + Send + 'static;
     /// The inbound upgrade for the protocol(s) used by the handler.
     type InboundProtocol: InboundUpgradeSend;
@@ -146,6 +149,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn connection_keep_alive(&self) -> KeepAlive;
 
     /// Should behave like `Stream::poll()`.
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -545,6 +549,9 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom, 
     /// connection, while allowing other [`ConnectionHandler`]s to continue using
     /// the connection, return [`KeepAlive::No`] in
     /// [`ConnectionHandler::connection_keep_alive`].
+    #[deprecated(
+        note = "To close a connection, use `ToSwarm::CloseConnection` or `Swarm::close_connection`. See <https://github.com/libp2p/rust-libp2p/issues/3591> for more details."
+    )]
     Close(TErr),
     /// We learned something about the protocols supported by the remote.
     ReportRemoteProtocols(ProtocolSupport),
@@ -583,6 +590,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(val)
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -608,6 +616,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(val)
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -630,6 +639,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(map(val))
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)
@@ -652,6 +662,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
             ConnectionHandlerEvent::NotifyBehaviour(val) => {
                 ConnectionHandlerEvent::NotifyBehaviour(val)
             }
+            #[allow(deprecated)]
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(map(val)),
             ConnectionHandlerEvent::ReportRemoteProtocols(support) => {
                 ConnectionHandlerEvent::ReportRemoteProtocols(support)

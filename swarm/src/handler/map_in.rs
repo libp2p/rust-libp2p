@@ -52,6 +52,7 @@ where
 {
     type FromBehaviour = TNewIn;
     type ToBehaviour = TConnectionHandler::ToBehaviour;
+    #[allow(deprecated)]
     type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
@@ -72,6 +73,7 @@ where
         self.inner.connection_keep_alive()
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

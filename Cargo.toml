@@ -101,7 +101,7 @@ libp2p-rendezvous = { version = "0.13.1", path = "protocols/rendezvous" }
 libp2p-upnp = { version = "0.1.1", path = "protocols/upnp" }
 libp2p-request-response = { version = "0.25.2", path = "protocols/request-response" }
 libp2p-server = { version = "0.12.3", path = "misc/server" }
-libp2p-swarm = { version = "0.43.6", path = "swarm" }
+libp2p-swarm = { version = "0.43.7", path = "swarm" }
 libp2p-swarm-derive = { version = "0.33.0", path = "swarm-derive" }
 libp2p-swarm-test = { version = "0.2.0", path = "swarm-test" }
 libp2p-tcp = { version = "0.40.1", path = "transports/tcp" }

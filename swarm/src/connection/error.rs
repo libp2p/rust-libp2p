@@ -34,6 +34,9 @@ pub enum ConnectionError<THandlerErr> {
     KeepAliveTimeout,
 
     /// The connection handler produced an error.
+    #[deprecated(
+        note = "Will be removed together with `ConnectionHandlerEvent::Close`. See <https://github.com/libp2p/rust-libp2p/issues/3591> for details."
+    )]
     Handler(THandlerErr),
 }
 
@@ -47,6 +50,7 @@ where
             ConnectionError::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
+            #[allow(deprecated)]
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {err}"),
         }
     }
@@ -60,6 +64,7 @@ where
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
+            #[allow(deprecated)]
             ConnectionError::Handler(err) => Some(err),
         }
     }

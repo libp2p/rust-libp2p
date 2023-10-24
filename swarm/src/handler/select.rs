@@ -181,6 +181,7 @@ where
 {
     type FromBehaviour = Either<TProto1::FromBehaviour, TProto2::FromBehaviour>;
     type ToBehaviour = Either<TProto1::ToBehaviour, TProto2::ToBehaviour>;
+    #[allow(deprecated)]
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -215,6 +216,7 @@ where
         )
     }
 
+    #[allow(deprecated)]
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -230,6 +232,7 @@ where
             Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Either::Left(event)));
             }
+            #[allow(deprecated)]
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
             }
@@ -252,6 +255,7 @@ where
                     event,
                 )));
             }
+            #[allow(deprecated)]
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
             }
