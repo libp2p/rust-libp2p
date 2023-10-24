@@ -233,7 +233,7 @@ where
         self.handlers
             .values()
             .map(|h| h.connection_keep_alive())
-            .min()
+            .max()
             .unwrap_or(false)
     }
 

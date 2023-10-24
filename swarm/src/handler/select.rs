@@ -209,7 +209,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> bool {
-        cmp::min(
+        cmp::max(
             self.proto1.connection_keep_alive(),
             self.proto2.connection_keep_alive(),
         )
