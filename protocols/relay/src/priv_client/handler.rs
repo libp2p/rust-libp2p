@@ -107,7 +107,7 @@ pub enum Event {
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: inbound_stop::UpgradeError,
+        error: inbound_stop::Error,
     },
 }
 
@@ -116,11 +116,8 @@ pub struct Handler {
     remote_peer_id: PeerId,
     remote_addr: Multiaddr,
     /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<
-        StreamUpgradeError<
-            Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-        >,
-    >,
+    pending_error:
+        Option<StreamUpgradeError<Either<inbound_stop::Error, outbound_hop::FatalUpgradeError>>>,
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
@@ -152,9 +149,9 @@ pub struct Handler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
     open_circuit_futs:
-        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::FatalUpgradeError>>,
+        futures_bounded::FuturesSet<Result<inbound_stop::Circuit, inbound_stop::Error>>,
 
-    circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::UpgradeError>>,
+    circuit_deny_futs: futures_bounded::FuturesMap<PeerId, Result<(), inbound_stop::Error>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -280,9 +277,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<
-        Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-    >;
+    type Error = StreamUpgradeError<Either<inbound_stop::Error, outbound_hop::FatalUpgradeError>>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;

@@ -154,11 +154,11 @@ pub enum Event {
         renewed: bool,
     },
     /// Accepting an inbound reservation request failed.
-    ReservationReqAcceptFailed { error: inbound_hop::UpgradeError },
+    ReservationReqAcceptFailed { error: inbound_hop::Error },
     /// An inbound reservation request has been denied.
     ReservationReqDenied {},
     /// Denying an inbound reservation request has failed.
-    ReservationReqDenyFailed { error: inbound_hop::UpgradeError },
+    ReservationReqDenyFailed { error: inbound_hop::Error },
     /// An inbound reservation has timed out.
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
@@ -175,7 +175,7 @@ pub enum Event {
     CircuitReqDenyFailed {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An inbound circuit request has been accepted.
     CircuitReqAccepted {
@@ -186,7 +186,7 @@ pub enum Event {
     CircuitReqAcceptFailed {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::Error,
     },
     /// An outbound substream for an inbound circuit request has been
     /// negotiated.
@@ -349,11 +349,8 @@ pub struct Handler {
     >,
 
     /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<
-        StreamUpgradeError<
-            Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
-        >,
-    >,
+    pending_error:
+        Option<StreamUpgradeError<Either<inbound_hop::Error, outbound_stop::FatalUpgradeError>>>,
 
     /// The point in time when this connection started idleing.
     idle_at: Option<Instant>,
@@ -364,14 +361,9 @@ pub struct Handler {
     active_reservation: Option<Delay>,
 
     /// Futures accepting an inbound circuit request.
-    circuit_accept_futures:
-        Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::UpgradeError)>>,
+    circuit_accept_futures: Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::Error)>>,
     /// Futures denying an inbound circuit request.
-    circuit_deny_futures: Futures<(
-        Option<CircuitId>,
-        PeerId,
-        Result<(), inbound_hop::UpgradeError>,
-    )>,
+    circuit_deny_futures: Futures<(Option<CircuitId>, PeerId, Result<(), inbound_hop::Error>)>,
     /// Tracks substreams lend out to other [`Handler`]s.
     ///
     /// Contains a [`futures::future::Future`] for each lend out substream that
@@ -390,7 +382,7 @@ pub struct Handler {
         Either<
             Result<
                 Either<inbound_hop::ReservationReq, inbound_hop::CircuitReq>,
-                inbound_hop::FatalUpgradeError,
+                inbound_hop::Error,
             >,
             Result<
                 Result<outbound_stop::Circuit, outbound_stop::CircuitFailed>,
@@ -503,8 +495,8 @@ impl Handler {
 }
 
 enum ReservationRequestFuture {
-    Accepting(BoxFuture<'static, Result<(), inbound_hop::UpgradeError>>),
-    Denying(BoxFuture<'static, Result<(), inbound_hop::UpgradeError>>),
+    Accepting(BoxFuture<'static, Result<(), inbound_hop::Error>>),
+    Denying(BoxFuture<'static, Result<(), inbound_hop::Error>>),
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
@@ -512,9 +504,7 @@ type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;
 impl ConnectionHandler for Handler {
     type FromBehaviour = In;
     type ToBehaviour = Event;
-    type Error = StreamUpgradeError<
-        Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
-    >;
+    type Error = StreamUpgradeError<Either<inbound_hop::Error, outbound_stop::FatalUpgradeError>>;
     type InboundProtocol = ReadyUpgrade<StreamProtocol>;
     type InboundOpenInfo = ();
     type OutboundProtocol = ReadyUpgrade<StreamProtocol>;

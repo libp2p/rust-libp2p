@@ -45,10 +45,10 @@ pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 /// Types related to the relay protocol inbound.
 pub mod inbound {
     pub mod hop {
-        pub use crate::protocol::inbound_hop::FatalUpgradeError;
+        pub use crate::protocol::inbound_hop::Error;
     }
     pub mod stop {
-        pub use crate::protocol::inbound_stop::FatalUpgradeError;
+        pub use crate::protocol::inbound_stop::Error;
     }
 }
 

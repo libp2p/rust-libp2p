@@ -84,7 +84,7 @@ pub enum Event {
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: inbound_stop::UpgradeError,
+        error: inbound_stop::Error,
     },
 }
 
