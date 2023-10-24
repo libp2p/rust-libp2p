@@ -6,7 +6,10 @@
   See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 - Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
-- Add `ConnectionHandler::connection_keep_alive` default implementation that returns `false` and remove `keep_alive` module.
+- Simplify the connection keep-alive algorithm.
+  Connections are now kept alive by default if there are active `Stream`s on it.
+  As a result, the `ConnectionHandler::connection_keep_alive` method now has a default implementation that returns `false`.
+  See its documentation for more details.
   See [PR 4703](https://github.com/libp2p/rust-libp2p/pull/4703).
 
 ## 0.43.6
