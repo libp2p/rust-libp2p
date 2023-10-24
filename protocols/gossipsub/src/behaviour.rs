@@ -3514,7 +3514,7 @@ fn peer_removed_from_mesh(
         .get(&peer_id)
         .expect("To be connected to peer.")
         .connections
-        .get(0)
+        .first()
         .expect("There should be at least one connection to a peer.");
 
     if let Some(topics) = known_topics {
