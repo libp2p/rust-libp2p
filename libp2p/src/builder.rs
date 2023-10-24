@@ -53,6 +53,10 @@ mod select_security;
 ///          libp2p_yamux::Config::default,
 ///      )?
 ///      .with_behaviour(|_key, relay| MyBehaviour { relay })?
+///      .with_swarm_config(|cfg| {
+///          // Edit cfg here.
+///          cfg
+///      })
 ///      .build();
 /// #
 /// #     Ok(())
