@@ -25,10 +25,11 @@ use swarm::*;
 use tcp::*;
 use websocket::*;
 
+use super::select_muxer::SelectMuxerUpgrade;
 use super::select_security::SelectSecurityUpgrade;
 use super::SwarmBuilder;
 
-use libp2p_core::{muxing::StreamMuxerBox, upgrade::SelectUpgrade, Transport};
+use libp2p_core::{muxing::StreamMuxerBox, Transport};
 use libp2p_identity::Keypair;
 
 pub trait IntoSecurityUpgrade<C> {
@@ -94,7 +95,7 @@ where
     U1: IntoMultiplexerUpgrade<C>,
     U2: IntoMultiplexerUpgrade<C>,
 {
-    type Upgrade = SelectUpgrade<U1::Upgrade, U2::Upgrade>;
+    type Upgrade = SelectMuxerUpgrade<U1::Upgrade, U2::Upgrade>;
 
     fn into_multiplexer_upgrade(self) -> Self::Upgrade {
         let (f1, f2) = self;
@@ -102,7 +103,7 @@ where
         let u1 = f1.into_multiplexer_upgrade();
         let u2 = f2.into_multiplexer_upgrade();
 
-        SelectUpgrade::new(u1, u2)
+        SelectMuxerUpgrade::new(u1, u2)
     }
 }
 

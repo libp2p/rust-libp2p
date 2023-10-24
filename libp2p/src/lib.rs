@@ -135,14 +135,6 @@ pub use libp2p_uds as uds;
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
 pub use libp2p_upnp as upnp;
-#[cfg(feature = "wasm-ext")]
-#[deprecated(
-    note = "`wasm-ext` is deprecated and will be removed in favor of `libp2p-websocket-websys`."
-)]
-pub mod wasm_ext {
-    #[doc(inline)]
-    pub use libp2p_wasm_ext::*;
-}
 #[cfg(feature = "websocket")]
 #[cfg(not(target_arch = "wasm32"))]
 #[doc(inline)]
