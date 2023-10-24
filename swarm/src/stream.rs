@@ -26,7 +26,7 @@ impl Stream {
         Self { stream, counter }
     }
 
-    /// Opt-out this stream from the [Swarm](crate::Swarm)s connection keep alive algorithm.
+    /// Ignore this stream in the [Swarm](crate::Swarm)'s connection-keep-alive algorithm.
     ///
     /// By default, any active stream keeps a connection alive. For most protocols,
     /// this is a good default as it ensures that the protocol is completed before
@@ -34,7 +34,7 @@ impl Stream {
     /// Some protocols like libp2p's [ping](https://github.com/libp2p/specs/blob/master/ping/ping.md)
     /// for example never complete and are of an auxiliary nature.
     /// These protocols should opt-out of the keep alive algorithm using this method.
-    pub fn no_keep_alive(&mut self) {
+    pub fn ignore_for_keep_alive(&mut self) {
         if let StreamCounter::Arc(arc_counter) = &self.counter {
             self.counter = StreamCounter::Weak(Arc::downgrade(arc_counter));
         }

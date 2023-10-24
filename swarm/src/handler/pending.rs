@@ -56,10 +56,6 @@ impl ConnectionHandler for PendingConnectionHandler {
         void::unreachable(v)
     }
 
-    fn connection_keep_alive(&self) -> bool {
-        false
-    }
-
     fn poll(
         &mut self,
         _: &mut Context<'_>,

@@ -314,10 +314,6 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn connection_keep_alive(&self) -> bool {
-        false
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,

@@ -612,7 +612,11 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        !matches!(self.idle_at, Some(idle_at) if Instant::now().duration_since(idle_at) > Duration::from_secs(10))
+        let Some(idle_at) = self.idle_at else {
+            return true;
+        };
+
+        Instant::now().duration_since(idle_at) > Duration::from_secs(10)
     }
 
     fn poll(

@@ -320,11 +320,7 @@ impl ConnectionHandler for Handler {
     }
 
     fn connection_keep_alive(&self) -> bool {
-        if self.reservation.is_some() {
-            return true;
-        }
-
-        false
+        self.reservation.is_some()
     }
 
     fn poll(

@@ -98,10 +98,6 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         void::unreachable(event)
     }
 
-    fn connection_keep_alive(&self) -> bool {
-        false
-    }
-
     fn poll(
         &mut self,
         _: &mut Context<'_>,

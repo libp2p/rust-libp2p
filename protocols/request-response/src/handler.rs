@@ -274,10 +274,6 @@ where
         self.outbound.push_back(request);
     }
 
-    fn connection_keep_alive(&self) -> bool {
-        false
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
