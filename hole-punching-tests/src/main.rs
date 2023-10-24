@@ -46,7 +46,7 @@ const LISTEN_CLIENT_PEER_ID: &str = "LISTEN_CLIENT_PEER_ID";
 async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
-        .parse_filters("netlink_proto=warn,rustls=warn,multistream_select=warn,libp2p_core::transport::choice=off,libp2p_swarm::connection=warn,libp2p_quic::hole_punching=trace")
+        .parse_filters("netlink_proto=warn,rustls=warn,multistream_select=warn,libp2p_core::transport::choice=off,libp2p_swarm::connection=warn,libp2p_quic=trace")
         .parse_default_env()
         .init();
 
