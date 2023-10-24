@@ -22,16 +22,14 @@ use std::time::Duration;
 
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
-use futures::channel::oneshot::{self};
 use futures::prelude::*;
 use thiserror::Error;
 
 use libp2p_identity::PeerId;
-use libp2p_swarm::{ConnectionId, Stream, StreamUpgradeError};
+use libp2p_swarm::{Stream, StreamUpgradeError};
 
-use crate::behaviour::handler::Config;
-use crate::protocol::{inbound_hop, MAX_MESSAGE_SIZE};
-use crate::{proto, CircuitId};
+use crate::proto;
+use crate::protocol::MAX_MESSAGE_SIZE;
 
 #[derive(Debug, Error)]
 pub(crate) enum UpgradeError {
@@ -76,24 +74,24 @@ pub enum FatalUpgradeError {
 /// Attempts to _connect_ to a peer via the given stream.
 pub(crate) async fn connect(
     io: Stream,
-    stop_command: PendingConnect,
-    tx: oneshot::Sender<()>,
+    src_peer_id: PeerId,
+    max_duration: Duration,
+    max_bytes: u64,
 ) -> Result<Result<Circuit, CircuitFailed>, FatalUpgradeError> {
     let msg = proto::StopMessage {
         type_pb: proto::StopMessageType::CONNECT,
         peer: Some(proto::Peer {
-            id: stop_command.src_peer_id.to_bytes(),
+            id: src_peer_id.to_bytes(),
             addrs: vec![],
         }),
         limit: Some(proto::Limit {
             duration: Some(
-                stop_command
-                    .max_circuit_duration
+                max_duration
                     .as_secs()
                     .try_into()
                     .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
             ),
-            data: Some(stop_command.max_circuit_bytes),
+            data: Some(max_bytes),
         }),
         status: None,
     };
@@ -126,20 +124,12 @@ pub(crate) async fn connect(
         Some(proto::Status::OK) => {}
         Some(proto::Status::RESOURCE_LIMIT_EXCEEDED) => {
             return Ok(Err(CircuitFailed {
-                circuit_id: stop_command.circuit_id,
-                src_peer_id: stop_command.src_peer_id,
-                src_connection_id: stop_command.src_connection_id,
-                inbound_circuit_req: stop_command.inbound_circuit_req,
                 status: proto::Status::RESOURCE_LIMIT_EXCEEDED,
                 error: StreamUpgradeError::Apply(CircuitFailedReason::ResourceLimitExceeded),
             }))
         }
         Some(proto::Status::PERMISSION_DENIED) => {
             return Ok(Err(CircuitFailed {
-                circuit_id: stop_command.circuit_id,
-                src_peer_id: stop_command.src_peer_id,
-                src_connection_id: stop_command.src_connection_id,
-                inbound_circuit_req: stop_command.inbound_circuit_req,
                 status: proto::Status::PERMISSION_DENIED,
                 error: StreamUpgradeError::Apply(CircuitFailedReason::PermissionDenied),
             }))
@@ -160,59 +150,17 @@ pub(crate) async fn connect(
     );
 
     Ok(Ok(Circuit {
-        circuit_id: stop_command.circuit_id,
-        src_peer_id: stop_command.src_peer_id,
-        src_connection_id: stop_command.src_connection_id,
-        inbound_circuit_req: stop_command.inbound_circuit_req,
-        dst_handler_notifier: tx,
         dst_stream: io,
         dst_pending_data: read_buffer.freeze(),
     }))
 }
 
 pub(crate) struct Circuit {
-    pub(crate) circuit_id: CircuitId,
-    pub(crate) src_peer_id: PeerId,
-    pub(crate) src_connection_id: ConnectionId,
-    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
-    pub(crate) dst_handler_notifier: oneshot::Sender<()>,
     pub(crate) dst_stream: Stream,
     pub(crate) dst_pending_data: Bytes,
 }
 
 pub(crate) struct CircuitFailed {
-    pub(crate) circuit_id: CircuitId,
-    pub(crate) src_peer_id: PeerId,
-    pub(crate) src_connection_id: ConnectionId,
-    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
     pub(crate) status: proto::Status,
     pub(crate) error: StreamUpgradeError<CircuitFailedReason>,
-}
-
-pub(crate) struct PendingConnect {
-    pub(crate) circuit_id: CircuitId,
-    pub(crate) inbound_circuit_req: inbound_hop::CircuitReq,
-    pub(crate) src_peer_id: PeerId,
-    pub(crate) src_connection_id: ConnectionId,
-    max_circuit_duration: Duration,
-    max_circuit_bytes: u64,
-}
-
-impl PendingConnect {
-    pub(crate) fn new(
-        circuit_id: CircuitId,
-        inbound_circuit_req: inbound_hop::CircuitReq,
-        src_peer_id: PeerId,
-        src_connection_id: ConnectionId,
-        config: &Config,
-    ) -> Self {
-        Self {
-            circuit_id,
-            inbound_circuit_req,
-            src_peer_id,
-            src_connection_id,
-            max_circuit_duration: config.max_circuit_duration,
-            max_circuit_bytes: config.max_circuit_bytes,
-        }
-    }
 }

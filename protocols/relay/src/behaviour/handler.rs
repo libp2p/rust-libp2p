@@ -40,7 +40,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionId, KeepAlive, Stream, StreamProtocol,
     StreamUpgradeError, SubstreamProtocol,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -376,12 +376,17 @@ pub struct Handler {
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
 
-    pending_connect_requests: VecDeque<outbound_stop::PendingConnect>,
+    /// We issue a stream upgrade for each [`PendingConnect`] request.
+    pending_connect_requests: VecDeque<PendingConnect>,
+
+    /// A `CONNECT` request is in flight for these circuits.
+    active_connect_requests: HashMap<CircuitId, PendingConnect>,
 
     inbound_workers: futures_bounded::FuturesSet<
         Result<Either<inbound_hop::ReservationReq, inbound_hop::CircuitReq>, inbound_hop::Error>,
     >,
-    outbound_workers: futures_bounded::FuturesSet<
+    outbound_workers: futures_bounded::FuturesMap<
+        CircuitId,
         Result<
             Result<outbound_stop::Circuit, outbound_stop::CircuitFailed>,
             outbound_stop::FatalUpgradeError,
@@ -396,7 +401,7 @@ impl Handler {
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
-            outbound_workers: futures_bounded::FuturesSet::new(
+            outbound_workers: futures_bounded::FuturesMap::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -412,6 +417,7 @@ impl Handler {
             circuits: Default::default(),
             active_reservation: Default::default(),
             pending_connect_requests: Default::default(),
+            active_connect_requests: Default::default(),
         }
     }
 
@@ -431,17 +437,22 @@ impl Handler {
     }
 
     fn on_fully_negotiated_outbound(&mut self, stream: Stream) {
-        let stop_command = self
+        let connect = self
             .pending_connect_requests
             .pop_front()
             .expect("opened a stream without a pending stop command");
 
-        let (tx, rx) = oneshot::channel();
-        self.alive_lend_out_substreams.push(rx);
-
         if self
             .outbound_workers
-            .try_push(outbound_stop::connect(stream, stop_command, tx))
+            .try_push(
+                connect.circuit_id,
+                outbound_stop::connect(
+                    stream,
+                    connect.src_peer_id,
+                    connect.max_circuit_duration,
+                    connect.max_circuit_bytes,
+                ),
+            )
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
@@ -548,14 +559,13 @@ impl ConnectionHandler for Handler {
                 src_peer_id,
                 src_connection_id,
             } => {
-                self.pending_connect_requests
-                    .push_back(outbound_stop::PendingConnect::new(
-                        circuit_id,
-                        inbound_circuit_req,
-                        src_peer_id,
-                        src_connection_id,
-                        &self.config,
-                    ));
+                self.pending_connect_requests.push_back(PendingConnect::new(
+                    circuit_id,
+                    inbound_circuit_req,
+                    src_peer_id,
+                    src_connection_id,
+                    &self.config,
+                ));
                 self.queued_events
                     .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(ReadyUpgrade::new(STOP_PROTOCOL_NAME), ()),
@@ -692,35 +702,47 @@ impl ConnectionHandler for Handler {
 
         // Process outbound protocol workers
         match self.outbound_workers.poll_unpin(cx) {
-            Poll::Ready(Ok(Ok(Ok(circuit)))) => {
+            Poll::Ready((id, Ok(Ok(Ok(circuit))))) => {
+                let connect = self
+                    .active_connect_requests
+                    .remove(&id)
+                    .expect("must have pending connect");
+                let (tx, rx) = oneshot::channel();
+                self.alive_lend_out_substreams.push(rx);
+
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectNegotiated {
-                        circuit_id: circuit.circuit_id,
-                        src_peer_id: circuit.src_peer_id,
-                        src_connection_id: circuit.src_connection_id,
-                        inbound_circuit_req: circuit.inbound_circuit_req,
-                        dst_handler_notifier: circuit.dst_handler_notifier,
+                        circuit_id: id,
+                        src_peer_id: connect.src_peer_id,
+                        src_connection_id: connect.src_connection_id,
+                        inbound_circuit_req: connect.inbound_circuit_req,
+                        dst_handler_notifier: tx,
                         dst_stream: circuit.dst_stream,
                         dst_pending_data: circuit.dst_pending_data,
                     },
                 ));
             }
-            Poll::Ready(Ok(Ok(Err(circuit_failed)))) => {
+            Poll::Ready((id, Ok(Ok(Err(circuit_failed))))) => {
+                let connect = self
+                    .active_connect_requests
+                    .remove(&id)
+                    .expect("must have pending connect");
+
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectNegotiationFailed {
-                        circuit_id: circuit_failed.circuit_id,
-                        src_peer_id: circuit_failed.src_peer_id,
-                        src_connection_id: circuit_failed.src_connection_id,
-                        inbound_circuit_req: circuit_failed.inbound_circuit_req,
+                        circuit_id: connect.circuit_id,
+                        src_peer_id: connect.src_peer_id,
+                        src_connection_id: connect.src_connection_id,
+                        inbound_circuit_req: connect.inbound_circuit_req,
                         status: circuit_failed.status,
                         error: circuit_failed.error,
                     },
                 ));
             }
-            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+            Poll::Ready((_, Err(futures_bounded::Timeout { .. }))) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
             }
-            Poll::Ready(Ok(Err(e))) => {
+            Poll::Ready((_, Ok(Err(e)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                     Either::Right(e),
                 )));
@@ -935,4 +957,33 @@ struct CircuitParts {
     dst_handler_notifier: oneshot::Sender<()>,
     dst_stream: Stream,
     dst_pending_data: Bytes,
+}
+
+/// Holds everything we know about a to-be-issued `CONNECT` request to a peer.
+struct PendingConnect {
+    circuit_id: CircuitId,
+    inbound_circuit_req: inbound_hop::CircuitReq,
+    src_peer_id: PeerId,
+    src_connection_id: ConnectionId,
+    max_circuit_duration: Duration,
+    max_circuit_bytes: u64,
+}
+
+impl PendingConnect {
+    fn new(
+        circuit_id: CircuitId,
+        inbound_circuit_req: inbound_hop::CircuitReq,
+        src_peer_id: PeerId,
+        src_connection_id: ConnectionId,
+        config: &Config,
+    ) -> Self {
+        Self {
+            circuit_id,
+            inbound_circuit_req,
+            src_peer_id,
+            src_connection_id,
+            max_circuit_duration: config.max_circuit_duration,
+            max_circuit_bytes: config.max_circuit_bytes,
+        }
+    }
 }
