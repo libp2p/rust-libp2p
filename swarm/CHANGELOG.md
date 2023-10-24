@@ -6,6 +6,9 @@
   See [PR 4225](https://github.com/libp2p/rust-libp2p/pull/4225).
 - Remove deprecated `keep_alive_timeout` in `OneShotHandlerConfig`.
   See [PR 4677](https://github.com/libp2p/rust-libp2p/pull/4677).
+- Don't close entire connection upon `DialFailure`s within `OneShotHandler`.
+  Instead, the error is reported as `Err(e)` via `ConnectionHandler::ToBehaviour`.
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
 
 ## 0.43.6
 

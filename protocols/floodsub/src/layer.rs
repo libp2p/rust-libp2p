@@ -31,7 +31,8 @@ use libp2p_identity::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, ConnectionDenied, ConnectionId, NetworkBehaviour, NotifyHandler,
-    OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent, ToSwarm,
+    OneShotHandler, PollParameters, StreamUpgradeError, THandler, THandlerInEvent,
+    THandlerOutEvent, ToSwarm,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -359,8 +360,12 @@ impl NetworkBehaviour for Floodsub {
     ) {
         // We ignore successful sends or timeouts.
         let event = match event {
-            InnerMessage::Rx(event) => event,
-            InnerMessage::Sent => return,
+            Ok(InnerMessage::Rx(event)) => event,
+            Ok(InnerMessage::Sent) => return,
+            Err(e) => {
+                log::debug!("Failed to send floodsub message: {e}");
+                return;
+            }
         };
 
         // Update connected peers topics
