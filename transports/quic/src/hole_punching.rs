@@ -24,9 +24,6 @@ pub(crate) async fn hole_puncher<P: Provider>(
 
 async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) -> Error {
     loop {
-        let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
-        P::sleep(sleep_duration).await;
-
         let contents: Vec<u8> = rand::thread_rng()
             .sample_iter(distributions::Standard)
             .take(64)
@@ -37,5 +34,8 @@ async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) ->
         if let Err(e) = P::send_to(&socket, &contents, remote_addr).await {
             return Error::Io(e);
         }
+
+        let sleep_duration = Duration::from_millis(rand::thread_rng().gen_range(10..=200));
+        P::sleep(sleep_duration).await;
     }
 }
