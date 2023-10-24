@@ -522,7 +522,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
         timeout: Delay,
         upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
-        counter: Arc<()>,
+        counter: ActiveStreamCounter,
     ) -> Self
     where
         Upgrade: OutboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -568,7 +568,7 @@ impl<UserData, TOk, TErr> StreamUpgrade<UserData, TOk, TErr> {
     fn new_inbound<Upgrade>(
         substream: SubstreamBox,
         protocol: SubstreamProtocol<Upgrade, UserData>,
-        counter: Arc<()>,
+        counter: ActiveStreamCounter,
     ) -> Self
     where
         Upgrade: InboundUpgradeSend<Output = TOk, Error = TErr>,
@@ -974,7 +974,7 @@ mod tests {
     }
 
     struct DummyStreamMuxer {
-        counter: Arc<()>,
+        counter: ActiveStreamCounter,
     }
 
     impl StreamMuxer for DummyStreamMuxer {
