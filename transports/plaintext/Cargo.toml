@@ -22,7 +22,7 @@ unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
 env_logger = "0.10.0"
-libp2p-identity = { workspace = true, features = ["ed25519"] }
+libp2p-identity = { workspace = true, features = ["ed25519", "rand"] }
 quickcheck = { workspace = true }
 rand = "0.8"
 futures_ringbuf = "0.4.0"
