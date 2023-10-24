@@ -449,6 +449,9 @@ impl Handler {
         {
             log::warn!("Dropping outbound stream because we are at capacity")
         }
+
+        self.active_connect_requests
+            .insert(connect.circuit_id, connect);
     }
 
     fn on_dial_upgrade_error(
