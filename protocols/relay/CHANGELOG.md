@@ -1,5 +1,12 @@
 ## 0.17.0 - unreleased
 
+- Don't close connections on protocol failures within the relay-server.
+  To achieve this, error handling was restructured:
+  - `libp2p::relay::outbound::stop::FatalUpgradeError` has been removed.
+  - `libp2p::relay::outbound::stop::{Error, ProtocolViolation}` have been introduced.
+
+  See [PR XXXX](https://github.com/libp2p/rust-libp2p/pull/XXXX).
+
 ## 0.16.2
 
 ## 0.16.1
