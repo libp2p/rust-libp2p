@@ -746,7 +746,7 @@ where
             addresses.extend(connections.iter().filter_map(|c| c.remote_address.clone()))
         }
         if let Some(more) = self.addresses.get(&peer) {
-            addresses.extend(more.into_iter().cloned());
+            addresses.extend(more.iter().cloned());
         }
 
         Ok(addresses)
