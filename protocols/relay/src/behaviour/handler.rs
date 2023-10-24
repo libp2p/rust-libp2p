@@ -616,7 +616,7 @@ impl ConnectionHandler for Handler {
             return true;
         };
 
-        Instant::now().duration_since(idle_at) > Duration::from_secs(10)
+        Instant::now().duration_since(idle_at) <= Duration::from_secs(10)
     }
 
     fn poll(
