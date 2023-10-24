@@ -378,16 +378,13 @@ pub struct Handler {
 
     pending_connect_requests: VecDeque<outbound_stop::PendingConnect>,
 
-    workers: futures_bounded::FuturesSet<
-        Either<
-            Result<
-                Either<inbound_hop::ReservationReq, inbound_hop::CircuitReq>,
-                inbound_hop::Error,
-            >,
-            Result<
-                Result<outbound_stop::Circuit, outbound_stop::CircuitFailed>,
-                outbound_stop::FatalUpgradeError,
-            >,
+    inbound_workers: futures_bounded::FuturesSet<
+        Result<Either<inbound_hop::ReservationReq, inbound_hop::CircuitReq>, inbound_hop::Error>,
+    >,
+    outbound_workers: futures_bounded::FuturesSet<
+        Result<
+            Result<outbound_stop::Circuit, outbound_stop::CircuitFailed>,
+            outbound_stop::FatalUpgradeError,
         >,
     >,
 }
@@ -395,7 +392,11 @@ pub struct Handler {
 impl Handler {
     pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
-            workers: futures_bounded::FuturesSet::new(
+            inbound_workers: futures_bounded::FuturesSet::new(
+                STREAM_TIMEOUT,
+                MAX_CONCURRENT_STREAMS_PER_CONNECTION,
+            ),
+            outbound_workers: futures_bounded::FuturesSet::new(
                 STREAM_TIMEOUT,
                 MAX_CONCURRENT_STREAMS_PER_CONNECTION,
             ),
@@ -416,16 +417,13 @@ impl Handler {
 
     fn on_fully_negotiated_inbound(&mut self, stream: Stream) {
         if self
-            .workers
-            .try_push(
-                inbound_hop::handle_inbound_request(
-                    stream,
-                    self.config.reservation_duration,
-                    self.config.max_circuit_duration,
-                    self.config.max_circuit_bytes,
-                )
-                .map(Either::Left),
-            )
+            .inbound_workers
+            .try_push(inbound_hop::handle_inbound_request(
+                stream,
+                self.config.reservation_duration,
+                self.config.max_circuit_duration,
+                self.config.max_circuit_bytes,
+            ))
             .is_err()
         {
             log::warn!("Dropping inbound stream because we are at capacity")
@@ -442,8 +440,8 @@ impl Handler {
         self.alive_lend_out_substreams.push(rx);
 
         if self
-            .workers
-            .try_push(outbound_stop::connect(stream, stop_command, tx).map(Either::Right))
+            .outbound_workers
+            .try_push(outbound_stop::connect(stream, stop_command, tx))
             .is_err()
         {
             log::warn!("Dropping outbound stream because we are at capacity")
@@ -662,9 +660,9 @@ impl ConnectionHandler for Handler {
             }
         }
 
-        // Process protocol requests
-        match self.workers.poll_unpin(cx) {
-            Poll::Ready(Ok(Either::Left(Ok(Either::Left(inbound_reservation_req))))) => {
+        // Process inbound protocol workers
+        match self.inbound_workers.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(Either::Left(inbound_reservation_req)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::ReservationReqReceived {
                         inbound_reservation_req,
@@ -673,7 +671,7 @@ impl ConnectionHandler for Handler {
                     },
                 ));
             }
-            Poll::Ready(Ok(Either::Left(Ok(Either::Right(inbound_circuit_req))))) => {
+            Poll::Ready(Ok(Ok(Either::Right(inbound_circuit_req)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::CircuitReqReceived {
                         inbound_circuit_req,
@@ -681,7 +679,20 @@ impl ConnectionHandler for Handler {
                     },
                 ));
             }
-            Poll::Ready(Ok(Either::Right(Ok(Ok(circuit))))) => {
+            Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
+            }
+            Poll::Ready(Ok(Err(e))) => {
+                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
+                    Either::Left(e),
+                )));
+            }
+            Poll::Pending => {}
+        }
+
+        // Process outbound protocol workers
+        match self.outbound_workers.poll_unpin(cx) {
+            Poll::Ready(Ok(Ok(Ok(circuit)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectNegotiated {
                         circuit_id: circuit.circuit_id,
@@ -694,7 +705,7 @@ impl ConnectionHandler for Handler {
                     },
                 ));
             }
-            Poll::Ready(Ok(Either::Right(Ok(Err(circuit_failed))))) => {
+            Poll::Ready(Ok(Ok(Err(circuit_failed)))) => {
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                     Event::OutboundConnectNegotiationFailed {
                         circuit_id: circuit_failed.circuit_id,
@@ -709,12 +720,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready(Err(futures_bounded::Timeout { .. })) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Timeout));
             }
-            Poll::Ready(Ok(Either::Left(Err(e)))) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
-                    Either::Left(e),
-                )));
-            }
-            Poll::Ready(Ok(Either::Right(Err(e)))) => {
+            Poll::Ready(Ok(Err(e))) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(StreamUpgradeError::Apply(
                     Either::Right(e),
                 )));
