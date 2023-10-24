@@ -20,10 +20,10 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamUpgradeError,
-    SubstreamProtocol,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::StreamUpgradeError;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
@@ -35,10 +35,8 @@ where
 {
     /// The upgrade for inbound substreams.
     listen_protocol: SubstreamProtocol<TInbound, ()>,
-    /// If `Some`, something bad happened and we should shut down the handler with an error.
-    pending_error: Option<StreamUpgradeError<<TOutbound as OutboundUpgradeSend>::Error>>,
     /// Queue of events to produce in `poll()`.
-    events_out: SmallVec<[TEvent; 4]>,
+    events_out: SmallVec<[Result<TEvent, StreamUpgradeError<TOutbound::Error>>; 4]>,
     /// Queue of outbound substreams to open.
     dial_queue: SmallVec<[TOutbound; 4]>,
     /// Current number of concurrent outbound substreams being opened.
@@ -60,7 +58,6 @@ where
     ) -> Self {
         OneShotHandler {
             listen_protocol,
-            pending_error: None,
             events_out: SmallVec::new(),
             dial_queue: SmallVec::new(),
             dial_negotiated: 0,
@@ -121,8 +118,8 @@ where
     TEvent: Debug + Send + 'static,
 {
     type FromBehaviour = TOutbound;
-    type ToBehaviour = TEvent;
-    type Error = StreamUpgradeError<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
+    type ToBehaviour = Result<TEvent, StreamUpgradeError<TOutbound::Error>>;
+    type Error = void::Void;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
     type OutboundOpenInfo = ();
@@ -151,10 +148,6 @@ where
             Self::Error,
         >,
     > {
-        if let Some(err) = self.pending_error.take() {
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
-        }
-
         if !self.events_out.is_empty() {
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(
                 self.events_out.remove(0),
@@ -197,20 +190,17 @@ where
                 protocol: out,
                 ..
             }) => {
-                self.events_out.push(out.into());
+                self.events_out.push(Ok(out.into()));
             }
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 ..
             }) => {
                 self.dial_negotiated -= 1;
-                self.events_out.push(out.into());
+                self.events_out.push(Ok(out.into()));
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                if self.pending_error.is_none() {
-                    log::debug!("DialUpgradeError: {error}");
-                    self.keep_alive = KeepAlive::No;
-                }
+                self.events_out.push(Err(error));
             }
             ConnectionEvent::AddressChange(_)
             | ConnectionEvent::ListenUpgradeError(_)
