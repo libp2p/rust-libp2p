@@ -67,7 +67,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.65.0"
+rust-version = "1.73.0"
 
 [workspace.dependencies]
 futures-bounded = { version = "0.2.0", path = "misc/futures-bounded" }
