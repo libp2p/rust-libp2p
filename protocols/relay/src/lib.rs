@@ -45,9 +45,15 @@ pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
 /// Types related to the relay protocol inbound.
 pub mod inbound {
     pub mod hop {
+        #[deprecated(note = "Renamed to `Error`.")]
+        pub type FatalUpgradeError = Error;
+
         pub use crate::protocol::inbound_hop::Error;
     }
     pub mod stop {
+        #[deprecated(note = "Renamed to `Error`.")]
+        pub type FatalUpgradeError = Error;
+
         pub use crate::protocol::inbound_stop::Error;
     }
 }
