@@ -32,6 +32,8 @@ async fn punch_holes<P: Provider>(socket: UdpSocket, remote_addr: SocketAddr) ->
             .take(64)
             .collect();
 
+        log::trace!("Sending random UDP packet to {remote_addr}");
+
         if let Err(e) = P::send_to(&socket, &contents, remote_addr).await {
             return Error::Io(e);
         }

@@ -317,6 +317,8 @@ impl NetworkBehaviour for Behaviour {
                 ));
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
+                log::debug!("Attempting to hole-punch to {event_source} using {remote_addrs:?}");
+
                 let opts = DialOpts::peer_id(event_source)
                     .condition(dial_opts::PeerCondition::Always)
                     .addresses(remote_addrs)

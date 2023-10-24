@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Debug)
         .parse_filters("netlink_proto=warn,rustls=warn,multistream_select=warn,libp2p_core::transport::choice=off,libp2p_swarm::connection=warn")
+        .parse_filters("libp2p_quic::hole_punching=trace")
         .parse_default_env()
         .init();
 
@@ -193,15 +194,6 @@ async fn main() -> Result<()> {
                 }
 
                 hole_punched_peer_connection = Some(connection_id)
-            }
-            (
-                SwarmEvent::Behaviour(BehaviourEvent::Dcutr(
-                    dcutr::Event::InitiatedDirectConnectionUpgrade { remote_peer_id, .. }
-                    | dcutr::Event::RemoteInitiatedDirectConnectionUpgrade { remote_peer_id, .. },
-                )),
-                _,
-            ) => {
-                log::info!("Attempting to hole-punch to {remote_peer_id}");
             }
             _ => {}
         }

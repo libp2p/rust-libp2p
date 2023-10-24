@@ -318,6 +318,8 @@ impl<P: Provider> Transport for GenTransport<P> {
             .try_clone_socket()
             .map_err(Self::Error::from)?;
 
+        log::debug!("Preparing for hole-punch from {addr}");
+
         let hole_puncher = hole_puncher::<P>(socket, socket_addr, self.handshake_timeout);
 
         let (sender, receiver) = oneshot::channel();
